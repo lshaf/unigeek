@@ -24,15 +24,21 @@ public:
 
       if (dir == INavigation::DIR_UP)
       {
-        if (_selectedIndex > 0) _selectedIndex--;
-        _scrollIfNeeded();
-        render();
+        if (_selectedIndex > 0)
+        {
+          _selectedIndex--;
+          _scrollIfNeeded();
+          render();
+        }
       }
       else if (dir == INavigation::DIR_DOWN)
       {
-        if (_selectedIndex < itemCount() - 1) _selectedIndex++;
-        _scrollIfNeeded();
-        render();
+        if (_selectedIndex < itemCount() - 1)
+        {
+          _selectedIndex++;
+          _scrollIfNeeded();
+          render();
+        }
       }
       else if (dir == INavigation::DIR_PRESS)
       {

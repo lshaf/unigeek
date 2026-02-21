@@ -10,12 +10,12 @@ public:
     if (!title) return;
 
     auto& lcd = Uni.Lcd;
-    lcd.fillRect(0, 0, lcd.width() - StatusBar::WIDTH, HEIGHT, TFT_NAVY);
+    lcd.fillRoundRect(StatusBar::WIDTH, 4, lcd.width() - StatusBar::WIDTH - 4, HEIGHT - 8, 3, TFT_NAVY);
+    lcd.setTextSize(1);
+    lcd.setTextDatum(TC_DATUM);
     lcd.setTextColor(TFT_WHITE, TFT_NAVY);
-    lcd.setTextSize(2);
-    lcd.setCursor(8, 8);
-    lcd.print(title);
+    lcd.drawString(title, (lcd.width() - StatusBar::WIDTH) / 2 + StatusBar::WIDTH, 7);
   }
 
-  static constexpr uint8_t HEIGHT = 28;
+  static constexpr uint8_t HEIGHT = 20;
 };

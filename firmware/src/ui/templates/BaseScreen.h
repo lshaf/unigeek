@@ -9,8 +9,8 @@ class BaseScreen : public IScreen
 public:
   void init() override {
     Uni.Lcd.fillScreen(TFT_BLACK);
-    _renderChrome();
     onInit();
+    render();
   }
 
   void update() override {
@@ -29,10 +29,10 @@ public:
 
 protected:
   // ─── Body area helpers ────────────────────────────────
-  uint16_t bodyX() { return 0; }
+  uint16_t bodyX() { return StatusBar::WIDTH; }
   uint16_t bodyY() { return title() ? Header::HEIGHT : 0; }
-  uint16_t bodyW() { return Uni.Lcd.width() - StatusBar::WIDTH; }
-  uint16_t bodyH() { return Uni.Lcd.height() - bodyY(); }
+  uint16_t bodyW() { return Uni.Lcd.width() - StatusBar::WIDTH - 4; }
+  uint16_t bodyH() { return Uni.Lcd.height() - bodyY() - 4; }
 
   // ─── Subclass overrides ───────────────────────────────
   virtual const char* title() { return nullptr; }  // nullptr = no header
