@@ -18,8 +18,12 @@ class MainMenuScreen : public ListScreen
     {"LoRa Freq", "915 MHz"},
     {"Navigation", "Built-in"},
   };
-  ListItem* items()     override { return _items; }
-  uint8_t   itemCount() override { return 9; }
+
+  void onInit() override
+  {
+    setItems(_items);
+    ListScreen::onInit();
+  }
 
   void onItemSelected(uint8_t index) override {
     // do nothing for now

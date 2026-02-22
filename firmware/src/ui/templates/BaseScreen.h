@@ -1,5 +1,6 @@
 #pragma once
 
+#include "WiFi.h"
 #include "core/IScreen.h"
 #include "ui/components/Header.h"
 #include "ui/components/StatusBar.h"
@@ -41,7 +42,7 @@ protected:
     // override to provide live data from your Power/radio classes
     return {
       Uni.Power.getBatteryPercentage(),
-      false,
+      WiFi.isConnected(),
       false
     };
   }

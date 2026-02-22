@@ -7,38 +7,43 @@ public:
   struct ListItem
   {
     const char* label;
-    const char* sublabel; // optional second line, nullptr to hide
+    const char* sublabel;
   };
+
+  template <size_t N>
+  void setItems(ListItem (&arr)[N])
+  {
+    _items = arr;
+    _count = N;
+    _selectedIndex = 0;
+    _scrollOffset = 0;
+    onRender();
+  }
 
   void onInit() override
   {
-    _selectedIndex = 0;
-    _scrollOffset = 0;
+    onRender();
   }
 
   void onUpdate() override
   {
+    if (_count == 0) return;
+
     if (Uni.Nav->wasPressed())
     {
       auto dir = Uni.Nav->readDirection();
 
-      if (dir == INavigation::DIR_UP)
+      if (dir == INavigation::DIR_UP && _selectedIndex > 0)
       {
-        if (_selectedIndex > 0)
-        {
-          _selectedIndex--;
-          _scrollIfNeeded();
-          render();
-        }
+        _selectedIndex--;
+        _scrollIfNeeded();
+        onRender();
       }
-      else if (dir == INavigation::DIR_DOWN)
+      else if (dir == INavigation::DIR_DOWN && _selectedIndex < _count - 1)
       {
-        if (_selectedIndex < itemCount() - 1)
-        {
-          _selectedIndex++;
-          _scrollIfNeeded();
-          render();
-        }
+        _selectedIndex++;
+        _scrollIfNeeded();
+        onRender();
       }
       else if (dir == INavigation::DIR_PRESS)
       {
@@ -49,7 +54,10 @@ public:
 
   void onRender() override
   {
+    if (_count == 0) return;
+
     auto& lcd = Uni.Lcd;
+    lcd.setTextDatum(TL_DATUM);
     lcd.fillRect(bodyX(), bodyY(), bodyW(), bodyH(), TFT_BLACK);
 
     uint8_t visible = bodyH() / ITEM_H;
@@ -57,47 +65,63 @@ public:
     for (uint8_t i = 0; i < visible; i++)
     {
       uint8_t idx = i + _scrollOffset;
-      if (idx >= itemCount()) break;
+      if (idx >= _count) break;
 
       bool selected = (idx == _selectedIndex);
-      uint16_t y = bodyY() + (i * ITEM_H);
-      uint16_t bg = selected ? TFT_BLUE : TFT_BLACK;
+      int16_t itemTop = bodyY() + (i * ITEM_H);
+      uint16_t bg = selected ?  Config.getThemeColor() : TFT_BLACK;
       uint16_t fg = selected ? TFT_WHITE : TFT_LIGHTGREY;
 
-      lcd.fillRect(bodyX(), y, bodyW(), ITEM_H, bg);
-      lcd.setTextColor(fg, bg);
-
-      // main label
-      lcd.setTextSize(2);
-      lcd.setCursor(bodyX() + 8, y + 6);
-      lcd.print(items()[idx].label);
-
-      // sublabel if present
-      if (items()[idx].sublabel)
+      if (selected)
       {
-        lcd.setTextSize(1);
-        lcd.setTextColor(TFT_DARKGREY, bg);
-        lcd.setCursor(bodyX() + 8, y + 22);
-        lcd.print(items()[idx].sublabel);
+        lcd.fillRoundRect(
+          bodyX(),
+          itemTop + 2,
+          bodyW(),
+          ITEM_H - 4,
+          3,
+          TFT_NAVY
+        );
       }
 
-      // divider
-      lcd.drawFastHLine(bodyX(), y + ITEM_H - 1, bodyW(), TFT_DARKGREY);
+      lcd.setTextColor(fg, bg);
+
+      if (_items[idx].sublabel)
+      {
+        // label on left, sublabel right-aligned (value style)
+        lcd.drawString(_items[idx].label,
+                       bodyX() + 6,
+                       itemTop + (ITEM_H / 2) - 4, 1);
+
+        lcd.setTextColor(selected ? TFT_CYAN : TFT_DARKGREY, bg);
+        int16_t subX = bodyX() + bodyW() - 6
+          - lcd.textWidth(_items[idx].sublabel, 1);
+        lcd.drawString(_items[idx].sublabel,
+                       subX,
+                       itemTop + (ITEM_H / 2) - 4, 1);
+      }
+      else
+      {
+        // label centered vertically, no sublabel
+        lcd.drawString(_items[idx].label,
+                       bodyX() + 6,
+                       itemTop + (ITEM_H / 2) - 4, 1);
+      }
     }
   }
 
-  // subclass must implement these
-  virtual ListItem* items() = 0;
-  virtual uint8_t itemCount() = 0;
   virtual void onItemSelected(uint8_t index) = 0;
 
 protected:
   uint8_t _selectedIndex = 0;
-  uint8_t _scrollOffset = 0;
-
-  static constexpr uint8_t ITEM_H = 36;
 
 private:
+  ListItem* _items = nullptr;
+  uint8_t _count = 0;
+  uint8_t _scrollOffset = 0;
+
+  static constexpr uint8_t ITEM_H = 22;
+
   void _scrollIfNeeded()
   {
     uint8_t visible = bodyH() / ITEM_H;

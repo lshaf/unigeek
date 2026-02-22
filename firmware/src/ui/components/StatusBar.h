@@ -1,5 +1,8 @@
 #pragma once
+#include "AXP192.h"
 #include "core/Device.h"
+#include "core/ConfigManager.h"
+#include "ui/components/Icon.h"
 
 class StatusBar
 {
@@ -17,16 +20,16 @@ public:
         auto& lcd = Uni.Lcd;
 
         // background
-        lcd.fillRoundRect(4, 4, WIDTH - 8, lcd.height() - 8, 3, TFT_DARKGREY);
+        lcd.fillRoundRect(4, 4, WIDTH - 8, lcd.height() - 8, 3,  Config.getThemeColor());
 
         // ─── Battery ──────────────────────────────────────
-        _renderIndicator(8, std::to_string(status.battery).c_str(), false);
+        _renderIndicator(12, std::to_string(status.battery).c_str(), false);
 
         // ─── WiFi ─────────────────────────────────────────
-        _renderIndicator(18, "Wi", status.wifiOn);
+        Icons::drawWifi(lcd, 4, 19, status.wifiOn);
 
         // ─── Bluetooth ────────────────────────────────────
-        _renderIndicator(30, "Bt", status.bluetoothOn);
+        Icons::drawBluetooth(lcd, 7, 46, status.wifiOn);
     }
 
     static constexpr uint8_t WIDTH = 32;
@@ -34,12 +37,11 @@ public:
 private:
     void _renderIndicator(uint16_t y, const char* label, bool active) {
         auto& lcd = Uni.Lcd;
-        const uint16_t bg = active ? TFT_BLUE : TFT_DARKGREY;
-        const uint16_t fg = active ? TFT_WHITE : TFT_LIGHTGREY;
+        const uint16_t fg = !active ? TFT_WHITE : TFT_DARKGREEN;
 
         lcd.setTextSize(1);
         lcd.setTextDatum(TC_DATUM);
-        lcd.setTextColor(fg, bg);
+        lcd.setTextColor(fg);
         lcd.drawString(label, WIDTH/2, y);
     }
 };

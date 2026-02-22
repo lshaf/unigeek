@@ -17,7 +17,7 @@ public:
   uint8_t getBatteryPercentage() override
   {
     const float b = _axp->GetBatVoltage();
-    const uint8_t percent = static_cast<uint8_t>((b - 3.0) / 1.2) * 100;
+    const uint8_t percent = ((b - 3.0) / 1.2) * 100;
     return (percent < 0) ? 1 : (percent >= 100) ? 100 : percent;
 
   }
