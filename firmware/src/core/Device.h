@@ -21,10 +21,14 @@ public:
     return *instance;
   }
 
+  void setupIo();
+
   void begin()
   {
+    setupIo();
+
     Lcd.begin();
-    Lcd.setBrightness(100);
+    Lcd.setBrightness(80);
     Lcd.setRotation(TFT_DEFAULT_ORIENTATION);
     Lcd.invertDisplay(true);
 

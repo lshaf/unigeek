@@ -1,25 +1,24 @@
 //
-// Created by L Shaf on 2026-02-18.
+// Created by L Shaf on 2026-02-23.
 //
 
-#include "device/Device.h"
+#include "core/Device.h"
+#include "Navigation.h"
+#include "Display.h"
+#include "Power.h"
+#include "Keyboard.h"
 
-CDevice Device;
-void CDevice::begin()
+static DisplayImpl    display;
+static NavigationImpl navigation;
+static PowerImpl      power;
+static KeyboardImpl   keyboard;
+
+void Device::setupIo()
 {
-  setBrightness(255);
-  pinMode(TFT_BL, OUTPUT);
-  setBrightness(100);
+  pinMode(LCD_BL, OUTPUT);
+  digitalWrite(LCD_BL, HIGH);
 }
 
-void CDevice::setBrightness(uint8_t brightness)
-{
-  if (brightness > 100) brightness = 100;
-  const int bl = 5 + round(((255 - 5) * brightness / 100));
-  analogWrite(TFT_BL, bl);
-}
-
-void CDevice::powerOff()
-{
-  //
+Device* Device::createInstance() {
+  return new Device(display, power, &navigation, &keyboard);
 }

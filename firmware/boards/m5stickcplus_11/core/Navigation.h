@@ -11,11 +11,7 @@ class NavigationImpl : public INavigation
 {
 public:
   NavigationImpl(AXP192* axp) : _axp(axp) {}
-  void begin() override
-  {
-    pinMode(BTN_B, INPUT_PULLUP);
-    pinMode(BTN_A, INPUT_PULLUP);
-  }
+  void begin() override {}
 
   void update() override
   {

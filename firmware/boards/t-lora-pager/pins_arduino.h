@@ -1,3 +1,7 @@
+//
+// Created by L Shaf on 2026-02-23.
+//
+
 #pragma once
 #include <stdint.h>
 
@@ -44,6 +48,29 @@ static const uint8_t SCL = GROVE_SCL;
 #define GPS_RX    4
 #define GPS_PPS  13
 
+// ─── SD Card ──────────────────────────────────────────────
+#define SDCARD_CS  21
+
+// ─── NFC ──────────────────────────────────────────────────
+#define NFC_CS   39
+#define NFC_INT   5
+
+// ─── Audio ────────────────────────────────────────────────
+#define AUDIO_I2S_WS    18
+#define AUDIO_I2S_SCK   11
+#define AUDIO_I2S_MCLK  10
+#define AUDIO_I2S_SDOUT 45
+#define AUDIO_I2S_SDIN  17
+
+// ─── Encoder extra ────────────────────────────────────────
+#define ENCODER_KEY  7   // same as ENCODER_BTN alias
+
+// ─── RTC ──────────────────────────────────────────────────
+#define RTC_INT  1
+
+// ─── Buttons ──────────────────────────────────────────────
+#define BTN_BOOT  0   // BOOT button doubles as wakeup
+
 // ─── TFT_eSPI config (USER_SETUP_LOADED in platformio.ini) ─
 #define DISABLE_ALL_LIBRARY_WARNINGS 1
 #define USER_SETUP_LOADED 1
@@ -58,6 +85,7 @@ static const uint8_t SCL = GROVE_SCL;
 #define TFT_RST     -1
 #define TFT_BL      LCD_BL
 #define TFT_INVERSION_ON
+#define TFT_DEFAULT_ORIENTATION 3
 #define USE_HSPI_PORT
 #define TOUCH_CS    -1
 #define SMOOTH_FONT

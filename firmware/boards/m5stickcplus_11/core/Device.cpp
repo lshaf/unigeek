@@ -14,6 +14,12 @@ static DisplayImpl display(&axp);
 static NavigationImpl navigation(&axp);
 static PowerImpl power(&axp);
 
+void Device::setupIo()
+{
+  pinMode(BTN_B, INPUT_PULLUP);
+  pinMode(BTN_A, INPUT_PULLUP);
+}
+
 Device* Device::createInstance() {
   return new Device(display, power, &navigation);
 }

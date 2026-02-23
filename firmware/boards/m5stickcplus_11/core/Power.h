@@ -21,9 +21,15 @@ public:
     return (percent < 0) ? 1 : (percent >= 100) ? 100 : percent;
 
   }
+
   void powerOff() override
   {
     _axp->PowerOff();
+  }
+
+  bool isCharging() override
+  {
+    return _axp->GetBatCurrent() > 20;
   }
 private:
   AXP192* _axp;
