@@ -41,10 +41,7 @@ public:
   void update()
   {
     Nav->update();
-    if (Keyboard)
-    {
-      Keyboard->update();
-    }
+    if (Keyboard) Keyboard->update();
   }
 
   void switchNavigation(INavigation* newNav)
