@@ -32,6 +32,7 @@ static const uint8_t SCL = GROVE_SCL;
 #define SD_CS  21
 
 // ─── Keyboard (TCA8418) ───────────────────────────────────
+#define DEVICE_HAS_KEYBOARD
 #define KB_INT  6
 #define KB_BL   46
 
@@ -99,3 +100,6 @@ static const uint8_t SCL = GROVE_SCL;
 #define SMOOTH_FONT
 #define SPI_FREQUENCY       80000000
 #define SPI_READ_FREQUENCY  20000000
+
+// PERMISSION MENU
+#define APP_MENU_POWER_OFF

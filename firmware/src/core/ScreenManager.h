@@ -1,4 +1,9 @@
+//
+// Created by L Shaf on 2026-02-19.
+//
+
 #pragma once
+
 #include "IScreen.h"
 
 class ScreenManager
@@ -10,26 +15,24 @@ public:
   }
 
   void setScreen(IScreen* screen) {
-    _current = screen;
-    if (_current) _current->init();
+    if (_pending) delete _pending;
+    _pending = screen;
   }
 
   void update() {
+    if (_pending) {
+      if (_current) delete _current;
+      _current = _pending;
+      _pending = nullptr;
+      _current->init();
+    }
     if (_current) _current->update();
   }
-
-  void render() {
-    if (_current) _current->render();
-  }
-
-  IScreen* current() { return _current; }
-
-  ScreenManager(const ScreenManager&)            = delete;
-  ScreenManager& operator=(const ScreenManager&) = delete;
 
 private:
   ScreenManager() = default;
   IScreen* _current = nullptr;
+  IScreen* _pending = nullptr;
 };
 
 #define Screen ScreenManager::getInstance()

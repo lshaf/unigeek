@@ -55,3 +55,6 @@ static const uint8_t SCL = GROVE_SCL;
 #define SMOOTH_FONT
 #define SPI_FREQUENCY       20000000
 #define SPI_READ_FREQUENCY   5000000
+
+// PERMISSION MENU
+#define APP_MENU_POWER_OFF

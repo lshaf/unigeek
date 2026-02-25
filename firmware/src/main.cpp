@@ -7,12 +7,10 @@
 
 #include "screens/MainMenuScreen.h"
 
-static MainMenuScreen mainMenuScreen;
-
 void setup() {
   Serial.begin(115200);
   Uni.begin();
-  Screen.setScreen(&mainMenuScreen);
+  Screen.setScreen(new MainMenuScreen());
 }
 
 void loop() {
