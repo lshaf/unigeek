@@ -11,8 +11,8 @@
 class InputTextAction
 {
 public:
-  static String popup(const char* title) {
-    InputTextAction action(title);
+  static String popup(const char* title, const String& defaultValue = "") {
+    InputTextAction action(title, defaultValue);
     return action._run();
   }
 
@@ -60,8 +60,8 @@ private:
 
   TFT_eSprite _overlay;
 
-  explicit InputTextAction(const char* title)
-    : _title(title), _overlay(&Uni.Lcd)
+  explicit InputTextAction(const char* title, const String& defaultValue)
+  : _title(title), _input(defaultValue), _overlay(&Uni.Lcd)
   {
     _buildSets();
   }

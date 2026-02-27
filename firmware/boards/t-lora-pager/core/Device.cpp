@@ -3,6 +3,8 @@
 //
 
 #include "core/Device.h"
+#include "core/StorageSD.h"
+#include "core/StorageLFS.h"
 #include "Navigation.h"
 #include "Display.h"
 #include "Power.h"
@@ -12,6 +14,8 @@ static DisplayImpl    display;
 static NavigationImpl navigation;
 static PowerImpl      power;
 static KeyboardImpl   keyboard;
+static StorageSD      storageSD;
+static StorageLFS     storageLFS;
 
 void Device::setupIo()
 {
@@ -23,7 +27,7 @@ void Device::setupIo()
     LORA_CS,
     SD_CS,
     LORA_RST,
-};
+  };
   for (auto pin : share_spi_bus_devices_cs_pins) {
     pinMode(pin, OUTPUT);
     digitalWrite(pin, HIGH);
@@ -31,5 +35,9 @@ void Device::setupIo()
 }
 
 Device* Device::createInstance() {
-  return new Device(display, power, &navigation, &keyboard);
+  storageLFS.begin();
+  storageSD.begin(SD_CS);
+
+  return new Device(display, power, &navigation, &keyboard,
+                    &storageSD, &storageLFS);
 }

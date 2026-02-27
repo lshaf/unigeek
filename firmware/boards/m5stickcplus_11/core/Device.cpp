@@ -3,6 +3,7 @@
 //
 
 #include "core/Device.h"
+#include "core/StorageLFS.h"
 #include "Navigation.h"
 #include "Display.h"
 #include "Power.h"
@@ -10,9 +11,10 @@
 
 AXP192 axp;
 
-static DisplayImpl display(&axp);
+static DisplayImpl    display(&axp);
 static NavigationImpl navigation(&axp);
-static PowerImpl power(&axp);
+static PowerImpl      power(&axp);
+static StorageLFS     storageLFS;
 
 void Device::setupIo()
 {
@@ -21,5 +23,8 @@ void Device::setupIo()
 }
 
 Device* Device::createInstance() {
-  return new Device(display, power, &navigation);
+  storageLFS.begin();
+
+  return new Device(display, power, &navigation, nullptr,
+                    nullptr, &storageLFS);
 }

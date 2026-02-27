@@ -20,6 +20,15 @@ public:
     onRender();
   }
 
+  void setItems(ListItem* arr, uint8_t count)
+  {
+    _items         = arr;
+    _count         = count;
+    _selectedIndex = 0;
+    _scrollOffset  = 0;
+    onRender();
+  }
+
   void onInit() override
   {
     onRender();
