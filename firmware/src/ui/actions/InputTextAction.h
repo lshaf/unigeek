@@ -125,7 +125,6 @@ private:
     while (!_done && !_cancelled) {
       Uni.update();
 
-      // blink
       if (millis() - lastBlink >= BLINK_MS) {
         cursorOn  = !cursorOn;
         lastBlink = millis();
@@ -156,19 +155,24 @@ private:
       }
       delay(10);
     }
+
+    _wipe(PAD + 4, (Uni.Lcd.height() - 80) / 2, Uni.Lcd.width() - (PAD * 2 + 8), 80);
     _overlay.deleteSprite();
     return _cancelled ? "" : _input;
   }
 
   void _drawKeyboard(bool cursorOn) {
     auto& lcd = Uni.Lcd;
-    int w = lcd.width()  - (PAD * 2 + 16);
+    int w = lcd.width()  - (PAD * 2 + 8);
     int h = 80;
-    int x = PAD * 2 + 8;
+    int x = PAD + 4;
     int y = (lcd.height() - h) / 2;
 
     int innerW = w - PAD * 2;
     int inputY = PAD + 12;
+
+    // clear previous overlay trace
+    lcd.fillRect(x, y, w, h, TFT_BLACK);
 
     _overlay.createSprite(w, h);
     _overlay.fillSprite(TFT_BLACK);
@@ -182,7 +186,6 @@ private:
     _overlay.drawRoundRect(PAD, inputY, innerW, 20, 3, TFT_DARKGREY);
     _overlay.setTextColor(TFT_WHITE);
     _overlay.setCursor(PAD + 2, inputY + 4);
-
     String display = _input;
     if (cursorOn) display += '_';
     _overlay.print(display.length() > 0 ? display.c_str() : (cursorOn ? "_" : " "));
@@ -203,7 +206,6 @@ private:
     while (!_done && !_cancelled) {
       Uni.update();
 
-      // commit timeout
       if (_tapCount > 0 && (millis() - _lastTapTime >= COMMIT_MS)) {
         _commitTap();
         _cursorVisible = true;
@@ -211,7 +213,6 @@ private:
         _drawScroll();
       }
 
-      // blink — only when idle (no pending tap)
       if (_tapCount == 0 && (millis() - _lastBlinkTime >= BLINK_MS)) {
         _cursorVisible = !_cursorVisible;
         _lastBlinkTime = millis();
@@ -220,36 +221,38 @@ private:
 
       if (Uni.Nav->wasPressed()) {
         switch (Uni.Nav->readDirection()) {
-          case INavigation::DIR_UP:
-            _commitTap();
-            _scrollPos     = (_scrollPos - 1 + _setCount) % _setCount;
+        case INavigation::DIR_UP:
+          _commitTap();
+          _scrollPos     = (_scrollPos - 1 + _setCount) % _setCount;
+          _cursorVisible = true;
+          _lastBlinkTime = millis();
+          _drawScroll();
+          break;
+
+        case INavigation::DIR_DOWN:
+          _commitTap();
+          _scrollPos     = (_scrollPos + 1) % _setCount;
+          _cursorVisible = true;
+          _lastBlinkTime = millis();
+          _drawScroll();
+          break;
+
+        case INavigation::DIR_PRESS:
+          _handleSelect();
+          if (!_done && !_cancelled) {
             _cursorVisible = true;
             _lastBlinkTime = millis();
             _drawScroll();
-            break;
+          }
+          break;
 
-          case INavigation::DIR_DOWN:
-            _commitTap();
-            _scrollPos     = (_scrollPos + 1) % _setCount;
-            _cursorVisible = true;
-            _lastBlinkTime = millis();
-            _drawScroll();
-            break;
-
-          case INavigation::DIR_PRESS:
-            _handleSelect();
-            if (!_done && !_cancelled) {
-              _cursorVisible = true;
-              _lastBlinkTime = millis();
-              _drawScroll();
-            }
-            break;
-
-          default: break;
+        default: break;
         }
       }
       delay(10);
     }
+
+    _wipe(PAD + 4, (Uni.Lcd.height() - 116) / 2, Uni.Lcd.width() - (PAD * 2 + 8), 116);
     _overlay.deleteSprite();
     return _cancelled ? "" : _input;
   }
@@ -375,5 +378,9 @@ private:
     _overlay.drawString("UP/DN:set  PRESS:char", PAD, hintY);
 
     _overlay.pushSprite(x, y);
+  }
+
+  void _wipe(int x, int y, int w, int h) {
+    Uni.Lcd.fillRect(x, y, w, h, TFT_BLACK);
   }
 };
