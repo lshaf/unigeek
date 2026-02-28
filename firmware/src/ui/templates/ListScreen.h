@@ -36,7 +36,15 @@ public:
 
   void onUpdate() override
   {
-    if (_count == 0) return;
+#ifdef DEVICE_HAS_KEYBOARD
+    if (Uni.Keyboard && Uni.Keyboard->available()) {
+      char c = Uni.Keyboard->getKey();
+      if (c == '\b') { onBack(); return; }
+    }
+#endif
+
+    uint8_t eff = _effectiveCount();
+    if (eff == 0) return;
 
     if (Uni.Nav->wasPressed())
     {
@@ -48,7 +56,7 @@ public:
         _scrollIfNeeded();
         onRender();
       }
-      else if (dir == INavigation::DIR_DOWN && _selectedIndex < _count - 1)
+      else if (dir == INavigation::DIR_DOWN && _selectedIndex < eff - 1)
       {
         _selectedIndex++;
         _scrollIfNeeded();
@@ -56,6 +64,9 @@ public:
       }
       else if (dir == INavigation::DIR_PRESS)
       {
+#ifndef DEVICE_HAS_KEYBOARD
+        if (_hasBackItem() && _selectedIndex == _count) { onBack(); return; }
+#endif
         onItemSelected(_selectedIndex);
       }
     }
@@ -63,7 +74,8 @@ public:
 
   void onRender() override
   {
-    if (_count == 0) return;
+    uint8_t eff = _effectiveCount();
+    if (eff == 0) return;
 
     auto& lcd = Uni.Lcd;
     lcd.setTextDatum(TL_DATUM);
@@ -71,14 +83,22 @@ public:
 
     uint8_t visible = bodyH() / ITEM_H;
 
+    static const ListItem _backListItem = {"< Back", nullptr};
+
     for (uint8_t i = 0; i < visible; i++)
     {
       uint8_t idx = i + _scrollOffset;
-      if (idx >= _count) break;
+      if (idx >= eff) break;
+
+      const ListItem* item;
+      if (_hasBackItem() && idx == _count)
+        item = &_backListItem;
+      else
+        item = &_items[idx];
 
       bool selected = (idx == _selectedIndex);
       int16_t itemTop = bodyY() + (i * ITEM_H);
-      uint16_t bg = selected ?  Config.getThemeColor() : TFT_BLACK;
+      uint16_t bg = selected ? Config.getThemeColor() : TFT_BLACK;
       uint16_t fg = selected ? TFT_WHITE : TFT_LIGHTGREY;
 
       if (selected)
@@ -95,24 +115,22 @@ public:
 
       lcd.setTextColor(fg, bg);
 
-      if (_items[idx].sublabel)
+      if (item->sublabel)
       {
-        // label on left, sublabel right-aligned (value style)
-        lcd.drawString(_items[idx].label,
+        lcd.drawString(item->label,
                        bodyX() + 6,
                        itemTop + (ITEM_H / 2) - 4, 1);
 
         lcd.setTextColor(selected ? TFT_CYAN : TFT_DARKGREY, bg);
         int16_t subX = bodyX() + bodyW() - 6
-          - lcd.textWidth(_items[idx].sublabel, 1);
-        lcd.drawString(_items[idx].sublabel,
+          - lcd.textWidth(item->sublabel, 1);
+        lcd.drawString(item->sublabel,
                        subX,
                        itemTop + (ITEM_H / 2) - 4, 1);
       }
       else
       {
-        // label centered vertically, no sublabel
-        lcd.drawString(_items[idx].label,
+        lcd.drawString(item->label,
                        bodyX() + 6,
                        itemTop + (ITEM_H / 2) - 4, 1);
       }
@@ -120,6 +138,8 @@ public:
   }
 
   virtual void onItemSelected(uint8_t index) = 0;
+  virtual void onBack() {}
+  virtual bool hasBackItem() { return true; }
 
 protected:
   uint8_t _selectedIndex = 0;
@@ -131,12 +151,28 @@ private:
 
   static constexpr uint8_t ITEM_H = 22;
 
+  bool _hasBackItem()
+  {
+#ifdef DEVICE_HAS_KEYBOARD
+    return false;
+#else
+    return hasBackItem();
+#endif
+  }
+
+  uint8_t _effectiveCount()
+  {
+    return _count + (_hasBackItem() ? 1 : 0);
+  }
+
   void _scrollIfNeeded()
   {
     uint8_t visible = bodyH() / ITEM_H;
+    uint8_t eff     = _effectiveCount();
     if (_selectedIndex < _scrollOffset)
       _scrollOffset = _selectedIndex;
     else if (_selectedIndex >= _scrollOffset + visible)
       _scrollOffset = _selectedIndex - visible + 1;
+    (void)eff;
   }
 };

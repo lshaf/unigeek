@@ -164,20 +164,14 @@ private:
     _overlay.setCursor(PAD, PAD);
     _overlay.print(_title);
 
-    // scroll counter
+    // scroll counter (excludes Cancel, caps at _count when on Cancel)
     if (_totalCount > visible) {
       char buf[8];
-      snprintf(buf, sizeof(buf), "%d/%d", _selectedIdx + 1, _totalCount);
+      int displayIdx = min((int)_selectedIdx + 1, (int)_count);
+      snprintf(buf, sizeof(buf), "%d/%d", displayIdx, _count);
       _overlay.setTextColor(TFT_DARKGREY);
       _overlay.setTextDatum(TR_DATUM);
       _overlay.drawString(buf, w - PAD, PAD);
-    }
-
-    // up arrow
-    if (_scrollOffset > 0) {
-      _overlay.setTextColor(TFT_DARKGREY);
-      _overlay.setTextDatum(MC_DATUM);
-      _overlay.drawString("^", w / 2, listY - 5);
     }
 
     // list items
@@ -200,13 +194,6 @@ private:
 
       _overlay.setTextDatum(ML_DATUM);
       _overlay.drawString(_labelAt(idx), PAD + 4, itemY + ITEM_H / 2);
-    }
-
-    // down arrow
-    if (_scrollOffset + visible < _totalCount) {
-      _overlay.setTextColor(TFT_DARKGREY);
-      _overlay.setTextDatum(MC_DATUM);
-      _overlay.drawString("v", w / 2, listY + visible * (ITEM_H + PAD));
     }
 
     // hint

@@ -113,12 +113,20 @@ private:
       if (millis() - lastBlink >= BLINK_MS) {
         cursorOn  = !cursorOn;
         lastBlink = millis();
-        _drawKeyboard(cursorOn);
+        _drawCursorKeyboard(cursorOn);
       }
 
       if (Uni.Keyboard && Uni.Keyboard->available()) {
         char c = Uni.Keyboard->getKey();
         _error = "";  // clear error on any keypress
+
+        // remap top row letters to digits (q=1 w=2 e=3 r=4 t=5 y=6 u=7 i=8 o=9 p=0)
+        static constexpr char topRow[]    = "qwertyuiop";
+        static constexpr char topRowUp[]  = "QWERTYUIOP";
+        static constexpr char topNums[]   = "1234567890";
+        for (int i = 0; i < 10; i++) {
+          if (c == topRow[i] || c == topRowUp[i]) { c = topNums[i]; break; }
+        }
 
         if (c == '\n') {
           if (_validate()) _done = true;
@@ -168,7 +176,6 @@ private:
     int errorY  = rangeY + (_hasMin || _hasMax ? 10 : 0) + 2;
     int hintY   = h - PAD - 8;
 
-    lcd.fillRect(x, y, w, h, TFT_BLACK);
     _overlay.createSprite(w, h);
     _overlay.fillSprite(TFT_BLACK);
     _overlay.drawRoundRect(0, 0, w, h, 4, TFT_WHITE);
@@ -180,7 +187,7 @@ private:
     _overlay.print(_title);
 
     // input box
-    _overlay.drawRoundRect(PAD, inputY, innerW, 20, 3, TFT_DARKGREY);
+    _overlay.drawRoundRect(PAD, inputY, innerW, 16, 3, TFT_DARKGREY);
     _overlay.setTextColor(TFT_WHITE);
     _overlay.setCursor(PAD + 2, inputY + 4);
     String display = _input;
@@ -215,6 +222,7 @@ private:
 
   // ── scroll mode ────────────────────────────────────────
   int _runScroll() {
+    _buildSets();
     _lastBlinkTime = millis();
     _cursorVisible = true;
     _drawScroll();
@@ -225,7 +233,7 @@ private:
       if (_tapCount == 0 && (millis() - _lastBlinkTime >= BLINK_MS)) {
         _cursorVisible = !_cursorVisible;
         _lastBlinkTime = millis();
-        _drawScroll();
+        _drawCursorOnly(_cursorVisible);
       }
 
       if (Uni.Nav->wasPressed()) {
@@ -309,7 +317,6 @@ private:
     int hintY  = h - PAD - 8;
     int midX   = w / 2;
 
-    lcd.fillRect(x, y, w, h, TFT_BLACK);
     _overlay.createSprite(w, h);
     _overlay.fillSprite(TFT_BLACK);
     _overlay.drawRoundRect(0, 0, w, h, 4, TFT_WHITE);
@@ -389,6 +396,45 @@ private:
           + PAD * 4;
     if (!_hasMin && !_hasMax) h -= 10;
     return h;
+  }
+
+  void _drawCursorKeyboard(bool visible) {
+    auto& lcd    = Uni.Lcd;
+    int   w      = lcd.width() - (PAD * 2 + 8);
+    int   h      = _overlayH();
+    int   ox     = PAD + 4;
+    int   oy     = (lcd.height() - h) / 2;
+    int   innerW = w - PAD * 2;
+    int   inputY = PAD + 12;
+
+    int bx = ox + PAD + 1;
+    int by = oy + inputY + 1;
+    lcd.fillRect(bx, by, innerW - 2, 14, TFT_BLACK);
+    lcd.setTextColor(TFT_WHITE, TFT_BLACK);
+    lcd.setTextDatum(TL_DATUM);
+    String display = _input;
+    if (visible) display += '_';
+    lcd.drawString(display.length() > 0 ? display.c_str() : (visible ? "_" : " "), bx + 1, by + 3, 1);
+  }
+
+  void _drawCursorOnly(bool visible) {
+    auto& lcd   = Uni.Lcd;
+    int   w     = lcd.width() - (PAD * 2 + 8);
+    int   h     = _overlayH();
+    int   ox    = PAD + 4;
+    int   oy    = (lcd.height() - h) / 2;
+    int   innerW = w - PAD * 2;
+    int   inputY = PAD + 12;
+    int   inputH = 16;
+
+    int bx = ox + PAD + 1;
+    int by = oy + inputY + 1;
+    lcd.fillRect(bx, by, innerW - 2, inputH - 2, TFT_BLACK);
+    lcd.setTextColor(TFT_WHITE, TFT_BLACK);
+    lcd.setTextDatum(TL_DATUM);
+    String display = _input;
+    if (visible) display += '_';
+    lcd.drawString(display.length() > 0 ? display.c_str() : (visible ? "_" : " "), bx + 1, by + 2, 1);
   }
 
   // unused in number mode but needed to compile scroll loop reference

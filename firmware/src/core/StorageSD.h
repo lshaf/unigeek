@@ -6,12 +6,13 @@
 
 #include "core/IStorage.h"
 #include <SD.h>
+#include <SPI.h>
 
 class StorageSD : public IStorage
 {
 public:
-  bool begin(uint8_t csPin) {
-    _available = SD.begin(csPin);
+  bool begin(uint8_t csPin, SPIClass& spi, uint32_t freq = 4000000) {
+    _available = SD.begin(csPin, spi, freq);
     return _available;
   }
 
@@ -25,7 +26,7 @@ public:
   String readFile(const char* path) override {
     if (!_available) return "";
     File f = SD.open(path, FILE_READ);
-    if (!f) return "";
+    if (!f) { _available = false; return ""; }
     String content = f.readString();
     f.close();
     return content;
@@ -34,7 +35,7 @@ public:
   bool writeFile(const char* path, const char* content) override {
     if (!_available) return false;
     File f = SD.open(path, FILE_WRITE);
-    if (!f) return false;
+    if (!f) { _available = false; return false; }
     f.print(content);
     f.close();
     return true;

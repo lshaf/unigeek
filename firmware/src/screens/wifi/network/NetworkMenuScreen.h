@@ -5,6 +5,7 @@
 #pragma once
 
 #include "core/Device.h"
+#include "core/ScreenManager.h"
 #include "ui/templates/ListScreen.h"
 #include "ui/actions/InputTextAction.h"
 #include "ui/actions/ShowStatusAction.h"
@@ -27,6 +28,17 @@ public:
     } else {
       _showWifiList();
     }
+  }
+
+  void onBack() override;
+
+  void onUpdate() override {
+    if (_state == STATE_INFORMATION) {
+      if (Uni.Nav->wasPressed() && Uni.Nav->readDirection() == INavigation::DIR_PRESS)
+        _showMenu();
+      return;
+    }
+    ListScreen::onUpdate();
   }
 
   void onItemSelected(uint8_t index) override {
@@ -78,11 +90,24 @@ private:
   };
 
   // ── helpers ────────────────────────────────────────────
-  String _passwordFilePath(const char* bssid, const char* ssid) {
+  String _buildPasswordPath(const char* bssid, const char* ssid) {
     String cleanBssid = bssid;
     cleanBssid.replace(":", "");
-    if (Uni.Storage) Uni.Storage->makeDir(_passwordPath);
     return String(_passwordPath) + "/" + cleanBssid + "_" + ssid + ".pass";
+  }
+
+  String _readPassword(const char* bssid, const char* ssid) {
+    if (!Uni.Storage) return "";
+    String path = _buildPasswordPath(bssid, ssid);
+    if (!Uni.Storage->exists(path.c_str())) return "";
+    return Uni.Storage->readFile(path.c_str());
+  }
+
+  void _savePassword(const char* bssid, const char* ssid, const char* password) {
+    if (!Uni.Storage) return;
+    String path = _buildPasswordPath(bssid, ssid);
+    Uni.Storage->makeDir(_passwordPath);
+    Uni.Storage->writeFile(path.c_str(), password);
   }
 
   // ── states ─────────────────────────────────────────────
@@ -118,13 +143,8 @@ private:
     const char* ssid  = _scanned[index].ssid;
 
     // try saved password first
-    if (Uni.Storage) {
-      String path = _passwordFilePath(bssid, ssid);
-      if (Uni.Storage->exists(path.c_str())) {
-        String saved = Uni.Storage->readFile(path.c_str());
-        if (_connect(bssid, ssid, saved.c_str())) return;
-      }
-    }
+    String saved = _readPassword(bssid, ssid);
+    if (saved.length() > 0 && _connect(bssid, ssid, saved.c_str())) return;
 
     // ask for password
     String password = InputTextAction::popup(ssid);
@@ -142,11 +162,7 @@ private:
     uint8_t res = WiFi.waitForConnectResult(10000);
 
     if (res == WL_CONNECTED) {
-      // save password
-      if (Uni.Storage) {
-        String path = _passwordFilePath(bssid, ssid);
-        Uni.Storage->writeFile(path.c_str(), password);
-      }
+      _savePassword(bssid, ssid, password);
       _showMenu();
       return true;
     }
@@ -160,27 +176,29 @@ private:
 
   void _showInformation() {
     _state = STATE_INFORMATION;
-    setItems({});
+    setItems(nullptr, 0);
 
     auto& lcd = Uni.Lcd;
-    int x     = 0;
-    int y     = 30;  // below header
-    int w     = lcd.width();
+    int bx    = bodyX();
+    int by    = bodyY();
+    int bw    = bodyW();
+    int bh    = bodyH();
     int lineH = 12;
     int pad   = 4;
+    int y     = by;
 
     auto _drawRow = [&](const char* label, const String& value) {
       lcd.setTextSize(1);
       lcd.setTextColor(TFT_DARKGREY);
       lcd.setTextDatum(TL_DATUM);
-      lcd.drawString(label, pad, y);
+      lcd.drawString(label, bx + pad, y);
       lcd.setTextColor(TFT_WHITE);
       lcd.setTextDatum(TR_DATUM);
-      lcd.drawString(value.c_str(), w - pad, y);
+      lcd.drawString(value.c_str(), bx + bw - pad, y);
       y += lineH + 2;
     };
 
-    lcd.fillRect(x, 30, w, lcd.height() - 30, TFT_BLACK);
+    lcd.fillRect(bx, by, bw, bh, TFT_BLACK);
 
     _drawRow("IP",       WiFi.localIP().toString());
     _drawRow("DNS",      WiFi.dnsIP().toString());

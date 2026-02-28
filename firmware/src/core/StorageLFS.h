@@ -5,6 +5,7 @@
 #pragma once
 
 #include "core/IStorage.h"
+#include <FS.h>
 #include <LittleFS.h>
 
 class StorageLFS : public IStorage
@@ -24,7 +25,7 @@ public:
 
   String readFile(const char* path) override {
     if (!_available) return "";
-    File f = LittleFS.open(path, FILE_READ);
+    fs::File f = LittleFS.open(path, FILE_READ);
     if (!f) return "";
     String content = f.readString();
     f.close();
@@ -34,7 +35,7 @@ public:
   bool writeFile(const char* path, const char* content) override {
     if (!_available) return false;
     _makeDir(path);
-    File f = LittleFS.open(path, FILE_WRITE);
+    fs::File f = LittleFS.open(path, FILE_WRITE);
     if (!f) return false;
     f.print(content);
     f.close();

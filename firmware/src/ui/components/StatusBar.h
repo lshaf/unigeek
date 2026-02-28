@@ -27,11 +27,15 @@ public:
         // ─── Battery ──────────────────────────────────────
         _renderIndicator(12, std::to_string(status.battery).c_str(), status.isCharging);
 
+        // ─── Storage ──────────────────────────────────────────
+        bool isSD = (Uni.StorageSD != nullptr && Uni.Storage == Uni.StorageSD);
+        _renderIndicator(25, isSD ? "SD" : "FS", true);
+
         // ─── WiFi ─────────────────────────────────────────
-        Icons::drawWifi(lcd, 4, 19, status.wifiOn);
+        Icons::drawWifi(lcd, 4, 32, status.wifiOn);
 
         // ─── Bluetooth ────────────────────────────────────
-        Icons::drawBluetooth(lcd, 7, 46, status.wifiOn);
+        Icons::drawBluetooth(lcd, 7, 59, status.bluetoothOn);
     }
 
     static constexpr uint8_t WIDTH = 32;

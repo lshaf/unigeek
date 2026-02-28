@@ -7,23 +7,19 @@
 
 #include "screens/MainMenuScreen.h"
 
+void _checkStorageFallback() {
+  if (Uni.Storage && !Uni.Storage->isAvailable() && Uni.StorageLFS)
+    Uni.Storage = Uni.StorageLFS;
+}
+
 void setup() {
   Serial.begin(115200);
   Uni.begin();
+  _checkStorageFallback();
   Screen.setScreen(new MainMenuScreen());
 }
 
 void loop() {
   Uni.update();
   Screen.update();
-  if (Uni.Keyboard != nullptr)
-  {
-    if (Uni.Keyboard->available())
-    {
-      const auto key = Uni.Keyboard->getKey();
-      Serial.println("Keyboard key " + String(key) + " pressed");
-      Uni.Lcd.setTextColor(TFT_WHITE, TFT_RED);
-      Uni.Lcd.drawString(&key, 100, 80);
-    }
-  }
 }

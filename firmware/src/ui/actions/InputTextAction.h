@@ -128,7 +128,7 @@ private:
       if (millis() - lastBlink >= BLINK_MS) {
         cursorOn  = !cursorOn;
         lastBlink = millis();
-        _drawKeyboard(cursorOn);
+        _drawCursorKeyboard(cursorOn);
       }
 
       if (Uni.Keyboard && Uni.Keyboard->available()) {
@@ -171,9 +171,6 @@ private:
     int innerW = w - PAD * 2;
     int inputY = PAD + 12;
 
-    // clear previous overlay trace
-    lcd.fillRect(x, y, w, h, TFT_BLACK);
-
     _overlay.createSprite(w, h);
     _overlay.fillSprite(TFT_BLACK);
     _overlay.drawRoundRect(0, 0, w, h, 4, TFT_WHITE);
@@ -183,7 +180,7 @@ private:
     _overlay.setCursor(PAD, PAD);
     _overlay.print(_title);
 
-    _overlay.drawRoundRect(PAD, inputY, innerW, 20, 3, TFT_DARKGREY);
+    _overlay.drawRoundRect(PAD, inputY, innerW, 16, 3, TFT_DARKGREY);
     _overlay.setTextColor(TFT_WHITE);
     _overlay.setCursor(PAD + 2, inputY + 4);
     String display = _input;
@@ -191,7 +188,7 @@ private:
     _overlay.print(display.length() > 0 ? display.c_str() : (cursorOn ? "_" : " "));
 
     _overlay.setTextColor(TFT_DARKGREY);
-    _overlay.setCursor(PAD, inputY + 28);
+    _overlay.setCursor(PAD, h - PAD - 8);
     _overlay.print("Type + ENTER to confirm");
 
     _overlay.pushSprite(x, y);
@@ -378,6 +375,24 @@ private:
     _overlay.drawString("UP/DN:set  PRESS:char", PAD, hintY);
 
     _overlay.pushSprite(x, y);
+  }
+
+  void _drawCursorKeyboard(bool visible) {
+    auto& lcd    = Uni.Lcd;
+    int   w      = lcd.width() - (PAD * 2 + 8);
+    int   ox     = PAD + 4;
+    int   oy     = (lcd.height() - 80) / 2;
+    int   innerW = w - PAD * 2;
+    int   inputY = PAD + 12;
+
+    int bx = ox + PAD + 1;
+    int by = oy + inputY + 1;
+    lcd.fillRect(bx, by, innerW - 2, 14, TFT_BLACK);
+    lcd.setTextColor(TFT_WHITE, TFT_BLACK);
+    lcd.setTextDatum(TL_DATUM);
+    String display = _input + _pendingChar;
+    if (visible) display += '_';
+    lcd.drawString(display.length() > 0 ? display.c_str() : (visible ? "_" : " "), bx + 1, by + 3, 1);
   }
 
   void _wipe(int x, int y, int w, int h) {

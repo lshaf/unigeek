@@ -6,6 +6,7 @@
 
 #include "core/ScreenManager.h"
 #include "ui/templates/ListScreen.h"
+#include "network/NetworkMenuScreen.h"
 
 class WifiMenuScreen : public ListScreen
 {
@@ -17,9 +18,13 @@ public:
   }
 
   void onItemSelected(uint8_t index) override {
-    // TODO: uncomment each case when screen is created
-    (void)index;
+    if (index == 0)
+    {
+      Screen.setScreen(new NetworkMenuScreen());
+    }
   }
+
+  void onBack() override;
 
 private:
   ListItem _items[8] = {
