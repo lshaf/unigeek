@@ -49,8 +49,15 @@ public:
 
   bool makeDir(const char* path) override {
     if (!_available) return false;
-    // LittleFS creates dirs implicitly but mkdir still works
-    return LittleFS.mkdir(path);
+    String p = path;
+    for (int i = 1; i < (int)p.length(); i++) {
+      if (p[i] == '/') {
+        String sub = p.substring(0, i);
+        if (!LittleFS.exists(sub.c_str())) LittleFS.mkdir(sub.c_str());
+      }
+    }
+    if (!LittleFS.exists(path)) return LittleFS.mkdir(path);
+    return true;
   }
 
 private:
@@ -61,9 +68,6 @@ private:
     String p = filePath;
     int last = p.lastIndexOf('/');
     if (last <= 0) return;
-    String dir = p.substring(0, last);
-    if (!LittleFS.exists(dir.c_str())) {
-      LittleFS.mkdir(dir.c_str());
-    }
+    makeDir(p.substring(0, last).c_str());
   }
 };

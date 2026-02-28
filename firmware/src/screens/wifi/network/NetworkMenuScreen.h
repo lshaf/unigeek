@@ -171,6 +171,7 @@ private:
     else if (res == WL_NO_SSID_AVAIL) ShowStatusAction::show("SSID Not Available!", 1500);
     else                           ShowStatusAction::show("Connection Error!",    1500);
 
+    render();
     return false;
   }
 

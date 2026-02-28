@@ -17,7 +17,7 @@ public:
     _count = N;
     _selectedIndex = 0;
     _scrollOffset = 0;
-    onRender();
+    render();
   }
 
   void setItems(ListItem* arr, uint8_t count)
@@ -26,12 +26,12 @@ public:
     _count         = count;
     _selectedIndex = 0;
     _scrollOffset  = 0;
-    onRender();
+    render();
   }
 
   void onInit() override
   {
-    onRender();
+    render();
   }
 
   void onUpdate() override

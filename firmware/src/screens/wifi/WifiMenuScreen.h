@@ -13,7 +13,7 @@ class WifiMenuScreen : public ListScreen
 public:
   const char* title() override { return "WiFi"; }
 
-  void init() override {
+  void onInit() override {
     setItems(_items);
   }
 
