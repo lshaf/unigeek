@@ -34,14 +34,51 @@ private:
 
   void _run() {
     auto& lcd = Uni.Lcd;
-
-    // measure text width for dynamic box sizing
     lcd.setTextSize(1);
-    int textW = lcd.textWidth(_message);
-    int w     = max(textW + PAD * 6, 80);
-    int h     = 24;
-    int x     = (lcd.width()  - w) / 2;
-    int y     = (lcd.height() - h) / 2;
+
+    static constexpr int MAX_LINES  = 5;
+    static constexpr int LINE_H     = 12;
+    // max box width: leave room for statusbar and margins
+    int maxBoxW    = lcd.width() - 40;
+    int maxContentW = maxBoxW - PAD * 4;
+
+    // ── word-wrap ─────────────────────────────────────────
+    String lines[MAX_LINES];
+    int    lineCount = 0;
+    String word      = "";
+    String msg       = _message;
+
+    for (int i = 0; i <= (int)msg.length() && lineCount < MAX_LINES; i++) {
+      if (i < (int)msg.length() && msg[i] != ' ') {
+        word += msg[i];
+        continue;
+      }
+      if (word.length() == 0) continue;
+
+      String candidate = lines[lineCount].length() > 0
+                         ? lines[lineCount] + " " + word
+                         : word;
+
+      if (lcd.textWidth(candidate.c_str()) <= maxContentW) {
+        lines[lineCount] = candidate;
+      } else {
+        if (lines[lineCount].length() > 0 && lineCount < MAX_LINES - 1)
+          lineCount++;
+        lines[lineCount] = word;
+      }
+      word = "";
+    }
+    lineCount++;  // index → count
+
+    // ── size overlay to content ───────────────────────────
+    int textW = 0;
+    for (int i = 0; i < lineCount; i++)
+      textW = max(textW, (int)lcd.textWidth(lines[i].c_str()));
+
+    int w = max(textW + PAD * 4, 80);
+    int h = lineCount * LINE_H + PAD * 2;
+    int x = (lcd.width()  - w) / 2;
+    int y = (lcd.height() - h) / 2;
 
     _overlay.createSprite(w, h);
     _overlay.fillSprite(TFT_BLACK);
@@ -49,7 +86,10 @@ private:
     _overlay.setTextColor(TFT_WHITE);
     _overlay.setTextDatum(MC_DATUM);
     _overlay.setTextSize(1);
-    _overlay.drawString(_message, w / 2, h / 2);
+
+    for (int i = 0; i < lineCount; i++)
+      _overlay.drawString(lines[i].c_str(), w / 2, PAD + i * LINE_H + LINE_H / 2);
+
     _overlay.pushSprite(x, y);
     _overlay.deleteSprite();
 
@@ -57,6 +97,5 @@ private:
       delay(_duration);
       _wipe(x, y, w, h);
     }
-    // durationMs = 0 → just show and return, caller decides when to wipe
   }
 };

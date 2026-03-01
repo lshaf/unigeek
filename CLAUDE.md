@@ -68,20 +68,26 @@ All hardware differences are isolated in board-specific folders.
     │   │   └── ConfigManager.h
     │   ├── screens/
     │   │   ├── MainMenuScreen.h
+    │   │   ├── MainMenuScreen.cpp
     │   │   └── wifi/
     │   │       ├── WifiMenuScreen.h
     │   │       ├── WifiMenuScreen.cpp
     │   │       └── network/
-    │   │           └── NetworkMenuScreen.h
+    │   │           ├── NetworkMenuScreen.h
+    │   │           ├── NetworkMenuScreen.cpp
+    │   │           ├── WorldClockScreen.h
+    │   │           └── WorldClockScreen.cpp
     │   ├── ui/
     │   │   ├── templates/
     │   │   │   ├── BaseScreen.h        header + StatusBar
     │   │   │   └── ListScreen.h        22px items, index-based selection
+    │   │   ├── components/
+    │   │   │   └── ScrollListView.h    scrollable label-value rows, reusable in any screen
     │   │   └── actions/
     │   │       ├── InputTextAction.h   text input overlay
     │   │       ├── InputNumberAction.h number input overlay
     │   │       ├── InputSelectAction.h select list overlay
-    │   │       └── ShowStatusAction.h  status message overlay
+    │   │       └── ShowStatusAction.h  status message overlay, auto word-wraps long text
     │   └── main.cpp
 
 ---
@@ -94,9 +100,10 @@ All hardware differences are isolated in board-specific folders.
     Uni.Power       IPower&
     Uni.Nav         INavigation*
     Uni.Keyboard    IKeyboard*  nullptr on M5StickC
-    Uni.Storage     IStorage*   primary, SD if available else LittleFS
+    Uni.Storage     IStorage*   primary, SD if available else LittleFS; reassigned by _checkStorageFallback()
     Uni.StorageSD   IStorage*   direct SD access, nullptr on M5StickC
     Uni.StorageLFS  IStorage*   direct LittleFS access
+    Uni.Spi         SPIClass*   shared SPI bus (HSPI on T-Lora Pager, nullptr on M5StickC)
 
 ### Screen Pattern
 
@@ -114,12 +121,33 @@ All hardware differences are isolated in board-specific folders.
         }
       }
 
+      void onBack() override;           // implement in .cpp to avoid circular includes
+      bool hasBackItem() override { return false; }  // omit "< Back" on root screens
+
     private:
       ListItem _items[2] = {
         {"Item A"},
         {"Item B", "sublabel"},
       };
     };
+
+### Back Navigation
+
+    - ListScreen provides virtual onBack() — called on backspace key (DEVICE_HAS_KEYBOARD)
+      or when user selects the auto-appended "< Back" item (no-keyboard devices)
+    - hasBackItem() controls whether "< Back" appears — default true, override false for root screens
+    - setItems() calls render() (full chrome + body redraw)
+    - Implement onBack() in a .cpp file when it needs to instantiate a parent screen:
+
+      // MyScreen.h
+      void onBack() override;
+
+      // MyScreen.cpp
+      #include "MyScreen.h"
+      #include "screens/ParentScreen.h"
+      void MyScreen::onBack() { Screen.setScreen(new ParentScreen()); }
+
+    - This pattern breaks circular includes (child .h never includes parent .h)
 
 ### ScreenManager
 
@@ -141,6 +169,7 @@ All hardware differences are isolated in board-specific folders.
     const char* InputSelectAction::popup("Title", opts, count, "default_value")
     void        ShowStatusAction::show("Message")           show and return immediately
     void        ShowStatusAction::show("Message", 1500)     show, block ms, then wipe
+    // Long messages are automatically word-wrapped (max 5 lines, box grows to fit)
 
 ### Storage
 
@@ -150,6 +179,22 @@ All hardware differences are isolated in board-specific folders.
     Uni.Storage->writeFile("/path/file.txt", "content")  returns bool
     Uni.Storage->makeDir("/path")
     Uni.Storage->deleteFile("/path/file.txt")
+
+### ScrollListView
+
+    ScrollListView view;
+    ScrollListView::Row rows[N] = {
+      {"Label", "value"},
+    };
+    view.setRows(rows, N);
+    view.render(bodyX(), bodyY(), bodyW(), bodyH());  // call once to draw
+    view.onNav(dir);                                  // call in onUpdate() with DIR_UP/DIR_DOWN
+
+    - Renders label (left, grey) + value (right, white) rows within the given bounding box
+    - Shows a scrollbar when content overflows the box height
+    - onNav() returns true if the direction was consumed (scrolled), false if at boundary
+    - Row.value is a String — safe for dynamic content (WiFi info, etc.)
+    - Store rows[] as a class member so values persist between renders
 
 ### Theme Color
 
@@ -168,6 +213,11 @@ All hardware differences are isolated in board-specific folders.
 - Use new for screen allocation — ScreenManager handles deletion
 - pins_arduino.h is auto-included, never include it explicitly
 - Always call deleteSprite() after createSprite() + pushSprite()
+- Screen .h files: declarations and data members only
+  Trivial one-liners (title(), hasBackItem()) may stay inline in .h
+  All onInit(), onUpdate(), onItemSelected(), onBack(), and private helper bodies go in .cpp
+  Only include headers needed for types used directly in the .h (base class, member variable types)
+  Action headers (InputTextAction.h, ShowStatusAction.h, etc.) belong in .cpp, not .h
 
 ---
 
@@ -199,6 +249,12 @@ All hardware differences are isolated in board-specific folders.
 - TFT_eSprite leaks heap if deleteSprite() is never called
 - powerOff() only works when USB is disconnected (hardware limitation)
 - LittleFS uses SPIFFS subtype in partitions.csv, use LittleFS.begin() not SPIFFS.begin()
+- LittleFS/SD makeDir() must create directories recursively — LittleFS.mkdir() fails if parent dirs missing
+- StorageSD self-reports failure: _available set false on open() failure, detectable via isAvailable()
+- Uni.Storage may be reassigned at runtime by _checkStorageFallback() in main.cpp when SD fails
+- T-Lora Pager SPI (HSPI, pins SCK=35/MISO=33/MOSI=34) must be explicitly passed to SD.begin()
+  SD.begin(csPin) alone uses wrong default VSPI bus and causes sdSelectCard() failures
+- ListItem struct has no default for sublabel — single-field init {"Label"} zero-initializes sublabel to nullptr
 
 ---
 

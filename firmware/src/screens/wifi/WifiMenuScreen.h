@@ -4,26 +4,15 @@
 
 #pragma once
 
-#include "core/ScreenManager.h"
 #include "ui/templates/ListScreen.h"
-#include "network/NetworkMenuScreen.h"
 
 class WifiMenuScreen : public ListScreen
 {
 public:
   const char* title() override { return "WiFi"; }
 
-  void onInit() override {
-    setItems(_items);
-  }
-
-  void onItemSelected(uint8_t index) override {
-    if (index == 0)
-    {
-      Screen.setScreen(new NetworkMenuScreen());
-    }
-  }
-
+  void onInit() override;
+  void onItemSelected(uint8_t index) override;
   void onBack() override;
 
 private:
