@@ -11,5 +11,6 @@ public:
   virtual void begin()  = 0;
   virtual void update() = 0;
   virtual bool available() = 0;
+  virtual char peekKey()   = 0;  // read without consuming
   virtual char getKey()    = 0;
 };

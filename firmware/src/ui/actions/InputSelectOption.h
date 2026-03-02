@@ -105,6 +105,18 @@ private:
     while (!_done) {
       Uni.update();
 
+#ifdef DEVICE_HAS_KEYBOARD
+      if (Uni.Keyboard && Uni.Keyboard->available()) {
+        char c = Uni.Keyboard->peekKey();
+        if (c == '\b') {
+          Uni.Keyboard->getKey();
+          _result = nullptr;
+          _done   = true;
+          continue;
+        }
+      }
+#endif
+
       if (Uni.Nav->wasPressed()) {
         switch (Uni.Nav->readDirection()) {
           case INavigation::DIR_UP:
@@ -152,7 +164,7 @@ private:
     int visible = _visibleCount();
     int listY   = PAD + TITLE_H + PAD;
 
-    lcd.fillRect(x, y, w, h, TFT_BLACK);
+    _overlay.deleteSprite();
     _overlay.createSprite(w, h);
     _overlay.fillSprite(TFT_BLACK);
     _overlay.drawRoundRect(0, 0, w, h, 4, TFT_WHITE);

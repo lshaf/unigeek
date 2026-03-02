@@ -78,8 +78,10 @@ public:
     if (eff == 0) return;
 
     auto& lcd = Uni.Lcd;
-    lcd.setTextDatum(TL_DATUM);
-    lcd.fillRect(bodyX(), bodyY(), bodyW(), bodyH(), TFT_BLACK);
+    TFT_eSprite sprite(&lcd);
+    sprite.createSprite(bodyW(), bodyH());
+    sprite.fillSprite(TFT_BLACK);
+    sprite.setTextDatum(TL_DATUM);
 
     uint8_t visible = bodyH() / ITEM_H;
 
@@ -96,45 +98,33 @@ public:
       else
         item = &_items[idx];
 
-      bool selected = (idx == _selectedIndex);
-      int16_t itemTop = bodyY() + (i * ITEM_H);
-      uint16_t bg = selected ? Config.getThemeColor() : TFT_BLACK;
-      uint16_t fg = selected ? TFT_WHITE : TFT_LIGHTGREY;
+      bool     selected = (idx == _selectedIndex);
+      int16_t  itemTop  = i * ITEM_H;
+      uint16_t bg       = selected ? Config.getThemeColor() : TFT_BLACK;
+      uint16_t fg       = selected ? TFT_WHITE : TFT_LIGHTGREY;
 
       if (selected)
       {
-        lcd.fillRoundRect(
-          bodyX(),
-          itemTop + 2,
-          bodyW(),
-          ITEM_H - 4,
-          3,
-          TFT_NAVY
-        );
+        sprite.fillRoundRect(0, itemTop + 2, bodyW(), ITEM_H - 4, 3, TFT_NAVY);
       }
 
-      lcd.setTextColor(fg, bg);
+      sprite.setTextColor(fg, bg);
 
       if (item->sublabel)
       {
-        lcd.drawString(item->label,
-                       bodyX() + 6,
-                       itemTop + (ITEM_H / 2) - 4, 1);
-
-        lcd.setTextColor(selected ? TFT_CYAN : TFT_DARKGREY, bg);
-        int16_t subX = bodyX() + bodyW() - 6
-          - lcd.textWidth(item->sublabel, 1);
-        lcd.drawString(item->sublabel,
-                       subX,
-                       itemTop + (ITEM_H / 2) - 4, 1);
+        sprite.drawString(item->label, 6, itemTop + (ITEM_H / 2) - 4, 1);
+        sprite.setTextColor(selected ? TFT_CYAN : TFT_DARKGREY, bg);
+        int16_t subX = bodyW() - 6 - sprite.textWidth(item->sublabel, 1);
+        sprite.drawString(item->sublabel, subX, itemTop + (ITEM_H / 2) - 4, 1);
       }
       else
       {
-        lcd.drawString(item->label,
-                       bodyX() + 6,
-                       itemTop + (ITEM_H / 2) - 4, 1);
+        sprite.drawString(item->label, 6, itemTop + (ITEM_H / 2) - 4, 1);
       }
     }
+
+    sprite.pushSprite(bodyX(), bodyY());
+    sprite.deleteSprite();
   }
 
   virtual void onItemSelected(uint8_t index) = 0;

@@ -129,6 +129,7 @@ public:
   }
 
   bool available() override { return _available; }
+  char peekKey()   override { return _key; }
 
   char getKey() override {
     char k     = _key;

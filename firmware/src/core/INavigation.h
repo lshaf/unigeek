@@ -8,7 +8,7 @@
 class INavigation
 {
 public:
-  enum Direction_t
+  enum Direction
   {
     DIR_NONE,
     DIR_UP,
@@ -32,8 +32,8 @@ public:
     return false;
   }
 
-  Direction_t readDirection() {
-    Direction_t dir = _releasedDirection;
+  Direction readDirection() {
+    Direction dir = _releasedDirection;
     _releasedDirection = DIR_NONE;
     return dir;
   }
@@ -41,7 +41,7 @@ public:
   uint32_t pressDuration() const { return _pressDuration; }
 
 protected:
-  void updateState(Direction_t currentlyHeld) {
+  void updateState(Direction currentlyHeld) {
     uint32_t now = millis();
 
     if (currentlyHeld != DIR_NONE) {
@@ -63,8 +63,8 @@ protected:
   }
 
 private:
-  Direction_t _currDirection    = DIR_NONE;
-  Direction_t _releasedDirection = DIR_NONE;
+  Direction _currDirection    = DIR_NONE;
+  Direction _releasedDirection = DIR_NONE;
 
   bool     _pressed   = false;
   bool     _wasPressed = false;
