@@ -33,7 +33,6 @@ static const uint8_t SCL = 15;
 #define SD_CS  12
 
 // ─── Keyboard (TCA8418 via Wire1) ─────────────────────────
-#define DEVICE_HAS_KEYBOARD
 #define KB_INT            11
 #define KB_I2C_SDA         8
 #define KB_I2C_SCL         9
@@ -46,9 +45,10 @@ static const uint8_t SCL = 15;
 #define RGB_LED  21
 
 // ─── Speaker (I2S) ────────────────────────────────────────
-#define SPK_BCLK  41
-#define SPK_WCLK  43
-#define SPK_DOUT  42
+#define SPK_BCLK      41
+#define SPK_WCLK      43
+#define SPK_DOUT      42
+#define SPK_I2S_PORT  I2S_NUM_1
 
 // ─── Boot / shoulder button ───────────────────────────────
 #define BTN_BOOT  0
@@ -76,3 +76,8 @@ static const uint8_t SCL = 15;
 #define SMOOTH_FONT
 #define SPI_FREQUENCY       20000000
 #define SPI_READ_FREQUENCY  20000000
+
+// ─── Firmware Feature Flags ───────────────────────────────
+#define DEVICE_HAS_KEYBOARD       // keyboard attached — enables keyboard input paths
+#define DEVICE_HAS_SOUND          // speaker attached — enables audio paths and sound settings
+#define DEVICE_HAS_VOLUME_CONTROL // I2S amp + ES8311 codec support setVolume() — shows Volume slider in Settings

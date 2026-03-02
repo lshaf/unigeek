@@ -10,9 +10,18 @@
 class DisplayImpl : public IDisplay
 {
 public:
-  void setBrightness(uint8_t brightness) override {
-    if (brightness > 100) brightness = 100;
-    if (brightness < 5) brightness = 5;
-    analogWrite(LCD_BL, brightness);
+  void setBrightness(uint8_t pct) override {
+    if (pct > 100) pct = 100;
+
+    static bool _ready = false;
+    if (!_ready) {
+      // GPIO42 backlight, ch7, 1kHz, 8-bit
+      ledcSetup(7, 1000, 8);
+      ledcAttachPin(LCD_BL, 7);
+      _ready = true;
+    }
+
+    // Map 0-100% → 0-255
+    ledcWrite(7, pct == 0 ? 0 : (uint8_t)((uint32_t)pct * 255 / 100));
   }
 };

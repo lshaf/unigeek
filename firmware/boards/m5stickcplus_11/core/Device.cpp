@@ -7,6 +7,7 @@
 #include "Navigation.h"
 #include "Display.h"
 #include "Power.h"
+#include "Speaker.h"
 #include <AXP192.h>
 
 AXP192 axp;
@@ -15,6 +16,7 @@ static DisplayImpl    display(&axp);
 static NavigationImpl navigation(&axp);
 static PowerImpl      power(&axp);
 static StorageLFS     storageLFS;
+static SpeakerBuzzer  speaker;
 
 void Device::setupIo()
 {
@@ -26,5 +28,5 @@ Device* Device::createInstance() {
   storageLFS.begin();
 
   return new Device(display, power, &navigation, nullptr,
-                    nullptr, &storageLFS);
+                    nullptr, &storageLFS, nullptr, &speaker);
 }

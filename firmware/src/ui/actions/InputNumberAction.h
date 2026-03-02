@@ -120,13 +120,15 @@ private:
         char c = Uni.Keyboard->getKey();
         _error = "";  // clear error on any keypress
 
-        // remap top row letters to digits (q=1 w=2 e=3 r=4 t=5 y=6 u=7 i=8 o=9 p=0)
-        static constexpr char topRow[]    = "qwertyuiop";
-        static constexpr char topRowUp[]  = "QWERTYUIOP";
-        static constexpr char topNums[]   = "1234567890";
+#ifdef KB_QWERT_NUM_REMAP
+        // T-Lora Pager: remap top row letters to digits (q=1 w=2 e=3 r=4 t=5 y=6 u=7 i=8 o=9 p=0)
+        static constexpr char topRow[]   = "qwertyuiop";
+        static constexpr char topRowUp[] = "QWERTYUIOP";
+        static constexpr char topNums[]  = "1234567890";
         for (int i = 0; i < 10; i++) {
           if (c == topRow[i] || c == topRowUp[i]) { c = topNums[i]; break; }
         }
+#endif
 
         if (c == '\n') {
           if (_validate()) _done = true;

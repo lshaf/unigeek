@@ -5,6 +5,7 @@
 #include "Display.h"
 #include "Power.h"
 #include "Keyboard.h"
+#include "Speaker.h"
 #include <SPI.h>
 
 static DisplayImpl    display;
@@ -14,6 +15,7 @@ static PowerImpl      power;
 static StorageSD      storageSD;
 static StorageLFS     storageLFS;
 static SPIClass       sdSpi(FSPI);
+static SpeakerADV     speaker;
 
 void Device::setupIo()
 {
@@ -32,5 +34,5 @@ Device* Device::createInstance() {
     sdOk ? "OK" : "FAILED", SD_CS, SPI_SCK_PIN, SPI_MOSI_PIN, SPI_MISO_PIN);
 
   return new Device(display, power, &navigation, &keyboard,
-                    &storageSD, &storageLFS, nullptr);
+                    &storageSD, &storageLFS, nullptr, &speaker);
 }

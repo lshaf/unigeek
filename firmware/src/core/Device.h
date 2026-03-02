@@ -9,6 +9,7 @@
 #include "IPower.h"
 #include "IKeyboard.h"
 #include "IStorage.h"
+#include "ISpeaker.h"
 #include <SPI.h>
 
 #ifndef TFT_DEFAULT_ORIENTATION
@@ -38,6 +39,7 @@ public:
     Nav->begin();
 
     if (Keyboard) Keyboard->begin();
+    if (Speaker)    Speaker->begin();
   }
 
   void update()
@@ -59,6 +61,7 @@ public:
   IStorage*   StorageSD  = nullptr;  // direct SD access (nullable)
   IStorage*   StorageLFS = nullptr;  // direct LFS access (nullable)
   IKeyboard*  Keyboard   = nullptr;
+  ISpeaker*   Speaker    = nullptr;
   SPIClass*   Spi        = nullptr;  // shared SPI bus (nullable, board-specific)
 
   // Prevent copying
@@ -70,14 +73,16 @@ private:
         IKeyboard* keyboard = nullptr,
         IStorage* storageSD = nullptr,
         IStorage* storageLFS = nullptr,
-        SPIClass* spi = nullptr)
+        SPIClass* spi = nullptr,
+        ISpeaker* sound = nullptr)
      : Lcd(lcd), Power(power), Nav(nav),
        Keyboard(keyboard),
        StorageSD(storageSD), StorageLFS(storageLFS),
        Storage(storageSD && storageSD->isAvailable()
                ? storageSD
                : storageLFS),
-       Spi(spi) {}
+       Spi(spi),
+       Speaker(sound) {}
   // Returns a heap-allocated instance — defined in Device.cpp
   static Device* createInstance();
 };

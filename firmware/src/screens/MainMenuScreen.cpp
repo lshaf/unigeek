@@ -4,6 +4,7 @@
 
 #include "MainMenuScreen.h"
 #include "screens/wifi/WifiMenuScreen.h"
+#include "screens/SettingScreen.h"
 #include "ui/actions/InputTextAction.h"
 #include "ui/actions/InputNumberAction.h"
 #include "ui/actions/InputSelectOption.h"
@@ -17,6 +18,7 @@ void MainMenuScreen::onInit() {
 void MainMenuScreen::onItemSelected(uint8_t index) {
   switch (index) {
   case 0: Screen.setScreen(new WifiMenuScreen()); break;
+  case 7: Screen.setScreen(new SettingScreen()); break;
   case 8: {
       String result = InputTextAction::popup("Your Name");
       if (result.length() > 0) {

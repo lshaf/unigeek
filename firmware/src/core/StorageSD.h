@@ -26,7 +26,7 @@ public:
   String readFile(const char* path) override {
     if (!_available) return "";
     File f = SD.open(path, FILE_READ);
-    if (!f) { _available = false; return ""; }
+    if (!f) return "";  // file not found is not an SD failure
     String content = f.readString();
     f.close();
     return content;

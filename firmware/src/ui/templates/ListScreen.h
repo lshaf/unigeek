@@ -55,12 +55,14 @@ public:
         _selectedIndex--;
         _scrollIfNeeded();
         onRender();
+        if (Uni.Speaker) Uni.Speaker->beep();
       }
       else if (dir == INavigation::DIR_DOWN && _selectedIndex < eff - 1)
       {
         _selectedIndex++;
         _scrollIfNeeded();
         onRender();
+        if (Uni.Speaker) Uni.Speaker->beep();
       }
       else if (dir == INavigation::DIR_PRESS)
       {
@@ -105,7 +107,7 @@ public:
 
       if (selected)
       {
-        sprite.fillRoundRect(0, itemTop + 2, bodyW(), ITEM_H - 4, 3, TFT_NAVY);
+        sprite.fillRoundRect(0, itemTop + 2, bodyW(), ITEM_H - 4, 3, bg);
       }
 
       sprite.setTextColor(fg, bg);

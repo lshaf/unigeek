@@ -10,12 +10,18 @@ class DisplayImpl : public IDisplay
 {
 public:
   DisplayImpl(AXP192* axp) : _axp(axp) {}
-  void setBrightness(uint8_t brightness) override
+
+  void setBrightness(uint8_t pct) override
   {
-    if (brightness > 100) brightness = 100;
-    if (brightness < 2) brightness = 2;
-    _axp->ScreenBreath(brightness);
+    if (pct > 100) pct = 100;
+    if (pct == 0) {
+      _axp->SetLDO2(false);   // cut LDO2 power → display off
+    } else {
+      _axp->SetLDO2(true);    // ensure LDO2 is enabled
+      _axp->ScreenBreath(pct);
+    }
   }
+
 private:
   AXP192* _axp;
 };

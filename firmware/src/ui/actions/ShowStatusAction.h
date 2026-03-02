@@ -10,7 +10,7 @@
 class ShowStatusAction
 {
 public:
-  // durationMs = 0 → auto dismiss, just show and return
+  // durationMs = 0 → show and wait for button/key press, then wipe
   // durationMs > 0 → block for that duration then wipe
   static void show(const char* message, uint32_t durationMs = 0) {
     ShowStatusAction action(message, durationMs);
@@ -95,6 +95,22 @@ private:
 
     if (_duration > 0) {
       delay(_duration);
+      _wipe(x, y, w, h);
+    } else {
+      for (;;) {
+        Uni.update();
+#ifdef DEVICE_HAS_KEYBOARD
+        if (Uni.Keyboard && Uni.Keyboard->available()) {
+          Uni.Keyboard->getKey();
+          break;
+        }
+#endif
+        if (Uni.Nav->wasPressed()) {
+          Uni.Nav->readDirection();
+          break;
+        }
+        delay(10);
+      }
       _wipe(x, y, w, h);
     }
   }

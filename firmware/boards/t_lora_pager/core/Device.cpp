@@ -9,6 +9,7 @@
 #include "Display.h"
 #include "Power.h"
 #include "Keyboard.h"
+#include "Speaker.h"
 #include <SPI.h>
 
 static DisplayImpl    display;
@@ -18,6 +19,7 @@ static KeyboardImpl   keyboard;
 static StorageSD      storageSD;
 static StorageLFS     storageLFS;
 static SPIClass       sharedSpi(HSPI);
+static SpeakerLoRa    speaker;
 
 void Device::setupIo()
 {
@@ -42,5 +44,5 @@ Device* Device::createInstance() {
   storageSD.begin(SD_CS, sharedSpi);
 
   return new Device(display, power, &navigation, &keyboard,
-                    &storageSD, &storageLFS, &sharedSpi);
+                    &storageSD, &storageLFS, &sharedSpi, &speaker);
 }

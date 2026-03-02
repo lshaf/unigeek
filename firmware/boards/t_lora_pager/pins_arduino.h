@@ -32,7 +32,6 @@ static const uint8_t SCL = GROVE_SCL;
 #define SD_CS  21
 
 // ─── Keyboard (TCA8418) ───────────────────────────────────
-#define DEVICE_HAS_KEYBOARD
 #define KB_INT  6
 #define KB_BL   46
 
@@ -69,6 +68,16 @@ static const uint8_t SCL = GROVE_SCL;
 #define AUDIO_DOUT  45
 #define AUDIO_DIN   17
 
+// ─── Speaker (I2S via ES8311 codec + NS4150B amp) ─────────
+#define SPK_BCLK      AUDIO_SCK   // 11
+#define SPK_WCLK      AUDIO_WS    // 18
+#define SPK_DOUT      AUDIO_DOUT  // 45
+#define SPK_MCLK      AUDIO_MCLK  // 10
+#define SPK_I2S_PORT  I2S_NUM_0
+
+// ─── XL9555 I2C GPIO Expander ─────────────────────────────
+#define EXPANDS_AMP_EN  1  // port 0 bit 1 — NS4150B amp enable
+
 // ─── UART (external 12-pin socket) ────────────────────────
 #define UART1_TX  43
 #define UART1_RX  44
@@ -101,5 +110,9 @@ static const uint8_t SCL = GROVE_SCL;
 #define SPI_FREQUENCY       80000000
 #define SPI_READ_FREQUENCY  20000000
 
-// PERMISSION MENU
-#define APP_MENU_POWER_OFF
+// ─── Firmware Feature Flags ───────────────────────────────
+#define DEVICE_HAS_KEYBOARD       // keyboard attached — enables keyboard input paths
+#define KB_QWERT_NUM_REMAP        // remap q-p top row to digits 1-0 in number input (no dedicated numrow)
+#define DEVICE_HAS_SOUND          // speaker attached — enables audio paths and sound settings
+#define DEVICE_HAS_VOLUME_CONTROL // I2S amp supports setVolume() — shows Volume slider in Settings
+#define APP_MENU_POWER_OFF        // show Power Off in main menu (hardware power cut via BQ25896)
