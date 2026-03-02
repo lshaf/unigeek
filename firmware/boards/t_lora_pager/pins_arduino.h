@@ -111,7 +111,7 @@ static const uint8_t SCL = GROVE_SCL;
 #define SPI_READ_FREQUENCY  20000000
 
 // ─── Firmware Feature Flags ───────────────────────────────
-#define DEVICE_HAS_KEYBOARD       // keyboard attached — enables keyboard input paths
+#define DEVICE_HAS_KEYBOARD       // keyboard attached — enables keyboard input pathsad
 #define KB_QWERT_NUM_REMAP        // remap q-p top row to digits 1-0 in number input (no dedicated numrow)
 #define DEVICE_HAS_SOUND          // speaker attached — enables audio paths and sound settings
 #define DEVICE_HAS_VOLUME_CONTROL // I2S amp supports setVolume() — shows Volume slider in Settings

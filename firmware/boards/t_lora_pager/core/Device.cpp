@@ -21,6 +21,8 @@ static StorageLFS     storageLFS;
 static SPIClass       sharedSpi(HSPI);
 static SpeakerLoRa    speaker;
 
+void Device::applyNavMode() {}
+
 void Device::setupIo()
 {
   pinMode(LCD_BL, OUTPUT);

@@ -102,6 +102,7 @@ Always null-check before using — Uni.StorageSD is nullptr on M5StickC.
 - Do NOT declare static constexpr const char*[] as class members — define inside methods
 - Do NOT call setItems({}) — use clearItems() instead
 - Do NOT use string comparison in onItemSelected — use index switch
+- Do NOT draw StatusBar or ListScreen body directly to LCD — both use TFT_eSprite to prevent flicker
 - Do NOT forget deleteSprite() after every createSprite() + pushSprite()
 - Do NOT modify Device.h constructor without updating ALL board Device.cpp files
 - Do NOT add SD-specific logic outside StorageSD.h — use Uni.Storage interface
@@ -126,7 +127,8 @@ All actions are blocking static calls that return a value:
     void               ShowStatusAction::show("Message", durationMs);
 
 For ShowStatusAction:
-- durationMs = 0   block until button/key press, then wipe
+- durationMs = -1  block until button/key press, then wipe  (default)
+- durationMs =  0  show and return immediately, no wipe
 - durationMs > 0   block for that duration then wipe
 
 All actions wipe their overlay area on close.
@@ -139,6 +141,14 @@ All actions wipe their overlay area on close.
     DIR_DOWN    encoder down / BTN_B on M5StickC / . key on Cardputer
     DIR_PRESS   encoder press / power button on M5StickC / ENTER key on Cardputer
     DIR_NONE    no event — wasPressed() returns false
+
+## Encoder Back Button (M5StickC + DEVICE_HAS_NAV_MODE_SWITCH)
+
+When nav mode is "encoder":
+- BTN_A short press (< 3s) → ListScreen::onBack() called on release
+- BTN_A hold ≥ 3s          → main.cpp resets nav to "default"; release does NOT trigger onBack()
+- "< Back" item is hidden automatically in ListScreen when encoder mode is active
+- The 3s hold safety reset always runs in main.cpp loop() regardless of current screen
 
 ---
 

@@ -38,6 +38,8 @@ All hardware differences are isolated in board-specific folders.
     DEVICE_HAS_VOLUME_CONTROL defined for boards with real volume control (I2S amp) — shows Volume in Settings
                               NOT defined for buzzer boards (M5StickC Plus) where setVolume() is a no-op
     APP_MENU_POWER_OFF        defined for T-Lora Pager and M5StickC Plus 1.1, adds Power Off in main menu
+    DEVICE_HAS_NAV_MODE_SWITCH defined for M5StickC Plus 1.1 — enables nav mode setting (Default vs Encoder)
+                              BTN_A short press = back in encoder mode; hold 3s resets to default (main.cpp safety)
 
 ---
 
@@ -208,9 +210,12 @@ All hardware differences are isolated in board-specific folders.
 
 ### Back Navigation
 
-    - ListScreen provides virtual onBack() — called on backspace key (DEVICE_HAS_KEYBOARD)
-      or when user selects the auto-appended "< Back" item (no-keyboard devices)
+    - ListScreen provides virtual onBack() — called on:
+        - backspace key (DEVICE_HAS_KEYBOARD boards)
+        - BTN_A short press when encoder nav is active (DEVICE_HAS_NAV_MODE_SWITCH boards)
+        - user selects the auto-appended "< Back" item (no-keyboard, non-encoder devices)
     - hasBackItem() controls whether "< Back" appears — default true, override false for root screens
+    - "< Back" is automatically hidden when encoder nav is active (BTN_A acts as back instead)
     - setItems() calls render() (full chrome + body redraw)
     - Implement onBack() in a .cpp file when it needs to instantiate a parent screen:
 
@@ -242,7 +247,8 @@ All hardware differences are isolated in board-specific folders.
     int         InputNumberAction::popup("Title", 0, 100, 50)
     const char* InputSelectAction::popup("Title", opts, count)
     const char* InputSelectAction::popup("Title", opts, count, "default_value")
-    void        ShowStatusAction::show("Message")           block until button/key press, then wipe
+    void        ShowStatusAction::show("Message")           wait for button/key press, then wipe  (default, durationMs=-1)
+    void        ShowStatusAction::show("Message", 0)        show and return immediately, no wipe
     void        ShowStatusAction::show("Message", 1500)     show, block ms, then wipe
     // Long messages are automatically word-wrapped (max 5 lines, box grows to fit)
     // InputSelectAction: backspace (DEVICE_HAS_KEYBOARD) dismisses overlay and returns nullptr
@@ -271,6 +277,7 @@ All hardware differences are isolated in board-specific folders.
     - onNav() returns true if the direction was consumed (scrolled), false if at boundary
     - Row.value is a String — safe for dynamic content (WiFi info, etc.)
     - Store rows[] as a class member so values persist between renders
+    - If remaining height after last full row is ≥ 5px, one additional partial row is rendered (clipped by viewport)
 
 ### Config System
 
@@ -289,6 +296,7 @@ All hardware differences are isolated in board-specific folders.
       APP_CONFIG_VOLUME / APP_CONFIG_VOLUME_DEFAULT
       APP_CONFIG_NAV_SOUND / APP_CONFIG_NAV_SOUND_DEFAULT
       APP_CONFIG_PRIMARY_COLOR / APP_CONFIG_PRIMARY_COLOR_DEFAULT
+      APP_CONFIG_NAV_MODE / APP_CONFIG_NAV_MODE_DEFAULT   ("default" or "encoder", M5StickC only)
 
     File path: /unigeek/config (key=value format, one per line)
     StorageLFS::writeFile auto-creates parent dirs; StorageSD does not — call makeDir("/unigeek") first.
@@ -382,6 +390,9 @@ All hardware differences are isolated in board-specific folders.
 - ListItem struct has no default for sublabel — single-field init {"Label"} zero-initializes sublabel to nullptr
 - ListScreen uses TFT_eSprite for body rendering — eliminates flicker on highlight change
   (full body rendered to sprite then pushed in one operation, no visible clear-then-draw flash)
+- ListScreen navigation wraps around: UP at index 0 goes to last item, DOWN at last item goes to 0
+- StatusBar uses TFT_eSprite (WIDTH × lcd.height()) — all slots rendered offscreen then pushed once to avoid flicker
+- StatusBar slots are 20×20px boxes centered in the 32px sidebar, spaced at 6px start + 24px per slot
 - StorageSD::writeFile does NOT auto-create parent directories — call makeDir("/dir") before writeFile()
   StorageLFS::writeFile calls _makeDir() internally, so parent creation is automatic
 - SettingScreen sublabels are stored as class member Strings (_nameSub, _brightSub, etc.)

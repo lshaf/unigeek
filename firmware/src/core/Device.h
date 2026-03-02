@@ -54,6 +54,8 @@ public:
     Nav->begin();
   }
 
+  virtual void applyNavMode();    // board override: switch nav based on APP_CONFIG_NAV_MODE
+
   IDisplay& Lcd;
   IPower& Power;
   INavigation* Nav;

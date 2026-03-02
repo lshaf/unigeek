@@ -60,6 +60,7 @@ static const uint8_t SCL = GROVE_SCL;
 #define SPK_PIN  2
 
 // ─── Firmware Feature Flags ───────────────────────────────
-#define DEVICE_HAS_SOUND   // buzzer attached — enables audio paths and sound settings
-                           // NOTE: no DEVICE_HAS_VOLUME_CONTROL — piezo buzzer has no real volume control
-#define APP_MENU_POWER_OFF // show Power Off in main menu (hardware power cut via AXP192)
+#define DEVICE_HAS_SOUND          // buzzer attached — enables audio paths and sound settings
+                                  // NOTE: no DEVICE_HAS_VOLUME_CONTROL — piezo buzzer has no real volume control
+#define DEVICE_HAS_NAV_MODE_SWITCH // supports switching between default (buttons) and encoder navigation
+#define APP_MENU_POWER_OFF        // show Power Off in main menu (hardware power cut via AXP192)

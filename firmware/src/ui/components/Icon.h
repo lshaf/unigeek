@@ -5,7 +5,7 @@ class Icons
 {
 public:
   static void drawWifi(TFT_eSPI& lcd, int16_t x, int16_t y, bool active) {
-    uint16_t color = active ? TFT_CYAN : TFT_WHITE;
+    uint16_t color = active ? TFT_GREEN : TFT_WHITE;
 
     // dot at bottom center
     lcd.fillCircle(x + 8, y + 14, 2, color);

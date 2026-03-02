@@ -26,6 +26,8 @@ void Device::setupIo()
   digitalWrite(SD_CS, HIGH);
 }
 
+void Device::applyNavMode() {}
+
 Device* Device::createInstance() {
   sdSpi.begin(SPI_SCK_PIN, SPI_MISO_PIN, SPI_MOSI_PIN, -1);
   storageLFS.begin();

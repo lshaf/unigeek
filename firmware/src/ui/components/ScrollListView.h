@@ -27,7 +27,7 @@ public:
 
   // returns true if direction was consumed (scrolled)
   bool onNav(INavigation::Direction dir) {
-    int visible = _h / ROW_H;
+    int visible = _h / ROW_H + (_h % ROW_H >= 5 ? 1 : 0);
     if (dir == INavigation::DIR_UP && _offset > 0) {
       _offset--;
       _draw();
@@ -52,11 +52,16 @@ private:
 
   void _draw() {
     auto& lcd    = Uni.Lcd;
-    int   visible = _h / ROW_H;
+    int   full    = _h / ROW_H;
+    int   extra   = (_h % ROW_H >= 5) ? 1 : 0;
+    int   visible = full + extra;
     int   textW   = _w - SCROLL_W - 4;
 
     lcd.fillRect(_x, _y, _w, _h, TFT_BLACK);
     lcd.setTextSize(1);
+
+    // viewport clips any partial row at the bottom edge
+    lcd.setViewport(_x, _y, _w, _h, false);
 
     for (int i = 0; i < visible; i++) {
       int idx = i + _offset;
@@ -71,6 +76,8 @@ private:
       lcd.setTextDatum(TR_DATUM);
       lcd.drawString(_rows[idx].value.c_str(), _x + textW, iy, 1);
     }
+
+    lcd.resetViewport();
 
     // scrollbar — only if content overflows
     if (_count > visible) {

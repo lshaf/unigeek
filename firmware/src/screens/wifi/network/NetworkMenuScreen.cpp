@@ -93,7 +93,8 @@ void NetworkMenuScreen::_showMenu() {
 }
 
 void NetworkMenuScreen::_showWifiList() {
-  _state = STATE_SELECT_WIFI;
+  _state    = STATE_SELECT_WIFI;
+  _scanning = true;
   ShowStatusAction::show("Scanning...", 0);
 
   WiFi.scanDelete();
@@ -109,6 +110,7 @@ void NetworkMenuScreen::_showWifiList() {
     _scannedItems[i] = { _scanned[i].label };
   }
 
+  _scanning = false;
   setItems(_scannedItems, _scannedCount);
 }
 
@@ -130,7 +132,7 @@ void NetworkMenuScreen::_connectToSelected(uint8_t index) {
 }
 
 bool NetworkMenuScreen::_connect(const char* bssid, const char* ssid, const char* password) {
-  ShowStatusAction::show(("Connecting to " + String(ssid) + "...").c_str());
+  ShowStatusAction::show(("Connecting to " + String(ssid) + "...").c_str(), 0);
 
   WiFi.begin(ssid, password);
   uint8_t res = WiFi.waitForConnectResult(10000);

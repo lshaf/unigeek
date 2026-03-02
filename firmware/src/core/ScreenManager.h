@@ -19,6 +19,8 @@ public:
     _pending = screen;
   }
 
+  IScreen* current() { return _current; }
+
   void update() {
     if (_pending) {
       if (_current) delete _current;

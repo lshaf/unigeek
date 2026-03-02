@@ -10,9 +10,10 @@
 class ShowStatusAction
 {
 public:
-  // durationMs = 0 → show and wait for button/key press, then wipe
-  // durationMs > 0 → block for that duration then wipe
-  static void show(const char* message, uint32_t durationMs = 0) {
+  // durationMs = -1 → wait for button/key press, then wipe  (default)
+  // durationMs =  0 → show and return immediately, no wipe
+  // durationMs > 0  → block for that duration then wipe
+  static void show(const char* message, int32_t durationMs = -1) {
     ShowStatusAction action(message, durationMs);
     action._run();
   }
@@ -21,10 +22,10 @@ private:
   static constexpr int PAD = 4;
 
   const char* _message;
-  uint32_t    _duration;
+  int32_t     _duration;
   TFT_eSprite _overlay;
 
-  explicit ShowStatusAction(const char* message, uint32_t duration)
+  explicit ShowStatusAction(const char* message, int32_t duration)
     : _message(message), _duration(duration), _overlay(&Uni.Lcd)
   {}
 
@@ -96,7 +97,7 @@ private:
     if (_duration > 0) {
       delay(_duration);
       _wipe(x, y, w, h);
-    } else {
+    } else if (_duration < 0) {
       for (;;) {
         Uni.update();
 #ifdef DEVICE_HAS_KEYBOARD
@@ -113,5 +114,6 @@ private:
       }
       _wipe(x, y, w, h);
     }
+    // _duration == 0: show and return immediately, no wipe
   }
 };

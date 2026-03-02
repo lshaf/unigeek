@@ -31,6 +31,9 @@ private:
     SETT_NAV_SOUND,
 #endif
     SETT_COLOR,
+#ifdef DEVICE_HAS_NAV_MODE_SWITCH
+    SETT_NAV_MODE,
+#endif
     SETT_ABOUT,
     SETT_COUNT
   };
@@ -47,6 +50,9 @@ private:
   String _navSndSub;
 #endif
   String _colorSub;
+#ifdef DEVICE_HAS_NAV_MODE_SWITCH
+  String _navModeSub;
+#endif
 
   ListItem _items[SETT_COUNT] = {
     {"Name",             ""},
@@ -61,6 +67,9 @@ private:
     {"Navigation Sound", ""},
 #endif
     {"Primary Color",    ""},
+#ifdef DEVICE_HAS_NAV_MODE_SWITCH
+    {"Navigation Mode",  ""},
+#endif
     {"About"},
   };
 };

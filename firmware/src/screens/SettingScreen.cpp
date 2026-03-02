@@ -30,6 +30,9 @@ void SettingScreen::_refresh() {
   _navSndSub   = Config.get(APP_CONFIG_NAV_SOUND,            APP_CONFIG_NAV_SOUND_DEFAULT).toInt() ? "On" : "Off";
 #endif
   _colorSub    = Config.get(APP_CONFIG_PRIMARY_COLOR,        APP_CONFIG_PRIMARY_COLOR_DEFAULT);
+#ifdef DEVICE_HAS_NAV_MODE_SWITCH
+  _navModeSub  = Config.get(APP_CONFIG_NAV_MODE, APP_CONFIG_NAV_MODE_DEFAULT) == "encoder" ? "Encoder" : "Default";
+#endif
 
   _items[SETT_NAME].sublabel      = _nameSub.c_str();
   _items[SETT_POWER_SAV].sublabel = _powerSavSub.c_str();
@@ -43,6 +46,9 @@ void SettingScreen::_refresh() {
   _items[SETT_NAV_SOUND].sublabel = _navSndSub.c_str();
 #endif
   _items[SETT_COLOR].sublabel     = _colorSub.c_str();
+#ifdef DEVICE_HAS_NAV_MODE_SWITCH
+  _items[SETT_NAV_MODE].sublabel  = _navModeSub.c_str();
+#endif
 
   render();
 }
@@ -155,6 +161,24 @@ void SettingScreen::onItemSelected(uint8_t index) {
       _refresh();
       break;
     }
+
+#ifdef DEVICE_HAS_NAV_MODE_SWITCH
+    case SETT_NAV_MODE: {
+      static constexpr InputSelectAction::Option opts[] = {
+        {"Default", "default"},
+        {"Encoder", "encoder"},
+      };
+      String      cur    = Config.get(APP_CONFIG_NAV_MODE, APP_CONFIG_NAV_MODE_DEFAULT);
+      const char* result = InputSelectAction::popup("Navigation Mode", opts, 2, cur.c_str());
+      if (result != nullptr) {
+        Config.set(APP_CONFIG_NAV_MODE, result);
+        Config.save(Uni.Storage);
+        Uni.applyNavMode();
+      }
+      _refresh();
+      break;
+    }
+#endif
   }
 }
 

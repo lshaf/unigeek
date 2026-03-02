@@ -12,7 +12,8 @@ class NetworkMenuScreen : public ListScreen
 public:
   NetworkMenuScreen();
 
-  const char* title() override { return "Network"; }
+  const char* title()        override { return "Network"; }
+  bool inhibitPowerSave()    override { return _scanning; }
 
   void onInit() override;
   void onBack() override;
@@ -28,6 +29,7 @@ private:
   };
 
   State      _state       = STATE_SELECT_WIFI;
+  bool       _scanning    = false;
   ScrollListView _scrollView;
   ScrollListView::Row _infoRows[11];
 
