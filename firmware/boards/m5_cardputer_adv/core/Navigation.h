@@ -16,6 +16,7 @@ public:
       if      (c == ';')  { _kb->getKey(); updateState(DIR_UP);    return; }
       else if (c == '.')  { _kb->getKey(); updateState(DIR_DOWN);  return; }
       else if (c == '\n') { _kb->getKey(); updateState(DIR_PRESS); return; }
+      else if (c == '\b') { _kb->getKey(); updateState(DIR_BACK);  return; }
     }
     updateState(DIR_NONE);
   }

@@ -5,6 +5,7 @@
 #pragma once
 
 #include "core/INavigation.h"
+#include "core/IKeyboard.h"
 #include "pins_arduino.h"
 #include <RotaryEncoder.h>
 
@@ -15,11 +16,14 @@
 class NavigationImpl : public INavigation
 {
 public:
+  NavigationImpl(IKeyboard* kb = nullptr) : _kb(kb) {}
+
   void begin() override;
   void update() override;
 
 private:
   RotaryEncoder* _encoder = nullptr;
+  IKeyboard*     _kb      = nullptr;
   int            _lastPos = 0;
   int            _posDiff = 0;
 };

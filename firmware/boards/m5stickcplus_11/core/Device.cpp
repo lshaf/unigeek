@@ -42,3 +42,18 @@ void Device::applyNavMode() {
     switchNavigation(&navigation);
   }
 }
+
+void Device::boardHook() {
+  static unsigned long _btnAHeld = 0;
+  if (digitalRead(BTN_A) == LOW) {
+    if (_btnAHeld == 0) _btnAHeld = millis();
+    else if (millis() - _btnAHeld >= 3000) {
+      Config.set(APP_CONFIG_NAV_MODE, APP_CONFIG_NAV_MODE_DEFAULT);
+      Config.save(Storage);
+      applyNavMode();
+      _btnAHeld = 0;
+    }
+  } else {
+    _btnAHeld = 0;
+  }
+}

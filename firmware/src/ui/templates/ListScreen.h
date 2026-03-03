@@ -36,26 +36,6 @@ public:
 
   void onUpdate() override
   {
-#ifdef DEVICE_HAS_KEYBOARD
-    if (Uni.Keyboard && Uni.Keyboard->available()) {
-      char c = Uni.Keyboard->getKey();
-      if (c == '\b') { onBack(); return; }
-    }
-#endif
-
-#if defined(DEVICE_HAS_NAV_MODE_SWITCH) && defined(BTN_A)
-    if (digitalRead(BTN_A) == LOW) {
-      if (_btnAPressed == 0) _btnAPressed = millis();
-    } else if (_btnAPressed != 0) {
-      unsigned long held = millis() - _btnAPressed;
-      _btnAPressed = 0;
-      if (held < 3000 && Config.get(APP_CONFIG_NAV_MODE, APP_CONFIG_NAV_MODE_DEFAULT) == "encoder") {
-        onBack();
-        return;
-      }
-    }
-#endif
-
     uint8_t eff = _effectiveCount();
     if (eff == 0) return;
 
@@ -63,7 +43,12 @@ public:
     {
       auto dir = Uni.Nav->readDirection();
 
-      if (dir == INavigation::DIR_UP)
+      if (dir == INavigation::DIR_BACK)
+      {
+        onBack();
+        return;
+      }
+      else if (dir == INavigation::DIR_UP)
       {
         _selectedIndex = (_selectedIndex == 0) ? eff - 1 : _selectedIndex - 1;
         _scrollIfNeeded();
@@ -153,7 +138,6 @@ private:
   ListItem*     _items        = nullptr;
   uint8_t       _count        = 0;
   uint8_t       _scrollOffset = 0;
-  unsigned long _btnAPressed  = 0;
 
   static constexpr uint8_t ITEM_H = 22;
 

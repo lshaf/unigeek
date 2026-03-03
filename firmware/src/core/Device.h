@@ -44,9 +44,12 @@ public:
 
   void update()
   {
+    boardHook();
     if (Keyboard) Keyboard->update();
     Nav->update();
   }
+
+  void boardHook();  // board-specific per-frame hook, defined in each Device.cpp
 
   void switchNavigation(INavigation* newNav)
   {

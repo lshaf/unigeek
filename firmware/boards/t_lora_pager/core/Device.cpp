@@ -13,15 +13,16 @@
 #include <SPI.h>
 
 static DisplayImpl    display;
-static NavigationImpl navigation;
-static PowerImpl      power;
 static KeyboardImpl   keyboard;
+static NavigationImpl navigation(&keyboard);
+static PowerImpl      power;
 static StorageSD      storageSD;
 static StorageLFS     storageLFS;
 static SPIClass       sharedSpi(HSPI);
 static SpeakerLoRa    speaker;
 
 void Device::applyNavMode() {}
+void Device::boardHook() {}
 
 void Device::setupIo()
 {

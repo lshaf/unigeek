@@ -135,11 +135,6 @@ private:
         char c = Uni.Keyboard->getKey();
         if (c == '\n') {
           _done = true;
-        } else if (c == '\b') {
-          if (_input.length() > 0) {
-            _input.remove(_input.length() - 1);
-            _drawKeyboard(true);
-          }
         } else if (c != '\0') {
           _input += c;
           cursorOn  = true;
@@ -149,8 +144,16 @@ private:
       }
 
       if (Uni.Nav->wasPressed()) {
-        if (Uni.Nav->readDirection() == INavigation::DIR_PRESS) {
+        auto dir = Uni.Nav->readDirection();
+        if (dir == INavigation::DIR_PRESS) {
           _done = true;
+        } else if (dir == INavigation::DIR_BACK) {
+          if (_input.length() > 0) {
+            _input.remove(_input.length() - 1);
+            cursorOn  = true;
+            lastBlink = millis();
+            _drawKeyboard(true);
+          }
         }
       }
       delay(10);

@@ -15,7 +15,8 @@ public:
     DIR_DOWN,
     DIR_LEFT,
     DIR_RIGHT,
-    DIR_PRESS
+    DIR_PRESS,
+    DIR_BACK
   };
 
   virtual ~INavigation() = default;

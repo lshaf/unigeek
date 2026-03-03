@@ -105,18 +105,6 @@ private:
     while (!_done) {
       Uni.update();
 
-#ifdef DEVICE_HAS_KEYBOARD
-      if (Uni.Keyboard && Uni.Keyboard->available()) {
-        char c = Uni.Keyboard->peekKey();
-        if (c == '\b') {
-          Uni.Keyboard->getKey();
-          _result = nullptr;
-          _done   = true;
-          continue;
-        }
-      }
-#endif
-
       if (Uni.Nav->wasPressed()) {
         switch (Uni.Nav->readDirection()) {
           case INavigation::DIR_UP:
@@ -133,6 +121,11 @@ private:
 
           case INavigation::DIR_PRESS:
             _result = _valueAt(_selectedIdx);
+            _done   = true;
+            break;
+
+          case INavigation::DIR_BACK:
+            _result = nullptr;
             _done   = true;
             break;
 

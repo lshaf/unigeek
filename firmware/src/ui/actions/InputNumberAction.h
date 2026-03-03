@@ -133,13 +133,6 @@ private:
         if (c == '\n') {
           if (_validate()) _done = true;
           else _drawKeyboard(true);
-        } else if (c == '\b') {
-          if (_input.length() > 0) {
-            _input.remove(_input.length() - 1);
-            cursorOn  = true;
-            lastBlink = millis();
-            _drawKeyboard(true);
-          }
         } else if (isdigit(c)) {
           _input += c;
           cursorOn  = true;
@@ -150,9 +143,17 @@ private:
       }
 
       if (Uni.Nav->wasPressed()) {
-        if (Uni.Nav->readDirection() == INavigation::DIR_PRESS) {
+        auto dir = Uni.Nav->readDirection();
+        if (dir == INavigation::DIR_PRESS) {
           if (_validate()) _done = true;
           else _drawKeyboard(true);
+        } else if (dir == INavigation::DIR_BACK) {
+          if (_input.length() > 0) {
+            _input.remove(_input.length() - 1);
+            cursorOn  = true;
+            lastBlink = millis();
+            _drawKeyboard(true);
+          }
         }
       }
       delay(10);

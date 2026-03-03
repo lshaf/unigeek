@@ -24,22 +24,6 @@ void setup() {
 }
 
 void loop() {
-#if defined(DEVICE_HAS_NAV_MODE_SWITCH) && defined(BTN_A)
-  // Hold BTN_A for 3 s to reset navigation mode to default (encoder recovery)
-  static unsigned long _btnAHeld = 0;
-  if (digitalRead(BTN_A) == LOW) {
-    if (_btnAHeld == 0) _btnAHeld = millis();
-    else if (millis() - _btnAHeld >= 3000) {
-      Config.set(APP_CONFIG_NAV_MODE, APP_CONFIG_NAV_MODE_DEFAULT);
-      Config.save(Uni.Storage);
-      Uni.applyNavMode();
-      _btnAHeld = 0;
-    }
-  } else {
-    _btnAHeld = 0;
-  }
-#endif
-
   Uni.update();
 
   // ── Activity detection (non-consuming) ────────────────────────────────────

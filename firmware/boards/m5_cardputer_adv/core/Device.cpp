@@ -27,6 +27,7 @@ void Device::setupIo()
 }
 
 void Device::applyNavMode() {}
+void Device::boardHook() {}
 
 Device* Device::createInstance() {
   sdSpi.begin(SPI_SCK_PIN, SPI_MISO_PIN, SPI_MOSI_PIN, -1);

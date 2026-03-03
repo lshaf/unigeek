@@ -24,6 +24,11 @@ void NavigationImpl::begin() {
 }
 
 void NavigationImpl::update() {
+  if (_kb && _kb->available()) {
+    char c = _kb->peekKey();
+    if (c == '\b') { _kb->getKey(); updateState(DIR_BACK); return; }
+  }
+
   int newPos = _encoder->getPosition();
   if (newPos != _lastPos) {
     _posDiff += (newPos - _lastPos);
