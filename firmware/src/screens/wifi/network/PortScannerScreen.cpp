@@ -49,6 +49,14 @@ void PortScannerScreen::_scan() {
     return;
   }
 
+  int a, b, c, d;
+  if (sscanf(_targetIp.c_str(), "%d.%d.%d.%d", &a, &b, &c, &d) != 4 ||
+      a < 0 || a > 255 || b < 0 || b > 255 ||
+      c < 0 || c > 255 || d < 0 || d > 255) {
+    ShowStatusAction::show("Invalid IP address");
+    return;
+  }
+
   memset(_results,     0, sizeof(_results));
   memset(_resultItems, 0, sizeof(_resultItems));
 
