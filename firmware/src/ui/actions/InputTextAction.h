@@ -11,8 +11,8 @@
 class InputTextAction
 {
 public:
-  static String popup(const char* title, const String& defaultValue = "") {
-    InputTextAction action(title, defaultValue);
+  static String popup(const char* title, const String& defaultValue = "", bool numberMode = false) {
+    InputTextAction action(title, defaultValue, numberMode);
     return action._run();
   }
 
@@ -24,6 +24,14 @@ private:
     SP_SYMBOL,
     SP_CANCEL,
     SP_COUNT
+  };
+
+  // number mode uses a reduced special set: SAVE, DEL, CANCEL only
+  enum SpecialNum {
+    SPN_SAVE = 0,
+    SPN_DELETE,
+    SPN_CANCEL,
+    SPN_COUNT
   };
 
   static constexpr int      MAX_SETS   = 15;
@@ -49,6 +57,7 @@ private:
   int         _tapCount    = 0;
   uint32_t    _lastTapTime = 0;
 
+  bool        _numberMode  = false;
   bool        _capsLock    = false;
   bool        _symbolMode  = false;
   bool        _done        = false;
@@ -60,33 +69,51 @@ private:
 
   TFT_eSprite _overlay;
 
-  explicit InputTextAction(const char* title, const String& defaultValue)
-  : _title(title), _input(defaultValue), _overlay(&Uni.Lcd)
+  explicit InputTextAction(const char* title, const String& defaultValue, bool numberMode)
+  : _title(title), _input(defaultValue), _numberMode(numberMode), _overlay(&Uni.Lcd)
   {
     _buildSets();
   }
 
   void _buildSets() {
-    static constexpr const char* charLabels[] = {
-      " 0",    ",.1",   "abc2",  "def3",  "ghi4",
-      "jkl5",  "mno6",  "pqrs7", "tuv8",  "wxyz9",
-    };
-    static constexpr const char* symbolLabels[] = {
-      " ",     ",.'- ", "*/@",   "+-=",   ":;?",
-      "!$#",   "\"&%",  "()[]",  "<>{}",  "^~`",
-    };
-
     _setCount = 0;
-    const char* const* sets = _symbolMode ? symbolLabels : charLabels;
-    for (int i = 0; i < 10; i++) {
-      _sets[_setCount++] = { sets[i], sets[i], false, SP_SAVE };
-    }
 
-    static constexpr const char* specialLabels[SP_COUNT] = {
-      "SAVE", "DEL", "CAPS", "SYM", "CANCEL"
-    };
-    for (int i = 0; i < SP_COUNT; i++) {
-      _sets[_setCount++] = { nullptr, specialLabels[i], true, (Special)i };
+    if (_numberMode) {
+      static constexpr const char* numLabels[] = {
+        "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", ".",
+      };
+      for (int i = 0; i < 11; i++) {
+        _sets[_setCount++] = { numLabels[i], numLabels[i], false, SP_SAVE };
+      }
+      static constexpr const char* numSpecialLabels[SPN_COUNT] = {
+        "SAVE", "DEL", "CANCEL"
+      };
+      // map SPN_* indices to SP_* so _handleSelect can reuse SP_SAVE/SP_DELETE/SP_CANCEL
+      static constexpr Special numSpecialMap[SPN_COUNT] = { SP_SAVE, SP_DELETE, SP_CANCEL };
+      for (int i = 0; i < SPN_COUNT; i++) {
+        _sets[_setCount++] = { nullptr, numSpecialLabels[i], true, numSpecialMap[i] };
+      }
+    } else {
+      static constexpr const char* charLabels[] = {
+        " 0",    ",.1",   "abc2",  "def3",  "ghi4",
+        "jkl5",  "mno6",  "pqrs7", "tuv8",  "wxyz9",
+      };
+      static constexpr const char* symbolLabels[] = {
+        " ",     ",.'- ", "*/@",   "+-=",   ":;?",
+        "!$#",   "\"&%",  "()[]",  "<>{}",  "^~`",
+      };
+
+      const char* const* sets = _symbolMode ? symbolLabels : charLabels;
+      for (int i = 0; i < 10; i++) {
+        _sets[_setCount++] = { sets[i], sets[i], false, SP_SAVE };
+      }
+
+      static constexpr const char* specialLabels[SP_COUNT] = {
+        "SAVE", "DEL", "CAPS", "SYM", "CANCEL"
+      };
+      for (int i = 0; i < SP_COUNT; i++) {
+        _sets[_setCount++] = { nullptr, specialLabels[i], true, (Special)i };
+      }
     }
   }
 
@@ -136,10 +163,12 @@ private:
         if (c == '\n') {
           _done = true;
         } else if (c != '\0') {
-          _input += c;
-          cursorOn  = true;
-          lastBlink = millis();
-          _drawKeyboard(true);
+          if (!_numberMode || isdigit(c) || c == '.') {
+            _input += c;
+            cursorOn  = true;
+            lastBlink = millis();
+            _drawKeyboard(true);
+          }
         }
       }
 
@@ -192,7 +221,7 @@ private:
 
     _overlay.setTextColor(TFT_DARKGREY);
     _overlay.setCursor(PAD, h - PAD - 8);
-    _overlay.print("Type + ENTER to confirm");
+    _overlay.print(_numberMode ? "0-9 . + ENTER to confirm" : "Type + ENTER to confirm");
 
     _overlay.pushSprite(x, y);
   }
@@ -375,7 +404,7 @@ private:
 
     // hint pinned to bottom with padding
     _overlay.setTextColor(TFT_DARKGREY);
-    _overlay.drawString("UP/DN:set  PRESS:char", PAD, hintY);
+    _overlay.drawString(_numberMode ? "UP/DN:digit  PRESS:sel" : "UP/DN:set  PRESS:char", PAD, hintY);
 
     _overlay.pushSprite(x, y);
   }
