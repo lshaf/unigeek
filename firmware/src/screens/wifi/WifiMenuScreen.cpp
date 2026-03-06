@@ -5,9 +5,12 @@
 #include "WifiMenuScreen.h"
 #include "screens/MainMenuScreen.h"
 #include "network/NetworkMenuScreen.h"
+#include "WifiAnalyzerScreen.h"
 #include "WifiPacketMonitorScreen.h"
 #include "WifiDeautherScreen.h"
 #include "WifiDeauthDetectorScreen.h"
+#include "WifiBeaconSpamScreen.h"
+#include "WifiESPNowChatScreen.h"
 
 void WifiMenuScreen::onInit() {
   setItems(_items);
@@ -15,10 +18,13 @@ void WifiMenuScreen::onInit() {
 
 void WifiMenuScreen::onItemSelected(uint8_t index) {
   switch (index) {
-    case 0: Screen.setScreen(new NetworkMenuScreen()); break;
+    case 0: Screen.setScreen(new NetworkMenuScreen());   break;
+    case 2: Screen.setScreen(new WifiAnalyzerScreen());  break;
     case 3: Screen.setScreen(new WifiPacketMonitorScreen()); break;
     case 4: Screen.setScreen(new WifiDeautherScreen()); break;
     case 5: Screen.setScreen(new WifiDeauthDetectorScreen()); break;
+    case 6: Screen.setScreen(new WifiBeaconSpamScreen()); break;
+    case 7: Screen.setScreen(new WifiESPNowChatScreen()); break;
   }
 }
 
