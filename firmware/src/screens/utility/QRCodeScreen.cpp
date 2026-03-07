@@ -4,8 +4,6 @@
 #include "ui/actions/InputTextAction.h"
 #include "ui/actions/ShowStatusAction.h"
 #include "ui/actions/ShowQRCodeAction.h"
-#include <SD.h>
-#include <LittleFS.h>
 
 void QRCodeScreen::onInit() {
   _state = STATE_MENU;
@@ -85,47 +83,39 @@ void QRCodeScreen::_scanFiles(const String& path) {
   _state = STATE_SELECT_FILE;
   _fileCount = 0;
 
-  bool useSD = Uni.StorageSD && Uni.StorageSD->isAvailable();
-  File dir = useSD ? SD.open(path.c_str()) : LittleFS.open(path.c_str());
-  if (!dir) {
+  IStorage::DirEntry entries[MAX_FILES];
+  uint8_t count = Uni.Storage->listDir(path.c_str(), entries, MAX_FILES);
+
+  if (count == 0) {
     ShowStatusAction::show("Cannot open directory", 1500);
     _state = STATE_MENU;
     render();
     return;
   }
 
-  File f;
-  while ((f = dir.openNextFile()) && _fileCount < MAX_FILES) {
-    bool isDir = f.isDirectory();
-    strncpy(_fileEntries[_fileCount].name, f.name(), sizeof(_fileEntries[0].name) - 1);
-    _fileEntries[_fileCount].name[sizeof(_fileEntries[0].name) - 1] = '\0';
-    _fileEntries[_fileCount].isDir = isDir;
-    _fileItems[_fileCount] = { _fileEntries[_fileCount].name, isDir ? "DIR" : "FILE" };
-    _fileCount++;
-    f.close();
+  for (uint8_t i = 0; i < count; i++) {
+    strncpy(_fileEntries[i].name, entries[i].name.c_str(), sizeof(_fileEntries[0].name) - 1);
+    _fileEntries[i].name[sizeof(_fileEntries[0].name) - 1] = '\0';
+    _fileEntries[i].isDir = entries[i].isDir;
+    _fileItems[i] = { _fileEntries[i].name, entries[i].isDir ? "DIR" : "FILE" };
   }
-  dir.close();
+  _fileCount = count;
 
   setItems(_fileItems, _fileCount);
 }
 
 void QRCodeScreen::_generateFromFile(const String& path) {
-  bool useSD = Uni.StorageSD && Uni.StorageSD->isAvailable();
-  File f = useSD ? SD.open(path.c_str()) : LittleFS.open(path.c_str());
-  if (!f) {
+  String data = Uni.Storage->readFile(path.c_str());
+  if (data.isEmpty()) {
     ShowStatusAction::show("Cannot open file", 1500);
     render();
     return;
   }
-  if (f.size() > 1800) {
-    f.close();
+  if (data.length() > 1800) {
     ShowStatusAction::show("File too large", 1500);
     render();
     return;
   }
-
-  String data = f.readString();
-  f.close();
 
   ShowQRCodeAction::show(path.c_str(), data.c_str(), _inverted);
   render();

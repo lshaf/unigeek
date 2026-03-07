@@ -9,11 +9,17 @@
 class IStorage
 {
 public:
-  virtual bool   isAvailable()                                    = 0;
-  virtual bool   exists(const char* path)                         = 0;
-  virtual String readFile(const char* path)                       = 0;
-  virtual bool   writeFile(const char* path, const char* content) = 0;
-  virtual bool   deleteFile(const char* path)                     = 0;
-  virtual bool   makeDir(const char* path)                        = 0;
+  struct DirEntry {
+    String name;
+    bool   isDir;
+  };
+
+  virtual bool    isAvailable()                                          = 0;
+  virtual bool    exists(const char* path)                               = 0;
+  virtual String  readFile(const char* path)                             = 0;
+  virtual bool    writeFile(const char* path, const char* content)       = 0;
+  virtual bool    deleteFile(const char* path)                           = 0;
+  virtual bool    makeDir(const char* path)                              = 0;
+  virtual uint8_t listDir(const char* path, DirEntry* out, uint8_t max) = 0;
   virtual ~IStorage() {}
 };

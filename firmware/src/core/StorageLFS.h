@@ -60,6 +60,23 @@ public:
     return true;
   }
 
+  uint8_t listDir(const char* path, DirEntry* out, uint8_t max) override {
+    if (!_available) return 0;
+    fs::File dir = LittleFS.open(path);
+    if (!dir) return 0;
+    uint8_t count = 0;
+    while (count < max) {
+      fs::File f = dir.openNextFile();
+      if (!f) break;
+      out[count].name  = f.name();
+      out[count].isDir = f.isDirectory();
+      f.close();
+      count++;
+    }
+    dir.close();
+    return count;
+  }
+
 private:
   bool _available = false;
 
