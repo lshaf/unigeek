@@ -54,10 +54,14 @@ When implementing board-specific hardware features, check these FIRST:
 4. Create config.ini (or boards.ini) with PlatformIO env config
 5. Storage: init in createInstance(), pass to Device constructor
 6. If board has keyboard:
-   - Implement Keyboard.h with IKeyboard: begin(), update(), available(), peekKey(), getKey()
+   - Implement Keyboard.h with IKeyboard: begin(), update(), available(), peekKey(), getKey(), modifiers()
    - Add DEVICE_HAS_KEYBOARD to build_flags
    - peekKey() must NOT consume the key — NavigationImpl peeks first, only consumes nav keys (;  .  \n  \b  ,  /)
-   - For GPIO matrix boards: add _waitRelease debounce — set true in getKey(), block in update() until all inputs low
+   - modifiers() returns a bitmask of IKeyboard::Modifier flags (MOD_SHIFT, MOD_FN, MOD_CTRL, MOD_ALT, MOD_OPT, MOD_CAPS)
+     Track modifier state from press/release events (TCA8418) or from physical scan (GPIO matrix)
+     FN/SHIFT/CTRL/ALT must be hold-based (active while key is physically held), never toggle
+   - For GPIO matrix boards: add _waitRelease debounce — set true in getKey(), block in update()
+     until all NON-modifier inputs are low (modifier keys must not prevent release detection)
 7. If board has speaker:
    - Define `SPK_BCLK`, `SPK_WCLK`, `SPK_DOUT` in pins_arduino.h
    - Define `SPK_I2S_PORT` (I2S_NUM_0 or I2S_NUM_1) in pins_arduino.h — Cardputer boards use I2S_NUM_1

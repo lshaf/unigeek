@@ -297,6 +297,11 @@ All hardware differences are isolated in board-specific folders.
     Uni.Keyboard->peekKey()     read buffered key WITHOUT consuming — used by NavigationImpl
                                 to avoid stealing text input keys
     Uni.Keyboard->getKey()      consume and return buffered key; sets _waitRelease on GPIO-matrix boards
+    Uni.Keyboard->modifiers()   bitmask of currently held modifier keys (IKeyboard::Modifier enum)
+                                MOD_SHIFT, MOD_FN, MOD_CAPS, MOD_CTRL, MOD_ALT, MOD_OPT
+                                T-Lora: SHIFT, FN (hold-based), CAPS (FN+SHIFT toggle)
+                                Cardputer / Cardputer ADV: SHIFT, FN, CTRL, ALT, OPT (all hold-based)
+                                M5StickC: always returns MOD_NONE (no keyboard)
 
     NavigationImpl (keyboard boards) uses peekKey() to check for nav keys (;  .  \n  \b  ,  /).
     Only calls getKey() when the key is a nav key — all other keys remain for action overlays.
@@ -543,8 +548,9 @@ All hardware differences are isolated in board-specific folders.
   (SCK=40/MISO=39/MOSI=14/CS=12). Must create SPIClass sdSpi(FSPI) and call sdSpi.begin() before SD.begin()
 - M5 Cardputer ADV: TCA8418 on Wire1 (SDA=8/SCL=9/addr=0x34); requires delay(100) after Wire1.begin()
   and enableInterrupts() after matrix(); guard update() with _ready flag in case begin() failed
-- M5 Cardputer keyboard _waitRelease: after getKey() consumes a key, update() blocks until all GPIO inputs
-  are released to prevent the same physical keypress registering multiple times
+- M5 Cardputer keyboard _waitRelease: after getKey() consumes a key, update() blocks until all non-modifier
+  GPIO inputs are released — modifier keys (SHIFT, FN, CTRL, ALT, OPT) do NOT block release detection,
+  allowing consecutive key presses while holding a modifier
 - peekKey() / getKey() pattern: NavigationImpl always peeks first; only calls getKey() for nav keys (;  .  \n  \b  ,  /)
   All other keys remain in the buffer for action overlays. \b is consumed by Nav (DIR_BACK),
   so action overlays handle delete/cancel via Uni.Nav->readDirection() == DIR_BACK, not Uni.Keyboard->getKey()
