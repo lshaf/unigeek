@@ -5,8 +5,9 @@
 class GameDecoderScreen : public BaseScreen
 {
 public:
-  const char* title()    override { return "HEX Decoder"; }
-  bool inhibitPowerOff() override { return true; }
+  const char* title()        override { return "HEX Decoder"; }
+  bool inhibitPowerSave()    override { return _state == STATE_PLAY; }
+  bool inhibitPowerOff()     override { return true; }
 
   void onInit()   override;
   void onUpdate() override;
@@ -16,7 +17,7 @@ private:
   enum State { STATE_MENU, STATE_PLAY, STATE_RESULT } _state = STATE_MENU;
 
   static constexpr uint8_t kInputLen   = 4;
-  static constexpr uint8_t kMaxHistory = 6;
+  static constexpr uint8_t kMaxHistory = 14;  // max attempts across all difficulties (Easy=14)
   static constexpr uint8_t kCharDBLen  = 16;
 
   // Main menu

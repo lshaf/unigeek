@@ -22,7 +22,9 @@ void GameDecoderScreen::onUpdate()
   if (_state == STATE_PLAY) {
     while (Uni.Keyboard->available()) {
       char c = Uni.Keyboard->getKey();
-      if ((c >= '0' && c <= '9') || (c >= 'A' && c <= 'F') || (c >= 'a' && c <= 'f'))
+      if (c == '\b' || c == 127)                                            { _backChar();   break; }
+      else if (c == '\n' || c == '\r')                                      { _submitGuess(); break; }
+      else if ((c >= '0' && c <= '9') || (c >= 'A' && c <= 'F') || (c >= 'a' && c <= 'f'))
         _handleKeyInput((c >= 'a') ? c - ('a' - 'A') : c);
     }
   }
@@ -189,8 +191,7 @@ void GameDecoderScreen::_handleKeyInput(char c)
 {
   if (_cursor >= kInputLen) return;
   _current[_cursor++] = c;
-  if (_cursor >= kInputLen) _submitGuess();
-  else render();
+  render();
 }
 
 // ── Render ──────────────────────────────────────────────────────────────────
@@ -228,19 +229,23 @@ void GameDecoderScreen::_renderPlay()
   constexpr bool noKb = true;
 #endif
 
-  const int arrowH  = noKb ? 8 : 0;   // space above input for ^ arrow
-  const int arrowV  = noKb ? 6 : 0;   // space below input for v arrow
-  const int cellW   = 14, cellH = 12, cellStep = 16;
-  const int inputX  = 16, inputY = arrowH - 2;
-  const int histY0  = inputY + cellH + arrowV + (noKb ? 0 : 10);
-  const int histRowH = (bodyH() - histY0) / kMaxHistory;
-  const int rightCX = (inputX + kInputLen * cellStep + 4 + bodyW()) / 2;
+  const int arrowH   = noKb ? 8 : 0;
+  const int arrowV   = noKb ? 6 : 0;
+  const int cellW    = 14, cellH = 12, cellStep = 16;
+  const int inputX   = 16;
+  const int inputY   = noKb ? arrowH - 2 : 2;           // keyboard boards: small top margin
+  const int histY0   = inputY + cellH + (noKb ? arrowV : 3);
+  const int histRowH = 14;                               // fixed row height — taller screen = more rows
+  const int maxAtt   = _maxAttempts();
+  const int attCap   = (maxAtt == -1) ? (int)kMaxHistory : maxAtt;
+  const int visRows  = min(min((int)kMaxHistory, (bodyH() - histY0) / histRowH), attCap);
+  const int rightCX  = (inputX + kInputLen * cellStep + 4 + bodyW()) / 2;
 
   sp.setTextDatum(MC_DATUM);
   sp.setTextSize(1);
 
   // Back indicator on blocks 1 and 2 only
-  if (_cursor > 0 && _cursor < kInputLen - 1) {
+  if (_cursor > 0) {
     sp.setTextColor(TFT_LIGHTGREY, TFT_BLACK);
     sp.drawString("<", 7, inputY + cellH / 2);
   }
@@ -273,7 +278,7 @@ void GameDecoderScreen::_renderPlay()
 
   // History rows
   bool showColors = (_difficulty < 2);
-  for (uint8_t row = 0; row < kMaxHistory; row++) {
+  for (int row = 0; row < visRows; row++) {
     const int y   = histY0 + row * histRowH + 1;
     bool hasEntry = (row < _histSize);
     int  hints[4] = {};
