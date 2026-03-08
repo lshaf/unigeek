@@ -11,6 +11,10 @@ public:
   void begin() override {}
 
   void update() override {
+    if (suppressKeys()) {
+      updateState(DIR_NONE);
+      return;
+    }
     if (_kb && _kb->available()) {
       char c = _kb->peekKey();
       Direction dir = DIR_NONE;

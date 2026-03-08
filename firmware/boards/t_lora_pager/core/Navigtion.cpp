@@ -24,7 +24,7 @@ void NavigationImpl::begin() {
 }
 
 void NavigationImpl::update() {
-  if (_kb && _kb->available()) {
+  if (!suppressKeys() && _kb && _kb->available()) {
     char c = _kb->peekKey();
     if (c == '\b') { _kb->getKey(); updateState(DIR_BACK);  return; }
     if (c == '\n') { _kb->getKey(); updateState(DIR_PRESS); return; }

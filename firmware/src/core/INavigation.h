@@ -42,6 +42,9 @@ public:
   uint32_t pressDuration() const { return _pressDuration; }
   uint32_t heldDuration()  const { return _pressed ? (millis() - _pressStart) : 0; }
 
+  void setSuppressKeys(bool s) { _suppressKeys = s; }
+  bool suppressKeys() const    { return _suppressKeys; }
+
 protected:
   void updateState(Direction currentlyHeld) {
     uint32_t now = millis();
@@ -68,8 +71,9 @@ private:
   Direction _currDirection    = DIR_NONE;
   Direction _releasedDirection = DIR_NONE;
 
-  bool     _pressed   = false;
-  bool     _wasPressed = false;
+  bool     _pressed      = false;
+  bool     _wasPressed   = false;
+  bool     _suppressKeys = false;
 
   uint32_t _pressStart   = 0;
   uint32_t _pressDuration = 0;

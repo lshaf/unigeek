@@ -3,6 +3,7 @@
 #include "core/ScreenManager.h"
 #include "screens/keyboard/KeyboardMenuScreen.h"
 #include "ui/actions/ShowStatusAction.h"
+#include "ui/components/StatusBar.h"
 #ifdef DEVICE_HAS_USB_HID
 #include "utils/keyboard/USBKeyboardUtil.h"  // must come before BLEKeyboardUtil — TinyUSB hid.h enum must be processed before NimBLE HIDTypes.h macro
 #endif
@@ -32,6 +33,8 @@ KeyboardScreen::~KeyboardScreen()
     delete _keyboard;
     _keyboard = nullptr;
   }
+  StatusBar::bleConnected() = false;
+  Uni.Nav->setSuppressKeys(false);
 }
 
 // ── Lifecycle ───────────────────────────────────────────────────────────────
@@ -44,6 +47,9 @@ void KeyboardScreen::onInit()
 
 void KeyboardScreen::onUpdate()
 {
+  if (_mode == MODE_BLE)
+    StatusBar::bleConnected() = _keyboard->isConnected();
+
   if (_state == STATE_KEYBOARD) {
     _handleKeyboardRelay();
   } else if (_state == STATE_RUNNING_SCRIPT) {
@@ -138,6 +144,8 @@ void KeyboardScreen::_goMenu()
 {
   _state      = STATE_MENU;
   _menuCount  = 0;
+  StatusBar::bleConnected() = false;
+  Uni.Nav->setSuppressKeys(false);
 
 #ifdef DEVICE_HAS_KEYBOARD
   _menuItems[_menuCount++] = {"Keyboard", nullptr};
@@ -152,6 +160,7 @@ void KeyboardScreen::_goMenu()
 void KeyboardScreen::_goConnected()
 {
   _state = STATE_KEYBOARD;
+  Uni.Nav->setSuppressKeys(true);
   render();
 }
 
