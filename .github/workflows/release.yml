@@ -33,7 +33,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.platformio
-          key: pio-${{ matrix.env }}-${{ hashFiles('firmware/platformio.ini', 'firmware/**/boards.ini', 'firmware/**/config.ini') }}
+          key: pio-${{ matrix.env }}-${{ hashFiles('platformio.ini', 'firmware/boards/**') }}
           restore-keys: pio-${{ matrix.env }}-
 
       - name: Install PlatformIO
@@ -41,10 +41,9 @@ jobs:
 
       - name: Build ${{ matrix.env }}
         run: pio run -e ${{ matrix.env }}
-        working-directory: firmware
 
       - name: Rename binary
-        run: cp firmware/unigeek-latest.bin unigeek-${{ matrix.env }}.bin
+        run: cp unigeek-latest.bin unigeek-${{ matrix.env }}.bin
 
       - name: Upload to release
         uses: softprops/action-gh-release@v2
