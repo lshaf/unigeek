@@ -118,6 +118,9 @@ Always null-check before using — Uni.StorageSD is nullptr on M5StickC.
 - Do NOT forget deleteSprite() after every createSprite() + pushSprite()
 - Do NOT modify Device.h constructor without updating ALL board Device.cpp files
 - Do NOT add SD-specific logic outside StorageSD.h — use Uni.Storage interface
+- Do NOT use unqualified File type without SD.h in scope — use fs::File (from <FS.h>) for binary access via Uni.Storage->open()
+- Do NOT use unicode characters in TFT drawString calls — TFT_eSPI only renders ASCII; use > instead of →, etc.
+- Do NOT stop deauthing an AP based on raw EAPOL frame count — validate hasM1 && hasM2 from Key Information field parsing
 - Do NOT use init() in screens — use onInit()
 - Do NOT include pins_arduino.h — it is auto-included by the build system
 - Do NOT call Keyboard->update() inside NavigationImpl — Device::update() does this; double-scan causes conflicts
@@ -133,6 +136,8 @@ Always null-check before using — Uni.StorageSD is nullptr on M5StickC.
   first so back navigation works even when the list is empty (_effectiveCount() == 0)
 - Do NOT skip the sprite push in ListScreen onRender() when the list is empty — always push (black fill)
   to clear any overlays (ShowStatusAction, etc.) that may have been drawn over the body area
+- Do NOT handle only DIR_BACK in a custom (non-ListScreen) state — M5StickC default nav NEVER emits
+  DIR_BACK; always handle both DIR_BACK and DIR_PRESS as "back/stop" in BaseScreen states
 - Do NOT put Wire1.begin() inside AXP192::begin() on M5StickC — Device::createInstance() calls
   Wire1.begin(INTERNAL_SDA, INTERNAL_SCL) before axp.begin(); AXP192::begin() only sets clock speed
 
@@ -180,6 +185,39 @@ Exception: if the very next line navigates to a different screen, render() is no
       LEFT/RIGHT  page jump by visible count, clamps at ends
       PRESS       select item (or "< Back" item on no-keyboard default nav)
       BACK        call onBack()
+
+## Non-Keyboard Back Navigation in Custom States
+
+Custom screen states that override `onUpdate()` manually (not delegating to `ListScreen::onUpdate()`)
+MUST handle **both** `DIR_BACK` and `DIR_PRESS` for the exit/stop action.
+M5StickC default nav never emits `DIR_BACK` — only `DIR_UP`, `DIR_DOWN`, `DIR_PRESS`.
+
+    // CORRECT — works on all boards
+    if (Uni.Nav->wasPressed()) {
+      auto dir = Uni.Nav->readDirection();
+      if (dir == INavigation::DIR_BACK || dir == INavigation::DIR_PRESS) {
+        // exit / stop
+      }
+    }
+
+    // WRONG — M5StickC users get stuck (DIR_BACK never fires in default nav)
+    if (Uni.Nav->wasPressed() && Uni.Nav->readDirection() == INavigation::DIR_BACK) {
+      // exit
+    }
+
+Custom state `onRender()` must also show a visible exit affordance:
+
+    #ifdef DEVICE_HAS_KEYBOARD
+      // hint text only — keyboard users know BACK key
+      sp.drawString("BACK: Exit", bodyW() / 2, bodyH() - 2, 1);
+    #else
+      // rendered "< Back" bar so button-only users see what to press (BTN_A = PRESS)
+      sp.fillRect(0, bodyH() - 16, bodyW(), 16, Config.getThemeColor());
+      sp.setTextColor(TFT_WHITE, Config.getThemeColor());
+      sp.drawString("< Back", bodyW() / 2, bodyH() - 8, 1);
+    #endif
+
+---
 
 ## M5StickC Nav Mode (DEVICE_HAS_NAV_MODE_SWITCH)
 

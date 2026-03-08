@@ -16,8 +16,17 @@ public:
     return _available;
   }
 
-  bool isAvailable() override { return _available; }
-
+  bool     isAvailable() override { return _available; }
+  uint64_t freeBytes()   override {
+    if (!_available) return 0;
+    uint64_t total = SD.totalBytes();
+    uint64_t used  = SD.usedBytes();
+    return (used < total) ? (total - used) : 0;
+  }
+  fs::File open(const char* path, const char* mode) override {
+    if (!_available) return fs::File();
+    return SD.open(path, mode);
+  }
   bool exists(const char* path) override {
     if (!_available) return false;
     return SD.exists(path);

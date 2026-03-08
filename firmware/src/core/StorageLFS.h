@@ -16,7 +16,17 @@ public:
     return _available;
   }
 
-  bool isAvailable() override { return _available; }
+  bool     isAvailable() override { return _available; }
+  uint64_t freeBytes()   override {
+    if (!_available) return 0;
+    uint64_t total = LittleFS.totalBytes();
+    uint64_t used  = LittleFS.usedBytes();
+    return (used < total) ? (total - used) : 0;
+  }
+  fs::File open(const char* path, const char* mode) override {
+    if (!_available) return fs::File();
+    return LittleFS.open(path, mode);
+  }
 
   bool exists(const char* path) override {
     if (!_available) return false;

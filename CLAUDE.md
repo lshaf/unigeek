@@ -347,6 +347,21 @@ All hardware differences are isolated in board-specific folders.
     - BaseScreen subclasses: handle DIR_BACK manually in onUpdate():
         if (Uni.Nav->wasPressed() && Uni.Nav->readDirection() == INavigation::DIR_BACK) { ... }
       Never declare onBack() override on a BaseScreen subclass — it will not compile.
+    - IMPORTANT: M5StickC default nav NEVER emits DIR_BACK — only DIR_UP/DOWN/PRESS.
+      In any custom state that must support "go back" or "stop", handle BOTH:
+        if (Uni.Nav->wasPressed()) {
+          auto dir = Uni.Nav->readDirection();
+          if (dir == INavigation::DIR_BACK || dir == INavigation::DIR_PRESS) { /* exit */ }
+        }
+      And render a device-appropriate exit affordance:
+        #ifdef DEVICE_HAS_KEYBOARD
+          sp.drawString("BACK: Exit", ...);   // keyboard users know the back key
+        #else
+          // render visible "< Back" bar so button-only users know to press BTN_A (= PRESS)
+          sp.fillRect(0, bodyH() - 16, bodyW(), 16, Config.getThemeColor());
+          sp.setTextColor(TFT_WHITE, Config.getThemeColor());
+          sp.drawString("< Back", bodyW() / 2, bodyH() - 8, 1);
+        #endif
 
     - DIR_BACK is emitted by navigation and consumed by ListScreen → calls onBack()
         - Keyboard boards (Cardputer, ADV, T-Lora): \b key consumed by NavigationImpl → DIR_BACK
@@ -423,6 +438,13 @@ All hardware differences are isolated in board-specific folders.
     Uni.Storage->writeFile("/path/file.txt", "content")  returns bool
     Uni.Storage->makeDir("/path")
     Uni.Storage->deleteFile("/path/file.txt")
+    Uni.Storage->freeBytes()                             returns uint64_t free bytes
+    Uni.Storage->open("/path/file.pcap", FILE_WRITE)     returns fs::File (binary access)
+    Uni.Storage->open("/path/file.pcap", FILE_APPEND)    returns fs::File (binary append)
+    Uni.Storage->listDir("/path", out, max)              returns uint8_t count
+
+    Use fs::File (not File) when SD.h is not included — fs::File is available from <FS.h> alone.
+    open() returns an invalid fs::File (evaluates false) if storage unavailable.
 
 ### ScrollListView
 
@@ -533,6 +555,13 @@ All hardware differences are isolated in board-specific folders.
 
 - static constexpr const char*[] arrays as class members cause linker errors
   Fix: define them as static constexpr locals inside methods
+- TFT_eSPI cannot render unicode characters (e.g. →, ✓, ×) — only ASCII printable chars work
+  Fix: use ASCII equivalents (>, v, x, etc.) in all drawString / log messages
+- Deauth-then-wait pattern for EAPOL capture: always call _flush() BEFORE _sendDeauth() so newly
+  received beacons are registered in _apTargets before the deauth fires; stay on channel 3-4s
+  after deauthing to capture the reconnect handshake — hopping away immediately loses the EAPOL
+- EAPOL handshake validation: use Key Information field bits (bit7=ACK, bit8=MIC) to identify
+  M1/M2/M3/M4 — do NOT use raw frame count; only stop attacking an AP when hasM1 && hasM2
 - IRAM_ATTR inline functions cause Xtensa literal pool errors
   Fix: always put them in .cpp files
 - TFT_eSprite leaks heap if deleteSprite() is never called

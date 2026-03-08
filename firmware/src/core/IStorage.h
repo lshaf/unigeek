@@ -5,6 +5,7 @@
 #pragma once
 
 #include <Arduino.h>
+#include <FS.h>
 
 class IStorage
 {
@@ -14,7 +15,9 @@ public:
     bool   isDir;
   };
 
-  virtual bool    isAvailable()                                          = 0;
+  virtual bool     isAvailable()                                          = 0;
+  virtual uint64_t freeBytes()                                            = 0;
+  virtual fs::File open(const char* path, const char* mode)               = 0;
   virtual bool    exists(const char* path)                               = 0;
   virtual String  readFile(const char* path)                             = 0;
   virtual bool    writeFile(const char* path, const char* content)       = 0;
