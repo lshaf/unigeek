@@ -26,6 +26,8 @@ Multi-tool firmware for ESP32-based handheld devices. Built with PlatformIO + Ar
 - **Deauther Detector** — Monitor and list detected deauthentication attacks
 - **Beacon Spam** — Broadcast fake SSIDs repeatedly
 - **ESPNOW Chat** — Peer-to-peer text chat over ESP-NOW (no router required)
+- **EAPOL Capture** — Passive WPA2 handshake capture; auto-discovers APs, deauths clients, waits for M1+M2 reconnect handshake, saves to PCAP on storage
+- **EAPOL Brute Force** — Offline WPA2 password cracking from a captured PCAP; select wordlist from storage or use a built-in test list; runs PBKDF2-HMAC-SHA1 + PTK/MIC verification on-device
 
 ### Bluetooth
 - **BLE Analyzer** — Scan nearby BLE devices, display RSSI, name, address, and advertisement data
@@ -114,6 +116,8 @@ Files are stored under `/unigeek/` on either SD card or LittleFS (fallback):
 ```
 /unigeek/config                    device configuration
 /unigeek/keyboard/duckyscript/     Ducky Script files (.ds)
+/unigeek/wifi/eapol/               WPA2 handshake captures (.pcap)
+/unigeek/utility/passwords/        Password wordlists for EAPOL brute force
 ```
 
 SD card is used when available. LittleFS is always present as a fallback.
