@@ -145,3 +145,13 @@ firmware/
     ├── ui/              templates, components, and action overlays
     └── utils/           keyboard HID utilities, DuckyScript runner
 ```
+
+---
+
+## TODO
+
+- Karma Attack
+- Evil Twin
+- GPS Wardriving
+- NFC Hack
+- Lora

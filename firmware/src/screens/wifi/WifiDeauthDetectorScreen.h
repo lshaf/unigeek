@@ -53,9 +53,26 @@ public:
 private:
   static constexpr int           MAX_ITEMS = 10;
   static constexpr unsigned long WINDOW_MS = 30000UL;
+  static constexpr int           MAX_RING  = 64;
 
-  static portMUX_TYPE  _deauthLock;
-  static portMUX_TYPE  _ssidLock;
+  // Lightweight ring buffer for ISR — no heap alloc in callback
+  struct DeauthEvent {
+    MacAddr mac;
+    unsigned long timestamp;
+  };
+  static DeauthEvent     _ring[MAX_RING];
+  static volatile int    _ringHead;
+  static volatile int    _ringTail;
+
+  struct SsidEvent {
+    MacAddr bssid;
+    char    ssid[33];
+  };
+  static SsidEvent       _ssidRing[MAX_RING];
+  static volatile int    _ssidRingHead;
+  static volatile int    _ssidRingTail;
+
+  static portMUX_TYPE  _ringLock;
   static volatile bool _newDetection;
 
   enum State { STATE_LISTED, STATE_EMPTY };

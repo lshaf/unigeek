@@ -22,8 +22,15 @@ std::unordered_map<
   WifiDeauthDetectorScreen::MacEqual
 > WifiDeauthDetectorScreen::_deauthMap = {};
 
-portMUX_TYPE  WifiDeauthDetectorScreen::_deauthLock  = portMUX_INITIALIZER_UNLOCKED;
-portMUX_TYPE  WifiDeauthDetectorScreen::_ssidLock     = portMUX_INITIALIZER_UNLOCKED;
+WifiDeauthDetectorScreen::DeauthEvent WifiDeauthDetectorScreen::_ring[MAX_RING] = {};
+volatile int WifiDeauthDetectorScreen::_ringHead = 0;
+volatile int WifiDeauthDetectorScreen::_ringTail = 0;
+
+WifiDeauthDetectorScreen::SsidEvent WifiDeauthDetectorScreen::_ssidRing[MAX_RING] = {};
+volatile int WifiDeauthDetectorScreen::_ssidRingHead = 0;
+volatile int WifiDeauthDetectorScreen::_ssidRingTail = 0;
+
+portMUX_TYPE  WifiDeauthDetectorScreen::_ringLock    = portMUX_INITIALIZER_UNLOCKED;
 volatile bool WifiDeauthDetectorScreen::_newDetection = false;
 
 // ── Destructor ────────────────────────────────────────────────────────────
@@ -44,6 +51,8 @@ void WifiDeauthDetectorScreen::onInit()
   _channel    = 1;
   _itemCount  = 0;
   _newDetection = false;
+  _ringHead = _ringTail = 0;
+  _ssidRingHead = _ssidRingTail = 0;
   _deauthMap.clear();
   _ssidMap.clear();
 
@@ -56,8 +65,38 @@ void WifiDeauthDetectorScreen::onInit()
 
 void WifiDeauthDetectorScreen::onUpdate()
 {
-  if (_newDetection) {
-    _newDetection = false;
+  // Drain deauth ring buffer into map (main core, no ISR pressure)
+  bool gotNew = false;
+  while (_ringTail != _ringHead) {
+    const auto& ev = _ring[_ringTail];
+    auto it = _deauthMap.find(ev.mac);
+    if (it == _deauthMap.end()) {
+      DeauthEntry e{};
+      e.timestamp = ev.timestamp;
+      e.counter   = 1;
+      auto ssidIt = _ssidMap.find(ev.mac);
+      if (ssidIt != _ssidMap.end()) e.ssid = ssidIt->second;
+      _deauthMap.emplace(ev.mac, e);
+      gotNew = true;
+    } else {
+      if (it->second.counter < 1000) ++it->second.counter;
+      it->second.timestamp = ev.timestamp;
+    }
+    _ringTail = (_ringTail + 1) % MAX_RING;
+  }
+
+  // Drain SSID ring buffer
+  while (_ssidRingTail != _ssidRingHead) {
+    const auto& ev = _ssidRing[_ssidRingTail];
+    MacAddr bssid{};
+    memcpy(bssid.data(), ev.bssid.data(), 6);
+    if (_ssidMap.find(bssid) == _ssidMap.end()) {
+      _ssidMap.emplace(bssid, std::string(ev.ssid));
+    }
+    _ssidRingTail = (_ssidRingTail + 1) % MAX_RING;
+  }
+
+  if (gotNew) {
     if (Uni.Speaker) Uni.Speaker->playNotification();
   }
 
@@ -105,7 +144,7 @@ void WifiDeauthDetectorScreen::_refresh()
 {
   const unsigned long now = millis();
 
-  // Collect stale keys, then erase — never modify map while iterating
+  // Collect stale keys, then erase
   std::vector<MacAddr> toErase;
   for (auto& kv : _deauthMap) {
     if (now - kv.second.timestamp > WINDOW_MS) toErase.push_back(kv.first);
@@ -119,13 +158,17 @@ void WifiDeauthDetectorScreen::_refresh()
     const MacAddr&    mac = kv.first;
     const DeauthEntry& e  = kv.second;
 
+    const char* countStr = e.counter >= 1000 ? "999+" : nullptr;
+    char countBuf[8];
+    if (!countStr) { snprintf(countBuf, sizeof(countBuf), "%d", e.counter); countStr = countBuf; }
+
     if (!e.ssid.empty()) {
       snprintf(_labels[newCount], sizeof(_labels[newCount]),
-               "%s (%d)", e.ssid.c_str(), e.counter);
+               "%s (%s)", e.ssid.c_str(), countStr);
     } else {
       snprintf(_labels[newCount], sizeof(_labels[newCount]),
-               "%02X:%02X:%02X:%02X:%02X:%02X (%d)",
-               mac[0], mac[1], mac[2], mac[3], mac[4], mac[5], e.counter);
+               "%02X:%02X:%02X:%02X:%02X:%02X (%s)",
+               mac[0], mac[1], mac[2], mac[3], mac[4], mac[5], countStr);
     }
 
     const unsigned long secsAgo = (now - e.timestamp) / 1000UL;
@@ -175,51 +218,35 @@ void IRAM_ATTR WifiDeauthDetectorScreen::_promiscuousCb(void* buf, wifi_promiscu
   const uint8_t fc_type = (pay[0] >> 2) & 0x03;
   if (fc_type != 0) return;
 
-  // Deauth frame (subtype 0xC)
+  // Deauth frame (subtype 0xC) — just push MAC + timestamp into ring buffer
   if (fc_sub == 0xC && len >= 16) {
-    MacAddr mac{};
-    memcpy(mac.data(), pay + 10, 6);  // addr2 = transmitter
-
-    const unsigned long now = millis();
-
-    portENTER_CRITICAL(&_deauthLock);
-    auto it = _deauthMap.find(mac);
-    if (it == _deauthMap.end()) {
-      DeauthEntry e{};
-      e.timestamp = now;
-      e.counter   = 1;
-      auto ssidIt = _ssidMap.find(mac);
-      if (ssidIt != _ssidMap.end()) e.ssid = ssidIt->second;
-      _deauthMap.emplace(mac, e);
-      _newDetection = true;
-    } else {
-      ++it->second.counter;
-      it->second.timestamp = now;
-      if (it->second.ssid.empty()) {
-        auto ssidIt = _ssidMap.find(mac);
-        if (ssidIt != _ssidMap.end()) it->second.ssid = ssidIt->second;
-      }
+    portENTER_CRITICAL_ISR(&_ringLock);
+    int next = (_ringHead + 1) % MAX_RING;
+    if (next != _ringTail) {  // drop if full (backpressure)
+      memcpy(_ring[_ringHead].mac.data(), pay + 10, 6);
+      _ring[_ringHead].timestamp = millis();
+      _ringHead = next;
     }
-    portEXIT_CRITICAL(&_deauthLock);
+    portEXIT_CRITICAL_ISR(&_ringLock);
   }
 
-  // Beacon (8) or Probe Response (5) — passively build SSID→MAC map
+  // Beacon (8) or Probe Response (5) — push into SSID ring buffer
   if ((fc_sub == 8 || fc_sub == 5) && len >= 36) {
-    MacAddr bssid{};
-    memcpy(bssid.data(), pay + 16, 6);  // addr3
-
-    size_t pos = 36;  // 24-byte header + 12 fixed params
+    size_t pos = 36;
     while (pos + 2 <= len) {
       const uint8_t id   = pay[pos];
       const uint8_t elen = pay[pos + 1];
       if (pos + 2 + elen > len) break;
-      if (id == 0 && elen > 0) {
-        portENTER_CRITICAL(&_ssidLock);
-        if (_ssidMap.find(bssid) == _ssidMap.end()) {
-          _ssidMap.emplace(bssid,
-            std::string(reinterpret_cast<const char*>(pay + pos + 2), elen));
+      if (id == 0 && elen > 0 && elen <= 32) {
+        portENTER_CRITICAL_ISR(&_ringLock);
+        int next = (_ssidRingHead + 1) % MAX_RING;
+        if (next != _ssidRingTail) {
+          memcpy(_ssidRing[_ssidRingHead].bssid.data(), pay + 16, 6);
+          memcpy(_ssidRing[_ssidRingHead].ssid, pay + pos + 2, elen);
+          _ssidRing[_ssidRingHead].ssid[elen] = '\0';
+          _ssidRingHead = next;
         }
-        portEXIT_CRITICAL(&_ssidLock);
+        portEXIT_CRITICAL_ISR(&_ringLock);
         break;
       }
       pos += 2 + elen;
