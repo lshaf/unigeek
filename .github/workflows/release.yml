@@ -46,7 +46,14 @@ jobs:
       - name: Rename binary
         run: cp unigeek-latest.bin unigeek-${{ matrix.env }}.bin
 
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: unigeek-${{ matrix.env }}
+          path: unigeek-${{ matrix.env }}.bin
+
       - name: Upload to release
+        if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
           files: unigeek-${{ matrix.env }}.bin
