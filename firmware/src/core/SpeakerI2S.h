@@ -57,6 +57,8 @@ public:
     _amplitude = (int16_t)((uint32_t)vol * 32767 / 100);
   }
 
+  bool isPlaying() override { return _taskHandle != nullptr; }
+
   void beep() override {
     if (!Config.get(APP_CONFIG_NAV_SOUND, APP_CONFIG_NAV_SOUND_DEFAULT).toInt()) return;
     if (_taskHandle) return;  // already playing — skip rapid beeps to avoid DMA stall

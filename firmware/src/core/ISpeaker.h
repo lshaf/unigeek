@@ -13,6 +13,7 @@ public:
   virtual void tone(uint16_t freq, uint32_t durationMs) = 0;
   virtual void noTone() = 0;
   virtual void setVolume(uint8_t vol) = 0;  // 0-100
+  virtual bool isPlaying() { return false; }
   virtual void beep() = 0;
 
   virtual void playWav(const uint8_t* data, size_t size) = 0;

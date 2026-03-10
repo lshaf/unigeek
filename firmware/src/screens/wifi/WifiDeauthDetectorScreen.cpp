@@ -65,9 +65,22 @@ void WifiDeauthDetectorScreen::onInit()
 
 void WifiDeauthDetectorScreen::onUpdate()
 {
-  // Drain deauth ring buffer into map (main core, no ISR pressure)
+  // Drain ring buffers — process nav FIRST so input is never starved
+  if (_state == STATE_LISTED) {
+    ListScreen::onUpdate();
+  } else {
+    if (Uni.Nav->wasPressed()) {
+      auto dir = Uni.Nav->readDirection();
+      if (dir == INavigation::DIR_BACK || dir == INavigation::DIR_PRESS) {
+        onBack();
+        return;
+      }
+    }
+  }
+
+  // Drain deauth ring buffer (cap per frame to avoid stalling)
   bool gotNew = false;
-  while (_ringTail != _ringHead) {
+  for (int i = 0; i < MAX_RING && _ringTail != _ringHead; i++) {
     const auto& ev = _ring[_ringTail];
     auto it = _deauthMap.find(ev.mac);
     if (it == _deauthMap.end()) {
@@ -86,7 +99,7 @@ void WifiDeauthDetectorScreen::onUpdate()
   }
 
   // Drain SSID ring buffer
-  while (_ssidRingTail != _ssidRingHead) {
+  for (int i = 0; i < MAX_RING && _ssidRingTail != _ssidRingHead; i++) {
     const auto& ev = _ssidRing[_ssidRingTail];
     MacAddr bssid{};
     memcpy(bssid.data(), ev.bssid.data(), 6);
@@ -97,7 +110,7 @@ void WifiDeauthDetectorScreen::onUpdate()
   }
 
   if (gotNew) {
-    if (Uni.Speaker) Uni.Speaker->playNotification();
+    if (Uni.Speaker && !Uni.Speaker->isPlaying()) Uni.Speaker->playNotification();
   }
 
   if (millis() - _lastUpdate >= 1000) {
@@ -105,14 +118,6 @@ void WifiDeauthDetectorScreen::onUpdate()
     _channel = (_channel % 13) + 1;
     esp_wifi_set_channel(_channel, WIFI_SECOND_CHAN_NONE);
     _refresh();
-  }
-
-  if (_state == STATE_LISTED) {
-    ListScreen::onUpdate();
-  } else {
-    if (Uni.Nav->wasPressed() && Uni.Nav->readDirection() == INavigation::DIR_BACK) {
-      onBack();
-    }
   }
 }
 
