@@ -22,6 +22,7 @@ jobs:
           - t_lora_pager
           - m5_cardputer
           - m5_cardputer_adv
+          - t_display_16mb
 
     steps:
       - name: Checkout
