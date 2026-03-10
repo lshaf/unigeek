@@ -9,8 +9,14 @@ BUILD_DIR = env.subst("$BUILD_DIR")
 PROJECT_DIR = env.get("PROJECT_DIR")
 OUTPUT_PATH = os.path.join(PROJECT_DIR, "unigeek-latest.bin")
 
+# Determine boot offset based on the MCU.
+# ESP32 uses 0x1000, while others (like ESP32-S2/S3) use 0.
+board = env.BoardConfig()
+mcu = board.get("build.mcu", "")
+boot_offset = 0x1000 if mcu == "esp32" else 0
+
 DEFAULT_OFFSETS = {
-    "boot": 0,
+    "boot": boot_offset,
     "part": 0x8000,
     "app": 0x10000,
 }
