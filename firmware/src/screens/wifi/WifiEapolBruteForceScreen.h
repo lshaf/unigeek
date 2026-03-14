@@ -1,6 +1,8 @@
 #pragma once
 
 #include <SD.h>
+#include <freertos/queue.h>
+#include <freertos/semphr.h>
 #include "ui/templates/ListScreen.h"
 
 class WifiEapolBruteForceScreen : public ListScreen {
@@ -32,10 +34,21 @@ public:
   };
 
 private:
-  // ── Shared state between crack task and main loop ─────────────────────────
+  // ── Dual-core crack ─────────────────────────────────────────────────────
+  static constexpr int QUEUE_DEPTH = 8;
+  static constexpr int PASS_MAX    = 64;
+
+  struct PwEntry {
+    char    pw[PASS_MAX];
+    uint8_t len;
+  };
+
   struct CrackCtx {
-    Handshake hs;
-    char      wordlistPath[64] = {};
+    Handshake         hs;
+    char              wordlistPath[64] = {};
+    QueueHandle_t     queue       = nullptr;
+    SemaphoreHandle_t doneSem     = nullptr;
+    TaskHandle_t      workerHandle = nullptr;
     volatile bool     stop      = false;
     volatile bool     done      = false;
     volatile bool     found     = false;
@@ -49,7 +62,8 @@ private:
 
   static CrackCtx     _ctx;
   static TaskHandle_t _taskHandle;
-  static void _crackTask(void* param);
+  static void _crackTask(void* param);    // producer + cracker on core 1
+  static void _workerTask(void* param);   // worker cracker on core 0
 
   // ── State machine ─────────────────────────────────────────────────────────
   enum State { STATE_MENU, STATE_SELECT_PCAP, STATE_SELECT_WORDLIST, STATE_CRACKING, STATE_DONE };

@@ -115,6 +115,9 @@ void WifiEapolBruteForceScreen::onUpdate() {
     if (_ctx.done) {
       _state = STATE_DONE;
       _taskHandle = nullptr;
+      if (_ctx.queue)   { vQueueDelete(_ctx.queue);       _ctx.queue   = nullptr; }
+      if (_ctx.doneSem) { vSemaphoreDelete(_ctx.doneSem); _ctx.doneSem = nullptr; }
+      _ctx.workerHandle = nullptr;
       if (_ctx.found) {
         _saveCrackedPassword();
         if (Uni.Speaker) Uni.Speaker->playWin();
@@ -123,7 +126,13 @@ void WifiEapolBruteForceScreen::onUpdate() {
       }
       render();
     } else {
-      render();
+      // Throttle UI to 1/s during cracking — free core 1 for producer task
+      static uint32_t lastRender = 0;
+      uint32_t now = millis();
+      if (now - lastRender >= 1000) {
+        lastRender = now;
+        render();
+      }
     }
     return;
   }
@@ -449,54 +458,123 @@ bool WifiEapolBruteForceScreen::_parsePcap(const char* path) {
   return true;
 }
 
-// ── Crack task (single task, pinned to core 0) ───────────────────────────
+// ── Worker (core 0) — consumes passwords from queue and cracks ────────────
+
+void WifiEapolBruteForceScreen::_workerTask(void* param) {
+  CrackCtx* ctx = static_cast<CrackCtx*>(param);
+  PwEntry entry;
+
+  while (true) {
+    if (xQueueReceive(ctx->queue, &entry, portMAX_DELAY) != pdTRUE) break;
+    if (entry.len == 0) break; // poison pill
+    if (ctx->found || ctx->stop) {
+      __atomic_fetch_add(&ctx->tested, 1, __ATOMIC_RELAXED);
+      continue;
+    }
+    if (fast_wpa2_try_password(entry.pw, entry.len,
+                                ctx->hs.ssid, ctx->hs.ssid_len,
+                                ctx->hs.prf_data,
+                                ctx->hs.eapol, ctx->hs.eapol_len,
+                                ctx->hs.mic)) {
+      ctx->found = true;
+      memcpy(ctx->foundPass, entry.pw, entry.len + 1);
+    }
+    __atomic_fetch_add(&ctx->tested, 1, __ATOMIC_RELAXED);
+  }
+  xSemaphoreGive(ctx->doneSem);
+  vTaskDelete(NULL);
+}
+
+// ── Producer + cracker (core 1) — reads wordlist, feeds queue, also cracks ─
 
 void WifiEapolBruteForceScreen::_crackTask(void* param) {
   CrackCtx* ctx = static_cast<CrackCtx*>(param);
 
-  char     line[64];
-  uint32_t tested = 0;
-  uint32_t t0     = millis();
+  uint32_t t0 = millis();
 
-  #define TRY_PW(pw, pwlen) do { \
-    memcpy(ctx->curPass, (pw), (pwlen) + 1); \
-    if (fast_wpa2_try_password((pw), (pwlen), \
-                                ctx->hs.ssid, ctx->hs.ssid_len, \
-                                ctx->hs.prf_data, \
-                                ctx->hs.eapol, ctx->hs.eapol_len, \
-                                ctx->hs.mic)) { \
-      memcpy(ctx->foundPass, (pw), (pwlen) + 1); \
-      ctx->found = true; \
-    } \
-    tested++; ctx->tested = tested; \
-    uint32_t _el = millis() - t0; \
-    if (_el >= 2000) ctx->speed = tested * 1000.0f / _el; \
-  } while (0)
+  // Crack one password on this core (producer side)
+  auto tryHere = [&](const char* pw, size_t len) {
+    memcpy(ctx->curPass, pw, len + 1);
+    if (fast_wpa2_try_password(pw, (uint8_t)len,
+                                ctx->hs.ssid, ctx->hs.ssid_len,
+                                ctx->hs.prf_data,
+                                ctx->hs.eapol, ctx->hs.eapol_len,
+                                ctx->hs.mic)) {
+      memcpy(ctx->foundPass, pw, len + 1);
+      ctx->found = true;
+    }
+    __atomic_fetch_add(&ctx->tested, 1, __ATOMIC_RELAXED);
+    uint32_t el = millis() - t0;
+    if (el >= 2000) ctx->speed = ctx->tested * 1000.0f / el;
+  };
+
+  // Send one password to worker queue (non-blocking)
+  auto sendToWorker = [&](const char* pw, size_t len) -> bool {
+    PwEntry entry;
+    memcpy(entry.pw, pw, len + 1);
+    entry.len = (uint8_t)len;
+    return xQueueSend(ctx->queue, &entry, 0) == pdTRUE;
+  };
 
   if (strcmp(ctx->wordlistPath, "__test__") == 0) {
-    for (int i = 0; i < kTestPasswordCount && !ctx->stop && !ctx->found; i++) {
+    int i = 0;
+    while (i < kTestPasswordCount && !ctx->stop && !ctx->found) {
+      // Send one to worker (core 0)
       size_t n = strlen(kTestPasswords[i]);
-      strncpy(line, kTestPasswords[i], sizeof(line) - 1);
-      line[n] = '\0';
-      TRY_PW(line, n);
-      ctx->bytesDone = (uint32_t)(i + 1);
+      if (!sendToWorker(kTestPasswords[i], n)) {
+        // Queue full — crack it here instead
+        tryHere(kTestPasswords[i], n);
+        i++;
+      } else {
+        i++;
+        // Crack the next one ourselves (core 1)
+        if (i < kTestPasswordCount && !ctx->stop && !ctx->found) {
+          tryHere(kTestPasswords[i], strlen(kTestPasswords[i]));
+          i++;
+        }
+      }
+      ctx->bytesDone = (uint32_t)i;
     }
   } else {
+    char line[64];
+    char line2[64];
     fs::File f = Uni.Storage->open(ctx->wordlistPath, FILE_READ);
     if (f) {
       while (f.available() && !ctx->stop && !ctx->found) {
+        // Read line for worker
         size_t n = f.readBytesUntil('\n', line, 63);
         line[n] = '\0';
         while (n > 0 && (line[n - 1] == '\r' || line[n - 1] == '\n')) line[--n] = '\0';
         if (n < 8 || n > 63) { ctx->bytesDone = f.position(); continue; }
-        TRY_PW(line, n);
+
+        if (!sendToWorker(line, n)) {
+          // Queue full — crack it here
+          tryHere(line, n);
+        } else {
+          // Worker got one — read next and crack it here
+          if (f.available() && !ctx->stop && !ctx->found) {
+            size_t n2 = f.readBytesUntil('\n', line2, 63);
+            line2[n2] = '\0';
+            while (n2 > 0 && (line2[n2 - 1] == '\r' || line2[n2 - 1] == '\n')) line2[--n2] = '\0';
+            if (n2 >= 8 && n2 <= 63) {
+              tryHere(line2, n2);
+            }
+          }
+        }
         ctx->bytesDone = f.position();
       }
       f.close();
     }
   }
 
-  #undef TRY_PW
+  // Poison pill to stop worker
+  PwEntry poison;
+  memset(&poison, 0, sizeof(poison));
+  xQueueSend(ctx->queue, &poison, pdMS_TO_TICKS(2000));
+
+  // Wait for worker to finish
+  xSemaphoreTake(ctx->doneSem, pdMS_TO_TICKS(5000));
+
   ctx->done = true;
   vTaskDelete(nullptr);
 }
@@ -523,8 +601,15 @@ void WifiEapolBruteForceScreen::_startCrack() {
     if (f) f.close();
   }
 
-  // Pin to core 0 — Arduino loop() runs on core 1, keeps UI responsive
-  xTaskCreatePinnedToCore(_crackTask, "eapol_bf", 8192, &_ctx, 1, &_taskHandle, 0);
+  // Create queue + semaphore for dual-core
+  _ctx.queue   = xQueueCreate(QUEUE_DEPTH, sizeof(PwEntry));
+  _ctx.doneSem = xSemaphoreCreateBinary();
+
+  // Worker on core 0 — pure cracking from queue
+  xTaskCreatePinnedToCore(_workerTask, "wpa2_w", 8192, &_ctx, 1, &_ctx.workerHandle, 0);
+
+  // Producer + cracker on core 1 — reads wordlist, feeds queue, also cracks
+  xTaskCreatePinnedToCore(_crackTask, "wpa2_p", 8192, &_ctx, 1, &_taskHandle, 1);
 
   _state = STATE_CRACKING;
   render();
@@ -537,8 +622,14 @@ void WifiEapolBruteForceScreen::_stopCrack() {
   for (int i = 0; i < 200 && !_ctx.done; i++) {
     vTaskDelay(10 / portTICK_PERIOD_MS);
   }
-  if (!_ctx.done) vTaskDelete(_taskHandle);
+  if (!_ctx.done) {
+    vTaskDelete(_taskHandle);
+    if (_ctx.workerHandle) vTaskDelete(_ctx.workerHandle);
+  }
   _taskHandle = nullptr;
+  _ctx.workerHandle = nullptr;
+  if (_ctx.queue)   { vQueueDelete(_ctx.queue);       _ctx.queue   = nullptr; }
+  if (_ctx.doneSem) { vSemaphoreDelete(_ctx.doneSem); _ctx.doneSem = nullptr; }
   if (_state == STATE_CRACKING) {
     _state = STATE_DONE;
     render();
