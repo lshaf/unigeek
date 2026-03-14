@@ -12,6 +12,7 @@ Multi-tool firmware for ESP32-based handheld devices. Built with PlatformIO + Ar
 | LilyGO T-Lora Pager | TCA8418 | I2S | Yes | Yes | Yes |
 | M5Stack Cardputer | GPIO Matrix | I2S | Yes | Yes | — |
 | M5Stack Cardputer ADV | TCA8418 | I2S + ES8311 | Yes | Yes | — |
+| LilyGO T-Display 16MB | 2 Buttons | — | — | — | — |
 
 ---
 
@@ -79,12 +80,14 @@ pio run -e m5stickcplus_11
 pio run -e t_lora_pager
 pio run -e m5_cardputer
 pio run -e m5_cardputer_adv
+pio run -e t_display_16mb
 
 # Flash
 pio run -e m5stickcplus_11 -t upload
 pio run -e t_lora_pager -t upload
 pio run -e m5_cardputer -t upload
 pio run -e m5_cardputer_adv -t upload
+pio run -e t_display_16mb -t upload
 
 # Serial monitor
 pio device monitor
