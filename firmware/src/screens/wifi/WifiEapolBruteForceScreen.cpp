@@ -3,14 +3,13 @@
 #include "core/ScreenManager.h"
 #include "screens/wifi/WifiMenuScreen.h"
 #include "ui/actions/ShowStatusAction.h"
+#include "utils/FastWpaCrack.h"
 
-#include <mbedtls/md.h>
-#include <mbedtls/pkcs5.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <cstring>
 
-// ── Built-in test wordlist (50 common passwords, all ≥ 8 chars) ───────────
+// ── Built-in test wordlist (55 common passwords, all >= 8 chars) ──────────
 
 static const char* const kTestPasswords[] = {
   "12345678",  "123456789", "1234567890", "11111111",  "00000000",
@@ -58,26 +57,6 @@ static int findSnap(const uint8_t* frm, uint16_t len) {
     if (ok) return (int)i;
   }
   return -1;
-}
-
-// PRF-512 (WPA2 PTK derivation): 4 × HMAC-SHA1 rounds, reuses caller's context
-static void prf512(mbedtls_md_context_t& ctx, const uint8_t* pmk,
-                   const uint8_t* prf_data, uint8_t* ptk) {
-  static const char label[] = "Pairwise key expansion"; // sizeof() includes '\0' separator
-  uint8_t digest[20];
-  uint8_t ctr = 0;
-  size_t  pos = 0;
-  while (pos < 64) {
-    mbedtls_md_hmac_starts(&ctx, pmk, 32);
-    mbedtls_md_hmac_update(&ctx, (const uint8_t*)label, sizeof(label));
-    mbedtls_md_hmac_update(&ctx, prf_data, 76);
-    mbedtls_md_hmac_update(&ctx, &ctr, 1);
-    mbedtls_md_hmac_finish(&ctx, digest);
-    size_t c = (64 - pos < 20) ? 64 - pos : 20;
-    memcpy(ptk + pos, digest, c);
-    pos += c;
-    ctr++;
-  }
 }
 
 // ── Destructor ────────────────────────────────────────────────────────────
@@ -136,8 +115,12 @@ void WifiEapolBruteForceScreen::onUpdate() {
     if (_ctx.done) {
       _state = STATE_DONE;
       _taskHandle = nullptr;
-      if (_ctx.found) { if (Uni.Speaker) Uni.Speaker->playWin(); }
-      else            { if (Uni.Speaker) Uni.Speaker->playLose(); }
+      if (_ctx.found) {
+        _saveCrackedPassword();
+        if (Uni.Speaker) Uni.Speaker->playWin();
+      } else {
+        if (Uni.Speaker) Uni.Speaker->playLose();
+      }
       render();
     } else {
       render();
@@ -303,8 +286,7 @@ bool WifiEapolBruteForceScreen::_parsePcap(const char* path) {
 
   uint8_t rec[512];
 
-  // Helper lambda-like macro: read one pcap record into rec[], strip radiotap.
-  // Sets frm/flen. Skips oversized records. Returns false when file exhausted.
+  // Helper macro: read one pcap record into rec[], strip radiotap.
   #define READ_FRAME(frm, flen) \
     uint32_t _ts, _tu, _incl, _orig; \
     if (!pcapRead32(f,_ts)||!pcapRead32(f,_tu)||!pcapRead32(f,_incl)||!pcapRead32(f,_orig)) break; \
@@ -320,7 +302,6 @@ bool WifiEapolBruteForceScreen::_parsePcap(const char* path) {
     uint16_t       flen = (uint16_t)(_incl - _off);
 
   // ── Single pass: pair M1/M3 with M2 in either order ─────────────────────
-  // Handles both M1→M2 (normal) and M2→M3 (M1 missed) orderings.
   bool gotAnonce = false;
   bool gotM2     = false;
   uint8_t lastAnonce[32] = {};
@@ -329,8 +310,8 @@ bool WifiEapolBruteForceScreen::_parsePcap(const char* path) {
 
   // Buffer for unpaired M2 (when M2 arrives before M1/M3)
   bool    pendM2 = false;
-  uint8_t pendM2Sta[6]  = {};    // addr2 of M2 frame (STA = transmitter)
-  uint8_t pendM2Ap[6]   = {};    // addr1 of M2 frame (AP  = receiver)
+  uint8_t pendM2Sta[6]  = {};
+  uint8_t pendM2Ap[6]   = {};
   uint8_t pendM2Snonce[32] = {};
   uint8_t pendM2Mic[16] = {};
   uint8_t pendM2Eapol[400] = {};
@@ -399,8 +380,7 @@ bool WifiEapolBruteForceScreen::_parsePcap(const char* path) {
       if (nonceZero) continue;
 
       if (gotAnonce) {
-        // Forward pairing: M1/M3 already seen → pair with it
-        // M2 direction: addr1=AP(BSSID), addr2=STA
+        // Forward pairing: M1/M3 already seen
         bool staMatch = memcmp(frm + 10, lastSta, 6) == 0;
         bool apMatch  = memcmp(frm + 4,  lastAp,  6) == 0;
         if (staMatch && apMatch) {
@@ -419,15 +399,15 @@ bool WifiEapolBruteForceScreen::_parsePcap(const char* path) {
         }
       }
 
-      // No M1/M3 yet (or MACs didn't match) — buffer this M2 for reverse pairing
+      // No M1/M3 yet — buffer this M2 for reverse pairing
       pendM2 = true;
-      memcpy(pendM2Sta, frm + 10, 6);   // addr2 = STA (transmitter in M2)
-      memcpy(pendM2Ap,  frm + 4,  6);   // addr1 = AP  (receiver in M2)
+      memcpy(pendM2Sta, frm + 10, 6);
+      memcpy(pendM2Ap,  frm + 4,  6);
       memcpy(pendM2Snonce, key + 13, 32);
       memcpy(pendM2Mic,    eapol + 81, 16);
       if (total <= sizeof(pendM2Eapol)) {
         memcpy(pendM2Eapol, eapol, total);
-        memset(pendM2Eapol + 81, 0, 16);  // zero MIC in copy for verification later
+        memset(pendM2Eapol + 81, 0, 16);
         pendM2EapolLen = total;
       }
     }
@@ -438,12 +418,11 @@ bool WifiEapolBruteForceScreen::_parsePcap(const char* path) {
 
   if (!gotM2) return false;
 
-  // SSID fallback: extract from filename (BSSID_SSID.pcap).
-  // The sanitizer preserves '.' so "local.icon" stays as-is in the filename.
+  // SSID fallback: extract from filename (BSSID_SSID.pcap)
   if (hs.ssid[0] == '\0') {
     String p   = String(path);
     int    sl  = p.lastIndexOf('/');
-    int    und = p.indexOf('_', sl >= 0 ? sl + 1 : 0);  // first _ after last /
+    int    und = p.indexOf('_', sl >= 0 ? sl + 1 : 0);
     int    dot = p.lastIndexOf('.');
     if (und >= 0 && dot > und + 1) {
       String part = p.substring(und + 1, dot);
@@ -470,7 +449,59 @@ bool WifiEapolBruteForceScreen::_parsePcap(const char* path) {
   return true;
 }
 
-// ── Crack task ────────────────────────────────────────────────────────────
+// ── Crack task (single task, pinned to core 0) ───────────────────────────
+
+void WifiEapolBruteForceScreen::_crackTask(void* param) {
+  CrackCtx* ctx = static_cast<CrackCtx*>(param);
+
+  char     line[64];
+  uint32_t tested = 0;
+  uint32_t t0     = millis();
+
+  #define TRY_PW(pw, pwlen) do { \
+    memcpy(ctx->curPass, (pw), (pwlen) + 1); \
+    if (fast_wpa2_try_password((pw), (pwlen), \
+                                ctx->hs.ssid, ctx->hs.ssid_len, \
+                                ctx->hs.prf_data, \
+                                ctx->hs.eapol, ctx->hs.eapol_len, \
+                                ctx->hs.mic)) { \
+      memcpy(ctx->foundPass, (pw), (pwlen) + 1); \
+      ctx->found = true; \
+    } \
+    tested++; ctx->tested = tested; \
+    uint32_t _el = millis() - t0; \
+    if (_el >= 2000) ctx->speed = tested * 1000.0f / _el; \
+  } while (0)
+
+  if (strcmp(ctx->wordlistPath, "__test__") == 0) {
+    for (int i = 0; i < kTestPasswordCount && !ctx->stop && !ctx->found; i++) {
+      size_t n = strlen(kTestPasswords[i]);
+      strncpy(line, kTestPasswords[i], sizeof(line) - 1);
+      line[n] = '\0';
+      TRY_PW(line, n);
+      ctx->bytesDone = (uint32_t)(i + 1);
+    }
+  } else {
+    fs::File f = Uni.Storage->open(ctx->wordlistPath, FILE_READ);
+    if (f) {
+      while (f.available() && !ctx->stop && !ctx->found) {
+        size_t n = f.readBytesUntil('\n', line, 63);
+        line[n] = '\0';
+        while (n > 0 && (line[n - 1] == '\r' || line[n - 1] == '\n')) line[--n] = '\0';
+        if (n < 8 || n > 63) { ctx->bytesDone = f.position(); continue; }
+        TRY_PW(line, n);
+        ctx->bytesDone = f.position();
+      }
+      f.close();
+    }
+  }
+
+  #undef TRY_PW
+  ctx->done = true;
+  vTaskDelete(nullptr);
+}
+
+// ── Start / Stop ──────────────────────────────────────────────────────────
 
 void WifiEapolBruteForceScreen::_startCrack() {
   memset(_ctx.foundPass, 0, sizeof(_ctx.foundPass));
@@ -483,7 +514,7 @@ void WifiEapolBruteForceScreen::_startCrack() {
   _ctx.speed     = 0.0f;
   strncpy(_ctx.wordlistPath, _selectedWordlist, sizeof(_ctx.wordlistPath) - 1);
 
-  // Get file size for progress bar (test wordlist uses entry count instead)
+  // Get file size for progress bar
   if (strcmp(_selectedWordlist, "__test__") == 0) {
     _ctx.fileSize = kTestPasswordCount;
   } else {
@@ -494,6 +525,7 @@ void WifiEapolBruteForceScreen::_startCrack() {
 
   // Pin to core 0 — Arduino loop() runs on core 1, keeps UI responsive
   xTaskCreatePinnedToCore(_crackTask, "eapol_bf", 8192, &_ctx, 1, &_taskHandle, 0);
+
   _state = STATE_CRACKING;
   render();
 }
@@ -501,7 +533,7 @@ void WifiEapolBruteForceScreen::_startCrack() {
 void WifiEapolBruteForceScreen::_stopCrack() {
   if (!_taskHandle) return;
   _ctx.stop = true;
-  // Wait up to 2s for task to self-exit cleanly
+  // Wait up to 2s for tasks to self-exit cleanly
   for (int i = 0; i < 200 && !_ctx.done; i++) {
     vTaskDelay(10 / portTICK_PERIOD_MS);
   }
@@ -513,69 +545,20 @@ void WifiEapolBruteForceScreen::_stopCrack() {
   }
 }
 
-void WifiEapolBruteForceScreen::_crackTask(void* param) {
-  CrackCtx* ctx = static_cast<CrackCtx*>(param);
+// ── Save cracked password (same format as NetworkMenuScreen) ───────────────
 
-  // Init mbedTLS contexts once — reused for all passwords to avoid init overhead
-  mbedtls_md_context_t pbkdfCtx, prfCtx;
-  const mbedtls_md_info_t* sha1 = mbedtls_md_info_from_type(MBEDTLS_MD_SHA1);
-  mbedtls_md_init(&pbkdfCtx); mbedtls_md_setup(&pbkdfCtx, sha1, 1);
-  mbedtls_md_init(&prfCtx);   mbedtls_md_setup(&prfCtx,   sha1, 1);
-
-  char     line[64];
-  uint32_t tested = 0;
-  uint32_t t0     = millis();
-
-  // ── Helper lambda-like macro to crack one password candidate ──────────────
-  // (shared between file and test-wordlist paths)
-  #define TRY_PASSWORD(pw, pwlen) do { \
-    memcpy(ctx->curPass, (pw), (pwlen) + 1); \
-    uint8_t pmk[32], ptk[64], mic[20]; \
-    mbedtls_pkcs5_pbkdf2_hmac(&pbkdfCtx, \
-      (const uint8_t*)(pw), (pwlen), \
-      (const uint8_t*)ctx->hs.ssid, ctx->hs.ssid_len, \
-      4096, 32, pmk); \
-    prf512(prfCtx, pmk, ctx->hs.prf_data, ptk); \
-    mbedtls_md_hmac(sha1, ptk, 16, ctx->hs.eapol, ctx->hs.eapol_len, mic); \
-    tested++; ctx->tested = tested; \
-    uint32_t _el = millis() - t0; \
-    if (_el >= 2000) ctx->speed = tested * 1000.0f / _el; \
-    if (memcmp(mic, ctx->hs.mic, 16) == 0) { \
-      memcpy(ctx->foundPass, (pw), (pwlen) + 1); \
-      ctx->found = true; \
-    } \
-    vTaskDelay(1); \
-  } while (0)
-
-  if (strcmp(ctx->wordlistPath, "__test__") == 0) {
-    // Built-in test wordlist — no storage access needed
-    for (int i = 0; i < kTestPasswordCount && !ctx->stop && !ctx->found; i++) {
-      size_t n = strlen(kTestPasswords[i]);
-      strncpy(line, kTestPasswords[i], sizeof(line) - 1);
-      line[n] = '\0';
-      TRY_PASSWORD(line, n);
-      ctx->bytesDone = (uint32_t)(i + 1);  // progress = entries tried / 50
-    }
-  } else {
-    fs::File f = Uni.Storage->open(ctx->wordlistPath, FILE_READ);
-    if (f) {
-      while (f.available() && !ctx->stop && !ctx->found) {
-        size_t n = f.readBytesUntil('\n', line, 63);
-        line[n] = '\0';
-        while (n > 0 && (line[n - 1] == '\r' || line[n - 1] == '\n')) line[--n] = '\0';
-        if (n < 8 || n > 63) { ctx->bytesDone = f.position(); continue; }
-        TRY_PASSWORD(line, n);
-        ctx->bytesDone = f.position();
-      }
-      f.close();
-    }
-  }
-
-  #undef TRY_PASSWORD
-  mbedtls_md_free(&pbkdfCtx);
-  mbedtls_md_free(&prfCtx);
-  ctx->done = true;
-  vTaskDelete(nullptr);
+void WifiEapolBruteForceScreen::_saveCrackedPassword() {
+  if (!Uni.Storage || !_ctx.found) return;
+  // Format BSSID from AP MAC bytes: "AABBCCDDEEFF"
+  char bssid[13];
+  snprintf(bssid, sizeof(bssid), "%02X%02X%02X%02X%02X%02X",
+           _ctx.hs.ap[0], _ctx.hs.ap[1], _ctx.hs.ap[2],
+           _ctx.hs.ap[3], _ctx.hs.ap[4], _ctx.hs.ap[5]);
+  // Save to /unigeek/wifi/passwords/<BSSID>_<SSID>.pass
+  static const char* dir = "/unigeek/wifi/passwords";
+  Uni.Storage->makeDir(dir);
+  String path = String(dir) + "/" + bssid + "_" + _ctx.hs.ssid + ".pass";
+  Uni.Storage->writeFile(path.c_str(), _ctx.foundPass);
 }
 
 // ── Render ────────────────────────────────────────────────────────────────
@@ -606,11 +589,11 @@ void WifiEapolBruteForceScreen::_renderCracking() {
   sp.drawString(disp, 36, y, 1);
   y += lh + 4;
 
-  // Progress bar — 3px padding each side, taller to fit font (8px) + padding
+  // Progress bar
   const int barPad = 3;
   const int barX   = barPad;
   const int barW   = bodyW() - barPad * 2;
-  const int barH   = 8 + barPad * 2;   // font height + top/bottom padding
+  const int barH   = 8 + barPad * 2;
   int pct = (_ctx.fileSize > 0)
     ? (int)((uint64_t)_ctx.bytesDone * 100 / _ctx.fileSize)
     : 0;
@@ -619,7 +602,6 @@ void WifiEapolBruteForceScreen::_renderCracking() {
   sp.drawRect(barX, y, barW, barH, TFT_DARKGREY);
   if (pct > 0) sp.fillRect(barX + 1, y + 1, (barW - 2) * pct / 100, barH - 2, accent);
 
-  // Percent label centered on bar — transparent background (no bg color)
   char pctBuf[6];
   snprintf(pctBuf, sizeof(pctBuf), "%d%%", pct);
   sp.setTextDatum(MC_DATUM);
@@ -635,7 +617,7 @@ void WifiEapolBruteForceScreen::_renderCracking() {
   sp.setTextColor(TFT_LIGHTGREY, TFT_BLACK);
   sp.drawString(statBuf, bodyW() / 2, y, 1);
 
-  // Bottom hint — device-appropriate stop instruction
+  // Bottom hint
   sp.setTextDatum(BC_DATUM);
   sp.setTextColor(TFT_DARKGREY, TFT_BLACK);
 #ifdef DEVICE_HAS_KEYBOARD

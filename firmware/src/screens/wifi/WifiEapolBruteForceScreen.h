@@ -16,7 +16,6 @@ public:
   void onBack() override;
   void onItemSelected(uint8_t index) override;
 
-private:
   // ── WPA2 handshake (extracted from PCAP) ─────────────────────────────────
   struct Handshake {
     bool     valid      = false;
@@ -32,6 +31,7 @@ private:
     uint8_t  prf_data[76] = {};   // sorted MACs + sorted nonces for PTK derivation
   };
 
+private:
   // ── Shared state between crack task and main loop ─────────────────────────
   struct CrackCtx {
     Handshake hs;
@@ -40,7 +40,7 @@ private:
     volatile bool     done      = false;
     volatile bool     found     = false;
     char              foundPass[64] = {};
-    char              curPass[64]   = {};   // updated each password, for display
+    char              curPass[64]   = {};
     volatile uint32_t tested     = 0;
     volatile uint32_t bytesDone  = 0;
     volatile uint32_t fileSize   = 0;
@@ -79,6 +79,7 @@ private:
   bool _parsePcap(const char* path);
   void _startCrack();
   void _stopCrack();
+  void _saveCrackedPassword();
   void _renderCracking();
   void _renderDone();
 };
