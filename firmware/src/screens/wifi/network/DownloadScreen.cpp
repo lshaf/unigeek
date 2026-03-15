@@ -38,7 +38,7 @@ void DownloadScreen::_showMenu() {
     else if (sha.length() > 0) _wfmVersionSub = sha;
   }
   _menuItems[0] = {"Web File Manager", _wfmVersionSub.c_str()};
-  _menuItems[1] = {"Sample Data"};
+  _menuItems[1] = {"Firmware Sample Files"};
   setItems(_menuItems, 2);
 }
 
