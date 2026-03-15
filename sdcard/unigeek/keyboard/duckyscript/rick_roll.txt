@@ -1,0 +1,6 @@
+REM Open Rick Roll in browser
+DELAY 500
+GUI r
+DELAY 500
+STRING https://www.youtube.com/watch?v=dQw4w9WgXcQ
+ENTER

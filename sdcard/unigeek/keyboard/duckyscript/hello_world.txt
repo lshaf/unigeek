@@ -1,0 +1,8 @@
+REM Opens notepad and types Hello World
+DELAY 500
+GUI r
+DELAY 500
+STRING notepad
+ENTER
+DELAY 1000
+STRING Hello World from UniGeek!

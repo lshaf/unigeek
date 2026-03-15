@@ -1,0 +1,6 @@
+BEGIN:VCARD
+VERSION:3.0
+N:Doe;John
+TEL:+1234567890
+EMAIL:john@example.com
+END:VCARD
