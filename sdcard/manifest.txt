@@ -19,3 +19,5 @@ unigeek/wifi/portals/wifi/index.htm
 unigeek/wifi/portals/wifi/style.css
 unigeek/wifi/portals/wifi/script.js
 unigeek/wifi/portals/wifi/success.htm
+unigeek/wifi/portals/dns_config
+unigeek/wifi/portals/default/index.html

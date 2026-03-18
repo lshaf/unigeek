@@ -24,6 +24,12 @@ All hardware differences are isolated in board-specific folders.
     pio device monitor
     pio run -t clean
 
+### Platform Version
+
+    platform = espressif32@6.13.0 (locked in platformio.ini)
+    framework-arduinoespressif32 v2.0.17 (Arduino ESP32 v2.x API)
+    patch.py validates platform version at build time — update EXPECTED_PLATFORM_VERSION if upgrading
+
 ### Board Environments
 
     m5stickcplus_11   M5StickC Plus 1.1, no keyboard, AXP192 power, LittleFS only
@@ -367,6 +373,7 @@ All hardware differences are isolated in board-specific folders.
   Never call esp_wifi_set_channel() directly — use attacker->setChannel()
 - ListScreen DIR_BACK with empty list: check DIR_BACK first, before _effectiveCount() == 0 guard
   onRender() must always push the sprite even when empty — clears lingering overlays
+- sdcard/manifest.txt must be updated when files are added or removed from sdcard/
 
 ---
 
