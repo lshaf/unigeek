@@ -7,6 +7,7 @@ unigeek/qrcode/rickroll.txt
 unigeek/qrcode/wifi_example.txt
 unigeek/qrcode/contact.txt
 unigeek/utility/passwords/rockyou_mini.txt
+unigeek/utility/cctv/targets.txt
 unigeek/wifi/portals/google/index.htm
 unigeek/wifi/portals/google/style.css
 unigeek/wifi/portals/google/script.js

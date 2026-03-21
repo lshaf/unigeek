@@ -38,7 +38,7 @@ private:
   uint8_t     _scannedCount = 0;
   ListItem    _scannedItems[WifiUtility::MAX_WIFI];
 
-  ListItem _menuItems[8] = {
+  ListItem _menuItems[9] = {
     {"Information"},
     {"WiFi QRCode"},
     {"World Clock"},
@@ -47,6 +47,7 @@ private:
     {"Web File Manager"},
     {"Download"},
     {"MITM Attack"},
+    {"CCTV Sniffer"},
   };
 
   void   _showMenu();

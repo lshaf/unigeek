@@ -1,0 +1,5 @@
+# CCTV Sniffer - Target IP List
+# One IP per line. Lines starting with # are comments.
+# Example:
+# 192.168.1.100
+# 192.168.1.101

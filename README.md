@@ -30,6 +30,7 @@ Multi-tool firmware for ESP32-based handheld devices. Built with PlatformIO + Ar
     - **Web File Manager** — HTML/CSS/JS interface for browser-based file management (auto-checks for updates)
     - **Firmware Sample Files** — Portal templates (Google, Facebook, WiFi login), DuckyScript payloads (hello world, reverse shell, WiFi password grab, rickroll, disable defender), QR code samples, DNS spoofing config, and rockyou_mini password wordlist
   - **MITM Attack** — Man-in-the-middle with DHCP starvation, deauth burst, rogue DHCP, DNS spoofing, and web file manager ([details](knowledge/network-mitm.md))
+  - **CCTV Sniffer** — Discover network cameras via ARP + camera port scanning, fingerprint brands (Hikvision, Dahua, Axis, etc.), test default credentials, and stream MJPEG video ([details](knowledge/cctv-toolkit.md))
 - **Access Point** — Create a custom WiFi hotspot with optional DNS spoofing, captive portal, web file manager, and WiFi QR code for easy sharing ([details](knowledge/access-point.md))
 - **Evil Twin** — Clone a target AP's SSID with a captive portal; optional deauth and real-time password verification ([details](knowledge/evil-twin.md))
 - **Karma Attack** — Sniff probe requests to discover saved networks, then deploy fake APs with captive portals to capture credentials ([details](knowledge/karma-attack.md))
@@ -139,6 +140,7 @@ Files are stored under `/unigeek/` on either SD card or LittleFS (fallback):
 /unigeek/wifi/captives/            Captured credentials from Evil Twin / Karma / Rogue DNS
 /unigeek/qrcode/                   QR code content files
 /unigeek/utility/passwords/        Password wordlists for EAPOL brute force
+/unigeek/utility/cctv/             CCTV Sniffer target IP lists
 /unigeek/web/file_manager/         Web file manager HTML files
 ```
 
