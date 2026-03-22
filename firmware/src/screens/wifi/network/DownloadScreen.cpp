@@ -225,7 +225,9 @@ void DownloadScreen::_downloadSampleData() {
 
     idx++;
     uint8_t pct = (uint8_t)((idx * 100) / fileCount);
-    ShowProgressAction::show(line.c_str(), pct);
+    char label[32];
+    snprintf(label, sizeof(label), "[%02d/%02d] Downloading...", idx, fileCount);
+    ShowProgressAction::show(label, pct);
 
     String url  = String(REPO_BASE) + "/" + line;
     String path = "/" + line;

@@ -186,7 +186,8 @@ void CctvSnifferScreen::_showConfig()
     _configItems[1] = {"IP", _ipSub.c_str()};
   } else if (_mode == MODE_FILE_IP) {
     if (!_targetFile.length()) _targetFile = "/unigeek/utility/cctv/targets.txt";
-    _fileSub = _targetFile;
+    int lastSlash = _targetFile.lastIndexOf('/');
+    _fileSub = lastSlash >= 0 ? _targetFile.substring(lastSlash + 1) : _targetFile;
     _configItems[1] = {"File", _fileSub.c_str()};
   } else {
     _ipSub = WiFi.SSID();

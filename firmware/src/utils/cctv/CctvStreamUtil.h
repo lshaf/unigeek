@@ -11,7 +11,7 @@ public:
 
   bool begin(const char* url, const char* username = nullptr, const char* password = nullptr);
   void stop();
-  bool isConnected() const { return _client.connected(); }
+  bool isConnected() { return _client.connected(); }
 
   // Call each frame. Reads one JPEG frame and calls the callback.
   // Returns false if stream ended or error.

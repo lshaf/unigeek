@@ -1,6 +1,9 @@
 #include "CctvScanUtil.h"
 #include <WiFi.h>
 
+constexpr CctvScanUtil::PortEntry CctvScanUtil::kPorts[];
+constexpr const char* CctvScanUtil::kStreamPaths[];
+
 // ── Brand keyword tables ──────────────────────────────────────────────────────
 
 struct BrandEntry { const char* brand; const char* keywords[6]; };
