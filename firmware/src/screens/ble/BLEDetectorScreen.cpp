@@ -246,7 +246,8 @@ void BLEDetectorScreen::_onDevice(NimBLEAdvertisedDevice* dev)
     strncpy(d.name, name.c_str(), sizeof(d.name) - 1);
     d.name[sizeof(d.name) - 1] = '\0';
   } else {
-    strncpy(d.name, "Unknown", sizeof(d.name));
+    strncpy(d.name, devType, sizeof(d.name) - 1);
+    d.name[sizeof(d.name) - 1] = '\0';
   }
 
   strncpy(d.type, devType, sizeof(d.type) - 1);
@@ -335,7 +336,7 @@ void BLEDetectorScreen::_draw()
       dotColor = TFT_BLUE;
     else if (strncmp(d.type, "BitChat", 7) == 0)
       dotColor = TFT_MAGENTA;
-    sp.fillCircle(4, y + 6, 3, dotColor);
+    sp.fillCircle(4, y + 3, 3, dotColor);
 
     // Name or type (truncated)
     sp.setTextColor(TFT_WHITE, TFT_BLACK);
@@ -350,7 +351,7 @@ void BLEDetectorScreen::_draw()
     } else {
       snprintf(label, sizeof(label), "%.12s", d.name);
     }
-    sp.drawString(label, 10, y);
+    sp.drawString(label, 12, y);
 
     // RSSI on right
     sp.setTextColor(TFT_DARKGREY, TFT_BLACK);
