@@ -3,7 +3,7 @@
 #include <esp_wifi.h>
 #include "ui/templates/ListScreen.h"
 #include "ui/components/LogView.h"
-#include "utils/CaptivePortalServer.h"
+#include "utils/network/CaptivePortalServer.h"
 
 class WifiKarmaScreen : public ListScreen
 {

@@ -1,4 +1,4 @@
-#include "WifiUtility.h"
+#include "utils/network/WifiUtility.h"
 #include "core/Device.h"
 #include "ui/actions/InputTextAction.h"
 #include <esp_wifi.h>

@@ -6,7 +6,7 @@
 
 #include "ui/templates/ListScreen.h"
 #include "ui/components/ScrollListView.h"
-#include "utils/WifiUtility.h"
+#include "utils/network/WifiUtility.h"
 
 class NetworkMenuScreen : public ListScreen
 {

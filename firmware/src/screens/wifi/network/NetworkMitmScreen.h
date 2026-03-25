@@ -2,11 +2,11 @@
 
 #include "ui/templates/ListScreen.h"
 #include "ui/components/LogView.h"
-#include "utils/DhcpStarvation.h"
-#include "utils/RogueDhcpServer.h"
-#include "utils/DnsSpoofServer.h"
-#include "utils/WebFileManager.h"
-#include "utils/WifiAttackUtil.h"
+#include "utils/network/DhcpStarvation.h"
+#include "utils/network/RogueDhcpServer.h"
+#include "utils/network/DnsSpoofServer.h"
+#include "utils/network/WebFileManager.h"
+#include "utils/network/WifiAttackUtil.h"
 
 class NetworkMitmScreen : public ListScreen {
 public:

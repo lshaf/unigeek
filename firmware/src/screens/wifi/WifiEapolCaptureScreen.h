@@ -7,7 +7,7 @@
 #include <esp_wifi.h>
 
 #include "ui/templates/ListScreen.h"
-#include "utils/WifiAttackUtil.h"
+#include "utils/network/WifiAttackUtil.h"
 
 class WifiEapolCaptureScreen : public ListScreen {
 public:

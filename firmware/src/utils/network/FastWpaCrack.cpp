@@ -1,4 +1,4 @@
-#include "FastWpaCrack.h"
+#include "utils/network/FastWpaCrack.h"
 #include <cstring>
 
 // ==========================================================================

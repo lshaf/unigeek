@@ -2,7 +2,7 @@
 #include <WiFi.h>
 #include <lwip/etharp.h>
 #include <lwip/netif.h>
-#include "utils/DnsUtil.h"
+#include "utils/network/DnsUtil.h"
 #include "core/ScreenManager.h"
 #include "screens/wifi/network/NetworkMenuScreen.h"
 #include "ui/actions/InputNumberAction.h"

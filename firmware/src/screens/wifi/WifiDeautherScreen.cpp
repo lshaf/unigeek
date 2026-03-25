@@ -2,7 +2,7 @@
 #include "core/Device.h"
 #include "core/ScreenManager.h"
 #include "screens/wifi/WifiMenuScreen.h"
-#include "utils/WifiAttackUtil.h"
+#include "utils/network/WifiAttackUtil.h"
 #include "ui/actions/ShowStatusAction.h"
 
 #include <WiFi.h>

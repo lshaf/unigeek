@@ -3,7 +3,7 @@
 #include "core/ScreenManager.h"
 #include "screens/wifi/WifiMenuScreen.h"
 #include "ui/actions/ShowStatusAction.h"
-#include "utils/FastWpaCrack.h"
+#include "utils/network/FastWpaCrack.h"
 
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>

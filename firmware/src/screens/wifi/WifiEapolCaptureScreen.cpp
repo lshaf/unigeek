@@ -5,7 +5,7 @@
 #include "ui/actions/ShowStatusAction.h"
 #include "utils/StorageUtil.h"
 
-#include "utils/WifiAttackUtil.h"
+#include "utils/network/WifiAttackUtil.h"
 #include <cstring>
 
 // ── Static definitions ────────────────────────────────────────────────────

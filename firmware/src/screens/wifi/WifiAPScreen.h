@@ -2,8 +2,8 @@
 
 #include "ui/templates/ListScreen.h"
 #include "ui/components/LogView.h"
-#include "utils/DnsSpoofServer.h"
-#include "utils/WebFileManager.h"
+#include "utils/network/DnsSpoofServer.h"
+#include "utils/network/WebFileManager.h"
 
 class WifiAPScreen : public ListScreen {
 public:

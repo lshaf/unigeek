@@ -2,7 +2,7 @@
 #include "core/ScreenManager.h"
 #include "core/Device.h"
 #include "screens/wifi/network/NetworkMenuScreen.h"
-#include "utils/WebFileManager.h"
+#include "utils/network/WebFileManager.h"
 #include "ui/actions/ShowStatusAction.h"
 #include "ui/actions/ShowProgressAction.h"
 #include <WiFi.h>

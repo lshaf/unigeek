@@ -1,6 +1,6 @@
 #pragma once
 #include "ui/templates/ListScreen.h"
-#include "utils/WebFileManager.h"
+#include "utils/network/WebFileManager.h"
 
 class WebFileManagerScreen : public ListScreen {
 public:

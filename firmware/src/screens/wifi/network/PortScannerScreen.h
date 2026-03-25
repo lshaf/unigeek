@@ -1,6 +1,6 @@
 #pragma once
 #include "ui/templates/ListScreen.h"
-#include "utils/PortScanUtil.h"
+#include "utils/network/PortScanUtil.h"
 
 class PortScannerScreen : public ListScreen {
 public:

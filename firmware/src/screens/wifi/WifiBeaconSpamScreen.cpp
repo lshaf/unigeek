@@ -2,7 +2,7 @@
 #include "core/Device.h"
 #include "core/ScreenManager.h"
 #include "screens/wifi/WifiMenuScreen.h"
-#include "utils/WifiAttackUtil.h"
+#include "utils/network/WifiAttackUtil.h"
 
 static constexpr const char* _ssids[] = {
   "FreeWiFi",          "Free_WiFi",          "FreeWifi_Hotspot",   "Free Internet",
