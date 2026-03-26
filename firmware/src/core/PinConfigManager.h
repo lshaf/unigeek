@@ -13,6 +13,23 @@
 #define PIN_CONFIG_EXT_SCL          "ext_scl"
 #define PIN_CONFIG_EXT_SCL_DEFAULT  "1"
 
+#ifdef GPS_TX
+  #define PIN_CONFIG_GPS_TX_DEFAULT   String(GPS_TX)
+#else
+  #define PIN_CONFIG_GPS_TX_DEFAULT   "1"
+#endif
+
+#ifdef GPS_RX
+  #define PIN_CONFIG_GPS_RX_DEFAULT   String(GPS_RX)
+#else
+  #define PIN_CONFIG_GPS_RX_DEFAULT   "2"
+#endif
+
+#define PIN_CONFIG_GPS_TX           "gps_tx"
+#define PIN_CONFIG_GPS_RX           "gps_rx"
+#define PIN_CONFIG_GPS_BAUD         "gps_baud"
+#define PIN_CONFIG_GPS_BAUD_DEFAULT "9600"
+
 class PinConfigManager
 {
 public:
