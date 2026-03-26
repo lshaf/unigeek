@@ -51,40 +51,39 @@ private:
   int     _x = 0, _y = 0, _w = 0, _h = 0;
 
   void _draw() {
-    auto& lcd    = Uni.Lcd;
     int   full    = _h / ROW_H;
     int   extra   = (_h % ROW_H >= 5) ? 1 : 0;
     int   visible = full + extra;
     int   textW   = _w - SCROLL_W - 4;
 
-    lcd.fillRect(_x, _y, _w, _h, TFT_BLACK);
-    lcd.setTextSize(1);
-
-    // viewport clips any partial row at the bottom edge
-    lcd.setViewport(_x, _y, _w, _h, false);
+    TFT_eSprite sp(&Uni.Lcd);
+    sp.createSprite(_w, _h);
+    sp.fillSprite(TFT_BLACK);
+    sp.setTextSize(1);
 
     for (int i = 0; i < visible; i++) {
       int idx = i + _offset;
       if (idx >= _count) break;
-      int iy = _y + i * ROW_H + 3;
+      int iy = i * ROW_H + 3;
 
-      lcd.setTextColor(TFT_DARKGREY);
-      lcd.setTextDatum(TL_DATUM);
-      lcd.drawString(_rows[idx].label, _x + 2, iy, 1);
+      sp.setTextColor(TFT_DARKGREY);
+      sp.setTextDatum(TL_DATUM);
+      sp.drawString(_rows[idx].label, 2, iy, 1);
 
-      lcd.setTextColor(TFT_WHITE);
-      lcd.setTextDatum(TR_DATUM);
-      lcd.drawString(_rows[idx].value.c_str(), _x + textW, iy, 1);
+      sp.setTextColor(TFT_WHITE);
+      sp.setTextDatum(TR_DATUM);
+      sp.drawString(_rows[idx].value.c_str(), textW, iy, 1);
     }
-
-    lcd.resetViewport();
 
     // scrollbar — only if content overflows
     if (_count > visible) {
       int sbH = max(4, _h * visible / _count);
-      int sbY = _y + (_h - sbH) * _offset / max(1, _count - visible);
-      lcd.fillRect(_x + _w - SCROLL_W, _y, SCROLL_W, _h, 0x2104);
-      lcd.fillRect(_x + _w - SCROLL_W, sbY, SCROLL_W, sbH, TFT_LIGHTGREY);
+      int sbY = (_h - sbH) * _offset / max(1, _count - visible);
+      sp.fillRect(_w - SCROLL_W, 0, SCROLL_W, _h, 0x2104);
+      sp.fillRect(_w - SCROLL_W, sbY, SCROLL_W, sbH, TFT_LIGHTGREY);
     }
+
+    sp.pushSprite(_x, _y);
+    sp.deleteSprite();
   }
 };
