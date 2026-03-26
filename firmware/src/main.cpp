@@ -38,13 +38,16 @@ void _bootSplash() {
   uint16_t barY = h / 2 + 28;
   lcd.drawRoundRect(barX, barY, barW, barH, 1, TFT_DARKGREY);
 
-  for (int i = 0; i <= barW - 2; i++) {
+  uint16_t steps = barW - 2;
+  unsigned long totalMs = 2000;
+  unsigned long start = millis();
+  for (int i = 0; i <= steps; i++) {
     lcd.fillRect(barX + 1, barY + 1, i, barH - 2, Config.getThemeColor());
-    delay(10);
+    unsigned long target = start + (totalMs * i / steps);
+    while (millis() < target) delay(1);
   }
 
   if (Uni.Speaker) Uni.Speaker->playWin();
-  delay(300);
 }
 
 void setup() {
