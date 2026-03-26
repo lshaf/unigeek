@@ -6,34 +6,36 @@
 #include "screens/utility/UtilityMenuScreen.h"
 
 void I2CDetectorScreen::onInit() {
+  _hasBoth = (Uni.ExI2C != nullptr) && (Uni.InI2C != nullptr);
+
+  // If only InI2C exists (no ExI2C), start on internal
+  if (!Uni.ExI2C && Uni.InI2C) _wireIndex = 1;
+
   _scan();
 }
 
 void I2CDetectorScreen::_scan() {
   memset(_found, 0, sizeof(_found));
 
-  if (_wireIndex == 0) {
+  TwoWire* bus = (_wireIndex == 0) ? Uni.ExI2C : Uni.InI2C;
+  if (!bus) return;
+
+  if (_wireIndex == 0 && _hasBoth) {
     // External I2C — user-configured pins, free state
-    if (!Uni.ExI2C) return;
     int sda = PinConfig.getInt(PIN_CONFIG_EXT_SDA, PIN_CONFIG_EXT_SDA_DEFAULT);
     int scl = PinConfig.getInt(PIN_CONFIG_EXT_SCL, PIN_CONFIG_EXT_SCL_DEFAULT);
-    Uni.ExI2C->begin(sda, scl);
-    Uni.ExI2C->setTimeOut(50);
+    bus->begin(sda, scl);
+    bus->setTimeOut(50);
     for (uint8_t addr = 0x08; addr < 0x78; addr++) {
-      Uni.ExI2C->beginTransmission(addr);
-      if (Uni.ExI2C->endTransmission() == 0) {
-        _found[addr] = true;
-      }
+      bus->beginTransmission(addr);
+      if (bus->endTransmission() == 0) _found[addr] = true;
     }
-    Uni.ExI2C->end();
+    bus->end();
   } else {
-    // Internal I2C — board-initialized
-    if (!Uni.InI2C) return;
+    // Single bus or internal — already initialized by board
     for (uint8_t addr = 0x08; addr < 0x78; addr++) {
-      Uni.InI2C->beginTransmission(addr);
-      if (Uni.InI2C->endTransmission() == 0) {
-        _found[addr] = true;
-      }
+      bus->beginTransmission(addr);
+      if (bus->endTransmission() == 0) _found[addr] = true;
     }
   }
 }
@@ -41,7 +43,7 @@ void I2CDetectorScreen::_scan() {
 void I2CDetectorScreen::onUpdate() {
   if (!Uni.Nav->wasPressed()) return;
   auto dir = Uni.Nav->readDirection();
-  if (dir == INavigation::DIR_UP || dir == INavigation::DIR_DOWN) {
+  if (_hasBoth && (dir == INavigation::DIR_UP || dir == INavigation::DIR_DOWN)) {
     _wireIndex ^= 1;
     _scan();
     onRender();
@@ -59,14 +61,18 @@ void I2CDetectorScreen::onRender() {
   spr.setTextColor(TFT_YELLOW, TFT_BLACK);
   spr.setTextSize(1);
   spr.setCursor(2, 2);
-  if (_wireIndex == 0) {
-    int sda = PinConfig.getInt(PIN_CONFIG_EXT_SDA, PIN_CONFIG_EXT_SDA_DEFAULT);
-    int scl = PinConfig.getInt(PIN_CONFIG_EXT_SCL, PIN_CONFIG_EXT_SCL_DEFAULT);
-    char label[32];
-    snprintf(label, sizeof(label), "External (SDA:%d SCL:%d)", sda, scl);
-    spr.print(label);
+  if (_hasBoth) {
+    if (_wireIndex == 0) {
+      int sda = PinConfig.getInt(PIN_CONFIG_EXT_SDA, PIN_CONFIG_EXT_SDA_DEFAULT);
+      int scl = PinConfig.getInt(PIN_CONFIG_EXT_SCL, PIN_CONFIG_EXT_SCL_DEFAULT);
+      char label[32];
+      snprintf(label, sizeof(label), "External (SDA:%d SCL:%d)", sda, scl);
+      spr.print(label);
+    } else {
+      spr.print("Internal");
+    }
   } else {
-    spr.print("Internal");
+    spr.print("I2C Bus");
   }
 
   const uint16_t labelH = 12;
@@ -107,7 +113,7 @@ void I2CDetectorScreen::onRender() {
   spr.setTextColor(TFT_DARKGREY, TFT_BLACK);
   spr.setTextSize(1);
   spr.setCursor(2, bodyH() - hintH);
-  spr.print("UP/DN:bus  OK:exit");
+  spr.print(_hasBoth ? "UP/DN:bus  OK:exit" : "OK:exit");
 
   spr.pushSprite(bodyX(), bodyY());
   spr.deleteSprite();

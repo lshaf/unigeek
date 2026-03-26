@@ -10,6 +10,7 @@ public:
 
 private:
   uint8_t _wireIndex = 0;
+  bool    _hasBoth = false;  // true when both ExI2C and InI2C exist
   bool    _found[0x78] = {};
   void _scan();
 };

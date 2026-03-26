@@ -79,7 +79,8 @@ static const uint8_t SCL = GROVE_SCL;
 #define SPK_I2S_PORT  I2S_NUM_0
 
 // ─── XL9555 I2C GPIO Expander ─────────────────────────────
-#define EXPANDS_AMP_EN  1  // port 0 bit 1 — NS4150B amp enable
+#define EXPANDS_AMP_EN   1  // port 0 bit 1 — NS4150B amp enable
+#define EXPANDS_GNSS_EN  4  // port 0 bit 4 — GNSS power supply enable
 
 // ─── UART (external 12-pin socket) ────────────────────────
 #define UART1_TX  43
@@ -119,4 +120,5 @@ static const uint8_t SCL = GROVE_SCL;
 #define DEVICE_HAS_SOUND          // speaker attached — enables audio paths and sound settings
 #define DEVICE_HAS_VOLUME_CONTROL // I2S amp supports setVolume() — shows Volume slider in Settings
 #define DEVICE_HAS_USB_HID        // ESP32-S3 native USB OTG — enables USB HID keyboard
+#define DEVICE_HAS_GPS            // built-in MIA-M10Q GPS module
 #define APP_MENU_POWER_OFF        // show Power Off in main menu (hardware power cut via BQ25896)
