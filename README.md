@@ -9,10 +9,12 @@ Multi-tool firmware for ESP32-based handheld devices. Built with PlatformIO + Ar
 | Device | Keyboard | Speaker | USB HID | SD Card | Power Off |
 |--------|----------|---------|---------|---------|-----------|
 | M5StickC Plus 1.1 | — | Buzzer | — | — | Yes |
+| M5StickC Plus 2 | — | — | — | — | Yes |
 | LilyGO T-Lora Pager | TCA8418 | I2S | Yes | Yes | Yes |
 | M5Stack Cardputer | GPIO Matrix | I2S | Yes | Yes | — |
 | M5Stack Cardputer ADV | TCA8418 | I2S + ES8311 | Yes | Yes | — |
 | LilyGO T-Display 16MB | 2 Buttons | — | — | — | — |
+| DIY Smoochie | — | — | — | — | — |
 
 ---
 
@@ -23,29 +25,29 @@ Multi-tool firmware for ESP32-based handheld devices. Built with PlatformIO + Ar
   - **Information** — View connection details (IP, gateway, DNS, MAC, signal strength)
   - **WiFi QRCode** — Generate a QR code for the connected network to share credentials
   - **World Clock** — Display current time synced via NTP across multiple time zones
-  - **IP Scanner** — Scan the local network for active devices (ARP scan)
+  - **IP Scanner** — Scan the local network for active devices
   - **Port Scanner** — Scan open ports on a target IP address
   - **Web File Manager** — Manage device files from a browser over WiFi ([details](knowledge/web-file-manager.md))
   - **Download** — Download files from GitHub directly to device storage
     - **Web File Manager** — HTML/CSS/JS interface for browser-based file management (auto-checks for updates)
     - **Firmware Sample Files** — Portal templates (Google, Facebook, WiFi login), DuckyScript payloads (hello world, reverse shell, WiFi password grab, rickroll, disable defender), QR code samples, DNS spoofing config, and rockyou_mini password wordlist
   - **MITM Attack** — Man-in-the-middle with DHCP starvation, deauth burst, rogue DHCP, DNS spoofing, and web file manager ([details](knowledge/network-mitm.md))
-  - **CCTV Sniffer** — Discover network cameras via ARP + camera port scanning, fingerprint brands (Hikvision, Dahua, Axis, etc.), test default credentials, and stream MJPEG video ([details](knowledge/cctv-toolkit.md))
+  - **CCTV Sniffer** — Discover network cameras, identify brands, test credentials, and stream live video ([details](knowledge/cctv-toolkit.md))
 - **Access Point** — Create a custom WiFi hotspot with optional DNS spoofing, captive portal, web file manager, and WiFi QR code for easy sharing ([details](knowledge/access-point.md))
 - **Evil Twin** — Clone a target AP's SSID with a captive portal; optional deauth and real-time password verification ([details](knowledge/evil-twin.md))
-- **Karma Attack** — Sniff probe requests to discover saved networks, then deploy fake APs with captive portals to capture credentials ([details](knowledge/karma-attack.md))
+- **Karma Attack** — Detect nearby devices searching for saved WiFi networks, then create fake APs to capture credentials ([details](knowledge/karma-attack.md))
 - **WiFi Analyzer** — Scan and display nearby networks with signal strength and channel info
-- **Packet Monitor** — Visualize raw 802.11 traffic by channel
-- **WiFi Deauther** — Send deauthentication frames to disconnect clients from a target network
-- **Deauther Detector** — Monitor the air for deauthentication attacks and list offending BSSIDs
+- **Packet Monitor** — Visualize WiFi traffic by channel
+- **WiFi Deauther** — Disconnect clients from a target network
+- **Deauther Detector** — Monitor for deauthentication attacks nearby
 - **Beacon Spam** — Flood the area with fake SSIDs
-- **CIW Zeroclick** — Broadcast SSIDs containing injection payloads (XSS, CRLF, JNDI, format string, etc.) to test how nearby devices handle untrusted network names
+- **CIW Zeroclick** — Broadcast SSIDs with injection payloads to test how nearby devices handle untrusted network names
 - **ESPNOW Chat** — Peer-to-peer text chat over ESP-NOW (no router needed)
-- **EAPOL Capture** — Capture WPA2 4-way handshakes; auto-discovers APs, deauths clients, saves PCAP to storage
-- **EAPOL Brute Force** — Offline WPA2 password cracking from captured PCAP using on-device PBKDF2-HMAC-SHA1
+- **EAPOL Capture** — Capture WPA2 handshakes from nearby networks and save to storage
+- **EAPOL Brute Force** — Crack WPA2 passwords offline from captured handshakes
 
 ### Bluetooth
-- **BLE Analyzer** — Scan nearby BLE devices, display RSSI, name, address, and advertisement data
+- **BLE Analyzer** — Scan nearby BLE devices, display name, address, and signal strength
 - **BLE Spam** — Spam BLE advertisement packets
 - **BLE Detector** — Passive BLE scanner that detects Flipper Zero devices, credit card skimmers, Apple AirTags/FindMy trackers, BitChat app users, and BLE spam attacks ([details](knowledge/ble-detector.md))
 
@@ -73,6 +75,20 @@ Multi-tool firmware for ESP32-based handheld devices. Built with PlatformIO + Ar
   - Choose between Common (curated) or Full word database
   - Available in English (EN) and Indonesian (ID)
 
+### Modules
+- **NFC (MFRC522)** — MIFARE Classic card reader and key recovery tool ([details](knowledge/nfc-mifare.md))
+  - **Scan UID** — Detect and display card UID and type
+  - **Authenticate** — Test all sectors with common default keys
+  - **Discovered Keys** — View all recovered keys per sector
+  - **Dump Memory** — Read and display all card data using discovered keys
+  - **Dictionary Attack** — Try additional keys from custom dictionary files
+  - **Static Nested Attack** — Recover keys on cards with static nonce using a known key
+  - **Darkside Attack** — Recover the first key when no keys are known
+- **GPS** — GPS module support with wardriving, works on all boards via external GPS ([details](knowledge/gps-wardriving.md))
+  - **Live View** — Real-time satellite count, coordinates, altitude, speed, and heading
+  - **Wardriving** — Log nearby WiFi networks with GPS coordinates in Wigle CSV format
+  - **Wigle Integration** — Upload wardrive logs, view user stats, manage API token
+
 ### Settings
 - Device name
 - Auto display-off and display-off timeout
@@ -82,6 +98,7 @@ Multi-tool firmware for ESP32-based handheld devices. Built with PlatformIO + Ar
 - Navigation sound toggle
 - Theme color
 - Web file manager password
+- Pin configuration (external I2C SDA/SCL)
 - Navigation mode — Default or Encoder (M5StickC Plus only)
 
 ---
@@ -93,17 +110,21 @@ Install [PlatformIO](https://platformio.org/), then run:
 ```bash
 # Build
 pio run -e m5stickcplus_11
+pio run -e m5stickcplus_2
 pio run -e t_lora_pager
 pio run -e m5_cardputer
 pio run -e m5_cardputer_adv
 pio run -e t_display_16mb
+pio run -e diy_smoochie
 
 # Flash
 pio run -e m5stickcplus_11 -t upload
+pio run -e m5stickcplus_2 -t upload
 pio run -e t_lora_pager -t upload
 pio run -e m5_cardputer -t upload
 pio run -e m5_cardputer_adv -t upload
 pio run -e t_display_16mb -t upload
+pio run -e diy_smoochie -t upload
 
 # Serial monitor
 pio device monitor
@@ -141,6 +162,7 @@ Files are stored under `/unigeek/` on either SD card or LittleFS (fallback):
 /unigeek/qrcode/                   QR code content files
 /unigeek/utility/passwords/        Password wordlists for EAPOL brute force
 /unigeek/utility/cctv/             CCTV Sniffer target IP lists
+/unigeek/nfc/dictionaries/         MIFARE Classic key dictionary files
 /unigeek/web/file_manager/         Web file manager HTML files
 ```
 
@@ -165,18 +187,20 @@ firmware/
     │   ├── wifi/
     │   ├── ble/
     │   ├── keyboard/
+    │   ├── module/      NFC (MFRC522), GPS
     │   ├── utility/
     │   ├── game/
-    │   └── ...
+    │   └── setting/
     ├── ui/              templates, components, and action overlays
-    └── utils/           keyboard HID utilities, DuckyScript runner
+    └── utils/           keyboard HID, DuckyScript, nfc/ (attacks, crypto), GPS
 ```
 
 ---
 
 ## TODO
 
-- CCTV
-- GPS Wardriving
-- NFC Hack
-- Lora
+- LoRa
+- nr24lf
+- cc1101
+- change post to theme color and remove sound in any captive (ap, mitm and karma)
+- for wardriving, show log instead having legacy display. status bar will have how many wifi capture, distance been walked then status bar on right will have how long wardriving been running. for log maybe just show latest found. and try check if promecius working better than scanNetworks regarding wifi scanning, ble scanning also good to have.
