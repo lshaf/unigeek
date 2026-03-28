@@ -6,6 +6,8 @@ unigeek/keyboard/duckyscript/disable_defender.txt
 unigeek/qrcode/rickroll.txt
 unigeek/qrcode/wifi_example.txt
 unigeek/qrcode/contact.txt
+unigeek/barcode/hello.txt
+unigeek/barcode/example.txt
 unigeek/utility/passwords/rockyou_mini.txt
 unigeek/utility/cctv/targets.txt
 unigeek/wifi/portals/google/index.htm
