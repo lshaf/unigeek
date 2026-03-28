@@ -202,5 +202,4 @@ firmware/
 - LoRa
 - nr24lf
 - cc1101
-- use HAS_PSRAM instead of t lora pager on ble scanning wardriving.
-- use nimble for ble scanning for non psram device
+

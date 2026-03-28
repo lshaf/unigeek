@@ -6,11 +6,7 @@
 #include <WiFi.h>
 #include <esp_wifi.h>
 #include <math.h>
-#ifdef BOARD_HAS_PSRAM
-#include <BLEDevice.h>
-#include <BLEScan.h>
-#include <BLEAdvertisedDevice.h>
-#endif
+#include <NimBLEDevice.h>
 #include "core/ConfigManager.h"
 
 // === Shared scan result buffer (promiscuous WiFi + BLE task) ===
@@ -80,31 +76,30 @@ static void promiscCb(void* buf, wifi_promiscuous_pkt_type_t type) {
   portEXIT_CRITICAL(&s_scanMux);
 }
 
-// === BLE scanning task (T-Lora Pager only — Bluedroid needs extra heap) ===
+// === BLE scanning task (NimBLE — lightweight, works without PSRAM) ===
 
-#ifdef BOARD_HAS_PSRAM
 static volatile bool s_bleRunning = false;
 static volatile bool s_bleTaskDone = false;
 
 static void bleTaskFunc(void* param) {
   s_bleTaskDone = false;
-  BLEDevice::init("");
-  BLEScan* scan = BLEDevice::getScan();
+  NimBLEDevice::init("");
+  NimBLEScan* scan = NimBLEDevice::getScan();
   scan->setActiveScan(true);
   scan->setInterval(100);
   scan->setWindow(99);
 
   while (s_bleRunning) {
-    BLEScanResults results = scan->start(2, false);
+    NimBLEScanResults results = scan->start(2, false);
 
     portENTER_CRITICAL(&s_scanMux);
     for (int i = 0; i < results.getCount() && s_scanCount < SCAN_BUF_SIZE; i++) {
-      BLEAdvertisedDevice d = results.getDevice(i);
+      NimBLEAdvertisedDevice dev = results.getDevice(i);
       auto& entry = s_scanBuf[s_scanCount];
-      memcpy(entry.addr, d.getAddress().getNative(), 6);
-      strncpy(entry.name, d.getName().c_str(), 32);
+      memcpy(entry.addr, dev.getAddress().getNative(), 6);
+      strncpy(entry.name, dev.getName().c_str(), 32);
       entry.name[32] = '\0';
-      entry.rssi = d.getRSSI();
+      entry.rssi = dev.getRSSI();
       entry.channel = 0;
       entry.isBle = true;
       entry.hasRSN = false;
@@ -119,11 +114,10 @@ static void bleTaskFunc(void* param) {
   }
 
   scan->stop();
-  BLEDevice::deinit(false);
+  NimBLEDevice::deinit(false);
   s_bleTaskDone = true;
   vTaskDelete(NULL);
 }
-#endif
 
 // === GPSModule implementation ===
 
@@ -316,21 +310,17 @@ void GPSModule::_stopPromiscuous() {
 // === BLE scan control ===
 
 void GPSModule::_startBleScan() {
-#ifdef BOARD_HAS_PSRAM
   s_bleRunning = true;
   s_bleTaskDone = false;
-  xTaskCreatePinnedToCore(bleTaskFunc, "ble_wd", 8192, nullptr, 1, &_bleTask, 0);
-#endif
+  xTaskCreatePinnedToCore(bleTaskFunc, "ble_wd", 4096, nullptr, 1, &_bleTask, 0);
 }
 
 void GPSModule::_stopBleScan() {
-#ifdef BOARD_HAS_PSRAM
   if (!_bleTask) return;
   s_bleRunning = false;
   unsigned long start = millis();
   while (!s_bleTaskDone && millis() - start < 5000) delay(100);
   _bleTask = nullptr;
-#endif
 }
 
 // === Wardrive lifecycle ===
