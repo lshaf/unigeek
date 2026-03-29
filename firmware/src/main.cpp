@@ -6,6 +6,7 @@
 #include "core/ConfigManager.h"
 #include "core/PinConfigManager.h"
 #include "core/RtcManager.h"
+#include "core/RandomSeed.h"
 
 #include "screens/MainMenuScreen.h"
 
@@ -59,6 +60,8 @@ void setup() {
   _checkStorageFallback();
   Config.load(Uni.Storage);
   PinConfig.load(Uni.Storage);
+
+  RandomSeed::init();
   Uni.applyNavMode();
   Uni.Lcd.setBrightness((uint8_t)Config.get(APP_CONFIG_BRIGHTNESS, APP_CONFIG_BRIGHTNESS_DEFAULT).toInt());
   if (Uni.Speaker) Uni.Speaker->setVolume((uint8_t)Config.get(APP_CONFIG_VOLUME, APP_CONFIG_VOLUME_DEFAULT).toInt());

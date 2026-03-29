@@ -5,6 +5,7 @@
 #include "WorldClockScreen.h"
 #include "screens/wifi/network/NetworkMenuScreen.h"
 #include "core/RtcManager.h"
+#include "core/RandomSeed.h"
 #include "ui/actions/ShowStatusAction.h"
 #include <esp_sntp.h>
 
@@ -64,6 +65,7 @@ void WorldClockScreen::onRender() {
 #ifdef DEVICE_HAS_RTC
     RtcManager::syncRtcFromSystem();
 #endif
+    RandomSeed::reseed();
     if (Uni.Speaker) Uni.Speaker->playNotification();
   }
 

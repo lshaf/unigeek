@@ -8,6 +8,7 @@
 #include <math.h>
 #include <NimBLEDevice.h>
 #include "core/ConfigManager.h"
+#include "core/RandomSeed.h"
 
 // === Shared scan result buffer (promiscuous WiFi + BLE task) ===
 
@@ -510,6 +511,7 @@ void GPSModule::doWardrive(IStorage* storage) {
     _startLat = gps.location.lat();
     _startLng = gps.location.lng();
     _hasStartPos = true;
+    RandomSeed::reseed();
   }
 }
 
