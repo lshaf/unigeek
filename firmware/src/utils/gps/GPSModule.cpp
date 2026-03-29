@@ -359,11 +359,11 @@ void GPSModule::_doActiveScan(IStorage* storage) {
         default:                     authMode = "[WPA2][ESS]"; break;
       }
 
-      _addWigleRecord(storage, WiFi.SSID(i), String(addrStr),
+      String ssid = WiFi.SSID(i);
+      _addWigleRecord(storage, ssid, String(addrStr),
                        authMode, WiFi.RSSI(i), WiFi.channel(i));
       _totalDiscovered++;
 
-      String ssid = WiFi.SSID(i);
       const char* displayName = ssid.length() > 0 ? ssid.c_str() : "<hidden>";
       _addRecentFind(displayName, addrStr, WiFi.RSSI(i), WiFi.channel(i), false);
     }
