@@ -48,7 +48,7 @@ void GameFlappyScreen::onUpdate()
     if (dir == INavigation::DIR_PRESS || dir == INavigation::DIR_UP) _flap();
     else if (dir == INavigation::DIR_BACK) { _state = STATE_MENU; render(); }
   } else if (_state == STATE_RESULT) {
-    if (dir != INavigation::DIR_NONE && millis() - _resultMs >= 2000) {
+    if (dir != INavigation::DIR_NONE && millis() - _resultMs >= 1000) {
       _state = STATE_MENU; _menuIdx = 0; render();
     }
   }
