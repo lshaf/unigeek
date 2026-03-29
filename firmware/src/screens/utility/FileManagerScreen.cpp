@@ -80,6 +80,21 @@ void FileManagerScreen::_loadDir(const String& path)
   IStorage::DirEntry entries[kMaxFiles];
   uint8_t count = Uni.Storage->listDir(path.c_str(), entries, kMaxFiles);
 
+  // Sort: directories first, then alphabetical ascending
+  for (uint8_t i = 1; i < count; i++) {
+    IStorage::DirEntry tmp = entries[i];
+    int j = i - 1;
+    while (j >= 0) {
+      bool swap = false;
+      if (tmp.isDir && !entries[j].isDir) swap = true;
+      else if (tmp.isDir == entries[j].isDir && strcasecmp(tmp.name.c_str(), entries[j].name.c_str()) < 0) swap = true;
+      if (!swap) break;
+      entries[j + 1] = entries[j];
+      j--;
+    }
+    entries[j + 1] = tmp;
+  }
+
   String base = (path == "/") ? "" : path;
   for (uint8_t i = 0; i < count; i++) {
     _fileName[i]  = entries[i].name;
