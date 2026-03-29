@@ -22,7 +22,7 @@ public:
     cfg.mode                 = (i2s_mode_t)(I2S_MODE_MASTER | I2S_MODE_TX);
     cfg.sample_rate          = _sampleRate;
     cfg.bits_per_sample      = I2S_BITS_PER_SAMPLE_16BIT;
-    cfg.channel_format       = I2S_CHANNEL_FMT_ALL_RIGHT;
+    cfg.channel_format       = I2S_CHANNEL_FMT_RIGHT_LEFT;
     cfg.communication_format = I2S_COMM_FORMAT_STAND_I2S;
     cfg.intr_alloc_flags     = ESP_INTR_FLAG_LEVEL1;
     cfg.dma_buf_count        = 8;
@@ -152,7 +152,6 @@ private:
       vTaskDelete(_taskHandle);
       _taskHandle = nullptr;
       i2s_zero_dma_buffer(_port);
-      i2s_set_clk(_port, _sampleRate, I2S_BITS_PER_SAMPLE_16BIT, I2S_CHANNEL_MONO);
     }
   }
 
@@ -170,7 +169,7 @@ private:
     uint32_t half  = _sampleRate / ((uint32_t)self->_freq * 2);
     if (half == 0) half = 1;
 
-    int16_t  buf[64];
+    int16_t  buf[128];  // stereo: 64 frames × 2 channels
     uint32_t done  = 0;
     bool     high  = true;
     uint32_t phase = 0;
@@ -178,11 +177,13 @@ private:
     while (done < total) {
       uint32_t chunk = (total - done) < 64 ? (total - done) : 64;
       for (uint32_t i = 0; i < chunk; i++) {
-        buf[i] = high ? self->_amplitude : -self->_amplitude;
+        int16_t s = high ? self->_amplitude : -self->_amplitude;
+        buf[i * 2]     = s;  // L
+        buf[i * 2 + 1] = s;  // R
         if (++phase >= half) { phase = 0; high = !high; }
       }
       size_t written;
-      i2s_write(_port, buf, chunk * sizeof(int16_t), &written, portMAX_DELAY);
+      i2s_write(_port, buf, chunk * 2 * sizeof(int16_t), &written, portMAX_DELAY);
       done += chunk;
     }
     i2s_zero_dma_buffer(_port);
@@ -198,41 +199,47 @@ private:
     const uint16_t bits      = self->_wavBits;
     const int16_t  amp       = self->_amplitude;
 
-    i2s_set_clk(_port, self->_wavSampleRate, I2S_BITS_PER_SAMPLE_16BIT, I2S_CHANNEL_MONO);
+    i2s_set_clk(_port, self->_wavSampleRate, I2S_BITS_PER_SAMPLE_16BIT, I2S_CHANNEL_STEREO);
 
-    int16_t outBuf[64];
+    int16_t outBuf[128];  // stereo: 64 frames × 2 channels
 
     while (remaining > 0) {
-      uint32_t outSamples = 0;
+      uint32_t outFrames = 0;
 
       if (bits == 8) {
         uint32_t bytesPerFrame = ch;
-        while (outSamples < 64 && remaining >= bytesPerFrame) {
+        while (outFrames < 64 && remaining >= bytesPerFrame) {
           int32_t sum = 0;
           for (uint16_t c = 0; c < ch; c++) sum += (int32_t)(*src++) - 128;
-          outBuf[outSamples++] = (int16_t)((int32_t)(sum / (int32_t)ch) * 256 * (int32_t)amp / 32767);
+          int16_t s = (int16_t)((int32_t)(sum / (int32_t)ch) * 256 * (int32_t)amp / 32767);
+          outBuf[outFrames * 2]     = s;  // L
+          outBuf[outFrames * 2 + 1] = s;  // R
+          outFrames++;
           remaining -= bytesPerFrame;
         }
       } else {
         uint32_t bytesPerFrame = (uint32_t)ch * 2;
-        while (outSamples < 64 && remaining >= bytesPerFrame) {
+        while (outFrames < 64 && remaining >= bytesPerFrame) {
           int32_t sum = 0;
           for (uint16_t c = 0; c < ch; c++) {
             sum += (int16_t)_readU16(src);
             src += 2;
           }
-          outBuf[outSamples++] = (int16_t)((int32_t)(sum / (int32_t)ch) * (int32_t)amp / 32767);
+          int16_t s = (int16_t)((int32_t)(sum / (int32_t)ch) * (int32_t)amp / 32767);
+          outBuf[outFrames * 2]     = s;  // L
+          outBuf[outFrames * 2 + 1] = s;  // R
+          outFrames++;
           remaining -= bytesPerFrame;
         }
       }
 
-      if (outSamples == 0) break;
+      if (outFrames == 0) break;
       size_t written;
-      i2s_write(_port, outBuf, outSamples * sizeof(int16_t), &written, portMAX_DELAY);
+      i2s_write(_port, outBuf, outFrames * 2 * sizeof(int16_t), &written, portMAX_DELAY);
     }
 
     i2s_zero_dma_buffer(_port);
-    i2s_set_clk(_port, _sampleRate, I2S_BITS_PER_SAMPLE_16BIT, I2S_CHANNEL_MONO);
+    i2s_set_clk(_port, _sampleRate, I2S_BITS_PER_SAMPLE_16BIT, I2S_CHANNEL_STEREO);
     self->_taskHandle = nullptr;
     vTaskDelete(nullptr);
   }
@@ -246,7 +253,7 @@ private:
       uint32_t    half  = _sampleRate / ((uint32_t)note.freq * 2);
       if (half == 0) half = 1;
 
-      int16_t  buf[64];
+      int16_t  buf[128];  // stereo: 64 frames × 2 channels
       uint32_t done  = 0;
       bool     high  = true;
       uint32_t phase = 0;
@@ -254,11 +261,13 @@ private:
       while (done < total) {
         uint32_t chunk = (total - done) < 64 ? (total - done) : 64;
         for (uint32_t i = 0; i < chunk; i++) {
-          buf[i] = high ? self->_amplitude : -self->_amplitude;
+          int16_t s = high ? self->_amplitude : -self->_amplitude;
+          buf[i * 2]     = s;  // L
+          buf[i * 2 + 1] = s;  // R
           if (++phase >= half) { phase = 0; high = !high; }
         }
         size_t written;
-        i2s_write(_port, buf, chunk * sizeof(int16_t), &written, portMAX_DELAY);
+        i2s_write(_port, buf, chunk * 2 * sizeof(int16_t), &written, portMAX_DELAY);
         done += chunk;
       }
 
