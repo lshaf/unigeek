@@ -35,7 +35,7 @@ public:
     sp.fillSprite(TFT_BLACK);
 
     int lineH   = 10;
-    int statusH = statusCb ? 14 : 0;
+    int statusH = statusCb ? 11 : 0;
     int logAreaH   = h - statusH;
     int maxVisible = logAreaH / lineH;
     int startIdx   = _count > maxVisible ? _count - maxVisible : 0;
@@ -49,7 +49,7 @@ public:
     if (statusCb) {
       int sepY = h - statusH;
       sp.drawFastHLine(0, sepY, w, TFT_DARKGREY);
-      statusCb(sp, sepY + 2, w, userData);
+      statusCb(sp, sepY + 3, w, userData);
     }
 
     sp.pushSprite(x, y);
