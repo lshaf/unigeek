@@ -84,8 +84,9 @@ All hardware differences are isolated in board-specific folders.
     │   ├── utils/                  WifiAttackUtil, FastWpaCrack, keyboard/ (HID/BLE/USB/DuckScript utils), nfc/ (NFCUtility, StaticNestedAttack, DarksideAttack, crypto/)
     │   ├── ui/
     │   │   ├── templates/          BaseScreen.h, ListScreen.h
-    │   │   ├── components/         ScrollListView.h, LogView.h
-    │   │   └── actions/            InputTextAction.h, InputNumberAction.h, InputSelectAction.h, ShowStatusAction.h, ShowQRCodeAction.h, ShowProgressAction.h
+    │   │   ├── views/              ScrollListView.h, LogView.h, ProgressView.h
+    │   │   ├── components/         Header.h, StatusBar.h, Icon.h, QRCodeRenderer.h, BarcodeRenderer.h
+    │   │   └── actions/            InputTextAction.h, InputNumberAction.h, InputSelectAction.h, ShowStatusAction.h, ShowQRCodeAction.h, ShowBarcodeAction.h
     │   └── main.cpp
     sdcard/                         sample SD card data — copy contents to SD root
     ├── unigeek/keyboard/duckyscript/   sample DuckyScript payloads
@@ -267,7 +268,6 @@ All hardware differences are isolated in board-specific folders.
     void        ShowStatusAction::show("Message", 0)        show and return immediately, no wipe
     void        ShowStatusAction::show("Message", 1500)     show, block ms, then wipe
     void        ShowQRCodeAction::show("Label", "content")  blocking QR code overlay
-    void        ShowProgressAction::show("Message", pct)   non-blocking progress bar (supports \n, max 3 lines, auto-truncate)
 
     // After any popup, call render() to restore the screen — actions only wipe their overlay area
     // InputSelectAction: DIR_BACK dismisses and returns nullptr
@@ -312,6 +312,10 @@ All hardware differences are isolated in board-specific folders.
     Reusable scrolling log buffer with TFT_eSprite rendering.
     Optional StatusBarCallback draws a custom status bar at the bottom.
     Use for scanning/progress screens instead of raw _logLines[] arrays.
+
+### ProgressView
+
+    ProgressView::show("Message", pct)   non-blocking progress bar (0-100%), auto word-wrap, max 2 lines
 
 ### IScreen Power Inhibit
 
@@ -386,7 +390,7 @@ All hardware differences are isolated in board-specific folders.
 - Screen .h files: declarations and data members only
   Trivial one-liners (title()) may stay inline in .h
   All onInit(), onUpdate(), onItemSelected(), onBack(), and private helper bodies go in .cpp
-  Action headers (InputTextAction.h, ShowStatusAction.h, etc.) belong in .cpp, not .h
+  Include headers only where they are actually needed, not preemptively
 
 ---
 

@@ -33,6 +33,7 @@ section with the repo link, author, and specific features taken as sub-bullets.
 2. Read CLAUDE.md for conventions before writing any code.
 3. Never add Serial.print to production code.
 4. Never include pins_arduino.h explicitly — it is auto-included.
+5. Include headers only where they are actually needed.
 
 ---
 
@@ -159,7 +160,7 @@ Override in screen .h. Use for scans, streams, attacks that should not be interr
   always handle both DIR_BACK and DIR_PRESS as "back/stop"
 - Do NOT check DIR_BACK after early-return guard in ListScreen onUpdate() — check DIR_BACK first
 - Do NOT skip sprite push in ListScreen onRender() when empty — always push to clear overlays
-- Do NOT roll custom log line arrays — use LogView component from ui/components/LogView.h
+- Do NOT roll custom log line arrays — use LogView from ui/views/LogView.h
 - Do NOT forget inhibitPowerSave()/inhibitPowerOff() on screens with active long-running operations
 
 ---
@@ -172,7 +173,7 @@ Override in screen .h. Use for scans, streams, attacks that should not be interr
     const char* result = InputSelectAction::popup("Title", opts, count, default);
     void               ShowStatusAction::show("Message", durationMs);
     void               ShowQRCodeAction::show("Label", "content");
-    void               ShowProgressAction::show("Message", percent);  // non-blocking, max 3 lines, auto-truncate
+    void               ProgressView::show("Message", percent);  // non-blocking, from ui/views/ProgressView.h
 
     // Always call render() after a popup returns to restore the screen
 
