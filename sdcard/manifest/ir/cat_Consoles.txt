@@ -1,0 +1,8 @@
+Consoles/Microsoft/XBOX360_Media.ir
+Consoles/Microsoft/XBox_DVD_Media_Playback_Kit.ir
+Consoles/Microsoft/Xb1_8BitDo_Media_remote_short.ir
+Consoles/Microsoft/Xbox.ir
+Consoles/Microsoft/Xbox_One_Media_Remote.ir
+Consoles/Nintendo/Gameboy/Pokemon_Silver_Mystery_Gift.ir
+Consoles/Philips/CDi_Commander.ir
+Consoles/PlayStation/PlayStation_2.ir

@@ -1,0 +1,5 @@
+Picture_Frames/Micca/Micca_N10.ir
+Picture_Frames/Micca/Micca_N7.ir
+Picture_Frames/Micca/Micca_N8.ir
+Picture_Frames/Nixplay/Nixplay_Picture_Frame.ir
+Picture_Frames/Pandigital/Pandigital_DPF70-2.ir

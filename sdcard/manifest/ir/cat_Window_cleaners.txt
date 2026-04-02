@@ -1,0 +1,2 @@
+Window_cleaners/HOBOT/HOBOT.ir
+Window_cleaners/HOBOT/Hobot_2S.ir

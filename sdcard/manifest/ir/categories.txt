@@ -1,0 +1,46 @@
+ACs|ACs
+Air_Purifiers|Air Purifiers
+Audio_and_Video_Receivers|Audio and Video Receivers
+Bidet|Bidet
+Blu-Ray|Blu-Ray
+CCTV|CCTV
+CD_Players|CD Players
+Cable_Boxes|Cable Boxes
+Cameras|Cameras
+Car_Multimedia|Car Multimedia
+Clocks|Clocks
+Computers|Computers
+Consoles|Consoles
+Converters|Converters
+DVB-T|DVB-T
+DVD_Players|DVD Players
+Digital_Signs|Digital Signs
+Dust_Collectors|Dust Collectors
+Fans|Fans
+Fireplaces|Fireplaces
+Handicap_Ceiling_Lifts|Handicap Ceiling Lifts
+Head_Units|Head Units
+Heaters|Heaters
+Humidifiers|Humidifiers
+KVM|KVM
+LED_Lighting|LED Lighting
+Laserdisc|Laserdisc
+MiniDisc|MiniDisc
+Miscellaneous|Miscellaneous
+Monitors|Monitors
+Multimedia|Multimedia
+Picture_Frames|Picture Frames
+Projectors|Projectors
+SoundBars|SoundBars
+Speakers|Speakers
+Streaming_Devices|Streaming Devices
+TV_Tuner|TV Tuner
+TVs|TVs
+Touchscreen_Displays|Touchscreen Displays
+Toys|Toys
+Universal_TV_Remotes|Universal TV Remotes
+VCR|VCR
+Vacuum_Cleaners|Vacuum Cleaners
+Videoconferencing|Videoconferencing
+Whiteboards|Whiteboards
+Window_cleaners|Window Cleaners

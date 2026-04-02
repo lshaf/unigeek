@@ -1,0 +1,34 @@
+Heaters/Arlec/Arlec_CH226.ir
+Heaters/Blyss/BLYSS_ZE-82.ir
+Heaters/ComfortZone/ComfortZone_Heater.ir
+Heaters/DeLonghi/Delonghi_heater.ir
+Heaters/Devola/Devola_ DVPH1200B _Patio_Heater.ir
+Heaters/Dr_Heater/Dr_heater_infrared.ir
+Heaters/Dreo/Dreo_Heater.ir
+Heaters/Dreo/Dreo_space_heater.ir
+Heaters/Duraflame/Duraflame_Heater.ir
+Heaters/EdenPURE/Edenpure_RPE1500_A5093.ir
+Heaters/FlameMore/FlameMore_Heater.ir
+Heaters/Frico/Frico_Air_Curtain.ir
+Heaters/Hampton Bay/Hampton_Bay_EST-540T-40R.ir
+Heaters/Holmes/Holmes_Heater.ir
+Heaters/Honeywell/Honeywell_360_Heater.ir
+Heaters/Honeywell/Honeywell_HCE323V.ir
+Heaters/Klarstein/Klarstein_Kamin.ir
+Heaters/Konwin/Konwin_GD921BCP_4JR_Heater.ir
+Heaters/KopBeauAireplus/Digital_Oil_Filled_Heater.ir
+Heaters/Lasko/Lasko_5586.ir
+Heaters/Lasko/Lasko_6462_Space_Heater.ir
+Heaters/Lasko/Lasko_CC23630.ir
+Heaters/Lasko/Lasko_CT22445.ir
+Heaters/Lasko/Lasko_CT22835.ir
+Heaters/Lasko/Lasko_Heater.ir
+Heaters/Lervia/Lervia_hnc_2500e.ir
+Heaters/Lifesmart/Lifesmart_208220.ir
+Heaters/Muskoka/Muskoka_MHC35BL.ir
+Heaters/Orbegozo/Orbegozo_RRE_1310_A.ir
+Heaters/Rinnai/Rinnai_SpaceHeater.ir
+Heaters/Rolsen/Rolsen_RTH-2778RT.ir
+Heaters/Sencor/Sencor_SFH_9013.ir
+Heaters/SilverCrest/SilverCrest_SKD_2300_D4.ir
+Heaters/Vornado/Vornado_Heater_AWRH.ir

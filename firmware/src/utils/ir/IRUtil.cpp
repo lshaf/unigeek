@@ -141,6 +141,38 @@ void IRUtil::sendSignal(const Signal& sig) {
   } else if (sig.protocol == "RC6") {
     uint64_t val = _sender->encodeRC6(sig.address, sig.command & 0xFF);
     _sender->sendRC6(val, sig.bits > 0 ? sig.bits : 20);
+  } else if (sig.protocol == "Kaseikyo") {
+    // address bytes: [0-1]=manufacturer(LE), [2]=device, [3]=subdevice
+    uint16_t mfr = sig.address & 0xFFFF;
+    uint8_t device = (sig.address >> 16) & 0xFF;
+    uint8_t subdevice = (sig.address >> 24) & 0xFF;
+    uint8_t function = sig.command & 0xFF;
+    uint64_t val = _sender->encodePanasonic(mfr, device, subdevice, function);
+    _sender->sendPanasonic64(val);
+  } else if (sig.protocol == "Pioneer") {
+    uint64_t val = _sender->encodePioneer(sig.address & 0xFFFF, sig.command & 0xFFFF);
+    _sender->sendPioneer(val);
+  } else if (sig.protocol == "NEC42") {
+    // NEC42 is 42-bit NEC — encode address(16) + command(8) into raw value
+    uint64_t val = ((uint64_t)(sig.address & 0x1FFF) << 8) | (sig.command & 0xFF);
+    _sender->sendNEC(val, 42);
+  } else if (sig.protocol == "RCA") {
+    // RCA: 4-bit address + 8-bit command + 12-bit complement, 56kHz
+    // Build 24-bit frame: addr(4) | cmd(8) | ~addr(4) | ~cmd(8), MSB first
+    uint8_t addr = sig.address & 0x0F;
+    uint8_t cmd = sig.command & 0xFF;
+    uint32_t frame = ((uint32_t)addr << 20) | ((uint32_t)cmd << 12)
+                   | ((uint32_t)(~addr & 0x0F) << 8) | (~cmd & 0xFF);
+    // Encode as raw: header(4000,4000) + 24 bits(500,2000/1000) + stop(500)
+    uint16_t raw[2 + 24 * 2 + 1]; // header(2) + bits(48) + stop(1) = 51
+    raw[0] = 4000; raw[1] = 4000;
+    for (int i = 23; i >= 0; i--) {
+      int idx = 2 + (23 - i) * 2;
+      raw[idx] = 500;
+      raw[idx + 1] = (frame >> i) & 1 ? 2000 : 1000;
+    }
+    raw[50] = 500;
+    _sender->sendRaw(raw, 51, 56);
   } else {
     // Fallback: send as raw
     if (sig.rawData.length() > 0) {
@@ -231,7 +263,7 @@ uint8_t IRUtil::loadFile(const String& content, Signal* signals, uint8_t maxCoun
 }
 
 String IRUtil::saveToString(const Signal* signals, uint8_t count) {
-  String content = "Filetype: Bruce IR File\nVersion: 1\n#\n";
+  String content = "Filetype: IR File\nVersion: 1\n#\n";
   for (uint8_t i = 0; i < count; i++) {
     auto& s = signals[i];
     content += "name: " + s.name + "\n";

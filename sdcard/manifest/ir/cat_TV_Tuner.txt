@@ -1,0 +1,5 @@
+TV_Tuner/Hauppauge/Hauppauge_R-005.ir
+TV_Tuner/Hauppauge/WinTV_DualHD.ir
+TV_Tuner/Mediasonic/Mediasonic_Homeworx_HW180STB.ir
+TV_Tuner/TechniSat/TechniSat_DVR401B.ir
+TV_Tuner/elWron/elWron.ir

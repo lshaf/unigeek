@@ -1,0 +1,6 @@
+Videoconferencing/AVer/AVer_COMVREMOT.ir
+Videoconferencing/Bose/Videobar.ir
+Videoconferencing/Logitech/Logitech_RI0019_for_PTZ_Pro_2.ir
+Videoconferencing/Polycom/Polycom_VX_series_remote.ir
+Videoconferencing/Tandberg/Tandberg_TRC_V_iTV.ir
+Videoconferencing/TrueConf/TrueConf_CleverMic1011.ir

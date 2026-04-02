@@ -1,0 +1,11 @@
+Converters/Benchmark/Benchmark_DAC2_HGC.ir
+Converters/Magnavox/Magnavox_ZV450MW8.ir
+Converters/OSSC/OSSC.ir
+Converters/OSSC/OSSC_Pro.ir
+Converters/RME/RME_ADI-2_DAC_FS.ir
+Converters/Retro-Bit/Retro-Bit_Prism.ir
+Converters/RetroTINK/RetroTINK_4K.ir
+Converters/RetroTINK/RetroTINK_5X_Prem.ir
+Converters/RetroTINK/RetroTINK_5X_Std.ir
+Converters/Socobeta/Socobeta_VGAtoSCART.ir
+Converters/Theta/GENVIIIS3.ir

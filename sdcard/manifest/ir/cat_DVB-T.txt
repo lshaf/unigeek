@@ -1,0 +1,10 @@
+DVB-T/Bulsatcom/Bulsatcom_DVBTV.ir
+DVB-T/Cyfrowy_Polsat/Cyfrowy_polsat.ir
+DVB-T/Diprogress/Diprogress_dvb_t.ir
+DVB-T/FranSat/Fransat_NewSat_Maestro.ir
+DVB-T/MSI/DigiVox_MiniII.ir
+DVB-T/Manhattan/MANHATTAN_SX_FREESAT.ir
+DVB-T/Octagon/Octagon_SF8008.ir
+DVB-T/Storex/MediaZapperHD.ir
+DVB-T/Tesla/Tesla_TE-300.ir
+DVB-T/Tilview/TILVIEW_DVB-T_2.ir

@@ -1,0 +1,5 @@
+Whiteboards/Boxlight/Boxlight_Smartboard.ir
+Whiteboards/Philips/Philips_SmartBoard_ID1.ir
+Whiteboards/Promethean/Promethan.ir
+Whiteboards/Promethean/Promethean_ActivPanel.ir
+Whiteboards/Promethean/Promethean_Digital_Whiteboard.ir

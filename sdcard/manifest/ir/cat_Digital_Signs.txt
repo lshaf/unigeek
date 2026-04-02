@@ -1,0 +1,7 @@
+Digital_Signs/Digi_Day/Digi_Day_3.ir
+Digital_Signs/DynaScan/Dynascan_DS2.ir
+Digital_Signs/LG/LG_AKB74915384.ir
+Digital_Signs/Panasonic/Panasonic_DPVF1615ZA.ir
+Digital_Signs/Philips/Philips_Signage_YKF326-019.ir
+Digital_Signs/Sharp/Sharp_signage.ir
+Digital_Signs/iiyama/iiyama_LExx40UHS.ir

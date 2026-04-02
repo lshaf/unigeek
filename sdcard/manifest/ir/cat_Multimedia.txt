@@ -1,0 +1,10 @@
+Multimedia/Asus/OPlay.ir
+Multimedia/DuneHD/DuneHD.ir
+Multimedia/Evolution/Evolution_4x1_HDMI_Switch.ir
+Multimedia/Fantec/4KS5700.ir
+Multimedia/Leicke/LEICKE-KANAAN-KN40573.ir
+Multimedia/Ligawo/Ligawo_HDMI_6518716.ir
+Multimedia/MT-VIKI/MT-VIKI-MT-HD0808.ir
+Multimedia/QNAP/QNAP RM_IR2.ir
+Multimedia/Rytaki/Rytaki_US_HDMI501-8K-H.ir
+Multimedia/Ugreen/Ugreen_8k_hdmi_switch.ir

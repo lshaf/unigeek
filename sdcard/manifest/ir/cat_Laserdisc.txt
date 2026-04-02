@@ -1,0 +1,3 @@
+Laserdisc/Pioneer/LaserActive_CU-CLD085.ir
+Laserdisc/Pioneer/Pioneer_CU-DV027.ir
+Laserdisc/Pioneer/Pioneer_Elite_CLD_99.ir

@@ -467,7 +467,9 @@ Format: list the repo link and author, then sub-bullets for each feature referen
   Never call esp_wifi_set_channel() directly — use attacker->setChannel()
 - ListScreen DIR_BACK with empty list: check DIR_BACK first, before _effectiveCount() == 0 guard
   onRender() must always push the sprite even when empty — clears lingering overlays
-- sdcard/manifest.txt must be updated when files are added or removed from sdcard/
+- sdcard/manifest/sdcard.txt must be updated when files are added or removed from sdcard/
+- sdcard/manifest/ir/categories.txt lists IR categories (folder|Display Name format)
+- sdcard/manifest/ir/cat_{folder}.txt lists files per IR category (from Flipper-IRDB repo)
 - M5StickC Plus 2 power: GPIO 4 PWR_HOLD_PIN must stay HIGH to keep device powered
 
 ---

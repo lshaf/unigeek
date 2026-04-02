@@ -1,0 +1,36 @@
+Cameras/Aigo/Aigo_config01.ir
+Cameras/Canon/Canon_Camera_JJC RM-E6A.ir
+Cameras/Canon/Canon_RC-6_Trigger.ir
+Cameras/Canon/Canon_config01.ir
+Cameras/Canon/Canon_config02.ir
+Cameras/Canon/Canon_config03.ir
+Cameras/Eakins/Eakins_48MP.ir
+Cameras/Fujifilm/Fujifilm_config01.ir
+Cameras/Fujifilm/Fujifilm_config02.ir
+Cameras/Haier/Haier_config01.ir
+Cameras/Hayear/HY-5200 Microscope Camera.ir
+Cameras/Kodak/Kodak_EasyShare_Max_Z990.ir
+Cameras/Kodak/Kodak_config01.ir
+Cameras/Lifesize/Lifesize_Icon_vid_cnf.ir
+Cameras/Logitech/Logitech_BCC950.ir
+Cameras/Logitech/Logitech_ConferenceCam_Connect.ir
+Cameras/Nikon/Nikon.ir
+Cameras/Nikon/Nikon_config01.ir
+Cameras/Nikon/Nikon_config02.ir
+Cameras/Olympus/Olympus_config01.ir
+Cameras/Ordro/Ordro_config01.ir
+Cameras/PTZOptics/PTZOptics_NDI_HX/PTZOptics_NDI_HX_CAM1.ir
+Cameras/PTZOptics/PTZOptics_NDI_HX/PTZOptics_NDI_HX_CAM2.ir
+Cameras/PTZOptics/PTZOptics_NDI_HX/PTZOptics_NDI_HX_CAM3.ir
+Cameras/PTZOptics/PTZOptics_NDI_HX/PTZOptics_NDI_HX_CAM4.ir
+Cameras/Panasonic/Panasonic_N2QAEC000017_MiniDV_remote.ir
+Cameras/Panasonic/Panasonic_config01.ir
+Cameras/Pentax/Pentax_config01.ir
+Cameras/Pentax/Pentax_config02.ir
+Cameras/Sanyo/Sanyo_config01.ir
+Cameras/Sony/Sony.ir
+Cameras/Sony/Sony_RMT_814_Handycam.ir
+Cameras/Sony/Sony_RMT_831.ir
+Cameras/Sony/Sony_config01.ir
+Cameras/Sony/Sony_config02.ir
+Cameras/Yealink/Yealink_UVC86.ir

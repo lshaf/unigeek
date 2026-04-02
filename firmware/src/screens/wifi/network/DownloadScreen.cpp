@@ -19,17 +19,30 @@ void DownloadScreen::onInit() {
 }
 
 void DownloadScreen::onBack() {
+  if (_state == STATE_IR_CATEGORIES) {
+    _showMenu();
+    return;
+  }
   Screen.setScreen(new NetworkMenuScreen());
 }
 
 void DownloadScreen::onItemSelected(uint8_t index) {
+  if (_state == STATE_IR_CATEGORIES) {
+    _downloadIRCategory(index);
+    return;
+  }
+
   switch (index) {
     case 0: _downloadWebPage();    break;
     case 1: _downloadSampleData(); break;
+    case 2: _showIRCategories();   break;
   }
 }
 
 void DownloadScreen::_showMenu() {
+  _state = STATE_MENU;
+  strcpy(_titleBuf, "Download");
+
   _wfmVersionSub = "Not installed";
   if (Uni.Storage) {
     String sha = Uni.Storage->readFile(
@@ -39,7 +52,8 @@ void DownloadScreen::_showMenu() {
   }
   _menuItems[0] = {"Web File Manager", _wfmVersionSub.c_str()};
   _menuItems[1] = {"Firmware Sample Files"};
-  setItems(_menuItems, 2);
+  _menuItems[2] = {"Infrared Files"};
+  setItems(_menuItems, 3);
 }
 
 // ── Download Web File Manager Page ────────────────────────
@@ -177,7 +191,7 @@ void DownloadScreen::_downloadSampleData() {
 
   // Download manifest
   ProgressView::show("Fetching file list...", 0);
-  String manifestUrl = String(REPO_BASE) + "/manifest.txt";
+  String manifestUrl = String(REPO_BASE) + "/manifest/sdcard.txt";
   http.begin(client, manifestUrl);
   http.addHeader("User-Agent", "ESP32");
   int code = http.GET();
@@ -243,4 +257,153 @@ void DownloadScreen::_downloadSampleData() {
   if (failed > 0) msg += "\n" + String(failed) + " failed";
   ShowStatusAction::show(msg.c_str(), 2000);
   _showMenu();
+}
+
+// ── Infrared Files ────────────────────────────────────────
+
+void DownloadScreen::_showIRCategories() {
+  if (WiFi.status() != WL_CONNECTED) {
+    ShowStatusAction::show("WiFi not connected");
+    return;
+  }
+
+  WiFiClientSecure client;
+  client.setInsecure();
+  HTTPClient http;
+
+  ProgressView::show("Fetching categories...", 0);
+  String url = String(REPO_BASE) + "/manifest/ir/categories.txt";
+  http.begin(client, url);
+  http.addHeader("User-Agent", "ESP32");
+  int code = http.GET();
+  if (code != HTTP_CODE_OK) {
+    http.end();
+    ShowStatusAction::show(("Failed (" + String(code) + ")").c_str());
+    render();
+    return;
+  }
+
+  String content = http.getString();
+  http.end();
+
+  // Parse "folder|Display Name" lines
+  _catCount = 0;
+  int pos = 0;
+  while (pos < (int)content.length() && _catCount < kMaxCategories) {
+    int nl = content.indexOf('\n', pos);
+    if (nl == -1) nl = content.length();
+    String line = content.substring(pos, nl);
+    line.trim();
+    pos = nl + 1;
+
+    if (line.length() == 0) continue;
+
+    int sep = line.indexOf('|');
+    if (sep < 0) continue;
+
+    _catFolders[_catCount] = line.substring(0, sep);
+    _catLabels[_catCount] = line.substring(sep + 1);
+    _catItems[_catCount] = {_catLabels[_catCount].c_str()};
+    _catCount++;
+  }
+
+  if (_catCount == 0) {
+    ShowStatusAction::show("No categories found");
+    render();
+    return;
+  }
+
+  _state = STATE_IR_CATEGORIES;
+  strcpy(_titleBuf, "Infrared Files");
+  setItems(_catItems, _catCount);
+}
+
+void DownloadScreen::_downloadIRCategory(uint8_t index) {
+  if (index >= _catCount) return;
+
+  WiFiClientSecure client;
+  client.setInsecure();
+  HTTPClient http;
+
+  // Fetch category manifest
+  ProgressView::show("Fetching file list...", 0);
+  String manifestUrl = String(REPO_BASE) + "/manifest/ir/cat_" + _catFolders[index] + ".txt";
+  http.begin(client, manifestUrl);
+  http.addHeader("User-Agent", "ESP32");
+  int code = http.GET();
+  if (code != HTTP_CODE_OK) {
+    http.end();
+    ShowStatusAction::show(("Failed (" + String(code) + ")").c_str());
+    render();
+    return;
+  }
+
+  String manifest = http.getString();
+  http.end();
+
+  // Count files
+  int fileCount = 0;
+  int pos = 0;
+  while (pos < (int)manifest.length()) {
+    int nl = manifest.indexOf('\n', pos);
+    if (nl == -1) nl = manifest.length();
+    String line = manifest.substring(pos, nl);
+    line.trim();
+    if (line.length() > 0) fileCount++;
+    pos = nl + 1;
+  }
+
+  if (fileCount == 0) {
+    ShowStatusAction::show("No files in category");
+    render();
+    return;
+  }
+
+  // Download each IR file from Flipper-IRDB repo
+  int downloaded = 0;
+  int failed = 0;
+  pos = 0;
+  int idx = 0;
+  while (pos < (int)manifest.length()) {
+    int nl = manifest.indexOf('\n', pos);
+    if (nl == -1) nl = manifest.length();
+    String line = manifest.substring(pos, nl);
+    line.trim();
+    pos = nl + 1;
+
+    if (line.length() == 0) continue;
+
+    idx++;
+    uint8_t pct = (uint8_t)((idx * 100) / fileCount);
+    char label[32];
+    snprintf(label, sizeof(label), "[%d/%d] Downloading...", idx, fileCount);
+    ProgressView::show(label, pct);
+
+    // Source: Flipper-IRDB repo, path as-is (e.g. "TVs/Samsung/Samsung_TV.ir")
+    String fileUrl = String(IR_REPO_BASE) + "/" + line;
+
+    // Destination: /unigeek/ir/downloads/{category}/{filename}
+    // Extract just the filename from the path
+    int lastSlash = line.lastIndexOf('/');
+    String fileName = (lastSlash >= 0) ? line.substring(lastSlash + 1) : line;
+    String destPath = "/unigeek/ir/downloads/" + _catFolders[index] + "/" + fileName;
+
+    // Create parent dirs
+    for (int i = 1; i < (int)destPath.length(); i++) {
+      if (destPath[i] == '/') {
+        Uni.Storage->makeDir(destPath.substring(0, i).c_str());
+      }
+    }
+
+    if (_downloadFile(fileUrl.c_str(), destPath.c_str())) {
+      downloaded++;
+    } else {
+      failed++;
+    }
+  }
+
+  String msg = String(downloaded) + " files downloaded";
+  if (failed > 0) msg += "\n" + String(failed) + " failed";
+  ShowStatusAction::show(msg.c_str(), 2000);
+  render();
 }

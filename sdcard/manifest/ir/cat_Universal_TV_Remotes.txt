@@ -1,0 +1,6 @@
+Universal_TV_Remotes/EHP/EHP_Waagen_Universal_Remote.ir
+Universal_TV_Remotes/One_For_All/OFA_8_Universal_Remote.ir
+Universal_TV_Remotes/RemotesReplaced/RemotesReplaced_RRS41.ir
+Universal_TV_Remotes/Sanyo/Sanyo_universal.ir
+Universal_TV_Remotes/UNIVERSAL_POWER_OFF_DEVICES.ir
+Universal_TV_Remotes/User_Created/UniversalSamsungFF.ir

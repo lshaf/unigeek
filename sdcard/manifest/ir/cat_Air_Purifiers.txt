@@ -1,0 +1,19 @@
+Air_Purifiers/3M/3M_Air_Purifier.ir
+Air_Purifiers/Blueair/Blueair_T10i_T20i.ir
+Air_Purifiers/Dyson/Dyson_HotCool_HP02.ir
+Air_Purifiers/Dyson/Dyson_HotCool_HP04.ir
+Air_Purifiers/Dyson/Dyson_HotCool_HP07.ir
+Air_Purifiers/Dyson/Dyson_PureCool_TP00.ir
+Air_Purifiers/Dyson/Dyson_PureCool_TP4A.ir
+Air_Purifiers/Dyson/Dyson_Purifier_Cool_Autoreact_TP7A.ir
+Air_Purifiers/Dyson/Dyson_Purifier_Cool_TP10.ir
+Air_Purifiers/Dyson/Dyson_Purifier_Humidify+Cool_Autoreact_PH3A.ir
+Air_Purifiers/Dyson/Dyson_PurifiyHumidify_PH04.ir
+Air_Purifiers/IQAir/IQAir_GC_Series.ir
+Air_Purifiers/Rabbit_Air/Rabbit_Air_Minusa2.ir
+Air_Purifiers/Rohnson/Rohnson_R-9400.ir
+Air_Purifiers/Shark/Shark_Air_Purifier.ir
+Air_Purifiers/Trotec/Trotec_AirgoClean_350_E.ir
+Air_Purifiers/WEN/WEN_3417.ir
+Air_Purifiers/Winix/Winix WAC5500.ir
+Air_Purifiers/Winix/Winix_Air_Purifiers.ir

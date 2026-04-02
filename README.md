@@ -31,6 +31,7 @@ Multi-tool firmware for ESP32-based handheld devices. Built with PlatformIO + Ar
   - **Download** — Download files from GitHub directly to device storage
     - **Web File Manager** — HTML/CSS/JS interface for browser-based file management (auto-checks for updates)
     - **Firmware Sample Files** — Portal templates (Google, Facebook, WiFi login), DuckyScript payloads (hello world, reverse shell, WiFi password grab, rickroll, disable defender), QR code samples, DNS spoofing config, and rockyou_mini password wordlist
+    - **Infrared Files** — Browse and download IR remote files by category (TVs, ACs, Fans, Projectors, etc.) from [Flipper-IRDB](https://github.com/lshaf/Flipper-IRDB), saved to `/unigeek/ir/downloads/`
   - **MITM Attack** — Man-in-the-middle with DHCP starvation, deauth burst, rogue DHCP, DNS spoofing, and web file manager ([details](knowledge/network-mitm.md))
   - **CCTV Sniffer** — Discover network cameras, identify brands, test credentials, and stream live video ([details](knowledge/cctv-toolkit.md))
   - **Wigle** — Upload wardrive logs, view user stats, and manage Wigle API token ([details](knowledge/gps-wardriving.md))
@@ -93,12 +94,12 @@ Multi-tool firmware for ESP32-based handheld devices. Built with PlatformIO + Ar
   - **Wardrive Mode** — Driving (default, active WiFi scan) or Walking (passive promiscuous sniffing)
   - **Wardriving** — Log nearby WiFi and BLE devices with GPS coordinates in Wigle CSV format
   - **Wigle Integration** — Connect to WiFi, upload wardrive logs, view user stats, manage API token
-- **IR Remote** — Infrared transceiver for capturing, replaying, and managing IR signals
+- **IR Remote** — Infrared transceiver for capturing, replaying, and managing IR signals ([details](knowledge/ir-remote.md))
   - **TX/RX Pin** — Configurable GPIO pins for IR transmitter and receiver (saved per device)
-  - **Receive** — Capture IR signals with automatic protocol detection (NEC, Samsung, Sony, RC5, RC6 and more), duplicate filtering, and signal details as sublabels
+  - **Receive** — Capture IR signals with automatic protocol detection (NEC, Samsung, Sony, RC5, RC6, Kaseikyo, Pioneer, RCA and more), duplicate filtering, and signal details as sublabels
   - **Send** — Browse and load IR remote files from storage (`/unigeek/ir/`), tap to send, hold for actions (replay, rename, delete), save changes back to file
   - **TV-B-Gone** — Send power-off codes from the WORLD_IR_CODES database (271 codes), choose North America or Europe region, with progress display and cancel support
-  - Compatible with Bruce IR file format for sharing signal libraries
+  - Compatible with Flipper Zero and Bruce IR file formats — download IR remotes via **WiFi > Network > Download > Infrared Files**
 
 ### Settings
 - Device name
@@ -228,6 +229,8 @@ This project was built with inspiration and reference from:
 - [Bruce](https://github.com/pr3y/Bruce) by pr3y
   - All boards configuration and pin definitions
   - IR Remote (receive, send, TV-B-Gone with WORLD_IR_CODES database)
+- [Flipper-IRDB](https://github.com/Flipper-XFW/Flipper-IRDB) by Flipper-XFW
+  - Infrared remote database (46 categories, 2000+ IR remote files)
 - [LilyGoLib](https://github.com/Xinyuan-LilyGO/LilyGoLib) — Hardware reference for LilyGO T-Lora Pager
 - [M5Unified](https://github.com/m5stack/M5Unified) — Hardware reference for M5Stack devices (speaker, display, power)
 

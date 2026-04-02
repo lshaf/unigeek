@@ -1,0 +1,6 @@
+CCTV/BrandUnknown/CCTV_DVR.ir
+CCTV/BrandUnknown/Szxlcom_cams.ir
+CCTV/Hikvision/HIKVISION_OEM.ir
+CCTV/Hikvision/Hikvision.ir
+CCTV/MarshallElectronics/Marshall_CV610.ir
+CCTV/Northern/Northern_NTH-LED24R.ir

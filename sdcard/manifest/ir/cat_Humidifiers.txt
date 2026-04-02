@@ -1,0 +1,14 @@
+Humidifiers/Deerma/Deerma DEM-LD6.ir
+Humidifiers/Dyson/Dyson_Humidifier_AM10.ir
+Humidifiers/Dyson/Dyson_Purifier_Humidify_Cool_Formaldehyde.ir
+Humidifiers/ElecHome/ElecHome_SH8820_Humid.ir
+Humidifiers/Homedics/HoMedics TotalComfort Ultrasonic Humidifier/Homedics_humidifier.ir
+Humidifiers/Homedics/HoMedics_TotalComfort.ir
+Humidifiers/Homedics/Homedics_ARM-720A_Ellia_Essential_Diffuser.ir
+Humidifiers/Homedics/Homedics_Humidifier.ir
+Humidifiers/Levoit/Levoit_Humidifier.ir
+Humidifiers/Levoit/Levoit_LV6S.ir
+Humidifiers/Maxcan/Maxcan_mh_602brc.ir
+Humidifiers/ProBreeze/ProBreese_PB_F13B_US_Dehumid.ir
+Humidifiers/Qlima/Qlima_Humidifier.ir
+Humidifiers/Unknown_Brand/Flame_Humidifier/Flame_humidifier.ir

@@ -1,0 +1,26 @@
+VCR/Apex/APEX_RM_3800.ir
+VCR/Fisher/RVR-4000.ir
+VCR/JVC/JVC_HR-A591U.ir
+VCR/JVC/JVC_HR-J700E.ir
+VCR/JVC/JVC_HR-S2902U.ir
+VCR/JVC/JVC_HRS7900U.ir
+VCR/LG/LG DVX7900.ir
+VCR/LG/LG_GC260W.ir
+VCR/Magnavox/Magnavox_N9377.ir
+VCR/Memorex/Memorex_MVR4040A.ir
+VCR/Panasonic/Panasonic_AG7350.ir
+VCR/Panasonic/Panasonic_Light_Tower_LSSQ0342.ir
+VCR/Panasonic/Panasonic_NV-FJ606.ir
+VCR/Panasonic/Panasonic_VCR_NV-HV-61EF.ir
+VCR/Panasonic/Panasonic_VCR_PV9662.ir
+VCR/Panasonic/Panasonic_VSQS1331_VCR.ir
+VCR/Philips/Philips-RC2K16.ir
+VCR/Sony/Sony_RM-Y126.ir
+VCR/Sony/Sony_SLV-D281P.ir
+VCR/Sony/Sony_SLV-SE610B.ir
+VCR/Sony/Sony_SLV70HF.ir
+VCR/Sony/Sony_SLV789HF.ir
+VCR/Sony/Sony_SLVD201P.ir
+VCR/Sony/Sony_SLVM88.ir
+VCR/Toshiba/Toshiba_SDKV550.ir
+VCR/Unknown/Unknown1.ir

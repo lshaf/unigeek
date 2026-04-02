@@ -1,0 +1,2 @@
+MiniDisc/Pioneer_CU-MJO11.ir
+MiniDisc/Sony_RM-D10E.ir

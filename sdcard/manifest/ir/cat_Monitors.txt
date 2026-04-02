@@ -1,0 +1,8 @@
+Monitors/Aorus/Aorus_FV43U.ir
+Monitors/BenQ/BenQ_EX2780Q.ir
+Monitors/Clinton_Electronics/Clinton_Electronics_M-10A.ir
+Monitors/LG/LG_43UD79-B.ir
+Monitors/LG/LG_UltraGear_OLED_Monitor.ir
+Monitors/Loncevon/LONCEVON-12_inch_Small_Monitor.ir
+Monitors/Monoprice/Monoprice_43305.ir
+Monitors/Philips/Philips_Evnia_49M2C8900L.ir
