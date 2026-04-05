@@ -32,7 +32,7 @@ Device* Device::createInstance() {
   storageSD.begin(SD_CS, sdSpi);
 
   auto* dev = new Device(display, power, &navigation, &keyboard,
-                         &storageSD, &storageLFS, nullptr, &speaker);
+                         &storageSD, &storageLFS, &sdSpi, &speaker);
   dev->ExI2C = &Wire;   // free — Keyboard+ES8311 use Wire1
   dev->InI2C = &Wire1;  // TCA8418 keyboard + ES8311 codec
   return dev;
