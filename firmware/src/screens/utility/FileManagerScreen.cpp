@@ -109,15 +109,12 @@ void FileManagerScreen::_loadDir(const String& path)
 
 void FileManagerScreen::_openMenu(uint8_t fileIdx)
 {
-  if (fileIdx >= _fileCount) {
-    return;
-  }
-
   _state      = STATE_MENU;
   _menuSelIdx = fileIdx;
   _menuCount  = 0;
 
-  bool isFile = !_fileIsDir[fileIdx];
+  bool hasTarget = (fileIdx < _fileCount);
+  bool isFile = hasTarget && !_fileIsDir[fileIdx];
 
   auto addMenu = [&](MenuAction action, const char* label, const char* sublabel = nullptr,
                      bool reserveTailSlots = true) -> bool {
@@ -136,8 +133,11 @@ void FileManagerScreen::_openMenu(uint8_t fileIdx)
   }
 
   addMenu(ACT_NEW_FOLDER, "New Folder");
-  addMenu(ACT_RENAME, "Rename");
-  addMenu(ACT_DELETE, "Delete");
+
+  if (hasTarget) {
+    addMenu(ACT_RENAME, "Rename");
+    addMenu(ACT_DELETE, "Delete");
+  }
 
   if (!_clipPath.isEmpty()) {
     String base = (_curPath == "/") ? "" : _curPath;
@@ -166,7 +166,12 @@ void FileManagerScreen::_handleMenuAction(uint8_t index)
     return;
   }
 
-  if (_menuSelIdx >= _fileCount && _menuActions[index] != ACT_CLOSE_MENU && _menuActions[index] != ACT_EXIT) {
+  static const MenuAction kFolderActions[] = {
+    ACT_NEW_FOLDER, ACT_PASTE, ACT_CANCEL_CLIP, ACT_CLOSE_MENU, ACT_EXIT
+  };
+  bool isFolderAction = false;
+  for (auto a : kFolderActions) { if (_menuActions[index] == a) { isFolderAction = true; break; } }
+  if (_menuSelIdx >= _fileCount && !isFolderAction) {
     ShowStatusAction::show("Invalid selection", 1200);
     _loadDir(_curPath);
     return;
