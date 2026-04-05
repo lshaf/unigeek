@@ -21,7 +21,7 @@ static const float kFreqList[] = {
   906.400f, 915.000f, 925.000f, 928.000f,
 };
 static constexpr uint8_t kFreqCount = sizeof(kFreqList) / sizeof(kFreqList[0]);
-static constexpr int kRssiThreshold = -65; // dBm — signal detected above this
+static constexpr int kRssiThreshold = CC1101Util::RSSI_THRESHOLD;
 static constexpr uint8_t kScanHits   = 1;  // lock to first frequency with signal
 
 // ── Init / End ───────────────────────────────────────────────────────────────
@@ -181,6 +181,42 @@ bool CC1101Util::pollReceive(Signal& out) {
 
 void CC1101Util::endReceive() {
   _sw.disableReceive();
+}
+
+// ── Non-blocking frequency scan ──────────────────────────────────────────────
+
+bool CC1101Util::beginScan() {
+  if (!_initialized) return false;
+  _scanIdx  = 0;
+  _scanFreq = 0;
+  _scanRssi = -120;
+  _scanning = true;
+  for (uint8_t i = 0; i < kFreqCount; i++) _scanRssiMap[i] = -120;
+  ELECHOUSE_cc1101.SetRx();
+  return true;
+}
+
+bool CC1101Util::stepScan() {
+  if (!_initialized || !_scanning) return false;
+  float f = kFreqList[_scanIdx % kFreqCount];
+  ELECHOUSE_cc1101.setMHZ(f);
+  _scanFreq = f;
+  _scanIdx++;
+  delay(2);
+  int rssi = ELECHOUSE_cc1101.getRssi();
+  _scanRssi = rssi;
+  uint8_t slot = (_scanIdx - 1) % kFreqCount;
+  _scanRssiMap[slot] = rssi;
+  return rssi > kRssiThreshold;
+}
+
+uint8_t CC1101Util::getScanCount()           const { return kFreqCount; }
+float   CC1101Util::getScanFreqAt(uint8_t i)  const { return (i < kFreqCount) ? kFreqList[i] : 0; }
+int     CC1101Util::getScanRssiAt(uint8_t i)  const { return (i < kFreqCount) ? _scanRssiMap[i] : -120; }
+
+void CC1101Util::endScan() {
+  _scanning = false;
+  if (_initialized) ELECHOUSE_cc1101.setSidle();
 }
 
 void CC1101Util::_initRx() {

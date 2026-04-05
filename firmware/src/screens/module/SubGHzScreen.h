@@ -10,8 +10,8 @@
 class SubGHzScreen : public ListScreen {
 public:
   const char* title() override { return _titleBuf; }
-  bool inhibitPowerSave() override { return _state == STATE_RECEIVING; }
-  bool inhibitPowerOff() override { return _state == STATE_RECEIVING || _state == STATE_JAMMING; }
+  bool inhibitPowerSave() override { return _state == STATE_RECEIVING || _state == STATE_SCANNING; }
+  bool inhibitPowerOff() override { return _state == STATE_RECEIVING || _state == STATE_JAMMING || _state == STATE_SCANNING; }
 
   void onInit() override;
   void onUpdate() override;
@@ -25,6 +25,7 @@ private:
     STATE_RECEIVING,
     STATE_SEND_BROWSE,
     STATE_JAMMING,
+    STATE_SCANNING,
   } _state = STATE_MENU;
 
   CC1101Util _rf;
@@ -32,22 +33,20 @@ private:
   int8_t _gdo0Pin = -1;
   char _titleBuf[32] = "Sub-GHz";
 
-  // Menu (6 items)
-  static constexpr uint8_t kMenuCount = 6;
+  // Menu (5 items)
+  static constexpr uint8_t kMenuCount = 5;
   ListItem _menuItems[kMenuCount] = {
-    {"CC1101 CS Pin"},
-    {"CC1101 GDO0 Pin"},
     {"Frequency"},
+    {"Detect Freq"},
     {"Receive"},
     {"Send"},
     {"Jammer"},
   };
-  String _csPinSub;
-  String _gdo0PinSub;
   String _freqSub;
   void _showMenu();
-  void _updatePinSublabels();
+  void _updateSublabels();
   void _selectFrequency();
+  void _startScan();
 
   // Receive — captured signal buffer
   static constexpr uint8_t kMaxCapture = 15;

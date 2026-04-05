@@ -12,10 +12,40 @@
 void SubGHzScreen::onInit() {
   _csPin   = PinConfig.get(PIN_CONFIG_CC1101_CS,   PIN_CONFIG_CC1101_CS_DEFAULT).toInt();
   _gdo0Pin = PinConfig.get(PIN_CONFIG_CC1101_GDO0, PIN_CONFIG_CC1101_GDO0_DEFAULT).toInt();
+
+  if (_csPin < 0 || _gdo0Pin < 0) {
+    ShowStatusAction::show("Set CC1101 pins first");
+    Screen.setScreen(new ModuleMenuScreen());
+    return;
+  }
+
+  ProgressView::show("Detecting CC1101...", 30);
+  if (!_rf.begin(Uni.Spi, _csPin, _gdo0Pin)) {
+    ShowStatusAction::show("CC1101 not found!");
+    Screen.setScreen(new ModuleMenuScreen());
+    return;
+  }
+  _rf.end();
+
   _showMenu();
 }
 
 void SubGHzScreen::onUpdate() {
+  if (_state == STATE_SCANNING) {
+    if (Uni.Nav->wasPressed()) {
+      auto dir = Uni.Nav->readDirection();
+      if (dir == INavigation::DIR_BACK || dir == INavigation::DIR_PRESS) {
+        _rf.endScan();
+        _rf.end();
+        _showMenu();
+        return;
+      }
+    }
+    _rf.stepScan();
+    render();
+    return;
+  }
+
   if (_state == STATE_RECEIVING) {
     if (_capturedCount < kMaxCapture) {
       CC1101Util::Signal sig;
@@ -114,6 +144,99 @@ void SubGHzScreen::onRender() {
     return;
   }
 
+  if (_state == STATE_SCANNING) {
+    TFT_eSprite sp(&Uni.Lcd);
+    sp.createSprite(bodyW(), bodyH());
+    sp.fillSprite(TFT_BLACK);
+    sp.setTextSize(1);
+
+    static constexpr int kRssiFloor   = -110;
+    static constexpr int kRssiCeiling = -30;
+    static constexpr int kRssiRange   = kRssiCeiling - kRssiFloor; // 80
+
+    const int footerH  = 16;
+    const int infoH    = 26;  // two text lines at top
+    const int chartY   = infoH;
+    const int chartH   = bodyH() - footerH - infoH;
+
+    uint8_t n = _rf.getScanCount();
+    int barW  = bodyW() / n;
+    if (barW < 1) barW = 1;
+
+    // Find best channel
+    uint8_t bestIdx  = 0;
+    int     bestRssi = -120;
+    for (uint8_t i = 0; i < n; i++) {
+      int r = _rf.getScanRssiAt(i);
+      if (r > bestRssi) { bestRssi = r; bestIdx = i; }
+    }
+
+    // Draw bars
+    for (uint8_t i = 0; i < n; i++) {
+      int rssi   = _rf.getScanRssiAt(i);
+      int clamped = constrain(rssi, kRssiFloor, kRssiCeiling);
+      int barH   = (clamped - kRssiFloor) * chartH / kRssiRange;
+      int x      = i * barW;
+      int y      = chartY + chartH - barH;
+
+      uint16_t color;
+      if (i == bestIdx && rssi > CC1101Util::RSSI_THRESHOLD)    color = TFT_YELLOW;
+      else if (rssi > CC1101Util::RSSI_THRESHOLD)                color = TFT_GREEN;
+      else if (rssi > kRssiFloor + 10)               color = 0x2945; // dim green
+      else                                            color = TFT_DARKGREY;
+
+      if (barH > 0) sp.fillRect(x, y, barW - 1, barH, color);
+    }
+
+    // Cursor line on current probe frequency
+    for (uint8_t i = 0; i < n; i++) {
+      if (fabsf(_rf.getScanFreqAt(i) - _rf.getScanFreq()) < 0.01f) {
+        sp.drawFastVLine(i * barW + barW / 2, chartY, chartH, TFT_WHITE);
+        break;
+      }
+    }
+
+    // Info text (top)
+    sp.setTextDatum(ML_DATUM);
+    sp.setTextColor(TFT_WHITE, TFT_BLACK);
+    char freqBuf[20];
+    snprintf(freqBuf, sizeof(freqBuf), "%.3f MHz", _rf.getScanFreq());
+    sp.drawString(freqBuf, 2, 7, 1);
+
+    sp.setTextDatum(MR_DATUM);
+    char rssiBuf[16];
+    snprintf(rssiBuf, sizeof(rssiBuf), "%d dBm", _rf.getScanRssi());
+    uint16_t rssiColor = (_rf.getScanRssi() > CC1101Util::RSSI_THRESHOLD) ? TFT_GREEN : TFT_CYAN;
+    sp.setTextColor(rssiColor, TFT_BLACK);
+    sp.drawString(rssiBuf, bodyW() - 2, 7, 1);
+
+    if (bestRssi > CC1101Util::RSSI_THRESHOLD) {
+      sp.setTextDatum(ML_DATUM);
+      sp.setTextColor(TFT_YELLOW, TFT_BLACK);
+      char bestBuf[28];
+      snprintf(bestBuf, sizeof(bestBuf), "> %.3f MHz %ddBm", _rf.getScanFreqAt(bestIdx), bestRssi);
+      sp.drawString(bestBuf, 2, 19, 1);
+    } else {
+      sp.setTextDatum(ML_DATUM);
+      sp.setTextColor(TFT_DARKGREY, TFT_BLACK);
+      sp.drawString("No signal", 2, 19, 1);
+    }
+
+    // Footer
+    sp.setTextDatum(MC_DATUM);
+    sp.fillRect(0, bodyH() - footerH, bodyW(), footerH, Config.getThemeColor());
+    sp.setTextColor(TFT_WHITE, Config.getThemeColor());
+    #ifdef DEVICE_HAS_KEYBOARD
+      sp.drawString("BACK: Stop", bodyW() / 2, bodyH() - 8, 1);
+    #else
+      sp.drawString("< Stop", bodyW() / 2, bodyH() - 8, 1);
+    #endif
+
+    sp.pushSprite(bodyX(), bodyY());
+    sp.deleteSprite();
+    return;
+  }
+
   if (_state == STATE_JAMMING) {
     TFT_eSprite sp(&Uni.Lcd);
     sp.createSprite(bodyW(), bodyH());
@@ -149,6 +272,10 @@ void SubGHzScreen::onBack() {
   } else if (_state == STATE_RECEIVING) {
     _rf.end();
     _showMenu();
+  } else if (_state == STATE_SCANNING) {
+    _rf.endScan();
+    _rf.end();
+    _showMenu();
   } else if (_state == STATE_JAMMING) {
     digitalWrite(_gdo0Pin, LOW);
     _rf.end();
@@ -167,33 +294,15 @@ void SubGHzScreen::onBack() {
 void SubGHzScreen::onItemSelected(uint8_t index) {
   if (_state == STATE_MENU) {
     switch (index) {
-      case 0: { // CS Pin
-        int pin = InputNumberAction::popup("CC1101 CS Pin", 0, 48, _csPin);
-        if (pin >= 0) {
-          _csPin = (int8_t)pin;
-          PinConfig.set(PIN_CONFIG_CC1101_CS, String(pin));
-          PinConfig.save(Uni.Storage);
-        }
-        _updatePinSublabels();
-        render();
-        return;
-      }
-      case 1: { // GDO0 Pin
-        int pin = InputNumberAction::popup("CC1101 GDO0 Pin", 0, 48, _gdo0Pin);
-        if (pin >= 0) {
-          _gdo0Pin = (int8_t)pin;
-          PinConfig.set(PIN_CONFIG_CC1101_GDO0, String(pin));
-          PinConfig.save(Uni.Storage);
-        }
-        _updatePinSublabels();
-        render();
-        return;
-      }
-      case 2: { // Frequency
+      case 0: { // Frequency
         _selectFrequency();
         return;
       }
-      case 3: { // Receive
+      case 1: { // Detect Freq
+        _startScan();
+        return;
+      }
+      case 2: { // Receive
         if (_csPin < 0 || _gdo0Pin < 0) {
           ShowStatusAction::show("Set CS and GDO0 pins first");
           render();
@@ -212,7 +321,7 @@ void SubGHzScreen::onItemSelected(uint8_t index) {
         setItems(_capturedItems, 0);  // prime pointer once; _showReceiveList uses setCount after this
         break;
       }
-      case 4: { // Send
+      case 3: { // Send
         if (_csPin < 0) {
           ShowStatusAction::show("Set CS pin first");
           render();
@@ -221,7 +330,7 @@ void SubGHzScreen::onItemSelected(uint8_t index) {
         _loadBrowseDir(kRootPath);
         break;
       }
-      case 5: { // Jammer
+      case 4: { // Jammer
         if (_csPin < 0 || _gdo0Pin < 0) {
           ShowStatusAction::show("Set CS and GDO0 pins first");
           render();
@@ -336,19 +445,32 @@ void SubGHzScreen::_showBrowseOptions(uint8_t index) {
 void SubGHzScreen::_showMenu() {
   _state = STATE_MENU;
   strcpy(_titleBuf, "Sub-GHz");
-  _updatePinSublabels();
+  _updateSublabels();
   setItems(_menuItems, kMenuCount);
 }
 
-void SubGHzScreen::_updatePinSublabels() {
-  _csPinSub  = (_csPin   >= 0) ? ("GPIO " + String(_csPin))   : "Not set";
-  _menuItems[0].sublabel = _csPinSub.c_str();
-  _gdo0PinSub = (_gdo0Pin >= 0) ? ("GPIO " + String(_gdo0Pin)) : "Not set";
-  _menuItems[1].sublabel = _gdo0PinSub.c_str();
+void SubGHzScreen::_updateSublabels() {
   char buf[12];
   snprintf(buf, sizeof(buf), "%.2f MHz", _rf.getFrequency());
   _freqSub = buf;
-  _menuItems[2].sublabel = _freqSub.c_str();
+  _menuItems[0].sublabel = _freqSub.c_str();
+}
+
+void SubGHzScreen::_startScan() {
+  if (_csPin < 0 || _gdo0Pin < 0) {
+    ShowStatusAction::show("Set CS and GDO0 pins first");
+    render();
+    return;
+  }
+  if (!_rf.begin(Uni.Spi, _csPin, _gdo0Pin)) {
+    ShowStatusAction::show("CC1101 not found");
+    render();
+    return;
+  }
+  _rf.beginScan();
+  _state = STATE_SCANNING;
+  strcpy(_titleBuf, "Detect Freq");
+  render();
 }
 
 void SubGHzScreen::_selectFrequency() {
@@ -382,7 +504,7 @@ void SubGHzScreen::_selectFrequency() {
   if (!_rf.setFrequency(mhz)) {
     ShowStatusAction::show("Invalid frequency");
   }
-  _updatePinSublabels();
+  _updateSublabels();
   render();
 }
 
