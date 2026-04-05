@@ -38,8 +38,11 @@ Device* Device::createInstance() {
 
   storageLFS.begin();
 
-  // Grove port SPI — VSPI on ESP32 (CC1101 Sub-GHz, MFRC522, etc.)
-  extSpi.begin(V_SPI_SCK, V_SPI_MISO, V_SPI_MOSI, -1);
+  // Grove port SPI — pins stored but NOT begun here.
+  // GPIO 32/33 are shared with GPS UART2 (TX=32, RX=33).
+  // CC1101Util::begin() calls extSpi.begin() when the bus is actually needed,
+  // and GPS Serial2.begin() can freely claim the pins when CC1101 is idle.
+  extSpi.setPins(V_SPI_SCK, V_SPI_MISO, V_SPI_MOSI, -1);
 
   auto* dev = new Device(display, power, &navigation, nullptr,
                          nullptr, &storageLFS, &extSpi, &speaker);

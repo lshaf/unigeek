@@ -34,6 +34,12 @@ bool CC1101Util::begin(ExtSpiClass* spi, int8_t csPin, int8_t gdo0Pin) {
   pinMode(csPin, OUTPUT);
   digitalWrite(csPin, HIGH);
 
+  // Explicitly begin the SPI bus — on boards where extSpi.begin() was deferred
+  // at boot (M5StickC, shared GPIO 32/33 with GPS UART), this reclaims the pins.
+  // On boards where SPI was already begun at boot this is a harmless reinit.
+  if (spi != nullptr && spi->pinSCK() >= 0)
+    spi->begin(spi->pinSCK(), spi->pinMISO(), spi->pinMOSI(), -1);
+
   ELECHOUSE_cc1101.setSPIinstance(spi);
   if (spi != nullptr && spi->pinSCK() >= 0)
     ELECHOUSE_cc1101.setSpiPin(spi->pinSCK(), spi->pinMISO(), spi->pinMOSI(), csPin);
