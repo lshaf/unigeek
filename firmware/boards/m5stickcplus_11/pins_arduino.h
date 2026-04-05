@@ -59,9 +59,12 @@ static const uint8_t SCL = GROVE_SCL;
 // ─── IR Transmitter ──────────────────────────────────────
 #define IR_TX_PIN  9
 
-// ─── CC1101 Sub-GHz ──────────────────────────────────────
-#define CC1101_CS_PIN   26
-#define CC1101_GDO0_PIN 25
+// ─── CC1101 Sub-GHz (Grove port SPI) ─────────────────────
+#define CC1101_CS_PIN    26
+#define CC1101_GDO0_PIN  25
+#define CC1101_SCK_PIN   0
+#define CC1101_MISO_PIN  33
+#define CC1101_MOSI_PIN  32
 
 // ─── Speaker (buzzer, LEDC PWM) ───────────────────────────
 #define SPK_PIN  2
