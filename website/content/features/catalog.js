@@ -22,6 +22,8 @@ export const CATALOG = [
   { slug: "ip-scanner",           title: "IP Scanner",          category: "wifi",     summary: "Scan the local network for active devices via ARP",                                                    hasDetail: false },
   { slug: "port-scanner",         title: "Port Scanner",        category: "wifi",     summary: "Scan open TCP ports on a target IP address",                                                           hasDetail: false },
   { slug: "wigle",                title: "Wigle",               category: "wifi",     summary: "Upload wardrive logs, view user stats, and manage Wigle API token",                                    hasDetail: false },
+  { slug: "wifi-information",     title: "WiFi Information",    category: "wifi",     summary: "View connection details of the current WiFi network — IP, gateway, DNS, MAC address, and signal strength", hasDetail: false },
+  { slug: "wifi-qrcode",          title: "WiFi QR Code",         category: "wifi",     summary: "Generate a QR code for the connected WiFi network to share credentials with other devices",                  hasDetail: false },
   { slug: "world-clock",          title: "World Clock",         category: "wifi",     summary: "Display current time synced via NTP across multiple time zones",                                       hasDetail: false },
 
   // BLE
@@ -58,4 +60,5 @@ export const CATALOG = [
   { slug: "setting-general",      title: "General Settings",    category: "setting",  summary: "Device name, display timeout, brightness, volume, navigation sound, theme color, and web file manager password", hasDetail: false },
   { slug: "setting-pin",          title: "Pin Settings",        category: "setting",  summary: "Configure GPIO pins for external modules: GPS TX/RX/baud, external I2C SDA/SCL, CC1101 CS/GDO0. Also accessible from Modules menu", hasDetail: false },
   { slug: "setting-nav-mode",     title: "Navigation Mode",     category: "setting",  summary: "Switch between Default and Encoder/Joystick navigation — M5StickC Plus 1.1 and 2 only", hasDetail: false },
+  { slug: "device-status",        title: "Device Status",        category: "setting",  summary: "View hardware status — CPU frequency, free RAM, free PSRAM, and available storage for LittleFS and SD", hasDetail: false },
 ];
