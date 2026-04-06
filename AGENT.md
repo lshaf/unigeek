@@ -267,6 +267,25 @@ If adding .cpp files in a board folder, ensure boards.ini includes:
 
 ---
 
+## Website Content Sync
+
+The website reads content directly from the repo — no copy step needed:
+- `knowledge/*.md`       → feature detail pages (slug must match catalog entry)
+- `release-notes/*.md`   → release notes page (auto-detected at build)
+- `README.md`            → source of truth for feature catalog
+
+Rules:
+- Adding a knowledge file   → add entry to `website/content/features/catalog.js` with `hasDetail: true`
+- Removing a knowledge file → set `hasDetail: false` in catalog (do NOT delete the catalog entry)
+- Renaming a knowledge file → update `slug` in catalog to match new filename
+- Adding a feature to README → add entry to catalog even if no knowledge file yet (`hasDetail: false`)
+- Removing a feature from README → remove entry from catalog entirely
+- Adding a release-notes file → no action needed
+
+Always check catalog.js after any README.md or knowledge/ change.
+
+---
+
 ## Keeping Documentation Accurate
 
 When completing a task that changes architecture, patterns, or conventions,

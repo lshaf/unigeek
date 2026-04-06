@@ -4,6 +4,11 @@ firmware/.pio
 *.bin
 .DS_Store
 
+# web
+website/node_modules
+website/package-lock.json
+website/build
+
 # lsp
 .cache
 compile_commands.json

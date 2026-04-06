@@ -474,6 +474,26 @@ Format: list the repo link and author, then sub-bullets for each feature referen
 
 ---
 
+## Website Content Sync
+
+The website reads content directly from the repo at build time:
+- `knowledge/*.md`          → feature detail pages (`website/content/features/index.js`)
+- `release-notes/*.md`      → release notes page (`website/content/releases/index.js`)
+- `README.md`               → source of truth for feature catalog
+
+When any of these change, the following must also be updated:
+
+| Changed file | Update required |
+|---|---|
+| `README.md` (features section) | `website/content/features/catalog.js` — add/remove/rename entries, fix summaries, fix categories |
+| `knowledge/*.md` (new file)    | `catalog.js` — add entry with `hasDetail: true` and correct slug matching the filename |
+| `knowledge/*.md` (removed)     | `catalog.js` — set `hasDetail: false` for that slug |
+| `release-notes/*.md` (new)     | No action needed — read automatically at build time |
+
+Do not wait for the user to ask. When editing README.md or knowledge/ files, scan catalog.js immediately and apply any needed corrections.
+
+---
+
 ## Self-Updating This Document
 
 This document should stay accurate as the project evolves.
