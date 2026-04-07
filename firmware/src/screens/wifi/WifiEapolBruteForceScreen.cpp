@@ -177,7 +177,18 @@ void WifiEapolBruteForceScreen::onRender() {
 
 void WifiEapolBruteForceScreen::onBack() {
   if (_state == STATE_SELECT_PCAP || _state == STATE_SELECT_WORDLIST) {
-    _showMenu();
+    if (_currentDir == _browseRoot) {
+      // At root → cancel selection, back to menu
+      _showMenu();
+    } else {
+      // Go up one level
+      int slash = _currentDir.lastIndexOf('/');
+      String parent = (slash > 0) ? _currentDir.substring(0, slash) : _browseRoot;
+      const char* ext = (_state == STATE_SELECT_PCAP) ? ".pcap" : nullptr;
+      _currentDir = parent;
+      _listFiles(ext);
+      setItems(_fileItems, (uint8_t)_fileCount);
+    }
     return;
   }
   Screen.setScreen(new WifiMenuScreen());
@@ -187,7 +198,9 @@ void WifiEapolBruteForceScreen::onItemSelected(uint8_t index) {
   if (_state == STATE_MENU) {
     if (index == 0) {
       // Select PCAP
-      if (!_listFiles(PCAP_DIR, ".pcap")) {
+      _browseRoot = PCAP_DIR;
+      _currentDir = PCAP_DIR;
+      if (!_listFiles(".pcap")) {
         ShowStatusAction::show("No PCAP files found.\nCapture EAPOL first.");
         render();
         return;
@@ -196,7 +209,9 @@ void WifiEapolBruteForceScreen::onItemSelected(uint8_t index) {
       setItems(_fileItems, (uint8_t)_fileCount);
     } else if (index == 1) {
       // Select wordlist
-      _listFiles(PASS_DIR, nullptr);  // always has Test Wordlist even if empty
+      _browseRoot = PASS_DIR;
+      _currentDir = PASS_DIR;
+      _listFiles(nullptr);  // always has Test Wordlist even if empty
       _state = STATE_SELECT_WORDLIST;
       setItems(_fileItems, (uint8_t)_fileCount);
     } else if (index == 2) {
@@ -225,14 +240,29 @@ void WifiEapolBruteForceScreen::onItemSelected(uint8_t index) {
   if (index >= (uint8_t)_fileCount) return;
 
   if (_state == STATE_SELECT_PCAP) {
-    strncpy(_selectedPcap, _filePaths[index].c_str(), sizeof(_selectedPcap) - 1);
-    _showMenu();
+    if (_fileIsDir[index]) {
+      _currentDir = _filePaths[index];
+      _listFiles(".pcap");
+      setItems(_fileItems, (uint8_t)_fileCount);
+    } else {
+      strncpy(_selectedPcap, _filePaths[index].c_str(), sizeof(_selectedPcap) - 1);
+      _selectedPcap[sizeof(_selectedPcap) - 1] = '\0';
+      Serial.printf("[EAPOL] selected index=%d path='%s' (len=%d)\n",
+                    index, _selectedPcap, strlen(_selectedPcap));
+      _showMenu();
+    }
     return;
   }
 
   if (_state == STATE_SELECT_WORDLIST) {
-    strncpy(_selectedWordlist, _filePaths[index].c_str(), sizeof(_selectedWordlist) - 1);
-    _showMenu();
+    if (_fileIsDir[index]) {
+      _currentDir = _filePaths[index];
+      _listFiles(nullptr);
+      setItems(_fileItems, (uint8_t)_fileCount);
+    } else {
+      strncpy(_selectedWordlist, _filePaths[index].c_str(), sizeof(_selectedWordlist) - 1);
+      _showMenu();
+    }
     return;
   }
 
@@ -240,31 +270,68 @@ void WifiEapolBruteForceScreen::onItemSelected(uint8_t index) {
 
 // ── File browser ──────────────────────────────────────────────────────────
 
-bool WifiEapolBruteForceScreen::_listFiles(const char* dir, const char* ext) {
+bool WifiEapolBruteForceScreen::_listFiles(const char* ext) {
   _fileCount = 0;
+  const char* dir = _currentDir.c_str();
   if (!Uni.Storage || !Uni.Storage->isAvailable()) return false;
 
   static constexpr int kMaxEntries = 64;
   IStorage::DirEntry entries[kMaxEntries];
   uint8_t count = Uni.Storage->listDir(dir, entries, kMaxEntries);
 
-  for (uint8_t i = 0; i < count && _fileCount < kMaxEntries; i++) {
-    if (entries[i].isDir) continue;
-
-    String name  = entries[i].name;
-    int    slash  = name.lastIndexOf('/');
-    String base   = (slash >= 0) ? name.substring(slash + 1) : name;
-    String full   = String(dir) + "/" + base;
-
-    if (ext && !base.endsWith(ext)) continue;
-
-    _fileLabels[_fileCount] = base;
-    _filePaths[_fileCount]  = full;
-    _fileItems[_fileCount]  = {_fileLabels[_fileCount].c_str(), nullptr};
-    _fileCount++;
+  // Collect base names for both groups
+  struct RawEntry { String base; bool isDir; };
+  RawEntry raw[kMaxEntries];
+  int rawCount = 0;
+  for (uint8_t i = 0; i < count && rawCount < kMaxEntries; i++) {
+    String name = entries[i].name;
+    int slash = name.lastIndexOf('/');
+    raw[rawCount++] = { (slash >= 0) ? name.substring(slash + 1) : name, entries[i].isDir };
   }
-  // Always append built-in test wordlist when listing passwords (no ext filter)
-  if (ext == nullptr && _fileCount < kMaxEntries) {
+
+  // Insertion sort: dirs before files, each group alphabetically
+  for (int i = 1; i < rawCount; i++) {
+    RawEntry key = raw[i];
+    int j = i - 1;
+    while (j >= 0) {
+      bool moveUp = false;
+      if (key.isDir && !raw[j].isDir) moveUp = true;
+      else if (key.isDir == raw[j].isDir && key.base < raw[j].base) moveUp = true;
+      if (!moveUp) break;
+      raw[j + 1] = raw[j];
+      j--;
+    }
+    raw[j + 1] = key;
+  }
+
+  // Build file items from sorted list
+  const bool isPcap = (ext && strcmp(ext, ".pcap") == 0);
+  for (int i = 0; i < rawCount && _fileCount < kMaxEntries; i++) {
+    const RawEntry& e = raw[i];
+    // A directory whose name ends with the target extension is a mislabeled file
+    // (FAT32 can set the directory attribute on a regular file)
+    const bool mislabeledFile = e.isDir && ext && e.base.endsWith(ext);
+    if (e.isDir && !mislabeledFile) {
+      _fileIsDir[_fileCount]  = true;
+      _fileLabels[_fileCount] = e.base;
+      _filePaths[_fileCount]  = String(dir) + "/" + e.base;
+      _fileItems[_fileCount]  = {_fileLabels[_fileCount].c_str(), "DIR"};
+      _fileCount++;
+    } else {
+      if (!mislabeledFile && ext && !e.base.endsWith(ext)) continue;
+      _fileIsDir[_fileCount]  = false;
+      _fileLabels[_fileCount] = e.base;
+      _filePaths[_fileCount]  = String(dir) + "/" + e.base;
+      _fileItems[_fileCount]  = {_fileLabels[_fileCount].c_str(), isPcap ? "PCAP" : nullptr};
+      Serial.printf("[EAPOL] listed[%d] label='%s' path='%s'\n",
+                    _fileCount, _fileLabels[_fileCount].c_str(), _filePaths[_fileCount].c_str());
+      _fileCount++;
+    }
+  }
+
+  // Built-in test wordlist only at the password root
+  if (ext == nullptr && strcmp(dir, PASS_DIR) == 0 && _fileCount < kMaxEntries) {
+    _fileIsDir[_fileCount]  = false;
     _fileLabels[_fileCount] = "Built In";
     _filePaths[_fileCount]  = "builtin";
     _fileItems[_fileCount]  = {_fileLabels[_fileCount].c_str(), _builtInSublabel};
@@ -755,8 +822,16 @@ void WifiEapolBruteForceScreen::_renderDone() {
     sp.setTextDatum(MC_DATUM);
     sp.setTextColor(TFT_GREEN, TFT_BLACK);
     sp.drawString("PASSWORD FOUND!", cx, cy - 22, 1);
-    sp.setTextColor(TFT_WHITE, TFT_BLACK);
+
+    // measure password text width and draw a pill behind it
+    int pwW = sp.textWidth(_ctx.foundPass, 1);
+    int padX = 6, padY = 3;
+    int rx = cx - pwW / 2 - padX;
+    int ry = cy - 6 - 6 - padY;
+    sp.fillRoundRect(rx, ry, pwW + padX * 2, 12 + padY * 2, 4, Config.getThemeColor());
+    sp.setTextColor(TFT_WHITE, Config.getThemeColor());
     sp.drawString(_ctx.foundPass, cx, cy - 6, 1);
+
     char buf[32];
     snprintf(buf, sizeof(buf), "%lu tries", (unsigned long)_ctx.tested);
     sp.setTextColor(TFT_DARKGREY, TFT_BLACK);

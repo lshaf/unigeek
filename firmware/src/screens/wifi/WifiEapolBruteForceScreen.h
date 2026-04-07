@@ -75,8 +75,12 @@ private:
 
   String   _fileLabels[64];
   String   _filePaths[64];
+  bool     _fileIsDir[64] = {};
   ListItem _fileItems[64]  = {};
   int      _fileCount = 0;
+
+  String   _currentDir;   // current browsing directory
+  String   _browseRoot;   // root dir for active browse session (back from here = cancel)
 
   char _selectedPcap[64]     = {};
   char _selectedWordlist[64] = {};
@@ -88,7 +92,7 @@ private:
 
   // ── Helpers ───────────────────────────────────────────────────────────────
   void _showMenu();
-  bool _listFiles(const char* dir, const char* ext);
+  bool _listFiles(const char* ext);
   bool _parsePcap(const char* path);
   void _startCrack();
   void _stopCrack();
