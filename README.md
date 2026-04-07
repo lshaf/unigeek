@@ -37,7 +37,9 @@ Multi-tool firmware for ESP32-based handheld devices. Built with PlatformIO + Ar
   - **Wigle** — Upload wardrive logs, view user stats, and manage Wigle API token ([details](knowledge/gps-wardriving.md))
 - **Access Point** — Create a custom WiFi hotspot with optional DNS spoofing, captive portal, web file manager, and WiFi QR code for easy sharing ([details](knowledge/access-point.md))
 - **Evil Twin** — Clone a target AP's SSID with a captive portal; optional deauth and real-time password verification ([details](knowledge/evil-twin.md))
-- **Karma Attack** — Detect nearby devices searching for saved WiFi networks, then create fake APs to capture credentials ([details](knowledge/karma-attack.md))
+- **Karma Captive** — Detect nearby probe requests and respond with a fake open AP serving a phishing portal to capture credentials ([details](knowledge/karma-attack.md))
+- **Karma EAPOL** — Detect nearby probe requests and deploy fake WPA2 APs via a paired Karma Support device; captures M1+M2 EAPOL handshakes for offline cracking, advances automatically on capture ([details](knowledge/karma-attack.md))
+- **Karma Support** — Companion screen for a second device; receives deploy commands over ESP-NOW and hosts the fake WPA2 AP on behalf of the attack device ([details](knowledge/karma-attack.md))
 - **WiFi Analyzer** — Scan and display nearby networks with signal strength and channel info
 - **Packet Monitor** — Visualize WiFi traffic by channel
 - **WiFi Deauther** — Disconnect clients from a target network
@@ -46,7 +48,7 @@ Multi-tool firmware for ESP32-based handheld devices. Built with PlatformIO + Ar
 - **CIW Zeroclick** — Broadcast SSIDs with injection payloads to test how nearby devices handle untrusted network names
 - **ESPNOW Chat** — Peer-to-peer text chat over ESP-NOW (no router needed)
 - **EAPOL Capture** — Capture WPA2 handshakes from nearby networks and save to storage; configurable discovery dwell, attack dwell, channel hopping, and max deauth attempts ([details](knowledge/eapol.md))
-- **EAPOL Brute Force** — Crack WPA2 passwords offline from captured handshakes; includes built-in 110-password test wordlist ([details](knowledge/eapol.md))
+- **EAPOL Brute Force** — Crack WPA2 passwords offline from captured handshakes; folder navigation for PCAP and wordlist selection; includes built-in 110-password test wordlist ([details](knowledge/eapol.md))
 
 ### Bluetooth
 - **BLE Analyzer** — Scan nearby BLE devices, display name, address, and signal strength

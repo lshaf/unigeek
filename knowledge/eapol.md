@@ -41,10 +41,10 @@ Cracks WPA2 passwords offline from previously captured handshake PCAP files usin
 ### Setup
 
 1. Go to **WiFi > EAPOL Brute Force**
-2. Select a PCAP file from `/unigeek/wifi/eapol/`
-3. Choose a wordlist:
-   - **Built-in test** (`__test__`) — 110 common passwords (numeric, keyboard patterns, router defaults)
-   - **Custom wordlist** — Select a file from `/unigeek/utility/passwords/` (one password per line, 8–63 chars)
+2. Select a PCAP file from `/unigeek/wifi/eapol/` — the browser supports folders; select a directory entry (labelled **DIR**) to navigate into it, press **BACK** to go up, press **BACK** from the root to cancel
+3. Choose a wordlist from `/unigeek/utility/passwords/`:
+   - **Built In** — 110 common passwords (numeric, keyboard patterns, router defaults)
+   - **Custom wordlist** — Select a file (one password per line, 8–63 chars); folder navigation works the same as PCAP selection
 
 ### How It Works
 
