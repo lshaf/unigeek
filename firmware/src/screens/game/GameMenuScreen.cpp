@@ -4,6 +4,7 @@
 #include "screens/game/GameDecoderScreen.h"
 #include "screens/game/GameWordleScreen.h"
 #include "screens/game/GameFlappyScreen.h"
+#include "screens/game/GameMemoryScreen.h"
 
 void GameMenuScreen::onInit()
 {
@@ -22,5 +23,6 @@ void GameMenuScreen::onItemSelected(uint8_t index)
     case 1: Screen.setScreen(new GameWordleScreen(GameWordleScreen::LANG_EN)); break;
     case 2: Screen.setScreen(new GameWordleScreen(GameWordleScreen::LANG_ID)); break;
     case 3: Screen.setScreen(new GameFlappyScreen()); break;
+    case 4: Screen.setScreen(new GameMemoryScreen()); break;
   }
 }

@@ -12,10 +12,11 @@ public:
   void onItemSelected(uint8_t index) override;
 
 private:
-  ListItem _items[4] = {
+  ListItem _items[5] = {
     {"HEX Decoder"},
     {"Wordle EN"},
     {"Wordle ID"},
     {"Flappy Bird"},
+    {"Memory Sequence"},
   };
 };
