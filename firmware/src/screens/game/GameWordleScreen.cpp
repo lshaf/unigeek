@@ -2,6 +2,7 @@
 #include "core/Device.h"
 #include "core/ConfigManager.h"
 #include "core/ScreenManager.h"
+#include "core/AchievementManager.h"
 #include "screens/game/GameMenuScreen.h"
 #include "utils/wordle/en.h"
 #include "utils/wordle/en_common.h"
@@ -148,6 +149,15 @@ void GameWordleScreen::_initGame()
   uint16_t idx = (uint16_t)random(wordCount);
   memcpy(_target, wordList[idx], kWordLen);
 
+  if (_language == LANG_EN) {
+    int n = Achievement.inc("wordle_en_first_play");
+    if (n == 1) Achievement.unlock("wordle_en_first_play");
+  }
+  if (_language == LANG_ID) {
+    int n = Achievement.inc("wordle_id_first_play");
+    if (n == 1) Achievement.unlock("wordle_id_first_play");
+  }
+
   _state = STATE_PLAY;
   render();
 }
@@ -176,6 +186,17 @@ void GameWordleScreen::_submitGuess()
   if (memcmp(_current, _target, kWordLen) == 0) {
     _state = STATE_RESULT; _win = true;
     if (Uni.Speaker) Uni.Speaker->playWin();
+    if (_totalInputs == 1) Achievement.unlock("wordle_first_try");
+    if (_language == LANG_EN) {
+      int n = Achievement.inc("wordle_en_first_win");
+      if (n == 1) Achievement.unlock("wordle_en_first_win");
+      if (n == 5) Achievement.unlock("wordle_en_win_5");
+    }
+    if (_language == LANG_ID) {
+      int n = Achievement.inc("wordle_id_first_win");
+      if (n == 1) Achievement.unlock("wordle_id_first_win");
+      if (n == 5) Achievement.unlock("wordle_id_win_5");
+    }
     render(); return;
   }
 

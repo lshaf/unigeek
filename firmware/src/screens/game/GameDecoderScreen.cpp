@@ -2,6 +2,7 @@
 #include "core/Device.h"
 #include "core/ConfigManager.h"
 #include "core/ScreenManager.h"
+#include "core/AchievementManager.h"
 #include "screens/game/GameMenuScreen.h"
 
 static constexpr char kCharDB[16] = {
@@ -134,6 +135,10 @@ void GameDecoderScreen::_initGame()
   _endMs        = _startMs + (uint32_t)_timerSecs() * 1000;
   _lastRenderMs = 0;
   _state        = STATE_PLAY;
+
+  int n = Achievement.inc("decoder_first_play");
+  if (n == 1) Achievement.unlock("decoder_first_play");
+
   render();
 }
 
@@ -156,6 +161,11 @@ void GameDecoderScreen::_submitGuess()
   if (memcmp(_current, _target, kInputLen) == 0) {
     _state = STATE_RESULT; _win = true;
     if (Uni.Speaker) Uni.Speaker->playWin();
+    {
+      int n = Achievement.inc("decoder_first_win");
+      if (n == 1) Achievement.unlock("decoder_first_win");
+    }
+    if (_difficulty >= 2) Achievement.unlock("decoder_win_hard");
     render(); return;
   }
 

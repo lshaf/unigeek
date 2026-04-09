@@ -2,6 +2,7 @@
 #include "core/Device.h"
 #include "core/ConfigManager.h"
 #include "core/ScreenManager.h"
+#include "core/AchievementManager.h"
 #include "screens/game/GameMenuScreen.h"
 
 static constexpr char kCharDB[36] = {
@@ -251,6 +252,10 @@ void GameMemoryScreen::_initGame()
   _isNewHigh       = false;
   _lastPointsEarned = 0;
   _maxMistakes     = _getMaxMistakes();
+
+  int n = Achievement.inc("memory_first_play");
+  if (n == 1) Achievement.unlock("memory_first_play");
+
   _newRound();
 }
 
@@ -265,6 +270,14 @@ void GameMemoryScreen::_newRound()
   _cursor           = 0;
   _cycleIdx         = 0;
   _roundHadMistake  = false;
+
+  if (_round == 5)  Achievement.unlock("memory_round_5");
+  if (_round == 10) Achievement.unlock("memory_round_10");
+  if (_round == 11 && _difficulty == 3) {
+    int n = Achievement.inc("memory_extreme_win");
+    if (n == 1) Achievement.unlock("memory_extreme_win");
+  }
+
   _stateTimer       = millis();
   _state            = STATE_SHOW_SEQUENCE;
   render();
@@ -358,6 +371,9 @@ void GameMemoryScreen::_saveHighScore()
     _highScores[d].round = gameRound;
     _highScores[d].score = _score;
     _isNewHigh = true;
+    int n = Achievement.inc("memory_new_highscore");
+    if (n == 1) Achievement.unlock("memory_new_highscore");
+    if (Achievement.getInt("memory_extreme_win") >= 5) Achievement.unlock("memory_extreme_win_5");
 
     String data = "";
     for (uint8_t i = 0; i < kDiffCount; i++) {

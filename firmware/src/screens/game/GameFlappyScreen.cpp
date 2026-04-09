@@ -2,6 +2,7 @@
 #include "core/Device.h"
 #include "core/ConfigManager.h"
 #include "core/ScreenManager.h"
+#include "core/AchievementManager.h"
 #include "screens/game/GameMenuScreen.h"
 #include "ui/actions/ShowStatusAction.h"
 
@@ -90,6 +91,9 @@ void GameFlappyScreen::_initGame()
   _lastFrameMs = millis();
   _state     = STATE_PLAY;
 
+  int n = Achievement.inc("flappy_first_play");
+  if (n == 1) Achievement.unlock("flappy_first_play");
+
   // Spawn first pipe ahead
   _spawnPipe();
   render();
@@ -128,6 +132,10 @@ void GameFlappyScreen::_updateGame()
       _pipes[i].scored = true;
       _score++;
       if (Uni.Speaker && !Uni.Speaker->isPlaying()) Uni.Speaker->playRandomTone(0, 50);
+      if (_score == 5)  Achievement.unlock("flappy_score_5");
+      if (_score == 10) Achievement.unlock("flappy_score_10");
+      if (_score == 25) Achievement.unlock("flappy_score_25");
+      if (_score == 50) Achievement.unlock("flappy_score_50");
     }
   }
 
