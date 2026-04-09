@@ -143,9 +143,9 @@ void AchievementScreen::_renderListItem(TFT_eSprite& sp, int16_t y, bool sel,
   int16_t rightX = (int16_t)(bodyW() - 2 - rightW);
 
   sp.setTextColor(l1LeftCol,  bg);
-  sp.drawString(l1Left,  3,      y + 5, 1);
+  sp.drawString(l1Left,  3,      y + 4, 1);
   sp.setTextColor(l1RightCol, bg);
-  sp.drawString(l1Right, rightX, y + 5, 1);
+  sp.drawString(l1Right, rightX, y + 4, 1);
 
   // Line 2: sub-label, truncated with ellipsis to full right boundary
   const int16_t maxW = (int16_t)(bodyW() - 2);
@@ -162,7 +162,7 @@ void AchievementScreen::_renderListItem(TFT_eSprite& sp, int16_t y, bool sel,
   }
 
   sp.setTextColor(l2Col, bg);
-  sp.drawString(buf, 3, y + 15, 1);
+  sp.drawString(buf, 3, y + 14, 1);
 }
 
 // ── Custom renderers ─────────────────────────────────────────────────────────
