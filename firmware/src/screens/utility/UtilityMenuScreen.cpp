@@ -5,6 +5,7 @@
 #include "screens/utility/QRCodeScreen.h"
 #include "screens/utility/BarcodeScreen.h"
 #include "screens/utility/FileManagerScreen.h"
+#include "screens/utility/AchievementScreen.h"
 
 void UtilityMenuScreen::onInit() {
   setItems(_items);
@@ -16,9 +17,10 @@ void UtilityMenuScreen::onBack() {
 
 void UtilityMenuScreen::onItemSelected(uint8_t index) {
   switch (index) {
-    case 0: Screen.setScreen(new I2CDetectorScreen()); break;
-    case 1: Screen.setScreen(new QRCodeScreen());       break;
-    case 2: Screen.setScreen(new BarcodeScreen());      break;
-    case 3: Screen.setScreen(new FileManagerScreen());  break;
+    case 0: Screen.setScreen(new I2CDetectorScreen());  break;
+    case 1: Screen.setScreen(new QRCodeScreen());        break;
+    case 2: Screen.setScreen(new BarcodeScreen());       break;
+    case 3: Screen.setScreen(new FileManagerScreen());   break;
+    case 4: Screen.setScreen(new AchievementScreen());   break;
   }
 }
