@@ -22,11 +22,12 @@ private:
   uint8_t       _animFrame   = 0;       // 0=normal, 1=blink
   unsigned long _lastAnimMs  = 0;
 
-  // dialog bubble typing  (0=typing, 1=pausing, 2=deleting)
+  // dialog bubble  (0=typing  1=pausing — no delete phase)
   uint8_t       _wordIdx     = 0;
   uint8_t       _wordPos     = 0;
-  uint8_t       _wordState   = 0;
+  uint8_t       _wordState   = 0;       // 0=typing  1=pausing
   unsigned long _lastCharMs  = 0;
+  char          _history[2][20]  = {};  // [0]=oldest  [1]=most-recent completed word
 
   void _enterMainMenu();
 };

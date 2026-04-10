@@ -198,6 +198,8 @@ void CharacterScreen::onInit()
   _wordIdx       = 0;
   _wordPos       = 0;
   _wordState     = 0;
+  _history[0][0] = '\0';
+  _history[1][0] = '\0';
 }
 
 void CharacterScreen::onUpdate()
@@ -222,8 +224,7 @@ void CharacterScreen::onUpdate()
 
   // ── dialog bubble state machine ──────────────────────────────────────
   // state 0 = TYPING:   add one char every 65 ms
-  // state 1 = PAUSING:  hold full word for 7 s then start deleting
-  // state 2 = DELETING: remove one char every 50 ms, then next word
+  // state 1 = PAUSING:  hold full word for 2.5 s, then push into history and start next word
   const char* w    = kWords[_wordIdx % kWordCount];
   int         wlen = (int)strlen(w);
 
@@ -233,15 +234,17 @@ void CharacterScreen::onUpdate()
     } else {
       _wordState = 1; _lastCharMs = now;  // word done → enter pause
     }
-  } else if (_wordState == 1) {
-    if (now - _lastCharMs > 7000) { _wordState = 2; _lastCharMs = now; needsRender = true; }
-  } else {  // _wordState == 2: deleting
-    if (_wordPos > 0) {
-      if (now - _lastCharMs > 50) { _wordPos--; _lastCharMs = now; needsRender = true; }
-    } else {
-      _wordIdx   = (uint8_t)((_wordIdx + 1) % kWordCount);
-      _wordPos   = 0;
-      _wordState = 0;
+  } else {  // _wordState == 1: pausing
+    if (now - _lastCharMs > 2500) {
+      // shift history up: [0] ← [1] ← current word
+      strncpy(_history[0], _history[1], sizeof(_history[0]) - 1);
+      _history[0][sizeof(_history[0]) - 1] = '\0';
+      strncpy(_history[1], w, sizeof(_history[1]) - 1);
+      _history[1][sizeof(_history[1]) - 1] = '\0';
+      // start next word
+      _wordIdx    = (uint8_t)((_wordIdx + 1) % kWordCount);
+      _wordPos    = 0;
+      _wordState  = 0;
       _lastCharMs = now;
       needsRender = true;
     }
@@ -365,43 +368,65 @@ void CharacterScreen::onRender()
 
   _drawHackerHead(sp, headX, headY, ps, _animFrame == 1, ri.rank);
 
-  // Dialog bubble (tail points left toward head)
+  // Dialog bubble (tail points left toward head) — 3-line terminal scroll
   const int bubX = headX + headW + gap * 3;
   const int bubW = W - bubX - PAD;
-  const int bubH = lineH + gap * 4;
+  const int ip   = gap * 2;                           // inner vertical padding
+  const int rowH = lineH + gap;
+  const int bubH = lineH * 3 + gap * 2 + ip * 2;     // 3 rows + 2 inter-row gaps + top/bottom padding
   const int bubY = headY + headH / 2 - bubH / 2;
 
   if (bubW > lineH * 2) {
     const uint16_t bubBg = 0x0841;
-    const uint16_t bubFg = TFT_GREEN;
+    const uint16_t col3  = TFT_GREEN;                 // bottom: current (bright)
+    const uint16_t col2  = 0x0460;                    // middle: prev word (medium green)
+    const uint16_t col1  = 0x01C0;                    // top: oldest word (dim green)
 
     // Tail: filled triangle pointing left
     const int tailW = gap * 3;
+    const int tailMy = bubY + bubH / 2;
     for (int i = 0; i < tailW; i++) {
       int spread = i + 1;
-      sp.drawFastVLine(bubX - tailW + i, bubY + bubH / 2 - spread, spread * 2, bubBg);
+      sp.drawFastVLine(bubX - tailW + i, tailMy - spread, spread * 2, bubBg);
     }
 
     sp.fillRect(bubX, bubY, bubW, bubH, bubBg);
-    sp.drawRect(bubX, bubY, bubW, bubH, bubFg);
+    sp.drawRect(bubX, bubY, bubW, bubH, col3);
 
-    // Build partial word string + cursor
-    const char* word  = kWords[_wordIdx % kWordCount];
-    int         wlen  = (int)strlen(word);
-    int         shown = (_wordPos <= (uint8_t)wlen) ? (int)_wordPos : wlen;
-    char buf[36] = {};
-    if (shown > 0) strncpy(buf, word, shown);
-    // Show cursor while typing or pausing; hide while deleting (erase effect)
-    if (_wordState != 2 || shown < wlen) {
-      buf[shown]     = '_';
-      buf[shown + 1] = '\0';
-    } else {
-      buf[shown] = '\0';
+    // Y centres for the three rows (ML_DATUM)
+    const int y1 = bubY + ip + lineH / 2;
+    const int y2 = bubY + ip + rowH + lineH / 2;
+    const int y3 = bubY + ip + rowH * 2 + lineH / 2;
+    const int tx = bubX + gap * 2;
+
+    // ── row 1: oldest history (static, dim) ──
+    if (_history[0][0] != '\0') {
+      sp.setTextDatum(ML_DATUM);
+      sp.setTextColor(col1);
+      sp.drawString(_history[0], tx, y1, 1);
     }
 
-    sp.setTextDatum(ML_DATUM);
-    sp.setTextColor(bubFg);
-    sp.drawString(buf, bubX + gap * 2, bubY + bubH / 2, 1);
+    // ── row 2: most-recent completed word (static, medium) ──
+    if (_history[1][0] != '\0') {
+      sp.setTextDatum(ML_DATUM);
+      sp.setTextColor(col2);
+      sp.drawString(_history[1], tx, y2, 1);
+    }
+
+    // ── row 3: current animated word + cursor (bottom) ──
+    {
+      const char* word  = kWords[_wordIdx % kWordCount];
+      int         wlen2 = (int)strlen(word);
+      int         shown = (_wordPos <= (uint8_t)wlen2) ? (int)_wordPos : wlen2;
+      char        buf[36] = {};
+      if (shown > 0) strncpy(buf, word, shown);
+      buf[shown]     = '_';
+      buf[shown + 1] = '\0';
+
+      sp.setTextDatum(ML_DATUM);
+      sp.setTextColor(col3);
+      sp.drawString(buf, tx, y3, 1);
+    }
   }
 
   sp.pushSprite(0, 0);
