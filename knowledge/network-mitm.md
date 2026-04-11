@@ -30,7 +30,7 @@ Hands out IP addresses to devices on the network, setting itself as the gateway 
 
 ### DNS Spoofing
 
-Redirects specific domains to phishing pages. Configure domain mappings in `/unigeek/wifi/portals/dns_config`. Also handles captive portal detection so devices auto-open the phishing page. Captured credentials are saved to `/unigeek/wifi/captives/`.
+Redirects specific domains to phishing pages. Configure domain mappings in `/unigeek/web/portals/dns_config`. Also handles captive portal detection so devices auto-open the phishing page. Captured credentials are saved to `/unigeek/wifi/captives/`.
 
 ### Web File Manager
 
@@ -57,8 +57,8 @@ Browser-based file manager on port 8080 for managing device storage during the a
 ## Storage
 
 ```
-/unigeek/wifi/portals/dns_config    Domain-to-portal mappings
-/unigeek/wifi/portals/<name>/       Portal template folders
+/unigeek/web/portals/dns_config    Domain-to-portal mappings
+/unigeek/web/portals/<name>/       Portal template folders
 /unigeek/wifi/captives/             Captured credentials
 ```
 

@@ -9,7 +9,7 @@ Creates a custom WiFi access point from the ESP32, turning the device into a sta
 3. **Password** — Set a password (min 8 chars for WPA2, or leave empty for an open network; saved in config)
 4. **Hidden** — Toggle hidden SSID (network won't appear in scan lists but can still be joined manually)
 5. **DNS Spoof** — Redirect configured domains to custom phishing pages; requires a `dns_config` file on storage
-6. **Captive Portal** — Select a portal template that triggers on WiFi connectivity checks (the "Sign in to network" popup); choose from folders in `/unigeek/wifi/portals/`
+6. **Captive Portal** — Select a portal template that triggers on WiFi connectivity checks (the "Sign in to network" popup); choose from folders in `/unigeek/web/portals/`
 7. **File Manager** — Enable a web file manager accessible at `unigeek.local` (port 8080); requires web files installed
 8. **Start** — Launch the AP and enter the log view
 
@@ -26,17 +26,17 @@ Creates a custom WiFi access point from the ESP32, turning the device into a sta
 When enabled, the device runs its own DNS server. All DNS queries from connected clients resolve to the ESP32's IP. The web server routes requests based on the `Host` header:
 
 - **Configured domains** (from `dns_config`) — Served from the path specified in the config
-- **Unconfigured domains** — Served from `/unigeek/wifi/portals/default/` (if it exists)
+- **Unconfigured domains** — Served from `/unigeek/web/portals/default/` (if it exists)
 - **Connectivity check domains** (captive.apple.com, connectivitycheck.gstatic.com, etc.) — If Captive Portal is enabled, serves the selected portal template; otherwise returns HTTP 204
 
 ### dns_config File
 
-Located at `/unigeek/wifi/portals/dns_config`. Format:
+Located at `/unigeek/web/portals/dns_config`. Format:
 
 ```
 # domain:path
-google.com:/unigeek/wifi/portals/google
-facebook.com:/unigeek/wifi/portals/facebook
+google.com:/unigeek/web/portals/google
+facebook.com:/unigeek/web/portals/facebook
 ```
 
 Each line maps a domain to a folder on storage containing HTML/CSS/JS files. The web server serves `index.htm` from the mapped folder when a client visits that domain.
@@ -61,12 +61,12 @@ Requires web files to be installed on storage first — download them via **WiFi
 
 ## Files
 
-| Path | Description |
-|------|-------------|
-| `/unigeek/wifi/portals/dns_config` | Domain-to-path mappings for DNS spoofing |
-| `/unigeek/wifi/portals/<name>/` | Portal template folders (HTML/CSS/JS) |
-| `/unigeek/wifi/captives/` | Captured POST data from portal forms |
-| `/unigeek/web/file_manager/` | Web file manager HTML files |
+| Path                              | Description |
+|-----------------------------------|-------------|
+| `/unigeek/web/portals/dns_config` | Domain-to-path mappings for DNS spoofing |
+| `/unigeek/web/portals/<name>/`    | Portal template folders (HTML/CSS/JS) |
+| `/unigeek/wifi/captives/`         | Captured POST data from portal forms |
+| `/unigeek/web/file_manager/`      | Web file manager HTML files |
 
 ## Notes
 

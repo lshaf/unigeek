@@ -18,7 +18,7 @@ There are two attack screens and one companion screen:
 
 1. Go to **WiFi > Karma Captive**
 2. **Save WiFi List** — Toggle on/off; when enabled, all discovered SSIDs are saved to `/unigeek/wifi/captives/karma_ssid.txt`
-3. **Captive Portal** — Select a portal template from `/unigeek/wifi/portals/`
+3. **Captive Portal** — Select a portal template from `/unigeek/web/portals/`
 4. **Waiting Time** — How long (in seconds) to keep each fake AP active waiting for a device to connect (default: 15s)
 5. **Wait Input** — How long (in seconds) to wait for form submission after a device connects (default: 120s)
 6. **Start** — Launches the attack
@@ -40,11 +40,11 @@ There are two attack screens and one companion screen:
 
 ### Files
 
-| Path | Description |
-|------|-------------|
-| `/unigeek/wifi/captives/karma_ssid.txt` | Saved probe SSIDs, format: `{timestamp}:{ssid}` per line |
+| Path                                      | Description |
+|-------------------------------------------|-------------|
+| `/unigeek/wifi/captives/karma_ssid.txt`   | Saved probe SSIDs, format: `{timestamp}:{ssid}` per line |
 | `/unigeek/wifi/captives/karma_<SSID>.txt` | Captured credentials per SSID |
-| `/unigeek/wifi/portals/<name>/` | Portal templates (shared with Evil Twin) |
+| `/unigeek/web/portals/<name>/`            | Portal templates (shared with Evil Twin) |
 
 ---
 

@@ -196,7 +196,6 @@ Files are stored under `/unigeek/` on either SD card or LittleFS (fallback):
 /unigeek/config                    device configuration
 /unigeek/keyboard/duckyscript/     Ducky Script files (.ds)
 /unigeek/wifi/eapol/               WPA2 handshake captures (.pcap)
-/unigeek/wifi/portals/             Portal templates for AP, Evil Twin, Karma (HTML/CSS/JS)
 /unigeek/wifi/captives/            Captured credentials from Evil Twin / Karma / Rogue DNS
 /unigeek/qrcode/                   QR code content files
 /unigeek/barcode/                  Barcode content files
@@ -207,6 +206,7 @@ Files are stored under `/unigeek/` on either SD card or LittleFS (fallback):
 /unigeek/nfc/dictionaries/         MIFARE Classic key dictionary files
 /unigeek/rf/                       Sub-GHz signal files (.sub)
 /unigeek/web/file_manager/         Web file manager HTML files
+/unigeek/web/portals/              Portal templates for AP, Evil Twin, Karma (HTML/CSS/JS)
 ```
 
 SD card is used when available. LittleFS is always present as a fallback.
