@@ -412,11 +412,11 @@ void BLEDetectorScreen::_draw()
   sp.setTextDatum(BC_DATUM);
   sp.setTextColor(TFT_DARKGREY, TFT_BLACK);
   #ifdef DEVICE_HAS_KEYBOARD
-    sp.drawString("BACK: Exit", bodyW() / 2, bodyH());
+    sp.drawString("BACK: Exit", bodyW() / 2, bodyH() - 2);
   #else
     sp.fillRect(0, bodyH() - 16, bodyW(), 16, Config.getThemeColor());
     sp.setTextColor(TFT_WHITE, Config.getThemeColor());
-    sp.drawString("< Back", bodyW() / 2, bodyH() - 8, 1);
+    sp.drawString("< Back", bodyW() / 2, bodyH() - 3);
   #endif
 
   sp.pushSprite(bodyX(), bodyY());
