@@ -11,6 +11,9 @@
 #include "core/RandomSeed.h"
 
 #include "screens/CharacterScreen.h"
+#ifdef DEVICE_HAS_TOUCH_NAV
+#include "screens/setting/TouchGuideScreen.h"
+#endif
 
 void _checkStorageFallback() {
   if (Uni.Storage && !Uni.Storage->isAvailable() && Uni.StorageLFS)
@@ -86,6 +89,11 @@ void setup() {
   RtcManager::syncSystemFromRtc();
 #endif
   _bootSplash();
+#ifdef DEVICE_HAS_TOUCH_NAV
+  if (Config.get("touch_guide_shown", "0") == "0")
+    Screen.setScreen(new TouchGuideScreen(false));
+  else
+#endif
   Screen.setScreen(new CharacterScreen());
 }
 

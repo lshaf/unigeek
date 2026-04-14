@@ -35,6 +35,9 @@ private:
 #ifdef DEVICE_HAS_NAV_MODE_SWITCH
     SETT_NAV_MODE,
 #endif
+#ifdef DEVICE_HAS_TOUCH_NAV
+    SETT_TOUCH_GUIDE,
+#endif
     SETT_WEB_PASSWORD,
     SETT_PIN_SETTING,
     SETT_DEVICE_STATUS,
@@ -76,6 +79,9 @@ private:
     {"Primary Color",    ""},
 #ifdef DEVICE_HAS_NAV_MODE_SWITCH
     {"Navigation Mode",  ""},
+#endif
+#ifdef DEVICE_HAS_TOUCH_NAV
+    {"Touch Guide"},
 #endif
     {"Web Password",     ""},
     {"Pin Setting"},

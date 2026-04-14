@@ -15,6 +15,9 @@
 #include "screens/setting/PinSettingScreen.h"
 #include "screens/setting/DeviceStatusScreen.h"
 #include "screens/setting/AboutScreen.h"
+#ifdef DEVICE_HAS_TOUCH_NAV
+#include "screens/setting/TouchGuideScreen.h"
+#endif
 
 void SettingScreen::onInit() {
   setItems(_items);
@@ -176,6 +179,13 @@ void SettingScreen::onItemSelected(uint8_t index) {
       _refresh();
       break;
     }
+
+#ifdef DEVICE_HAS_TOUCH_NAV
+    case SETT_TOUCH_GUIDE: {
+      Screen.setScreen(new TouchGuideScreen(true));
+      break;
+    }
+#endif
 
     case SETT_WEB_PASSWORD: {
       String cur    = Config.get(APP_CONFIG_WEB_PASSWORD, APP_CONFIG_WEB_PASSWORD_DEFAULT);

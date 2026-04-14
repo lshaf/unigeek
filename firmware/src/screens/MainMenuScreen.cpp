@@ -34,7 +34,7 @@ void MainMenuScreen::onInit() {
 
 bool MainMenuScreen::_hasBackItem()
 {
-#ifdef DEVICE_HAS_KEYBOARD
+#if defined(DEVICE_HAS_TOUCH_NAV) || defined(DEVICE_HAS_KEYBOARD)
   return false;
 #else
 #ifdef DEVICE_HAS_NAV_MODE_SWITCH

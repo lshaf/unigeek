@@ -18,7 +18,7 @@ public:
     onUpdate();
     Achievement.drawToastIfNeeded(bodyX(), bodyY(), bodyW(), bodyH());
     if (Uni.lcdOff) return;
-    if (millis() - _lastStatusUpdate > 1000) {
+    if (!isFullScreen() && millis() - _lastStatusUpdate > 1000) {
       StatusBar::refresh();
       _lastStatusUpdate = millis();
     }
@@ -26,7 +26,7 @@ public:
 
   void render() override {
     if (Uni.lcdOff) return;
-    _renderChrome();
+    if (!isFullScreen()) _renderChrome();
     onRender();
   }
 
@@ -39,6 +39,7 @@ protected:
 
   // ─── Subclass overrides ───────────────────────────────
   virtual const char* title() { return nullptr; }  // nullptr = no header
+  virtual bool isFullScreen() { return false; }   // true = skip header + status bar
 
   virtual void onInit()   {}
   virtual void onUpdate() {}
