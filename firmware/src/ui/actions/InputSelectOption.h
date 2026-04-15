@@ -6,7 +6,6 @@
 
 #include "core/Device.h"
 #include "core/ConfigManager.h"
-#include <TFT_eSPI.h>
 
 class InputSelectAction
 {
@@ -38,7 +37,7 @@ private:
   bool          _done          = false;
   const char*   _result        = nullptr;
 
-  TFT_eSprite   _overlay;
+  Sprite   _overlay;
 
   explicit InputSelectAction(const char* title, const Option* options, uint8_t count, const char* defaultValue)
   : _title(title), _options(options),

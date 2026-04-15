@@ -391,7 +391,7 @@ void GameMemoryScreen::_saveHighScore()
 
 void GameMemoryScreen::_renderMenu()
 {
-  TFT_eSprite sp(&Uni.Lcd);
+  Sprite sp(&Uni.Lcd);
   sp.createSprite(bodyW(), bodyH());
   sp.fillSprite(TFT_BLACK);
   sp.setTextDatum(MC_DATUM);
@@ -431,7 +431,7 @@ void GameMemoryScreen::_renderMenu()
 
 void GameMemoryScreen::_renderShowSequence()
 {
-  TFT_eSprite sp(&Uni.Lcd);
+  Sprite sp(&Uni.Lcd);
   sp.createSprite(bodyW(), bodyH());
   sp.fillSprite(TFT_BLACK);
 
@@ -498,7 +498,7 @@ void GameMemoryScreen::_renderShowSequence()
 
 void GameMemoryScreen::_renderWaitingInput()
 {
-  TFT_eSprite sp(&Uni.Lcd);
+  Sprite sp(&Uni.Lcd);
   sp.createSprite(bodyW(), bodyH());
   sp.fillSprite(TFT_BLACK);
 
@@ -596,7 +596,7 @@ void GameMemoryScreen::_renderWaitingInput()
 
 void GameMemoryScreen::_renderFeedbackCorrect()
 {
-  TFT_eSprite sp(&Uni.Lcd);
+  Sprite sp(&Uni.Lcd);
   sp.createSprite(bodyW(), bodyH());
   sp.fillSprite(TFT_BLACK);
 
@@ -625,7 +625,7 @@ void GameMemoryScreen::_renderFeedbackCorrect()
 
 void GameMemoryScreen::_renderFeedbackWrong()
 {
-  TFT_eSprite sp(&Uni.Lcd);
+  Sprite sp(&Uni.Lcd);
   sp.createSprite(bodyW(), bodyH());
   sp.fillSprite(TFT_BLACK);
 
@@ -666,7 +666,7 @@ void GameMemoryScreen::_renderFeedbackWrong()
 
 void GameMemoryScreen::_renderGameLoss()
 {
-  TFT_eSprite sp(&Uni.Lcd);
+  Sprite sp(&Uni.Lcd);
   sp.createSprite(bodyW(), bodyH());
   sp.fillSprite(TFT_BLACK);
   sp.setTextDatum(MC_DATUM);
@@ -706,7 +706,7 @@ void GameMemoryScreen::_renderGameLoss()
 
 void GameMemoryScreen::_renderHighScores()
 {
-  TFT_eSprite sp(&Uni.Lcd);
+  Sprite sp(&Uni.Lcd);
   sp.createSprite(bodyW(), bodyH());
   sp.fillSprite(TFT_BLACK);
 

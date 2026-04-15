@@ -50,7 +50,7 @@ public:
   {
     auto& lcd = Uni.Lcd;
 
-    TFT_eSprite sprite(&lcd);
+    Sprite sprite(&lcd);
     sprite.createSprite(WIDTH, lcd.height());
     sprite.fillSprite(TFT_BLACK);
 
@@ -125,12 +125,12 @@ private:
     return SLOT_START + slot * (BOX_SIZE + SLOT_GAP);
   }
 
-  static void _drawBox(TFT_eSprite& spr, uint16_t slotY)
+  static void _drawBox(Sprite& spr, uint16_t slotY)
   {
     spr.fillRoundRect(BOX_X, slotY, BOX_SIZE, BOX_SIZE, 3, TFT_DARKGREY);
   }
 
-  static void _renderText(TFT_eSprite& spr, uint16_t slotY, const char* label, uint16_t color)
+  static void _renderText(Sprite& spr, uint16_t slotY, const char* label, uint16_t color)
   {
     spr.setTextSize(1);
     spr.setTextDatum(MC_DATUM);

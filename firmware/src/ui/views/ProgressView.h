@@ -4,7 +4,6 @@
 #include "core/ConfigManager.h"
 #include "ui/components/StatusBar.h"
 #include "ui/components/Header.h"
-#include <TFT_eSPI.h>
 
 class ProgressView
 {
@@ -24,7 +23,7 @@ private:
 
   const char* _message;
   uint8_t     _percent;
-  TFT_eSprite _spr;
+  Sprite _spr;
 
   ProgressView(const char* message, uint8_t percent)
     : _message(message), _percent(percent), _spr(&Uni.Lcd)

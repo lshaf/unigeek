@@ -88,7 +88,7 @@ void WifiESPNowChatScreen::onRender()
   const int      LINE_H     = 9;
   const int      HINT_H     = 10;
 
-  TFT_eSprite sp(&Uni.Lcd);
+  Sprite sp(&Uni.Lcd);
   sp.createSprite(bodyW(), bodyH());
   sp.fillSprite(TFT_BLACK);
 

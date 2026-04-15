@@ -60,7 +60,7 @@ void WebFileManagerScreen::onRender() {
 }
 
 void WebFileManagerScreen::_drawRunning() {
-  TFT_eSprite sp(&Uni.Lcd);
+  Sprite sp(&Uni.Lcd);
   sp.createSprite(bodyW(), bodyH());
   sp.fillSprite(TFT_BLACK);
 
@@ -70,11 +70,11 @@ void WebFileManagerScreen::_drawRunning() {
   sp.setTextFont(1);
   sp.setTextDatum(TC_DATUM);
   sp.setTextColor(TFT_GREEN, TFT_BLACK);
-  sp.drawString(_ipUrl,   cx, midY - 10, 1);
-  sp.drawString(_mdnsUrl, cx, midY + 4,  1);
+  sp.drawString(_ipUrl,   cx, midY - 10);
+  sp.drawString(_mdnsUrl, cx, midY + 4);
 
   sp.setTextColor(TFT_DARKGREY, TFT_BLACK);
-  sp.drawString("BACK to stop", cx, bodyH() - 14, 1);
+  sp.drawString("BACK to stop", cx, bodyH() - 14);
 
   sp.pushSprite(bodyX(), bodyY());
   sp.deleteSprite();

@@ -6,7 +6,6 @@
 
 #include "core/Device.h"
 #include "core/ConfigManager.h"
-#include <TFT_eSPI.h>
 
 class InputTextAction
 {
@@ -69,7 +68,7 @@ private:
   bool        _cursorVisible  = true;
   uint32_t    _lastBlinkTime  = 0;
 
-  TFT_eSprite _overlay;
+  Sprite _overlay;
 
   explicit InputTextAction(const char* title, const String& defaultValue, bool numberMode)
   : _title(title), _input(defaultValue), _numberMode(numberMode), _overlay(&Uni.Lcd)
@@ -421,7 +420,7 @@ private:
     lcd.setTextDatum(TL_DATUM);
     String display = _input + _pendingChar;
     if (visible) display += '_';
-    lcd.drawString(display.length() > 0 ? display.c_str() : (visible ? "_" : " "), bx + 1, by + 3, 1);
+    lcd.drawString(display.length() > 0 ? display.c_str() : (visible ? "_" : " "), bx + 1, by + 3);
   }
 
   void _wipe(int x, int y, int w, int h) {

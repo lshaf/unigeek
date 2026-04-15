@@ -25,10 +25,10 @@ void _drawInlineBar(T& dc, int x, int y, int w, int h,
   int ty = y + (h - scale * 8) / 2 + 1;
   dc.setTextDatum(TL_DATUM);
   dc.setTextColor(TFT_WHITE);
-  dc.drawString(label, x + 5, ty, 1);
+  dc.drawString(label, x + 5, ty);
   dc.setTextDatum(TR_DATUM);
   dc.setTextColor(TFT_WHITE);
-  dc.drawString(value, x + w - 5, ty, 1);
+  dc.drawString(value, x + w - 5, ty);
 }
 
 struct RankInfo { const char* label; uint16_t color; int rank; };
@@ -45,7 +45,8 @@ RankInfo _getRankInfo(int exp)
 // ── Pixel-art hacker head ─────────────────────────────────────────────────────
 // Grid: 12 wide × 14 tall (art-pixels).  ps = screen pixels per art-pixel.
 // rank 0=NOVICE  1=HACKER  2=EXPERT  3=ELITE  4=LEGEND
-void _drawHackerHead(TFT_eSPI& dc, int ox, int oy, int ps, bool blink, int rank)
+template<typename T>
+void _drawHackerHead(T& dc, int ox, int oy, int ps, bool blink, int rank)
 {
   // Per-rank style table
   struct HeadStyle { uint16_t hood; uint16_t eye; bool sunglasses; bool bigEyes; };
@@ -138,7 +139,8 @@ void _drawHackerHead(TFT_eSPI& dc, int ox, int oy, int ps, bool blink, int rank)
 }
 
 // ── Partial blink update — only redraws the 3 eye rows, no full head repaint ─
-void _drawHackerEyes(TFT_eSPI& dc, int ox, int oy, int ps, bool blink, int rank)
+template<typename T>
+void _drawHackerEyes(T& dc, int ox, int oy, int ps, bool blink, int rank)
 {
   if (rank == 2) return;  // EXPERT has sunglasses — blink has no visible effect
 
@@ -347,9 +349,6 @@ void CharacterScreen::onRender()
   const int rowH = lineH + gap;
   const int bubH = lineH * 3 + gap * 2 + ip * 2;
   const int bubY = headY + headH / 2 - bubH / 2;
-  const int y1   = bubY + ip + lineH / 2;
-  const int y2   = bubY + ip + rowH + lineH / 2;
-  const int y3   = bubY + ip + rowH * 2 + lineH / 2;
   const int btx  = bubX + gap * 2;
 
   const uint16_t bubBg = 0x0841;
@@ -384,8 +383,7 @@ void CharacterScreen::onRender()
   // ── TOP SECTION ───────────────────────────────────────────────────────
   if (_dirtyMask & DIRTY_TOP) {
     Uni.Lcd.fillRect(0, 0, W, midY, TFT_BLACK);
-
-    const int indent = Uni.Lcd.textWidth("AGENT ", 1);
+    const int indent = Uni.Lcd.textWidth("AGENT ");
 
     const char* t = agTitle.length() > 0 ? agTitle.c_str() : "No Title";
     char rankBuf[48];
@@ -393,20 +391,20 @@ void CharacterScreen::onRender()
 
     Uni.Lcd.setTextDatum(TL_DATUM);
     Uni.Lcd.setTextColor(TFT_DARKGREY);
-    Uni.Lcd.drawString("AGENT", PAD, topY1, 1);
+    Uni.Lcd.drawString("AGENT", PAD, topY1);
     Uni.Lcd.setTextColor(TFT_WHITE);
-    Uni.Lcd.drawString(agent.substring(0, 15).c_str(), PAD + indent, topY1, 1);
+    Uni.Lcd.drawString(agent.substring(0, 15).c_str(), PAD + indent, topY1);
     Uni.Lcd.setTextDatum(TR_DATUM);
     Uni.Lcd.setTextColor(ri.color);
-    Uni.Lcd.drawString(rankBuf, W - PAD, topY1, 1);
+    Uni.Lcd.drawString(rankBuf, W - PAD, topY1);
 
     char expBuf[12];
     snprintf(expBuf, sizeof(expBuf), "%d", exp);
     Uni.Lcd.setTextDatum(TL_DATUM);
     Uni.Lcd.setTextColor(TFT_DARKGREY);
-    Uni.Lcd.drawString("EXP", PAD, topY2, 1);
+    Uni.Lcd.drawString("EXP", PAD, topY2);
     Uni.Lcd.setTextColor(TFT_ORANGE);
-    Uni.Lcd.drawString(expBuf, PAD + indent, topY2, 1);
+    Uni.Lcd.drawString(expBuf, PAD + indent, topY2);
 
     int nextExp = (exp < 4500)  ? 4500  : (exp < 15000) ? 15000
                 : (exp < 30000) ? 30000 : 43000;
@@ -458,7 +456,7 @@ void CharacterScreen::onRender()
       // Sprite covers the inner text area only; frame/tail stay on LCD.
       const int spW = bubW - gap * 4;
       const int spH = lineH * 3 + gap * 2;
-      TFT_eSprite sp(&Uni.Lcd);
+      Sprite sp(&Uni.Lcd);
       sp.createSprite(spW, spH);
       sp.fillSprite(bubBg);
       sp.setTextSize(scale);
@@ -470,9 +468,9 @@ void CharacterScreen::onRender()
       const int sy3 = rowH * 2 + lineH / 2;
 
       sp.setTextColor(col1);
-      if (_history[0][0]) sp.drawString(_history[0], 0, sy1, 1);
+      if (_history[0][0]) sp.drawString(_history[0], 0, sy1);
       sp.setTextColor(col2);
-      if (_history[1][0]) sp.drawString(_history[1], 0, sy2, 1);
+      if (_history[1][0]) sp.drawString(_history[1], 0, sy2);
 
       {
         const char* word  = kWords[_wordIdx % kWordCount];
@@ -482,7 +480,7 @@ void CharacterScreen::onRender()
         if (shown > 0) memcpy(buf, word, shown);
         buf[shown] = '_';
         sp.setTextColor(col3);
-        sp.drawString(buf, 0, sy3, 1);
+        sp.drawString(buf, 0, sy3);
       }
 
       sp.pushSprite(btx, bubY + ip);
@@ -497,7 +495,7 @@ void CharacterScreen::onRender()
     snprintf(hpBuf,    sizeof(hpBuf),    "%d%%", hp);
     snprintf(brainBuf, sizeof(brainBuf), "%d%%", brain);
     {
-      TFT_eSprite sp(&Uni.Lcd);
+      Sprite sp(&Uni.Lcd);
       sp.createSprite(W - PAD * 2, barH);
       sp.setTextSize(scale);
       _drawInlineBar(sp, 0,           0, halfW, barH, chg ? "HP++" : "HP", hpBuf,    hp,    TFT_RED,       scale);

@@ -3,9 +3,9 @@
 //
 
 #pragma once
-#include <TFT_eSPI.h>
 #include <map>
 #include "IStorage.h"
+#include "IDisplay.h"
 
 // ─── Config keys & defaults (mirrors puteros GlobalState) ─────────────────
 #define APP_CONFIG_DEVICE_NAME                  "device_name"

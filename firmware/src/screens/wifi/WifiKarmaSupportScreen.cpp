@@ -98,7 +98,7 @@ void WifiKarmaSupportScreen::onUpdate()
 
 void WifiKarmaSupportScreen::onRender()
 {
-  TFT_eSprite sp(&Uni.Lcd);
+  Sprite sp(&Uni.Lcd);
   sp.createSprite(bodyW(), bodyH());
   sp.fillSprite(TFT_BLACK);
   sp.setTextDatum(MC_DATUM);
@@ -110,28 +110,28 @@ void WifiKarmaSupportScreen::onRender()
 
     case STATE_WAITING_CONNECTION:
       sp.setTextColor(TFT_CYAN, TFT_BLACK);
-      sp.drawString("Waiting for", cx, cy - 8, 1);
-      sp.drawString("connection...", cx, cy + 6, 1);
+      sp.drawString("Waiting for", cx, cy - 8);
+      sp.drawString("connection...", cx, cy + 6);
       break;
 
     case STATE_WAITING_DEPLOY:
       sp.setTextColor(TFT_YELLOW, TFT_BLACK);
-      sp.drawString("Waiting for", cx, cy - 8, 1);
-      sp.drawString("deploy...", cx, cy + 6, 1);
+      sp.drawString("Waiting for", cx, cy - 8);
+      sp.drawString("deploy...", cx, cy + 6);
       break;
 
     case STATE_AP_ACTIVE: {
       sp.setTextColor(TFT_GREEN, TFT_BLACK);
-      sp.drawString("AP Active", cx, cy - 20, 1);
+      sp.drawString("AP Active", cx, cy - 20);
 
       sp.setTextColor(TFT_WHITE, TFT_BLACK);
-      sp.drawString(String(_currentSsid).substring(0, 22), cx, cy - 4, 1);
+      sp.drawString(String(_currentSsid).substring(0, 22), cx, cy - 4);
 
       unsigned long elapsed = (millis() - _apDeployTime) / 1000;
       char buf[12];
       snprintf(buf, sizeof(buf), "+%lus", elapsed);
       sp.setTextColor(TFT_DARKGREY, TFT_BLACK);
-      sp.drawString(buf, cx, cy + 12, 1);
+      sp.drawString(buf, cx, cy + 12);
       break;
     }
   }
@@ -143,11 +143,11 @@ void WifiKarmaSupportScreen::onRender()
   snprintf(mac, sizeof(mac), "%02X:%02X:%02X", myMac[3], myMac[4], myMac[5]);
   sp.setTextDatum(BR_DATUM);
   sp.setTextColor(TFT_DARKGREY, TFT_BLACK);
-  sp.drawString(mac, bodyW() - 2, bodyH() - 2, 1);
+  sp.drawString(mac, bodyW() - 2, bodyH() - 2);
 
 #ifdef DEVICE_HAS_KEYBOARD
   sp.setTextDatum(BL_DATUM);
-  sp.drawString("\\b exit", 2, bodyH() - 2, 1);
+  sp.drawString("\\b exit", 2, bodyH() - 2);
 #endif
 
   sp.pushSprite(bodyX(), bodyY());

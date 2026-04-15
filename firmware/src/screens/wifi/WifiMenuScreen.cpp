@@ -3,6 +3,7 @@
 //
 
 #include "WifiMenuScreen.h"
+#include "core/ScreenManager.h"
 #include "screens/MainMenuScreen.h"
 #include "network/NetworkMenuScreen.h"
 #include "WifiAPScreen.h"

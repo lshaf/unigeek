@@ -138,7 +138,7 @@ private:
 
   WifiAttackUtil* _attacker = nullptr;
 
-  static void _statusBarCb(TFT_eSprite& sp, int barY, int width, void* userData);
+  static void _statusBarCb(Sprite& sp, int barY, int width, void* userData);
   bool _checkFreeSpace();
   void _flush();
   void _buildAttackChans();

@@ -56,7 +56,7 @@ private:
     int   visible = full + extra;
     int   textW   = _w - SCROLL_W - 4;
 
-    TFT_eSprite sp(&Uni.Lcd);
+    Sprite sp(&Uni.Lcd);
     sp.createSprite(_w, _h);
     sp.fillSprite(TFT_BLACK);
     sp.setTextSize(1);
@@ -68,11 +68,11 @@ private:
 
       sp.setTextColor(TFT_DARKGREY);
       sp.setTextDatum(TL_DATUM);
-      sp.drawString(_rows[idx].label, 2, iy, 1);
+      sp.drawString(_rows[idx].label, 2, iy);
 
       sp.setTextColor(TFT_WHITE);
       sp.setTextDatum(TR_DATUM);
-      sp.drawString(_rows[idx].value.c_str(), textW, iy, 1);
+      sp.drawString(_rows[idx].value.c_str(), textW, iy);
     }
 
     // scrollbar — only if content overflows

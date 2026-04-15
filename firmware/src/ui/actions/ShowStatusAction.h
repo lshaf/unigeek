@@ -5,7 +5,6 @@
 #pragma once
 
 #include "core/Device.h"
-#include <TFT_eSPI.h>
 
 class ShowStatusAction
 {
@@ -24,7 +23,7 @@ private:
 
   const char* _message;
   int32_t     _duration;
-  TFT_eSprite _overlay;
+  Sprite _overlay;
 
   explicit ShowStatusAction(const char* message, int32_t duration)
     : _message(message), _duration(duration), _overlay(&Uni.Lcd)

@@ -245,7 +245,7 @@ void GameDecoderScreen::_handleKeyInput(char c)
 
 void GameDecoderScreen::_renderMenu()
 {
-  TFT_eSprite sp(&Uni.Lcd);
+  Sprite sp(&Uni.Lcd);
   sp.createSprite(bodyW(), bodyH());
   sp.fillSprite(TFT_BLACK);
 
@@ -266,7 +266,7 @@ void GameDecoderScreen::_renderMenu()
 
 void GameDecoderScreen::_renderPlay()
 {
-  TFT_eSprite sp(&Uni.Lcd);
+  Sprite sp(&Uni.Lcd);
   sp.createSprite(bodyW(), bodyH());
   sp.fillSprite(TFT_BLACK);
 
@@ -391,7 +391,7 @@ void GameDecoderScreen::_renderResult()
 {
   const bool won = _win;
 
-  TFT_eSprite sp(&Uni.Lcd);
+  Sprite sp(&Uni.Lcd);
   sp.createSprite(bodyW(), bodyH());
   sp.fillSprite(TFT_BLACK);
 
@@ -510,7 +510,7 @@ void GameDecoderScreen::_renderHighScores()
 {
   static constexpr const char* kDiffNames[4] = { "Easy", "Medium", "Hard", "Extreme" };
 
-  TFT_eSprite sp(&Uni.Lcd);
+  Sprite sp(&Uni.Lcd);
   sp.createSprite(bodyW(), bodyH());
   sp.fillSprite(TFT_BLACK);
 

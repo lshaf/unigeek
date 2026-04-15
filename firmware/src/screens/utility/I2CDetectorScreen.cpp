@@ -62,7 +62,7 @@ void I2CDetectorScreen::onUpdate() {
 }
 
 void I2CDetectorScreen::onRender() {
-  TFT_eSprite spr(&Uni.Lcd);
+  Sprite spr(&Uni.Lcd);
   spr.createSprite(bodyW(), bodyH());
   spr.fillSprite(TFT_BLACK);
 

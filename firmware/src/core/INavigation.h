@@ -23,7 +23,8 @@ public:
   virtual void update() = 0;
   virtual void begin() = 0;
 
-  bool isPressed() const { return _pressed; }
+  bool isPressed()          const { return _pressed; }
+  Direction currentDirection() const { return _currDirection; }
 
   bool wasPressed() {
     if (_wasPressed) {

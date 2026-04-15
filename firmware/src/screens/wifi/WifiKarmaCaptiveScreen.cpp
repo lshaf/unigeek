@@ -415,19 +415,19 @@ void WifiKarmaCaptiveScreen::_drawLog()
 {
   auto* self = this;
   _log.draw(Uni.Lcd, bodyX(), bodyY(), bodyW(), bodyH(),
-    [](TFT_eSprite& sp, int barY, int w, void* ud) {
+    [](Sprite& sp, int barY, int w, void* ud) {
       auto* s = static_cast<WifiKarmaCaptiveScreen*>(ud);
       sp.setTextColor(TFT_GREEN, TFT_BLACK);
       sp.setTextDatum(TL_DATUM);
       char stats[40];
       snprintf(stats, sizeof(stats), "AP:%d V:%d P:%d",
                s->_capturedCount, s->_portal.visitCount(), s->_portal.postCount());
-      sp.drawString(stats, 2, barY, 1);
+      sp.drawString(stats, 2, barY);
       sp.setTextDatum(TR_DATUM);
       if (s->_apActive && s->_currentSsid[0] != '\0') {
-        sp.drawString(String(s->_currentSsid).substring(0, 14), w - 2, barY, 1);
+        sp.drawString(String(s->_currentSsid).substring(0, 14), w - 2, barY);
       } else {
-        sp.drawString("Sniffing...", w - 2, barY, 1);
+        sp.drawString("Sniffing...", w - 2, barY);
       }
     }, self);
 }

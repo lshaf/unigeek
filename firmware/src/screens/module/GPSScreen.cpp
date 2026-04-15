@@ -139,7 +139,7 @@ void GPSScreen::onUpdate() {
 
 void GPSScreen::onRender() {
   if (_state == STATE_LOADING) {
-    TFT_eSprite sp(&Uni.Lcd);
+    Sprite sp(&Uni.Lcd);
     sp.createSprite(bodyW(), bodyH());
     sp.fillSprite(TFT_BLACK);
     sp.setTextDatum(MC_DATUM);
@@ -334,7 +334,7 @@ void GPSScreen::_renderInfo() {
   _infoView.render(bodyX(), bodyY(), bodyW(), bodyH());
 }
 
-void GPSScreen::_wardStatusCb(TFT_eSprite& sp, int barY, int width, void* userData) {
+void GPSScreen::_wardStatusCb(Sprite& sp, int barY, int width, void* userData) {
   auto* self = (GPSScreen*)userData;
 
   sp.setTextDatum(TL_DATUM);

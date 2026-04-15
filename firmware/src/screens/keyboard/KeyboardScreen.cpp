@@ -255,7 +255,7 @@ void KeyboardScreen::_addScriptLine(const String& text, bool ok)
 
 void KeyboardScreen::_renderConnected()
 {
-  TFT_eSprite sp(&Uni.Lcd);
+  Sprite sp(&Uni.Lcd);
   sp.createSprite(bodyW(), bodyH());
   sp.fillSprite(TFT_BLACK);
 
@@ -281,7 +281,7 @@ void KeyboardScreen::_renderConnected()
 
 void KeyboardScreen::_renderScript()
 {
-  TFT_eSprite sp(&Uni.Lcd);
+  Sprite sp(&Uni.Lcd);
   sp.createSprite(bodyW(), bodyH());
   sp.fillSprite(TFT_BLACK);
   sp.setTextDatum(TL_DATUM);

@@ -420,7 +420,7 @@ void NetworkMitmScreen::_drawLog()
 {
   auto* self = this;
   _log.draw(Uni.Lcd, bodyX(), bodyY(), bodyW(), bodyH(),
-    [](TFT_eSprite& sp, int barY, int w, void* ud) {
+    [](Sprite& sp, int barY, int w, void* ud) {
       auto* s = static_cast<NetworkMitmScreen*>(ud);
       sp.setTextColor(TFT_GREEN, TFT_BLACK);
       sp.setTextDatum(TL_DATUM);
@@ -439,6 +439,6 @@ void NetworkMitmScreen::_drawLog()
       } else {
         snprintf(label, sizeof(label), "Running");
       }
-      sp.drawString(label, 2, barY, 1);
+      sp.drawString(label, 2, barY);
     }, self);
 }

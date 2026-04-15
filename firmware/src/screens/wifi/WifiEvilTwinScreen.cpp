@@ -391,14 +391,14 @@ void WifiEvilTwinScreen::_drawLog()
 {
   auto* self = this;
   _log.draw(Uni.Lcd, bodyX(), bodyY(), bodyW(), bodyH(),
-    [](TFT_eSprite& sp, int barY, int w, void* ud) {
+    [](Sprite& sp, int barY, int w, void* ud) {
       auto* s = static_cast<WifiEvilTwinScreen*>(ud);
       sp.setTextColor(TFT_GREEN, TFT_BLACK);
       sp.setTextDatum(TL_DATUM);
       char pwdLabel[16];
       snprintf(pwdLabel, sizeof(pwdLabel), "Pwd: %d", s->_pwdCount);
-      sp.drawString(pwdLabel, 2, barY, 1);
+      sp.drawString(pwdLabel, 2, barY);
       sp.setTextDatum(TR_DATUM);
-      sp.drawString(s->_target.ssid.substring(0, 16), w - 2, barY, 1);
+      sp.drawString(s->_target.ssid.substring(0, 16), w - 2, barY);
     }, self);
 }

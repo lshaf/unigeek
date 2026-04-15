@@ -112,7 +112,7 @@ void FileViewerScreen::_parseLines() {
 }
 
 void FileViewerScreen::_renderContent() {
-  TFT_eSprite sp(&Uni.Lcd);
+  Sprite sp(&Uni.Lcd);
   sp.createSprite(bodyW(), bodyH());
   sp.fillSprite(TFT_BLACK);
   sp.setTextDatum(TL_DATUM);
@@ -143,7 +143,7 @@ void FileViewerScreen::_renderContent() {
 
   for (uint16_t i = 0; i < _visibleLines && (_scrollOffset + i) < _lineCount; i++) {
     const char* line = _lines[_scrollOffset + i];
-    sp.drawString(line, 1, i * LINE_HEIGHT, FONT);
+    sp.drawString(line, 1, i * LINE_HEIGHT);
   }
 
   sp.pushSprite(bodyX(), bodyY());

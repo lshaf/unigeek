@@ -231,7 +231,7 @@ void WifiDeautherScreen::_deauthAll()
 
 void WifiDeautherScreen::_drawStatus(const char* msg)
 {
-  TFT_eSprite sp(&Uni.Lcd);
+  Sprite sp(&Uni.Lcd);
   sp.createSprite(bodyW(), bodyH());
   sp.fillSprite(TFT_BLACK);
 

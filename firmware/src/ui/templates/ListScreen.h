@@ -95,7 +95,7 @@ public:
     uint8_t eff = _effectiveCount();
 
     auto& lcd = Uni.Lcd;
-    TFT_eSprite sprite(&lcd);
+    Sprite sprite(&lcd);
     sprite.createSprite(bodyW(), bodyH());
     sprite.fillSprite(TFT_BLACK);
 
@@ -136,14 +136,14 @@ public:
 
       if (item->sublabel)
       {
-        sprite.drawString(item->label, 6, itemTop + (ITEM_H / 2) - 4, 1);
+        sprite.drawString(item->label, 6, itemTop + (ITEM_H / 2) - 4);
         sprite.setTextColor(selected ? TFT_CYAN : TFT_DARKGREY, bg);
-        int16_t subX = bodyW() - 6 - sprite.textWidth(item->sublabel, 1);
-        sprite.drawString(item->sublabel, subX, itemTop + (ITEM_H / 2) - 4, 1);
+        int16_t subX = bodyW() - 6 - sprite.textWidth(item->sublabel);
+        sprite.drawString(item->sublabel, subX, itemTop + (ITEM_H / 2) - 4);
       }
       else
       {
-        sprite.drawString(item->label, 6, itemTop + (ITEM_H / 2) - 4, 1);
+        sprite.drawString(item->label, 6, itemTop + (ITEM_H / 2) - 4);
       }
     }
 

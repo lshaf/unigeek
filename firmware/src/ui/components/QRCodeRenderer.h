@@ -6,7 +6,6 @@
 
 #include "core/Device.h"
 #include "ui/components/StatusBar.h"
-#include <TFT_eSPI.h>
 #include "lgfx_qrcode.h"
 
 class QRCodeRenderer

@@ -60,7 +60,7 @@ void WifiPacketMonitorScreen::onRender()
 
   const uint16_t themeColor = Config.getThemeColor();
 
-  TFT_eSprite body(&Uni.Lcd);
+  Sprite body(&Uni.Lcd);
   body.createSprite(bodyW(), bodyH());
   body.fillSprite(TFT_BLACK);
 

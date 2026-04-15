@@ -275,7 +275,7 @@ void GameWordleScreen::_handleKeyInput(char c)
 
 void GameWordleScreen::_renderMenu()
 {
-  TFT_eSprite sp(&Uni.Lcd);
+  Sprite sp(&Uni.Lcd);
   sp.createSprite(bodyW(), bodyH());
   sp.fillSprite(TFT_BLACK);
 
@@ -299,7 +299,7 @@ void GameWordleScreen::_renderMenu()
 
 void GameWordleScreen::_renderPlay()
 {
-  TFT_eSprite sp(&Uni.Lcd);
+  Sprite sp(&Uni.Lcd);
   sp.createSprite(bodyW(), bodyH());
   sp.fillSprite(TFT_BLACK);
 
@@ -411,7 +411,7 @@ void GameWordleScreen::_renderPlay()
 
 void GameWordleScreen::_renderResult()
 {
-  TFT_eSprite sp(&Uni.Lcd);
+  Sprite sp(&Uni.Lcd);
   sp.createSprite(bodyW(), bodyH());
   sp.fillSprite(TFT_BLACK);
 
@@ -534,7 +534,7 @@ void GameWordleScreen::_renderHighScores()
 {
   static constexpr const char* kDiffNames[3] = { "Easy", "Medium", "Hard" };
 
-  TFT_eSprite sp(&Uni.Lcd);
+  Sprite sp(&Uni.Lcd);
   sp.createSprite(bodyW(), bodyH());
   sp.fillSprite(TFT_BLACK);
 

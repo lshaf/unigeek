@@ -372,7 +372,7 @@ void GameNumberGuessScreen::onRender()
 
 void GameNumberGuessScreen::_renderMenu()
 {
-  TFT_eSprite sp(&Uni.Lcd);
+  Sprite sp(&Uni.Lcd);
   sp.createSprite(bodyW(), bodyH());
   sp.fillSprite(TFT_BLACK);
   sp.setTextDatum(MC_DATUM);
@@ -413,7 +413,7 @@ void GameNumberGuessScreen::_renderMenu()
 
 void GameNumberGuessScreen::_renderPlay()
 {
-  TFT_eSprite sp(&Uni.Lcd);
+  Sprite sp(&Uni.Lcd);
   sp.createSprite(bodyW(), bodyH());
   sp.fillSprite(TFT_BLACK);
 
@@ -539,7 +539,7 @@ void GameNumberGuessScreen::_renderResult()
 {
   const bool won = (_state == STATE_WIN);
 
-  TFT_eSprite sp(&Uni.Lcd);
+  Sprite sp(&Uni.Lcd);
   sp.createSprite(bodyW(), bodyH());
   sp.fillSprite(TFT_BLACK);
 
@@ -601,7 +601,7 @@ void GameNumberGuessScreen::_renderResult()
 
 void GameNumberGuessScreen::_renderHighScores()
 {
-  TFT_eSprite sp(&Uni.Lcd);
+  Sprite sp(&Uni.Lcd);
   sp.createSprite(bodyW(), bodyH());
   sp.fillSprite(TFT_BLACK);
 

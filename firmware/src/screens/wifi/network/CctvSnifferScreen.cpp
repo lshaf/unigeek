@@ -146,7 +146,7 @@ void CctvSnifferScreen::onUpdate()
         snprintf(fpsBuf, sizeof(fpsBuf), "%.1f FPS", _fps);
         Uni.Lcd.setTextColor(TFT_YELLOW, TFT_BLACK);
         Uni.Lcd.setTextDatum(TR_DATUM);
-        Uni.Lcd.drawString(fpsBuf, bodyX() + bodyW() - 2, bodyY() + 2, 1);
+        Uni.Lcd.drawString(fpsBuf, bodyX() + bodyW() - 2, bodyY() + 2);
       }
     } else {
       ShowStatusAction::show("Stream disconnected", 1500);

@@ -232,7 +232,7 @@ void MFRC522Screen::_goShowDiscoveredKeys() {
 void MFRC522Screen::_callScanUid() {
   _state = STATE_SCAN_UID;
 
-  TFT_eSprite sp(&Uni.Lcd);
+  Sprite sp(&Uni.Lcd);
   sp.createSprite(bodyW(), bodyH());
   sp.fillSprite(TFT_BLACK);
   sp.setTextDatum(MC_DATUM);
@@ -288,7 +288,7 @@ void MFRC522Screen::_callScanUid() {
   #else
     sp.fillRect(0, bodyH() - 16, bodyW(), 16, Config.getThemeColor());
     sp.setTextColor(TFT_WHITE, Config.getThemeColor());
-    sp.drawString("PRESS: Scan", bodyW() / 2, bodyH() - 8, 1);
+    sp.drawString("PRESS: Scan", bodyW() / 2, bodyH() - 8);
   #endif
 
   sp.pushSprite(bodyX(), bodyY());

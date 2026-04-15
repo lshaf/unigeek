@@ -91,7 +91,7 @@ WifiEapolCaptureScreen::~WifiEapolCaptureScreen() {
 
 // ── Status bar callback ───────────────────────────────────────────────────
 
-void WifiEapolCaptureScreen::_statusBarCb(TFT_eSprite& sp, int barY, int width, void* userData) {
+void WifiEapolCaptureScreen::_statusBarCb(Sprite& sp, int barY, int width, void* userData) {
   auto* self = static_cast<WifiEapolCaptureScreen*>(userData);
 
   char countBuf[24];

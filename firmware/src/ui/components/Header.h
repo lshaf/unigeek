@@ -16,7 +16,7 @@ public:
     char buf[64];
     snprintf(buf, sizeof(buf), "# %s ", title);
 
-    TFT_eSprite sp(&lcd);
+    Sprite sp(&lcd);
     sp.createSprite(w, HEIGHT);
     sp.fillSprite(TFT_BLACK);
     sp.fillRect(0, 10, w - 6, 3, Config.getThemeColor());

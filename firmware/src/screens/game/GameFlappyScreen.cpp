@@ -193,7 +193,7 @@ bool GameFlappyScreen::_checkCollision()
 
 void GameFlappyScreen::_renderMenu()
 {
-  TFT_eSprite sp(&Uni.Lcd);
+  Sprite sp(&Uni.Lcd);
   sp.createSprite(bodyW(), bodyH());
   sp.fillSprite(TFT_BLACK);
 
@@ -231,7 +231,7 @@ void GameFlappyScreen::_renderMenu()
 
 void GameFlappyScreen::_renderPlay()
 {
-  TFT_eSprite sp(&Uni.Lcd);
+  Sprite sp(&Uni.Lcd);
   sp.createSprite(bodyW(), bodyH());
   sp.fillSprite(TFT_BLACK);
 
@@ -286,7 +286,7 @@ void GameFlappyScreen::_renderPlay()
 
 void GameFlappyScreen::_renderResult()
 {
-  TFT_eSprite sp(&Uni.Lcd);
+  Sprite sp(&Uni.Lcd);
   sp.createSprite(bodyW(), bodyH());
   sp.fillSprite(TFT_BLACK);
   sp.setTextDatum(MC_DATUM);
@@ -367,7 +367,7 @@ void GameFlappyScreen::_saveHighScore()
 
 void GameFlappyScreen::_renderHighScores()
 {
-  TFT_eSprite sp(&Uni.Lcd);
+  Sprite sp(&Uni.Lcd);
   sp.createSprite(bodyW(), bodyH());
   sp.fillSprite(TFT_BLACK);
 

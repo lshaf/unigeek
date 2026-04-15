@@ -6,7 +6,6 @@
 
 #include "core/Device.h"
 #include "core/ConfigManager.h"
-#include <TFT_eSPI.h>
 
 class InputNumberAction
 {
@@ -40,7 +39,7 @@ private:
   static constexpr int DIGIT_COUNT = 12; // 0-9 + DEL + SAVE + CANCEL
   int         _scrollPos   = 0;
 
-  TFT_eSprite _overlay;
+  Sprite _overlay;
 
   struct DigitSet {
     const char* label;
@@ -419,7 +418,7 @@ private:
     lcd.setTextDatum(TL_DATUM);
     String display = _input;
     if (visible) display += '_';
-    lcd.drawString(display.length() > 0 ? display.c_str() : (visible ? "_" : " "), bx + 1, by + 3, 1);
+    lcd.drawString(display.length() > 0 ? display.c_str() : (visible ? "_" : " "), bx + 1, by + 3);
   }
 
   void _drawCursorOnly(bool visible) {
@@ -439,7 +438,7 @@ private:
     lcd.setTextDatum(TL_DATUM);
     String display = _input;
     if (visible) display += '_';
-    lcd.drawString(display.length() > 0 ? display.c_str() : (visible ? "_" : " "), bx + 1, by + 2, 1);
+    lcd.drawString(display.length() > 0 ? display.c_str() : (visible ? "_" : " "), bx + 1, by + 2);
   }
 
   // unused in number mode but needed to compile scroll loop reference

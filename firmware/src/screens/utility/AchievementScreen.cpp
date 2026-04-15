@@ -13,7 +13,7 @@ void AchievementScreen::onInit()
 
 void AchievementScreen::onRender()
 {
-  TFT_eSprite sp(&Uni.Lcd);
+  Sprite sp(&Uni.Lcd);
   sp.createSprite(bodyW(), bodyH());
   sp.fillSprite(TFT_BLACK);
 
@@ -126,7 +126,7 @@ void AchievementScreen::_showDomain(uint8_t domain)
 
 // ── Shared item renderer ─────────────────────────────────────────────────────
 
-void AchievementScreen::_renderListItem(TFT_eSprite& sp, int16_t y, bool sel,
+void AchievementScreen::_renderListItem(Sprite& sp, int16_t y, bool sel,
                                         const char* l1Left,  uint16_t l1LeftCol,
                                         const char* l1Right, uint16_t l1RightCol,
                                         const char* l2,      uint16_t l2Col)
@@ -139,13 +139,13 @@ void AchievementScreen::_renderListItem(TFT_eSprite& sp, int16_t y, bool sel,
     sp.fillRoundRect(0, y + 2, bodyW(), rowH - 4, 3, themeC);
 
   // Line 1: left label + right label (right-aligned)
-  int16_t rightW = (int16_t)sp.textWidth(l1Right, 1);
+  int16_t rightW = (int16_t)sp.textWidth(l1Right);
   int16_t rightX = (int16_t)(bodyW() - 2 - rightW);
 
   sp.setTextColor(l1LeftCol,  bg);
-  sp.drawString(l1Left,  3,      y + 4, 1);
+  sp.drawString(l1Left,  3,      y + 4);
   sp.setTextColor(l1RightCol, bg);
-  sp.drawString(l1Right, rightX, y + 4, 1);
+  sp.drawString(l1Right, rightX, y + 4);
 
   // Line 2: sub-label, truncated with ellipsis to full right boundary
   const int16_t maxW = (int16_t)(bodyW() - 2);
@@ -154,20 +154,20 @@ void AchievementScreen::_renderListItem(TFT_eSprite& sp, int16_t y, bool sel,
   strncpy(buf, l2, sizeof(buf) - 1);
   buf[sizeof(buf) - 1] = '\0';
 
-  if ((int16_t)sp.textWidth(buf, 1) > maxW) {
+  if ((int16_t)sp.textWidth(buf) > maxW) {
     uint8_t len = (uint8_t)strlen(buf);
-    while (len > 3 && (int16_t)sp.textWidth(buf, 1) > maxW)
+    while (len > 3 && (int16_t)sp.textWidth(buf) > maxW)
       buf[--len] = '\0';
     if (len >= 3) { buf[len-3] = '.'; buf[len-2] = '.'; buf[len-1] = '.'; }
   }
 
   sp.setTextColor(l2Col, bg);
-  sp.drawString(buf, 3, y + 14, 1);
+  sp.drawString(buf, 3, y + 14);
 }
 
 // ── Custom renderers ─────────────────────────────────────────────────────────
 
-void AchievementScreen::_renderDomainsView(TFT_eSprite& sp)
+void AchievementScreen::_renderDomainsView(Sprite& sp)
 {
   const uint8_t  rowH    = kRowHDom;
   const uint8_t  visible = bodyH() / rowH;
@@ -199,7 +199,7 @@ void AchievementScreen::_renderDomainsView(TFT_eSprite& sp)
   }
 }
 
-void AchievementScreen::_renderDomainView(TFT_eSprite& sp)
+void AchievementScreen::_renderDomainView(Sprite& sp)
 {
   static constexpr uint16_t    kTierColors[4] = { 0xC440, TFT_LIGHTGREY, TFT_YELLOW, TFT_CYAN };
   static constexpr const char* kTierNames[4]  = { "BRONZE", "SILVER", "GOLD", "PLAT" };

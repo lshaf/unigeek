@@ -6,7 +6,6 @@
 
 #include "core/Device.h"
 #include "ui/components/StatusBar.h"
-#include <TFT_eSPI.h>
 
 class BarcodeRenderer
 {
@@ -98,7 +97,7 @@ public:
   }
 
 private:
-  static int _drawSymbol(TFT_eSPI& lcd, int x, int y, int h, int pw,
+  static int _drawSymbol(IDisplay& lcd, int x, int y, int h, int pw,
                           int value, uint16_t fg, uint16_t bg) {
     // Code 128 symbol bit patterns (11 bits each, MSB = first module)
     static const uint16_t CODE128[] = {

@@ -740,7 +740,7 @@ void WifiEapolBruteForceScreen::_saveCrackedPassword() {
 // ── Render ────────────────────────────────────────────────────────────────
 
 void WifiEapolBruteForceScreen::_renderCracking() {
-  TFT_eSprite sp(&Uni.Lcd);
+  Sprite sp(&Uni.Lcd);
   sp.createSprite(bodyW(), bodyH());
   sp.fillSprite(TFT_BLACK);
 
@@ -751,18 +751,18 @@ void WifiEapolBruteForceScreen::_renderCracking() {
   // SSID row
   sp.setTextDatum(TL_DATUM);
   sp.setTextColor(TFT_DARKGREY, TFT_BLACK);
-  sp.drawString("SSID:", 4, y, 1);
+  sp.drawString("SSID:", 4, y);
   sp.setTextColor(TFT_WHITE, TFT_BLACK);
-  sp.drawString(_ctx.hs.ssid, 40, y, 1);
+  sp.drawString(_ctx.hs.ssid, 40, y);
   y += lh;
 
   // Current password (max 22 chars to avoid overflow)
   char disp[24];
   snprintf(disp, sizeof(disp), "%.23s", _ctx.curPass);
   sp.setTextColor(TFT_DARKGREY, TFT_BLACK);
-  sp.drawString("Try:", 4, y, 1);
+  sp.drawString("Try:", 4, y);
   sp.setTextColor(accent, TFT_BLACK);
-  sp.drawString(disp, 36, y, 1);
+  sp.drawString(disp, 36, y);
   y += lh + 4;
 
   // Progress bar
@@ -782,7 +782,7 @@ void WifiEapolBruteForceScreen::_renderCracking() {
   snprintf(pctBuf, sizeof(pctBuf), "%d%%", pct);
   sp.setTextDatum(MC_DATUM);
   sp.setTextColor(TFT_WHITE);
-  sp.drawString(pctBuf, barX + barW / 2, y + barH / 2, 1);
+  sp.drawString(pctBuf, barX + barW / 2, y + barH / 2);
   y += barH + 6;
 
   // Speed + count
@@ -791,15 +791,15 @@ void WifiEapolBruteForceScreen::_renderCracking() {
            (float)_ctx.speed, (unsigned long)_ctx.tested);
   sp.setTextDatum(TC_DATUM);
   sp.setTextColor(TFT_LIGHTGREY, TFT_BLACK);
-  sp.drawString(statBuf, bodyW() / 2, y, 1);
+  sp.drawString(statBuf, bodyW() / 2, y);
 
   // Bottom hint
   sp.setTextDatum(BC_DATUM);
   sp.setTextColor(TFT_DARKGREY, TFT_BLACK);
 #ifdef DEVICE_HAS_KEYBOARD
-  sp.drawString("BACK / ENTER: Stop", bodyW() / 2, bodyH(), 1);
+  sp.drawString("BACK / ENTER: Stop", bodyW() / 2, bodyH());
 #else
-  sp.drawString("Any btn: Stop", bodyW() / 2, bodyH(), 1);
+  sp.drawString("Any btn: Stop", bodyW() / 2, bodyH());
 #endif
 
   sp.pushSprite(bodyX(), bodyY());
@@ -807,7 +807,7 @@ void WifiEapolBruteForceScreen::_renderCracking() {
 }
 
 void WifiEapolBruteForceScreen::_renderDone() {
-  TFT_eSprite sp(&Uni.Lcd);
+  Sprite sp(&Uni.Lcd);
   sp.createSprite(bodyW(), bodyH());
   sp.fillSprite(TFT_BLACK);
 
@@ -817,34 +817,34 @@ void WifiEapolBruteForceScreen::_renderDone() {
   if (_ctx.found) {
     sp.setTextDatum(MC_DATUM);
     sp.setTextColor(TFT_GREEN, TFT_BLACK);
-    sp.drawString("PASSWORD FOUND!", cx, cy - 22, 1);
+    sp.drawString("PASSWORD FOUND!", cx, cy - 22);
 
     // measure password text width and draw a pill behind it
-    int pwW = sp.textWidth(_ctx.foundPass, 1);
+    int pwW = sp.textWidth(_ctx.foundPass);
     int padX = 6, padY = 3;
     int rx = cx - pwW / 2 - padX;
     int ry = cy - 6 - 6 - padY;
     sp.fillRoundRect(rx, ry, pwW + padX * 2, 12 + padY * 2, 4, Config.getThemeColor());
     sp.setTextColor(TFT_WHITE, Config.getThemeColor());
-    sp.drawString(_ctx.foundPass, cx, cy - 6, 1);
+    sp.drawString(_ctx.foundPass, cx, cy - 6);
 
     char buf[32];
     snprintf(buf, sizeof(buf), "%lu tries", (unsigned long)_ctx.tested);
     sp.setTextColor(TFT_DARKGREY, TFT_BLACK);
-    sp.drawString(buf, cx, cy + 10, 1);
+    sp.drawString(buf, cx, cy + 10);
   } else {
     sp.setTextDatum(MC_DATUM);
     sp.setTextColor(TFT_RED, TFT_BLACK);
-    sp.drawString("Not in wordlist", cx, cy - 10, 1);
+    sp.drawString("Not in wordlist", cx, cy - 10);
     char buf[32];
     snprintf(buf, sizeof(buf), "%lu tested", (unsigned long)_ctx.tested);
     sp.setTextColor(TFT_DARKGREY, TFT_BLACK);
-    sp.drawString(buf, cx, cy + 6, 1);
+    sp.drawString(buf, cx, cy + 6);
   }
 
   sp.setTextDatum(BC_DATUM);
   sp.setTextColor(TFT_DARKGREY, TFT_BLACK);
-  sp.drawString("Any key to continue", cx, bodyH(), 1);
+  sp.drawString("Any key to continue", cx, bodyH());
 
   sp.pushSprite(bodyX(), bodyY());
   sp.deleteSprite();

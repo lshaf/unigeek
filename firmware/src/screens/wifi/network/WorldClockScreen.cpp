@@ -50,7 +50,7 @@ void WorldClockScreen::onRender() {
 
   auto& lcd = Uni.Lcd;
 
-  TFT_eSprite sprite(&lcd);
+  Sprite sprite(&lcd);
   sprite.createSprite(bodyW(), bodyH());
   sprite.fillSprite(TFT_BLACK);
 

@@ -56,7 +56,7 @@ void BLEAndroidSpamScreen::onUpdate()
 
 void BLEAndroidSpamScreen::onRender()
 {
-  TFT_eSprite sp(&Uni.Lcd);
+  Sprite sp(&Uni.Lcd);
   sp.createSprite(bodyW(), bodyH());
   sp.fillSprite(TFT_BLACK);
   sp.setTextDatum(MC_DATUM);

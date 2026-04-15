@@ -131,7 +131,7 @@ void SubGHzScreen::onUpdate() {
 void SubGHzScreen::onRender() {
   if (_state == STATE_RECEIVING) {
     if (_capturedCount == 0) {
-      TFT_eSprite sp(&Uni.Lcd);
+      Sprite sp(&Uni.Lcd);
       sp.createSprite(bodyW(), bodyH());
       sp.fillSprite(TFT_BLACK);
       sp.setTextDatum(MC_DATUM);
@@ -142,9 +142,9 @@ void SubGHzScreen::onRender() {
       sp.fillRect(0, bodyH() - 16, bodyW(), 16, Config.getThemeColor());
       sp.setTextColor(TFT_WHITE, Config.getThemeColor());
       #ifdef DEVICE_HAS_KEYBOARD
-        sp.drawString("BACK: Stop", bodyW() / 2, bodyH() - 8, 1);
+        sp.drawString("BACK: Stop", bodyW() / 2, bodyH() - 8);
       #else
-        sp.drawString("< Stop", bodyW() / 2, bodyH() - 8, 1);
+        sp.drawString("< Stop", bodyW() / 2, bodyH() - 8);
       #endif
       sp.pushSprite(bodyX(), bodyY());
       sp.deleteSprite();
@@ -155,7 +155,7 @@ void SubGHzScreen::onRender() {
   }
 
   if (_state == STATE_SCANNING) {
-    TFT_eSprite sp(&Uni.Lcd);
+    Sprite sp(&Uni.Lcd);
     sp.createSprite(bodyW(), bodyH());
     sp.fillSprite(TFT_BLACK);
     sp.setTextSize(1);
@@ -211,25 +211,25 @@ void SubGHzScreen::onRender() {
     sp.setTextColor(TFT_WHITE, TFT_BLACK);
     char freqBuf[20];
     snprintf(freqBuf, sizeof(freqBuf), "%.3f MHz", _rf.getScanFreq());
-    sp.drawString(freqBuf, 2, 7, 1);
+    sp.drawString(freqBuf, 2, 7);
 
     sp.setTextDatum(MR_DATUM);
     char rssiBuf[16];
     snprintf(rssiBuf, sizeof(rssiBuf), "%d dBm", _rf.getScanRssi());
     uint16_t rssiColor = (_rf.getScanRssi() > CC1101Util::RSSI_THRESHOLD) ? TFT_GREEN : TFT_CYAN;
     sp.setTextColor(rssiColor, TFT_BLACK);
-    sp.drawString(rssiBuf, bodyW() - 2, 7, 1);
+    sp.drawString(rssiBuf, bodyW() - 2, 7);
 
     if (bestRssi > CC1101Util::RSSI_THRESHOLD) {
       sp.setTextDatum(ML_DATUM);
       sp.setTextColor(TFT_YELLOW, TFT_BLACK);
       char bestBuf[28];
       snprintf(bestBuf, sizeof(bestBuf), "> %.3f MHz %ddBm", _rf.getScanFreqAt(bestIdx), bestRssi);
-      sp.drawString(bestBuf, 2, 19, 1);
+      sp.drawString(bestBuf, 2, 19);
     } else {
       sp.setTextDatum(ML_DATUM);
       sp.setTextColor(TFT_DARKGREY, TFT_BLACK);
-      sp.drawString("No signal", 2, 19, 1);
+      sp.drawString("No signal", 2, 19);
     }
 
     // Footer
@@ -237,9 +237,9 @@ void SubGHzScreen::onRender() {
     sp.fillRect(0, bodyH() - footerH, bodyW(), footerH, Config.getThemeColor());
     sp.setTextColor(TFT_WHITE, Config.getThemeColor());
     #ifdef DEVICE_HAS_KEYBOARD
-      sp.drawString("BACK: Stop", bodyW() / 2, bodyH() - 8, 1);
+      sp.drawString("BACK: Stop", bodyW() / 2, bodyH() - 8);
     #else
-      sp.drawString("< Stop", bodyW() / 2, bodyH() - 8, 1);
+      sp.drawString("< Stop", bodyW() / 2, bodyH() - 8);
     #endif
 
     sp.pushSprite(bodyX(), bodyY());
@@ -248,7 +248,7 @@ void SubGHzScreen::onRender() {
   }
 
   if (_state == STATE_JAMMING) {
-    TFT_eSprite sp(&Uni.Lcd);
+    Sprite sp(&Uni.Lcd);
     sp.createSprite(bodyW(), bodyH());
     sp.fillSprite(TFT_BLACK);
     sp.setTextDatum(MC_DATUM);
@@ -264,7 +264,7 @@ void SubGHzScreen::onRender() {
     #else
       sp.fillRect(0, bodyH() - 16, bodyW(), 16, Config.getThemeColor());
       sp.setTextColor(TFT_WHITE, Config.getThemeColor());
-      sp.drawString("< Stop", bodyW() / 2, bodyH() - 8, 1);
+      sp.drawString("< Stop", bodyW() / 2, bodyH() - 8);
     #endif
 
     sp.pushSprite(bodyX(), bodyY());

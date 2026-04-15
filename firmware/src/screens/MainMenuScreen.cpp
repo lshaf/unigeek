@@ -3,6 +3,7 @@
 //
 
 #include "MainMenuScreen.h"
+#include "core/ScreenManager.h"
 #include "screens/wifi/WifiMenuScreen.h"
 #include "screens/ble/BLEMenuScreen.h"
 #include "screens/keyboard/KeyboardMenuScreen.h"
@@ -58,7 +59,7 @@ void MainMenuScreen::_calculateLayout()
   Uni.Lcd.setTextSize(1);
   uint16_t maxTextW = 0;
   for (uint8_t i = 0; i < ITEM_COUNT; i++) {
-    uint16_t tw = Uni.Lcd.textWidth(_items[i].label, 1);
+    uint16_t tw = Uni.Lcd.textWidth(_items[i].label);
     if (tw > maxTextW) maxTextW = tw;
   }
   uint16_t minItemW = maxTextW + 4;
@@ -153,7 +154,7 @@ void MainMenuScreen::onRender() {
   uint8_t eff = _effectiveCount();
 
   auto& lcd = Uni.Lcd;
-  TFT_eSprite sprite(&lcd);
+  Sprite sprite(&lcd);
   sprite.createSprite(bodyW(), bodyH());
   sprite.fillSprite(TFT_BLACK);
 
@@ -197,7 +198,7 @@ void MainMenuScreen::onRender() {
 
       sprite.setTextColor(fg, bg);
       sprite.setTextDatum(TC_DATUM);
-      sprite.drawString(item->label, itemX + _itemW / 2, itemY + 32, 1);
+      sprite.drawString(item->label, itemX + _itemW / 2, itemY + 32);
     }
   }
 

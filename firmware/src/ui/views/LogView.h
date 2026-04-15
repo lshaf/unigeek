@@ -1,12 +1,12 @@
 #pragma once
 
-#include <TFT_eSPI.h>
+#include "core/IDisplay.h"
 
 // Reusable scrolling log buffer with sprite rendering.
 // Status bar content is drawn via a callback so each screen can customize it.
 class LogView {
 public:
-  using StatusBarCallback = void (*)(TFT_eSprite& sp, int barY, int width, void* userData);
+  using StatusBarCallback = void (*)(Sprite& sp, int barY, int width, void* userData);
 
   void clear() { _count = 0; }
 
@@ -27,10 +27,10 @@ public:
     }
   }
 
-  void draw(TFT_eSPI& lcd, int x, int y, int w, int h,
+  void draw(IDisplay& lcd, int x, int y, int w, int h,
             StatusBarCallback statusCb = nullptr, void* userData = nullptr)
   {
-    TFT_eSprite sp(&lcd);
+    Sprite sp(&lcd);
     sp.createSprite(w, h);
     sp.fillSprite(TFT_BLACK);
 
@@ -43,7 +43,7 @@ public:
     sp.setTextDatum(TL_DATUM);
     for (int i = startIdx; i < _count; i++) {
       sp.setTextColor(_colors[i], TFT_BLACK);
-      sp.drawString(_lines[i], 2, (i - startIdx) * lineH, 1);
+      sp.drawString(_lines[i], 2, (i - startIdx) * lineH);
     }
 
     if (statusCb) {

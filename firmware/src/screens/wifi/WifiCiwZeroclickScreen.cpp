@@ -368,7 +368,7 @@ void WifiCiwZeroclickScreen::_tickBroadcast()
 
 void WifiCiwZeroclickScreen::_drawBroadcasting()
 {
-  TFT_eSprite sp(&Uni.Lcd);
+  Sprite sp(&Uni.Lcd);
   sp.createSprite(bodyW(), bodyH());
   sp.fillSprite(TFT_BLACK);
 
@@ -415,7 +415,7 @@ void WifiCiwZeroclickScreen::_drawBroadcasting()
   #else
     sp.fillRect(0, bodyH() - 16, bodyW(), 16, Config.getThemeColor());
     sp.setTextColor(TFT_WHITE, Config.getThemeColor());
-    sp.drawString("< Back", bodyW() / 2, bodyH() - 8, 1);
+    sp.drawString("< Back", bodyW() / 2, bodyH() - 8);
   #endif
 
   sp.pushSprite(bodyX(), bodyY());
