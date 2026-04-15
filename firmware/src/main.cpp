@@ -134,4 +134,7 @@ void loop() {
 
   // ── Screen update ─────────────────────────────────────────────────────────
   Screen.update();
+
+  // ── Live touch overlay (no-op on button-nav boards) ───────────────────────
+  if (Uni.Nav) Uni.Nav->drawOverlay();
 }

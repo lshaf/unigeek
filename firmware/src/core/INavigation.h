@@ -23,6 +23,12 @@ public:
   virtual void update() = 0;
   virtual void begin() = 0;
 
+  // Optional post-render hook. Touch-nav boards use this to draw a live edge
+  // indicator showing which zone is currently being held. Called by main.cpp
+  // every loop AFTER Screen.update() so the overlay paints on top of all
+  // screen content. Default: no-op (button-nav boards don't need it).
+  virtual void drawOverlay() {}
+
   bool isPressed()          const { return _pressed; }
   Direction currentDirection() const { return _currDirection; }
 
