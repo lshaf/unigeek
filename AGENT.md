@@ -3,10 +3,14 @@
 
 ## What This Project Is
 
-Multi-device ESP32 firmware. Nine target boards share one codebase:
-M5StickC Plus 1.1, M5StickC Plus 2, T-Lora Pager, T-Display 16MB, DIY Smoochie,
-M5 Cardputer, M5 Cardputer ADV, T-Embed CC1101, WiFi Marauder v7.
+Multi-device ESP32 firmware. Eleven target boards share one codebase:
+M5StickC Plus 1.1, M5StickC Plus 2, T-Lora Pager, T-Display, T-Display S3,
+DIY Smoochie, M5 Cardputer, M5 Cardputer ADV, T-Embed CC1101,
+M5 CoreS3 (Unified), M5StickC S3.
 All hardware differences are isolated. Do not break this isolation.
+
+Out-of-tree boards (present in firmware/boards/ but NOT in the release matrix):
+m5_cores3 (bare CoreS3 reference), diy_marauder (WiFi Marauder v7).
 
 ---
 

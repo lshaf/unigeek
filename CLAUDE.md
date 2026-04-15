@@ -3,7 +3,7 @@
 
 ## Project Overview
 
-ESP32 multi-device firmware supporting nine boards.
+ESP32 multi-device firmware supporting eleven boards.
 Built with PlatformIO + Arduino framework + TFT_eSPI.
 All hardware differences are isolated in board-specific folders.
 
@@ -31,23 +31,30 @@ All hardware differences are isolated in board-specific folders.
 
 ### Board Environments
 
-    m5stickcplus_11   M5StickC Plus 1.1, no keyboard, AXP192 power, LittleFS only
-    m5stickcplus_2    M5StickC Plus 2, no keyboard, ADC battery + GPIO power hold, EncoderNavigation (optional encoder hat), LittleFS only
-    t_lora_pager      LilyGO T-Lora Pager, TCA8418 keyboard, BQ25896/BQ27220 power, SD + LittleFS
-    t_display_16mb    LilyGO T-Display 16MB, 2 buttons (double-click=select), no keyboard, 16MB flash, LittleFS only
-    diy_smoochie      DIY Smoochie, 5 buttons, BQ25896 power, CC1101, 16MB flash, SD + LittleFS
-    m5_cardputer      M5Stack Cardputer, 74HC138 GPIO matrix keyboard, ADC battery, SD + LittleFS
-    m5_cardputer_adv  M5Stack Cardputer ADV, TCA8418 keyboard via Wire1, ADC battery, SD + LittleFS
-    t_embed_cc1101    LilyGO T-Embed CC1101, rotary encoder nav, BQ25896 power, CC1101, I2S speaker, 16MB flash, SD + LittleFS
-    marauder_v7       WiFi Marauder v7 (ESP32), 5 buttons (GPIO34-39 no internal pull-up), ILI9341 240x320, 4MB flash, SD + LittleFS
+    m5stickcplus_11    M5StickC Plus 1.1, no keyboard, AXP192 power, LittleFS only
+    m5stickcplus_2     M5StickC Plus 2, no keyboard, ADC battery + GPIO power hold, EncoderNavigation (optional encoder hat), LittleFS only
+    t_lora_pager       LilyGO T-Lora Pager, TCA8418 keyboard, BQ25896/BQ27220 power, SD + LittleFS
+    t_display          LilyGO T-Display, 2 buttons (double-click=select), no keyboard, LittleFS only
+    t_display_s3       LilyGO T-Display S3, ESP32-S3, 2 buttons, USB HID, LittleFS only
+    diy_smoochie       DIY Smoochie, 5 buttons, BQ25896 power, CC1101, 16MB flash, SD + LittleFS
+    m5_cardputer       M5Stack Cardputer, 74HC138 GPIO matrix keyboard, ADC battery, SD + LittleFS
+    m5_cardputer_adv   M5Stack Cardputer ADV, TCA8418 keyboard via Wire1, ADC battery, SD + LittleFS
+    t_embed_cc1101     LilyGO T-Embed CC1101, rotary encoder nav, BQ25896 power, CC1101, I2S speaker, 16MB flash, SD + LittleFS
+    m5_cores3_unified  M5Stack CoreS3 (M5Unified-backed), ESP32-S3, FT6336U touch nav, AW88298 I2S speaker, AXP2101 power, USB HID, SD + LittleFS
+    m5sticks3          M5StickC S3, ESP32-S3, 2 buttons, ES8311 I2S speaker, M5PM1 power, IR, USB HID, LittleFS only
+
+    Out-of-tree boards (present in firmware/boards/ but NOT released):
+      m5_cores3       — bare CoreS3 (no M5Unified); kept as a reference to the unified variant
+      diy_marauder    — WiFi Marauder v7 (ESP32), 5 buttons (GPIO34-39 no internal pull-up), ILI9341 240x320
 
 ### Build Flags (board-specific)
 
-    DEVICE_HAS_KEYBOARD       defined for T-Lora Pager, m5_cardputer, m5_cardputer_adv
-    DEVICE_HAS_SOUND          defined for boards with a speaker
-    DEVICE_HAS_VOLUME_CONTROL defined for boards with real volume control (I2S amp)
-    DEVICE_HAS_USB_HID        defined for ESP32-S3 boards (T-Lora Pager, Cardputer, Cardputer ADV)
-    APP_MENU_POWER_OFF        defined for T-Lora Pager, M5StickC Plus 1.1 and 2, Marauder v7
+    DEVICE_HAS_KEYBOARD        defined for T-Lora Pager, m5_cardputer, m5_cardputer_adv
+    DEVICE_HAS_SOUND           defined for boards with a speaker
+    DEVICE_HAS_VOLUME_CONTROL  defined for boards with real volume control (I2S amp)
+    DEVICE_HAS_USB_HID         defined for ESP32-S3 boards (T-Lora Pager, Cardputer, Cardputer ADV, T-Display S3, CoreS3, StickC S3)
+    DEVICE_HAS_TOUCH_NAV       defined for touch-only nav boards (M5 CoreS3 / CoreS3 Unified) — gates main.cpp first-boot touch tutorial branch
+    APP_MENU_POWER_OFF         defined for T-Lora Pager, M5StickC Plus 1.1 and 2, Marauder v7
     DEVICE_HAS_NAV_MODE_SWITCH defined for M5StickC Plus 1.1 and 2
 
     All app feature flags are defined in pins_arduino.h — NEVER in config.ini or platformio.ini
@@ -55,6 +62,7 @@ All hardware differences are isolated in board-specific folders.
       DEVICE_M5STICK_C_PLUS / DEVICE_T_LORA_PAGER / DEVICE_M5STICK_C_PLUS2
       DEVICE_M5_CARDPUTER / DEVICE_M5_CARDPUTER_ADV / DEVICE_DIY_SMOOCHIE
       DEVICE_T_EMBED_CC1101 / DEVICE_MARAUDER_V7
+      DEVICE_M5_CORES3 / DEVICE_M5_STICKS3 / DEVICE_T_DISPLAY_S3
 
 ---
 
@@ -66,12 +74,16 @@ All hardware differences are isolated in board-specific folders.
     │   ├── m5stickplus_11/         Device.cpp, Display.h, Navigation.h, EncoderNavigation.h, Power.h, pins_arduino.h
     │   ├── m5stickcplus_2/         Device.cpp, Display.h, Navigation.h, EncoderNavigation.h, Power.h, Speaker.h, pins_arduino.h
     │   ├── t_lora_pager/           Device.cpp, Display.h, Navigation.h/cpp, Keyboard.h/cpp, Power.h, pins_arduino.h
-    │   ├── t_display_16mb/         Device.cpp, Display.h, Navigation.h, Power.h, pins_arduino.h
+    │   ├── t_display/              Device.cpp, Display.h, Navigation.h, Power.h, pins_arduino.h
+    │   ├── t_display_s3/           Device.cpp, Display.h, Navigation.h, Power.h, pins_arduino.h
     │   ├── diy_smoochie/           Device.cpp, Display.h, Navigation.h, Power.h, pins_arduino.h
     │   ├── m5_cardputer/           Device.cpp, Display.h, Navigation.h, Keyboard.h, Power.h, pins_arduino.h
     │   ├── m5_cardputer_adv/       Device.cpp, Display.h, Navigation.h, Keyboard.h, Power.h, pins_arduino.h
     │   ├── t_embed_cc1101/         Device.cpp, Display.h, Navigation.h/cpp, Power.h, Speaker.h, pins_arduino.h
-    │   └── marauder_v7/            Device.cpp, Display.h, Navigation.h, Power.h, pins_arduino.h
+    │   ├── m5_cores3_unified/      Device.cpp, Display.h, Navigation.h/cpp, Power.h, Speaker.h, pins_arduino.h (M5Unified-backed)
+    │   ├── m5_cores3/              Device.cpp, Display.h, Navigation.h/cpp, Power.h, Speaker.h, lib/AW9523B.h, lib/TouchFT6336U.h, pins_arduino.h (out-of-tree)
+    │   ├── m5sticks3/              Device.cpp, Display.h, Navigation.h/cpp, Power.h, Speaker.h, lib/M5PM1, pins_arduino.h
+    │   └── diy_marauder/           Device.cpp, Display.h, Navigation.h, Power.h, pins_arduino.h (out-of-tree)
     ├── src/
     │   ├── core/                   Device.h, I*.h interfaces, Storage*.h, SpeakerI2S.h, RtcManager.h, ScreenManager.h, ConfigManager.h
     │   ├── screens/                MainMenuScreen, SettingScreen, wifi/, keyboard/, utility/
@@ -146,6 +158,9 @@ See `docs/HARDWARE.md` for full ISpeaker and IKeyboard interface documentation.
     Uni.Nav->isPressed()         true while any direction is physically held (non-consuming)
     Uni.Nav->pressDuration()     duration of last completed press (set on release)
     Uni.Nav->heldDuration()      duration of current ongoing press (0 if not held)
+    Uni.Nav->drawOverlay()       optional post-render hook (default no-op); touch-nav
+                                 boards override it to paint live edge indicators
+                                 — called from main.cpp loop after Screen.update()
     DIR_UP / DIR_DOWN / DIR_PRESS / DIR_BACK / DIR_LEFT / DIR_RIGHT
 
     Always qualify as INavigation::DIR_BACK etc. — bare DIR_BACK will not compile.
