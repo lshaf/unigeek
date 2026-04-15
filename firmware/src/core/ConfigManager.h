@@ -36,6 +36,8 @@
 #define APP_CONFIG_WIFI_AP_PASSWORD_DEFAULT     ""
 #define APP_CONFIG_AGENT_TITLE                  "agent_title"
 #define APP_CONFIG_AGENT_TITLE_DEFAULT          ""
+#define APP_CONFIG_SHOW_OVERLAY                 "show_overlay"
+#define APP_CONFIG_SHOW_OVERLAY_DEFAULT         "1"
 
 class ConfigManager
 {

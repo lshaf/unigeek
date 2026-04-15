@@ -41,6 +41,9 @@ void SettingScreen::_refresh() {
 #ifdef DEVICE_HAS_NAV_MODE_SWITCH
   _navModeSub  = Config.get(APP_CONFIG_NAV_MODE, APP_CONFIG_NAV_MODE_DEFAULT) == "encoder" ? "Encoder" : "Default";
 #endif
+#ifdef DEVICE_HAS_TOUCH_NAV
+  _overlaySub  = Config.get(APP_CONFIG_SHOW_OVERLAY, APP_CONFIG_SHOW_OVERLAY_DEFAULT).toInt() ? "Show" : "Hide";
+#endif
   _webPwdSub   = Config.get(APP_CONFIG_WEB_PASSWORD, APP_CONFIG_WEB_PASSWORD_DEFAULT);
 
   _items[SETT_NAME].sublabel         = _nameSub.c_str();
@@ -58,6 +61,9 @@ void SettingScreen::_refresh() {
   _items[SETT_COLOR].sublabel        = _colorSub.c_str();
 #ifdef DEVICE_HAS_NAV_MODE_SWITCH
   _items[SETT_NAV_MODE].sublabel     = _navModeSub.c_str();
+#endif
+#ifdef DEVICE_HAS_TOUCH_NAV
+  _items[SETT_OVERLAY].sublabel      = _overlaySub.c_str();
 #endif
   _items[SETT_WEB_PASSWORD].sublabel = _webPwdSub.c_str();
 
@@ -183,6 +189,14 @@ void SettingScreen::onItemSelected(uint8_t index) {
 #ifdef DEVICE_HAS_TOUCH_NAV
     case SETT_TOUCH_GUIDE: {
       Screen.setScreen(new TouchGuideScreen(true));
+      break;
+    }
+
+    case SETT_OVERLAY: {
+      bool cur = Config.get(APP_CONFIG_SHOW_OVERLAY, APP_CONFIG_SHOW_OVERLAY_DEFAULT).toInt();
+      Config.set(APP_CONFIG_SHOW_OVERLAY, cur ? "0" : "1");
+      Config.save(Uni.Storage);
+      _refresh();
       break;
     }
 #endif

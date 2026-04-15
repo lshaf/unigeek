@@ -135,6 +135,9 @@ void loop() {
   // ── Screen update ─────────────────────────────────────────────────────────
   Screen.update();
 
-  // ── Live touch overlay (no-op on button-nav boards) ───────────────────────
-  if (Uni.Nav) Uni.Nav->drawOverlay();
+  // ── Live touch overlay (touch-nav boards only) ───────────────────────────
+#ifdef DEVICE_HAS_TOUCH_NAV
+  if (Uni.Nav && Config.get(APP_CONFIG_SHOW_OVERLAY, APP_CONFIG_SHOW_OVERLAY_DEFAULT).toInt())
+    Uni.Nav->drawOverlay();
+#endif
 }

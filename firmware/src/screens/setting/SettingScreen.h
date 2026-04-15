@@ -37,6 +37,7 @@ private:
 #endif
 #ifdef DEVICE_HAS_TOUCH_NAV
     SETT_TOUCH_GUIDE,
+    SETT_OVERLAY,
 #endif
     SETT_WEB_PASSWORD,
     SETT_PIN_SETTING,
@@ -61,6 +62,9 @@ private:
 #ifdef DEVICE_HAS_NAV_MODE_SWITCH
   String _navModeSub;
 #endif
+#ifdef DEVICE_HAS_TOUCH_NAV
+  String _overlaySub;
+#endif
   String _webPwdSub;
 
   ListItem _items[SETT_COUNT] = {
@@ -82,6 +86,7 @@ private:
 #endif
 #ifdef DEVICE_HAS_TOUCH_NAV
     {"Touch Guide"},
+    {"Navigation Overlay", ""},
 #endif
     {"Web Password",     ""},
     {"Pin Setting"},

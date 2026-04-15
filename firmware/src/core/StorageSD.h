@@ -20,7 +20,13 @@ public:
   // The re-route step is needed because M5GFX / LovyanGFX calls
   // gpio_pad_select_gpio() on the DC pin during display init, which clears
   // the GPIO matrix SPI routing. spiAttachMISO() restores it each call.
+  //
+  // Background FatFS status checks (ff_sd_status → sdSelectCard) can run while
+  // GPIO35 is in DC-output mode (input buffer disabled), setting the card to
+  // STA_NOINIT. _recover() re-initialises the SD bus to clear that state.
   bool begin(uint8_t csPin, SPIClass& spi, uint32_t freq = 4000000, int8_t dcPin = -1) {
+    _csPin = csPin;
+    _freq  = freq;
     _dcPin = dcPin;
     _spi   = (dcPin >= 0) ? &spi : nullptr;
     _miso();
@@ -69,7 +75,13 @@ public:
     if (!_available) return false;
     _miso();
     File f = SD.open(path, FILE_WRITE);
-    if (!f) { _available = false; _dc(); return false; }
+    if (!f) {
+      // FatFS background status check may have set card to STA_NOINIT while
+      // GPIO35 was in DC-output mode. Recover and retry once before giving up.
+      _recover();
+      f = SD.open(path, FILE_WRITE);
+      if (!f) { _available = false; _dc(); return false; }
+    }
     f.print(content);
     f.close();
     _dc();
@@ -129,8 +141,21 @@ public:
 
 private:
   bool       _available = false;
+  uint8_t    _csPin     = 0;
+  uint32_t   _freq      = 4000000;
   int8_t     _dcPin     = -1;
   SPIClass*  _spi       = nullptr;
+
+  // Re-initialise the SD bus after a FatFS background status check set the
+  // card to STA_NOINIT (happens when GPIO35 DC-output mode disabled the MISO
+  // input buffer during an internal sdSelectCard() poll).
+  void _recover() {
+    SD.end();
+    delayMicroseconds(500);
+    _miso();
+    if (_spi) _available = SD.begin(_csPin, *_spi, _freq);
+    else      _available = SD.begin(_csPin);
+  }
 
   // Re-route _dcPin to SPI MISO in the GPIO matrix (cleared by M5GFX/LGFX's
   // gpio_pad_select_gpio call during DC pin setup), then enable input buffer.
