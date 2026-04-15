@@ -1,16 +1,15 @@
 //
 // M5Stack CoreS3 (M5Unified) — Device factory.
 // Init order:
-//   1. SPI.begin()  — Arduino SPI claims SPI2 first (SD card needs a valid handle).
-//   2. M5.begin()   — inits AXP2101, AW9523B, FT6336U, AW88298; M5.Display Bus_SPI
-//                     attaches to the existing SPI2 bus (ESP_ERR_INVALID_STATE handled).
-//   3. storageSD    — SD.begin() uses the valid Arduino SPI handle on SPI2.
-//   4. Lcd.begin()  — DisplayImpl Bus_SPI likewise attaches to SPI2 (bus_shared=true).
+//   1. SPI.begin()     — Arduino SPI claims SPI2 with MISO=35 BEFORE M5.begin().
+//                        M5.Display Bus_SPI attaches to the existing bus (ESP_ERR_INVALID_STATE ok).
+//   2. M5.begin()      — inits AXP2101, AW9523B, FT6336U, AW88298.
+//   3. Lcd.begin()     — DisplayImpl Bus_SPI likewise attaches to SPI2 (bus_shared=true).
+//   4. initStorage()   — SD.begin() uses the SPI2 handle; StorageDcPin=35 handles
+//                        the GPIO35 DC/MISO dual role around every SD operation.
 //
 
 #include "core/Device.h"
-#include "core/StorageSD.h"
-#include "core/StorageLFS.h"
 #include "Display.h"
 #include "Power.h"
 #include "Navigation.h"
@@ -23,8 +22,6 @@ static DisplayImpl    display;
 static NavigationImpl navigation;
 static PowerImpl      power;
 static SpeakerImpl    speaker;
-static StorageSD      storageSD;
-static StorageLFS     storageLFS;
 
 void Device::applyNavMode() {}
 
@@ -35,14 +32,18 @@ void Device::boardHook() {
 Device* Device::createInstance() {
   if (psramFound()) heap_caps_malloc_extmem_enable(0);
 
-  // Claim SPI2 first so that SD.begin() gets a valid Arduino SPI handle.
-  // M5.begin() (and later Lcd.begin()) attach to the already-initialised bus.
-  SPI.begin(SPI_SCK_PIN, SPI_MISO_PIN, SPI_MOSI_PIN, SD_CS);
+  // Claim SPI2 with MISO=35 BEFORE M5.begin() so M5.Display Bus_SPI finds the
+  // bus already initialised (ESP_ERR_INVALID_STATE handled gracefully by LGFX).
+  // Without this, M5.begin() claims SPI2 without MISO and GPIO35 cannot be
+  // re-routed as MISO afterwards — SD reads then fail.
+  SPI.begin(SPI_SCK_PIN, SPI_MISO_PIN, SPI_MOSI_PIN, -1);
   M5.begin(M5.config());
 
-  storageLFS.begin();
-  storageSD.begin(SD_CS, SPI);
+  // Storage init deferred to Device::initStorage() — called after Lcd.begin()
+  // so the Bus_SPI handle exists before any SPI sharing with SD.
+  // StorageDcPin = SPI_MISO_PIN (GPIO35) because DC and MISO share the same pin.
 
-  return new Device(display, power, &navigation, nullptr,
-                    &storageSD, &storageLFS, nullptr, &speaker);
+  auto* dev = new Device(display, power, &navigation, nullptr, nullptr, &speaker);
+  dev->StorageDcPin = SPI_MISO_PIN;
+  return dev;
 }

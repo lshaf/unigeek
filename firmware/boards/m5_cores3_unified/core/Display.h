@@ -58,8 +58,6 @@ public:
   }
 
   void setBrightness(uint8_t pct) override {
-    // M5.Display controls the AXP2101 DLDO1 backlight rail.
-    // Scale our 0-100 percent to 0-255.
     M5.Display.setBrightness((uint8_t)((uint32_t)pct * 255 / 100));
   }
 };
