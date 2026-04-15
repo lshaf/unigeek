@@ -40,30 +40,44 @@ void TouchGuideScreen::onUpdate() {
     return;
   }
 
-  if (!Uni.Nav->wasPressed()) return;
+  // Track live held zone for visual feedback
+  uint8_t newHeld = 0;
+  if (Uni.Nav->isPressed()) {
+    switch (Uni.Nav->currentDirection()) {
+      case INavigation::DIR_BACK:  newHeld = (1 << 0); break;
+      case INavigation::DIR_UP:    newHeld = (1 << 1); break;
+      case INavigation::DIR_PRESS: newHeld = (1 << 2); break;
+      case INavigation::DIR_DOWN:  newHeld = (1 << 3); break;
+      default: break;
+    }
+  }
+  bool changed = (newHeld != _heldBit);
+  _heldBit = newHeld;
 
-  INavigation::Direction dir = Uni.Nav->readDirection();
-  switch (dir) {
-    case INavigation::DIR_BACK:  _touched |= (1 << 0); break;
-    case INavigation::DIR_UP:    _touched |= (1 << 1); break;
-    case INavigation::DIR_PRESS: _touched |= (1 << 2); break;
-    case INavigation::DIR_DOWN:  _touched |= (1 << 3); break;
-    default: break;
+  // Commit zone on release
+  if (Uni.Nav->wasPressed()) {
+    INavigation::Direction dir = Uni.Nav->readDirection();
+    switch (dir) {
+      case INavigation::DIR_BACK:  _touched |= (1 << 0); break;
+      case INavigation::DIR_UP:    _touched |= (1 << 1); break;
+      case INavigation::DIR_PRESS: _touched |= (1 << 2); break;
+      case INavigation::DIR_DOWN:  _touched |= (1 << 3); break;
+      default: break;
+    }
+    if (Uni.Speaker) Uni.Speaker->playRandomTone();
+    changed = true;
+    if (_touched == ALL_TOUCHED) {
+      _allDone = true;
+      _doneAt  = millis();
+    }
   }
 
-  render();
-
-  if (_touched == ALL_TOUCHED) {
-    _allDone = true;
-    _doneAt  = millis();
-  }
+  if (changed) render();
 }
 
 void TouchGuideScreen::onRender() {
   // Full-screen sprite — covers header and status bar exactly like the old overlay.
-  // CoreS3 has PSRAM so 320×240×2 = 150 KB is fine.
-  TFT_eSprite sp(&Uni.Lcd);
-  sp.createSprite(SCREEN_W, SCREEN_H);
+  auto& lcd = Uni.Lcd;
 
   // Zone boundaries match NavigationImpl exactly (actual screen coords).
   const int16_t nvX = BACK_END + 1;           // 108
@@ -74,66 +88,71 @@ void TouchGuideScreen::onRender() {
   const uint16_t dimBg  = 0x2104;   // very dark grey
   const uint16_t doneBg = 0x1BE0;   // dark green when all done
 
+  // holdBg: theme colour at ~50% so it's clearly visible while pressing
+  const uint16_t holdBg = ((theme >> 1) & 0x7BEF);
+
   auto bg = [&](uint8_t bit) -> uint16_t {
     if (_allDone)        return doneBg;
     if (_touched & bit)  return theme;
+    if (_heldBit & bit)  return holdBg;
     return dimBg;
   };
   auto fg = [&](uint8_t bit) -> uint16_t {
-    if (_allDone || (_touched & bit)) return TFT_WHITE;
+    if (_allDone || (_touched & bit) || (_heldBit & bit)) return TFT_WHITE;
     return theme;
   };
   auto sub = [&](uint8_t bit) -> uint16_t {
     return (_touched & bit) ? TFT_WHITE : 0x4208;
   };
 
+  lcd.setTextDatum(MC_DATUM);
+  lcd.setTextSize(1);
+
   // ── BACK zone ─────────────────────────────────────────────────
-  sp.fillRect(0, 0, BACK_END, SCREEN_H, bg(1 << 0));
-  sp.setTextDatum(MC_DATUM);
-  sp.setTextSize(1);
-  sp.setTextColor(fg(1 << 0));
-  sp.drawString("BACK", BACK_END / 2, SCREEN_H / 2 - 4);
-  sp.setTextColor(sub(1 << 0));
-  sp.drawString(_touched & (1 << 0) ? "OK" : "tap", BACK_END / 2, SCREEN_H / 2 + 8);
+  lcd.fillRect(0, 0, BACK_END, SCREEN_H, bg(1 << 0));
+  lcd.setTextColor(fg(1 << 0));
+  lcd.drawString("BACK", BACK_END / 2, SCREEN_H / 2 - 4);
+  lcd.setTextColor(sub(1 << 0));
+  lcd.drawString(_touched & (1 << 0) ? "OK" : "tap", BACK_END / 2, SCREEN_H / 2 + 8);
 
   // ── UP zone ───────────────────────────────────────────────────
-  sp.fillRect(nvX, 0, nvW, zh, bg(1 << 1));
-  sp.setTextColor(fg(1 << 1));
-  sp.drawString("UP", nvX + nvW / 2, zh / 2 - 4);
-  sp.setTextColor(sub(1 << 1));
-  sp.drawString(_touched & (1 << 1) ? "OK" : "tap", nvX + nvW / 2, zh / 2 + 8);
+  lcd.fillRect(nvX, 0, nvW, zh, bg(1 << 1));
+  lcd.setTextColor(fg(1 << 1));
+  lcd.drawString("UP", nvX + nvW / 2, zh / 2 - 4);
+  lcd.setTextColor(sub(1 << 1));
+  lcd.drawString(_touched & (1 << 1) ? "OK" : "tap", nvX + nvW / 2, zh / 2 + 8);
 
   // ── SEL zone ──────────────────────────────────────────────────
-  sp.fillRect(nvX, zh + 1, nvW, zh - 1, bg(1 << 2));
-  sp.setTextColor(fg(1 << 2));
-  sp.drawString("SEL", nvX + nvW / 2, zh + zh / 2 - 4);
-  sp.setTextColor(sub(1 << 2));
-  sp.drawString(_touched & (1 << 2) ? "OK" : "tap", nvX + nvW / 2, zh + zh / 2 + 8);
+  lcd.fillRect(nvX, zh + 1, nvW, zh - 1, bg(1 << 2));
+  lcd.setTextColor(fg(1 << 2));
+  lcd.drawString("SEL", nvX + nvW / 2, zh + zh / 2 - 4);
+  lcd.setTextColor(sub(1 << 2));
+  lcd.drawString(_touched & (1 << 2) ? "OK" : "tap", nvX + nvW / 2, zh + zh / 2 + 8);
 
   // ── DOWN zone ─────────────────────────────────────────────────
   const int16_t dnY = zh * 2 + 1;
   const int16_t dnH = SCREEN_H - dnY;
-  sp.fillRect(nvX, dnY, nvW, dnH, bg(1 << 3));
-  sp.setTextColor(fg(1 << 3));
-  sp.drawString("DOWN", nvX + nvW / 2, dnY + dnH / 2 - 4);
-  sp.setTextColor(sub(1 << 3));
-  sp.drawString(_touched & (1 << 3) ? "OK" : "tap", nvX + nvW / 2, dnY + dnH / 2 + 8);
+  lcd.fillRect(nvX, dnY, nvW, dnH, bg(1 << 3));
+  lcd.setTextColor(fg(1 << 3));
+  lcd.drawString("DOWN", nvX + nvW / 2, dnY + dnH / 2 - 4);
+  lcd.setTextColor(sub(1 << 3));
+  lcd.drawString(_touched & (1 << 3) ? "OK" : "tap", nvX + nvW / 2, dnY + dnH / 2 + 8);
 
   // ── Zone dividers ─────────────────────────────────────────────
-  sp.drawFastVLine(BACK_END, 0,   SCREEN_H, TFT_BLACK);
-  sp.drawFastHLine(nvX,      zh,  nvW,      TFT_BLACK);
-  sp.drawFastHLine(nvX,      zh*2,nvW,      TFT_BLACK);
+  lcd.drawFastVLine(BACK_END, 0,    SCREEN_H, TFT_BLACK);
+  lcd.drawFastHLine(nvX,      zh,   nvW,      TFT_BLACK);
+  lcd.drawFastHLine(nvX,      zh*2, nvW,      TFT_BLACK);
 
-  // ── All-done banner ───────────────────────────────────────────
+  // ── All-done dialog ───────────────────────────────────────────
   if (_allDone) {
-    sp.setTextDatum(MC_DATUM);
-    sp.setTextColor(TFT_WHITE);
-    sp.setTextSize(1);
-    sp.drawString("All zones learned!", SCREEN_W / 2, SCREEN_H / 2);
+    static constexpr int16_t BW = 160, BtH = 36, BtR = 4;
+    const int16_t bx = (SCREEN_W - BW) / 2;
+    const int16_t by = (SCREEN_H - BtH) / 2;
+    lcd.fillRoundRect(bx, by, BW, BtH, BtR, TFT_BLACK);
+    lcd.drawRoundRect(bx, by, BW, BtH, BtR, TFT_WHITE);
+    lcd.setTextColor(TFT_WHITE);
+    lcd.drawString("All zones learned!", SCREEN_W / 2, SCREEN_H / 2);
   }
-
-  sp.pushSprite(0, 0);   // full screen — (0,0) not (bodyX, bodyY)
-  sp.deleteSprite();
 }
 
 void TouchGuideScreen::_markDone() {

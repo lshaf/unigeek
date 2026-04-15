@@ -24,10 +24,10 @@ public:
 
 private:
   bool    _fromSettings;
-  uint8_t _touched  = 0;      // bit 0=BACK, 1=UP, 2=SEL, 3=DOWN
-  bool    _allDone  = false;
-  uint32_t _doneAt  = 0;
-
+  uint8_t _touched       = 0;   // bit 0=BACK, 1=UP, 2=SEL, 3=DOWN (committed on release)
+  uint8_t _heldBit       = 0;   // bit for zone currently being held (live feedback)
+  bool    _allDone       = false;
+  uint32_t _doneAt       = 0;
   static constexpr uint8_t ALL_TOUCHED = 0x0F;
 
   void _markDone();

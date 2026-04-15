@@ -12,6 +12,7 @@
 
 #include "Navigation.h"
 #include "core/Device.h"
+#include "core/ConfigManager.h"
 #include <M5Unified.h>
 #include <Arduino.h>
 
@@ -62,4 +63,32 @@ void NavigationImpl::update() {
 
   _curDir = dir;
   updateState(_curDir);
+}
+
+// Always-on 2 px edge bars mapping the touch zones to the screen edge:
+//   BACK  → left  edge (x=0..1),       full height
+//   UP    → right edge (x=318..319), top    third
+//   SEL   → right edge (x=318..319), middle third
+//   DOWN  → right edge (x=318..319), bottom third
+// Each bar sits at dim theme (~25 %) as a constant map of the zones, and
+// lights up to full theme on the zone currently being held.
+void NavigationImpl::drawOverlay() {
+  // Per-zone fixed colours: dark when idle, bright when held
+  static constexpr uint16_t DIM_RED   = 0x4000;  // dark red
+  static constexpr uint16_t LIT_RED   = 0xF800;  // bright red
+  static constexpr uint16_t DIM_GREEN = 0x0200;  // dark green
+  static constexpr uint16_t LIT_GREEN = 0x07E0;  // bright green
+  static constexpr uint16_t DIM_BLUE  = 0x0008;  // dark blue
+  static constexpr uint16_t LIT_BLUE  = 0x001F;  // bright blue
+
+  auto col = [&](Direction d, uint16_t dim, uint16_t lit) -> uint16_t {
+    return (_curDir == d) ? lit : dim;
+  };
+
+  Uni.Lcd.fillRect(0,            0,              2, SCREEN_H,              col(DIR_BACK,  DIM_RED,   LIT_RED));
+  Uni.Lcd.fillRect(SCREEN_W - 2, 0,              2, ZONE_H - 1,            col(DIR_UP,    DIM_GREEN, LIT_GREEN));
+  Uni.Lcd.fillRect(SCREEN_W - 2, ZONE_H - 1,     2, 1,                     TFT_BLACK);
+  Uni.Lcd.fillRect(SCREEN_W - 2, ZONE_H,         2, ZONE_H - 1,            col(DIR_PRESS, DIM_BLUE,  LIT_BLUE));
+  Uni.Lcd.fillRect(SCREEN_W - 2, ZONE_H * 2 - 1, 2, 1,                     TFT_BLACK);
+  Uni.Lcd.fillRect(SCREEN_W - 2, ZONE_H * 2,     2, SCREEN_H - ZONE_H * 2, col(DIR_DOWN,  DIM_GREEN, LIT_GREEN));
 }
