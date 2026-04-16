@@ -35,9 +35,9 @@ private:
 
   void _showDomains();
   void _showDomain(uint8_t domain);
-  void _renderDomainsView(Sprite& sp);
-  void _renderDomainView(Sprite& sp);
-  void _renderListItem(Sprite& sp, int16_t y, bool sel,
+  void _renderDomainsView();
+  void _renderDomainView();
+  void _renderListItem(int16_t y, bool sel,
                        const char* l1Left,  uint16_t l1LeftCol,
                        const char* l1Right, uint16_t l1RightCol,
                        const char* l2,      uint16_t l2Col);

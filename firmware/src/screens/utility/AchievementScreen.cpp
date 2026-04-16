@@ -13,15 +13,8 @@ void AchievementScreen::onInit()
 
 void AchievementScreen::onRender()
 {
-  Sprite sp(&Uni.Lcd);
-  sp.createSprite(bodyW(), bodyH());
-  sp.fillSprite(TFT_BLACK);
-
-  if (_state == STATE_DOMAINS) _renderDomainsView(sp);
-  else                         _renderDomainView(sp);
-
-  sp.pushSprite(bodyX(), bodyY());
-  sp.deleteSprite();
+  if (_state == STATE_DOMAINS) _renderDomainsView();
+  else                         _renderDomainView();
 }
 
 void AchievementScreen::onItemSelected(uint8_t index)
@@ -126,26 +119,32 @@ void AchievementScreen::_showDomain(uint8_t domain)
 
 // ── Shared item renderer ─────────────────────────────────────────────────────
 
-void AchievementScreen::_renderListItem(Sprite& sp, int16_t y, bool sel,
+void AchievementScreen::_renderListItem(int16_t y, bool sel,
                                         const char* l1Left,  uint16_t l1LeftCol,
                                         const char* l1Right, uint16_t l1RightCol,
                                         const char* l2,      uint16_t l2Col)
 {
+  auto&         lcd    = Uni.Lcd;
   const uint16_t themeC = Config.getThemeColor();
   const uint8_t  rowH   = kRowHAch;
-  uint16_t bg = sel ? themeC : TFT_BLACK;
+  uint16_t       bg     = sel ? themeC : TFT_BLACK;
+
+  Sprite sp(&lcd);
+  sp.createSprite(bodyW(), rowH);
+  sp.fillSprite(TFT_BLACK);
+  sp.setTextDatum(TL_DATUM);
 
   if (sel)
-    sp.fillRoundRect(0, y + 2, bodyW(), rowH - 4, 3, themeC);
+    sp.fillRoundRect(0, 2, bodyW(), rowH - 4, 3, themeC);
 
   // Line 1: left label + right label (right-aligned)
   int16_t rightW = (int16_t)sp.textWidth(l1Right);
   int16_t rightX = (int16_t)(bodyW() - 2 - rightW);
 
   sp.setTextColor(l1LeftCol,  bg);
-  sp.drawString(l1Left,  3,      y + 4);
+  sp.drawString(l1Left,  3,      4);
   sp.setTextColor(l1RightCol, bg);
-  sp.drawString(l1Right, rightX, y + 4);
+  sp.drawString(l1Right, rightX, 4);
 
   // Line 2: sub-label, truncated with ellipsis to full right boundary
   const int16_t maxW = (int16_t)(bodyW() - 2);
@@ -162,13 +161,17 @@ void AchievementScreen::_renderListItem(Sprite& sp, int16_t y, bool sel,
   }
 
   sp.setTextColor(l2Col, bg);
-  sp.drawString(buf, 3, y + 14);
+  sp.drawString(buf, 3, 14);
+
+  sp.pushSprite(bodyX(), bodyY() + y);
+  sp.deleteSprite();
 }
 
 // ── Custom renderers ─────────────────────────────────────────────────────────
 
-void AchievementScreen::_renderDomainsView(Sprite& sp)
+void AchievementScreen::_renderDomainsView()
 {
+  auto& lcd = Uni.Lcd;
   const uint8_t  rowH    = kRowHDom;
   const uint8_t  visible = bodyH() / rowH;
   const uint8_t  total   = AchievementManager::kDomainCount;
@@ -180,8 +183,7 @@ void AchievementScreen::_renderDomainsView(Sprite& sp)
   else if (_selectedIndex >= _domScrollOff + visible)
     _domScrollOff = _selectedIndex - visible + 1;
 
-  sp.setTextDatum(TL_DATUM);
-
+  uint8_t rendered = 0;
   for (uint8_t i = 0; i < visible; i++) {
     uint8_t idx = i + _domScrollOff;
     if (idx >= total) break;
@@ -192,15 +194,22 @@ void AchievementScreen::_renderDomainsView(Sprite& sp)
     char expBuf[12];
     snprintf(expBuf, sizeof(expBuf), "%u EXP", _domainExp[idx]);
 
-    _renderListItem(sp, y, sel,
+    _renderListItem(y, sel,
       AchievementManager::domainName(idx), TFT_WHITE,
       expBuf,                              sel ? TFT_WHITE : themeC,
       _domainSubs[idx],                    sel ? TFT_WHITE : TFT_DARKGREY);
+    rendered++;
   }
+
+  // Clear unused rows below last rendered row
+  int16_t usedH = (int16_t)(rendered * rowH);
+  if (usedH < (int16_t)bodyH())
+    lcd.fillRect(bodyX(), bodyY() + usedH, bodyW(), bodyH() - usedH, TFT_BLACK);
 }
 
-void AchievementScreen::_renderDomainView(Sprite& sp)
+void AchievementScreen::_renderDomainView()
 {
+  auto& lcd = Uni.Lcd;
   static constexpr uint16_t    kTierColors[4] = { 0xC440, TFT_LIGHTGREY, TFT_YELLOW, TFT_CYAN };
   static constexpr const char* kTierNames[4]  = { "BRONZE", "SILVER", "GOLD", "PLAT" };
 
@@ -215,8 +224,7 @@ void AchievementScreen::_renderDomainView(Sprite& sp)
   else if (_selectedIndex >= _achScrollOff + visible)
     _achScrollOff = _selectedIndex - visible + 1;
 
-  sp.setTextDatum(TL_DATUM);
-
+  uint8_t rendered = 0;
   for (uint8_t i = 0; i < visible; i++) {
     uint8_t idx = i + _achScrollOff;
     if (idx >= _achCount) break;
@@ -234,9 +242,15 @@ void AchievementScreen::_renderDomainView(Sprite& sp)
     const char* tierName = hidden ? "???" : kTierNames[cat.defs[ci].tier];
     const char* descSrc  = hidden ? "Unlock to reveal" : cat.defs[ci].desc;
 
-    _renderListItem(sp, y, sel,
+    _renderListItem(y, sel,
       cat.defs[ci].title, titleFg,
       tierName,      tierFg,
       descSrc,       descFg);
+    rendered++;
   }
+
+  // Clear unused rows below last rendered row
+  int16_t usedH = (int16_t)(rendered * rowH);
+  if (usedH < (int16_t)bodyH())
+    lcd.fillRect(bodyX(), bodyY() + usedH, bodyW(), bodyH() - usedH, TFT_BLACK);
 }

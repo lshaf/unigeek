@@ -30,5 +30,11 @@ private:
   uint32_t _doneAt       = 0;
   static constexpr uint8_t ALL_TOUCHED = 0x0F;
 
+  // Per-zone last-drawn packed state (bg<<2 | touched<<1 | held) — 0xFFFF = undrawn
+  uint32_t _lastZone[4] = { 0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu };
+  bool     _chromeDrawn = false;
+  bool     _doneDrawn   = false;
+
   void _markDone();
+  void _drawZone(uint8_t zoneIdx);
 };
