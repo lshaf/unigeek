@@ -33,12 +33,18 @@ void _drawInlineBar(T& dc, int x, int y, int w, int h,
 
 struct RankInfo { const char* label; uint16_t color; int rank; };
 
+// Tuned against the live catalog pool (≈ 84 800 EXP total).
+//   NOVICE  fresh boot
+//   HACKER  ~10%  of pool
+//   EXPERT  ~25%  of pool
+//   ELITE   ~50%  of pool
+//   LEGEND  ~80%  of pool
 RankInfo _getRankInfo(int exp)
 {
-  if (exp >= 43000) return { "LEGEND", TFT_VIOLET,   4 };
-  if (exp >= 30000) return { "ELITE",  TFT_YELLOW,   3 };
-  if (exp >= 15000) return { "EXPERT", TFT_CYAN,     2 };
-  if (exp >= 4500)  return { "HACKER", TFT_GREEN,    1 };
+  if (exp >= 68000) return { "LEGEND", TFT_VIOLET,   4 };
+  if (exp >= 42000) return { "ELITE",  TFT_YELLOW,   3 };
+  if (exp >= 21000) return { "EXPERT", TFT_CYAN,     2 };
+  if (exp >= 8500)  return { "HACKER", TFT_GREEN,    1 };
                     return { "NOVICE", TFT_DARKGREY, 0 };
 }
 
