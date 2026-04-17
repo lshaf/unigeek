@@ -560,14 +560,20 @@ bool ChameleonClient::mf1LoadBlockData(uint8_t slot, uint8_t startBlock,
   return ok && st == 0;
 }
 
-bool ChameleonClient::mf1GetBlockData(uint8_t startBlock, uint8_t count, uint8_t* out) {
+bool ChameleonClient::mf1GetBlockData(uint8_t startBlock, uint8_t count, uint8_t* out,
+                                       uint16_t* outStatus, uint16_t* outLen) {
   if (count == 0) return false;
   uint8_t p[2] = { startBlock, count };
   uint16_t st = 0, rlen = 0;
   uint16_t wantBytes = (uint16_t)count * 16;
   bool ok = sendCommand(CMD_MF1_GET_BLOCK, p, 2,
                         out, &rlen, &st, 3000, wantBytes);
-  return ok && st == 0 && rlen >= wantBytes;
+  if (outStatus) *outStatus = st;
+  if (outLen)    *outLen    = rlen;
+  // Firmware returns 0x68 (HF_TAG_OK) for successful HF-family reads; 0 is the
+  // generic success code. Either means the payload is valid.
+  if (!ok || rlen < wantBytes) return false;
+  return st == 0 || st == 0x68;
 }
 
 bool ChameleonClient::hf14ARaw(uint8_t options, uint16_t timeoutMs, uint16_t bitLen,
@@ -702,11 +708,14 @@ bool ChameleonClient::setVikingSlot(const uint8_t uid[4], uint8_t uidLen) {
   return sendCommand(CMD_SET_VIKING_ID, uid, uidLen, nullptr, nullptr, &st);
 }
 
+// Upstream GUI ignores the status byte on LF getters and just reads data length.
+// Mirror that — some firmware revisions return status != 0 but still deliver the
+// stored UID payload.
 bool ChameleonClient::getEM410XSlot(uint8_t uid[5]) {
   uint8_t buf[16] = {};
   uint16_t len = 0, st = 0;
   if (!sendCommand(CMD_GET_EM410X_ID, nullptr, 0, buf, &len, &st)) return false;
-  if (st != 0 || len < 5) return false;
+  if (len < 5) return false;
   memcpy(uid, buf, 5);
   return true;
 }
@@ -715,7 +724,7 @@ bool ChameleonClient::getHIDProxSlot(uint8_t payload[13], uint8_t* payloadLen) {
   uint8_t buf[32] = {};
   uint16_t len = 0, st = 0;
   if (!sendCommand(CMD_GET_HID_PROX_ID, nullptr, 0, buf, &len, &st)) return false;
-  if (st != 0 || len == 0) return false;
+  if (len == 0) return false;
   uint16_t cp = len > 13 ? 13 : len;
   memcpy(payload, buf, cp);
   *payloadLen = (uint8_t)cp;
@@ -726,7 +735,7 @@ bool ChameleonClient::getVikingSlot(uint8_t uid[4], uint8_t* uidLen) {
   uint8_t buf[16] = {};
   uint16_t len = 0, st = 0;
   if (!sendCommand(CMD_GET_VIKING_ID, nullptr, 0, buf, &len, &st)) return false;
-  if (st != 0 || len == 0) return false;
+  if (len == 0) return false;
   uint16_t cp = len > 4 ? 4 : len;
   memcpy(uid, buf, cp);
   *uidLen = (uint8_t)cp;

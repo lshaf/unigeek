@@ -17,7 +17,7 @@ void ChameleonSlotViewScreen::_addRow(const char* label, const String& value) {
 void ChameleonSlotViewScreen::_runHF() {
   auto& c = ChameleonClient::get();
   c.setActiveSlot(_slot);
-  c.setMode(0); // emulator mode so slot memory is accessible
+  delay(50);  // let firmware finish the slot switch before the next request
 
   // Read slot tag types to infer block count
   ChameleonClient::SlotTypes types[8] = {};
@@ -40,34 +40,38 @@ void ChameleonSlotViewScreen::_runHF() {
     return;
   }
 
-  uint8_t buf[128];
-  uint16_t got = 0;
-  while (got < total) {
-    uint8_t chunk = (total - got > 8) ? 8 : (uint8_t)(total - got);
-    if (!c.mf1GetBlockData((uint8_t)got, chunk, buf)) {
-      _addRow("Error", String("read fail @") + got);
+  // Read one block at a time (26-byte responses) — small, predictable,
+  // survives low-MTU connections. Cheap enough at 64-256 calls.
+  uint8_t buf[16];
+  for (uint16_t b = 0; b < total; b++) {
+    uint16_t st = 0, rlen = 0;
+    if (!c.mf1GetBlockData((uint8_t)b, 1, buf, &st, &rlen)) {
+      char diag[32];
+      snprintf(diag, sizeof(diag), "@%u st=%u rlen=%u", b, st, rlen);
+      _addRow("Error", diag);
       break;
     }
-    for (uint8_t b = 0; b < chunk; b++) {
-      const uint8_t* p = buf + b * 16;
-      char lbl[8];
-      snprintf(lbl, sizeof(lbl), "B%03u", got + b);
-      // Show as two halves separated so it fits in value column:
-      //   AABBCCDDEEFFGGHH  IIJJKKLLMMNNOOPP
-      char hex[40];
-      snprintf(hex, sizeof(hex),
-               "%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X",
-               p[0],p[1],p[2],p[3],p[4],p[5],p[6],p[7],
-               p[8],p[9],p[10],p[11],p[12],p[13],p[14],p[15]);
-      _addRow(lbl, hex);
+    char lbl[8];
+    snprintf(lbl, sizeof(lbl), "B%03u", b);
+    char hex[40];
+    snprintf(hex, sizeof(hex),
+             "%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X",
+             buf[0],buf[1],buf[2],buf[3],buf[4],buf[5],buf[6],buf[7],
+             buf[8],buf[9],buf[10],buf[11],buf[12],buf[13],buf[14],buf[15]);
+    _addRow(lbl, hex);
+
+    // Periodically repaint so the user sees progress on big cards.
+    if ((b & 0x0F) == 0x0F) {
+      _scrollView.setRows(_rows, _rowCount);
+      render();
     }
-    got += chunk;
   }
 }
 
 void ChameleonSlotViewScreen::_runLF() {
   auto& c = ChameleonClient::get();
   c.setActiveSlot(_slot);
+  delay(50);
 
   ChameleonClient::SlotTypes types[8] = {};
   c.getSlotTypes(types);

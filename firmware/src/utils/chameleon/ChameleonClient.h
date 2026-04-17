@@ -139,7 +139,11 @@ public:
   bool mf1LoadBlockData(uint8_t slot, uint8_t startBlock,
                         const uint8_t* data, uint16_t dataLen);
   // Read emulator slot memory (active slot). `count` blocks of 16 B.
-  bool mf1GetBlockData(uint8_t startBlock, uint8_t count, uint8_t* out);
+  // On return, `outStatus` receives the firmware status byte and `outLen`
+  // the actual payload length (both useful for diagnostics).
+  bool mf1GetBlockData(uint8_t startBlock, uint8_t count, uint8_t* out,
+                       uint16_t* outStatus = nullptr,
+                       uint16_t* outLen    = nullptr);
   bool hf14ARaw(uint8_t options, uint16_t timeoutMs, uint16_t bitLen,
                 const uint8_t* data, uint16_t dataBytes,
                 uint8_t* respOut, uint16_t* respLen, uint16_t respBufSize);
