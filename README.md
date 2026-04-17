@@ -282,7 +282,9 @@ This project was built with inspiration and reference from:
 ## TODO
 
 - LoRa
-- nr24lf
+- easier input action for touch screen
+- cores3 sdcard isn't perfect, need to have workaround when screen render upon file save.
+- add option left or right handed on all m5stick boards.
 - sticks3 ir doesn't work, need to investigate
 - implement thermal camera
 - change keyboard to HID instead, mode will be USB and BLE, while BLE and USB only have Keyboard, Mouse and Jiggle Mouse, USB has 1 more option is Mass Storage.
