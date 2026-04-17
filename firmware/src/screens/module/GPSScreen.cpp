@@ -33,6 +33,7 @@ void GPSScreen::onInit() {
   _enableGnssPower();
   _gps.begin(2, _baudRate, _rxPin, _txPin);
   _state = STATE_LOADING;
+  _loadingChromeDrawn = false;
 }
 
 void GPSScreen::onUpdate() {
@@ -139,30 +140,44 @@ void GPSScreen::onUpdate() {
 
 void GPSScreen::onRender() {
   if (_state == STATE_LOADING) {
-    Sprite sp(&Uni.Lcd);
-    sp.createSprite(bodyW(), bodyH());
-    sp.fillSprite(TFT_BLACK);
-    sp.setTextDatum(MC_DATUM);
-    sp.setTextSize(1);
+    auto& lcd = Uni.Lcd;
+
+    if (!_loadingChromeDrawn) {
+      lcd.fillRect(bodyX(), bodyY(), bodyW(), bodyH(), TFT_BLACK);
+      _loadingChromeDrawn = true;
+    }
+
     bool gpsFound = _gps.gps.charsProcessed() >= 10;
     static const char spinner[] = {'/', '-', '\\', '|'};
     uint8_t frame = (millis() / 250) % 4;
     char anim[4] = {'[', spinner[frame], ']', '\0'};
 
-    sp.setTextColor(TFT_WHITE);
+    const int spH = 64;
+    int cx = bodyW() / 2;
+    int cy = spH / 2;
+    int pushY = bodyY() + bodyH() / 2 - spH / 2;
+
+    Sprite sp(&Uni.Lcd);
+    sp.createSprite(bodyW(), spH);
+    sp.fillSprite(TFT_BLACK);
+    sp.setTextDatum(MC_DATUM);
+    sp.setTextSize(1);
+
+    sp.setTextColor(TFT_WHITE, TFT_BLACK);
     if (gpsFound) {
-      sp.drawString("GPS module found!", bodyW() / 2, bodyH() / 2 - 20);
-      sp.setTextColor(TFT_DARKGREY);
-      sp.drawString("Acquiring satellite fix...", bodyW() / 2, bodyH() / 2 - 4);
-      sp.drawString("This may take a few minutes", bodyW() / 2, bodyH() / 2 + 8);
+      sp.drawString("GPS module found!", cx, cy - 20);
+      sp.setTextColor(TFT_DARKGREY, TFT_BLACK);
+      sp.drawString("Acquiring satellite fix...", cx, cy - 4);
+      sp.drawString("This may take a few minutes", cx, cy + 8);
     } else {
-      sp.drawString("Waiting for GPS signal...", bodyW() / 2, bodyH() / 2 - 12);
-      sp.setTextColor(TFT_DARKGREY);
-      sp.drawString("Go outside for best reception", bodyW() / 2, bodyH() / 2 + 4);
+      sp.drawString("Waiting for GPS signal...", cx, cy - 12);
+      sp.setTextColor(TFT_DARKGREY, TFT_BLACK);
+      sp.drawString("Go outside for best reception", cx, cy + 4);
     }
-    sp.setTextColor(TFT_YELLOW);
-    sp.drawString(anim, bodyW() / 2, bodyH() / 2 + 24);
-    sp.pushSprite(bodyX(), bodyY());
+    sp.setTextColor(TFT_YELLOW, TFT_BLACK);
+    sp.drawString(anim, cx, cy + 24);
+
+    sp.pushSprite(bodyX(), pushY);
     sp.deleteSprite();
     return;
   }
