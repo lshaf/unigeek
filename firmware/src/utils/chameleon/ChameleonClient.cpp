@@ -526,22 +526,22 @@ bool ChameleonClient::mf1ReadBlock(uint8_t block, uint8_t keyType,
 
 bool ChameleonClient::mf1CheckKeysOfBlock(uint8_t block, uint8_t keyType,
                                            const uint8_t* keys, uint8_t keyCount,
-                                           uint32_t* hitBitmap) {
+                                           uint8_t outKey[6]) {
   if (keyCount == 0 || keyCount > 32) return false;
-  uint8_t p[2 + 32 * 6];
-  p[0] = keyType;
-  p[1] = block;
-  memcpy(p + 2, keys, 6 * keyCount);
-  uint8_t rsp[48] = {};
+  // Upstream wire format: [block, keyType, keyCount, key0..keyN-1 * 6B]
+  uint8_t p[3 + 32 * 6];
+  p[0] = block;
+  p[1] = keyType;
+  p[2] = keyCount;
+  memcpy(p + 3, keys, 6 * keyCount);
+  uint8_t rsp[16] = {};
   uint16_t rspLen = 0, st = 0;
-  if (!sendCommand(CMD_MF1_CHECK_BLOCK, p, 2 + 6 * keyCount,
+  if (!sendCommand(CMD_MF1_CHECK_BLOCK, p, 3 + 6 * keyCount,
                    rsp, &rspLen, &st, 8000)) return false;
-  if (st != 0) { *hitBitmap = 0; return false; }
-  // Firmware packs hits little-endian: byte i bit b → key index (i*8 + b).
-  uint32_t bm = 0;
-  for (uint16_t i = 0; i < rspLen && i < 4; i++)
-    bm |= ((uint32_t)rsp[i]) << (i * 8);
-  *hitBitmap = bm;
+  if (st != 0) return false;        // no match in this batch
+  // Response: [first byte reserved / index, key0..key5]
+  if (rspLen < 7) return false;
+  memcpy(outKey, rsp + 1, 6);
   return true;
 }
 

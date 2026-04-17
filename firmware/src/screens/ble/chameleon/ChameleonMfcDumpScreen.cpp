@@ -109,17 +109,11 @@ void ChameleonMfcDumpScreen::_run() {
     uint8_t trailer = _trailerBlock(s);
     for (int kt = 0; kt < 2; kt++) {
       uint8_t keyType = (kt == 0) ? 0x60 : 0x61;
-      uint32_t hits = 0;
-      if (!c.mf1CheckKeysOfBlock(trailer, keyType, flatKeys, kDumpKeyCount, &hits)) continue;
-      if (!hits) continue;
-      for (uint8_t i = 0; i < kDumpKeyCount; i++) {
-        if (hits & (1u << i)) {
-          if (kt == 0) { memcpy(keyA[s], kDumpKeys[i], 6); hasA[s] = true; }
-          else         { memcpy(keyB[s], kDumpKeys[i], 6); hasB[s] = true; }
-          recovered++;
-          break;
-        }
-      }
+      uint8_t matched[6];
+      if (!c.mf1CheckKeysOfBlock(trailer, keyType, flatKeys, kDumpKeyCount, matched)) continue;
+      if (kt == 0) { memcpy(keyA[s], matched, 6); hasA[s] = true; }
+      else         { memcpy(keyB[s], matched, 6); hasB[s] = true; }
+      recovered++;
     }
   }
 

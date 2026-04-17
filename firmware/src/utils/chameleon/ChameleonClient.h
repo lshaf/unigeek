@@ -131,10 +131,11 @@ public:
   bool mf1CheckKey(uint8_t block, uint8_t keyType, const uint8_t key[6]);
   bool mf1ReadBlock(uint8_t block, uint8_t keyType, const uint8_t key[6],
                     uint8_t out[16]);
-  // batch check: keyCount<=32, returns bitmap of hits (LSB=first key)
+  // Batch check up to ~32 keys against one block. Firmware returns the first
+  // matching key directly; outKey[6] receives it on success.
   bool mf1CheckKeysOfBlock(uint8_t block, uint8_t keyType,
                            const uint8_t* keys, uint8_t keyCount,
-                           uint32_t* hitBitmap);
+                           uint8_t outKey[6]);
   bool mf1LoadBlockData(uint8_t slot, uint8_t startBlock,
                         const uint8_t* data, uint16_t dataLen);
   // Read emulator slot memory (active slot). `count` blocks of 16 B.

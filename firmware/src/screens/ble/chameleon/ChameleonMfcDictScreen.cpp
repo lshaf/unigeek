@@ -223,19 +223,12 @@ void ChameleonMfcDictScreen::_runAttack(const char* sourceLabel) {
         uint8_t flat[32 * 6];
         memcpy(flat, _keys[off], chunk * 6);
 
-        uint32_t hits = 0;
-        if (!c.mf1CheckKeysOfBlock(block, keyType, flat, chunk, &hits)) continue;
-        if (!hits) continue;
-
-        for (uint16_t i = 0; i < chunk; i++) {
-          if (hits & (1u << i)) {
-            if (kt == 0) { memcpy(_keysA[s], _keys[off + i], 6); _foundA[s] = true; }
-            else         { memcpy(_keysB[s], _keys[off + i], 6); _foundB[s] = true; }
-            _recovered++;
-            found = true;
-            break;
-          }
-        }
+        uint8_t matched[6];
+        if (!c.mf1CheckKeysOfBlock(block, keyType, flat, chunk, matched)) continue;
+        if (kt == 0) { memcpy(_keysA[s], matched, 6); _foundA[s] = true; }
+        else         { memcpy(_keysB[s], matched, 6); _foundB[s] = true; }
+        _recovered++;
+        found = true;
       }
       progress++;
     }
