@@ -193,7 +193,7 @@ void NRF24Screen::onItemSelected(uint8_t index) {
       _state       = STATE_SPECTRUM;
       snprintf(_titleBuf, sizeof(_titleBuf), "2.4G Spectrum");
       render();
-      Achievement.inc("nrf24_spectrum");
+      if (Achievement.inc("nrf24_spectrum") == 1) Achievement.unlock("nrf24_spectrum");
 
     } else if (index == 1) {
       // ── Jammer menu ───────────────────────────────────────
@@ -219,7 +219,7 @@ void NRF24Screen::onItemSelected(uint8_t index) {
       _chromeDrawn = false;
       _state = STATE_JAMMER_RUNNING;
       snprintf(_titleBuf, sizeof(_titleBuf), "Jammer");
-      Achievement.inc("nrf24_jammer");
+      if (Achievement.inc("nrf24_jammer") == 1) Achievement.unlock("nrf24_jammer");
       render();
 
     } else if (index == kJamModes) {
@@ -231,7 +231,7 @@ void NRF24Screen::onItemSelected(uint8_t index) {
       _chromeDrawn = false;
       _state = STATE_CH_JAMMER;
       snprintf(_titleBuf, sizeof(_titleBuf), "Single CH");
-      Achievement.inc("nrf24_jammer");
+      if (Achievement.inc("nrf24_jammer") == 1) Achievement.unlock("nrf24_jammer");
       render();
 
     } else if (index == kJamModes + 1) {
@@ -253,7 +253,7 @@ void NRF24Screen::onItemSelected(uint8_t index) {
       _chromeDrawn = false;
       _state = STATE_HOPPER_RUN;
       snprintf(_titleBuf, sizeof(_titleBuf), "CH Hopper");
-      Achievement.inc("nrf24_jammer");
+      if (Achievement.inc("nrf24_jammer") == 1) Achievement.unlock("nrf24_jammer");
       render();
     }
     return;
@@ -723,7 +723,7 @@ void NRF24Screen::_setupMjScan() {
   _state = STATE_MJ_SCAN;
   snprintf(_titleBuf, sizeof(_titleBuf), "MouseJack");
   render();
-  Achievement.inc("nrf24_mousejack");
+  if (Achievement.inc("nrf24_mousejack") == 1) Achievement.unlock("nrf24_mousejack");
 }
 
 void NRF24Screen::_stepMjScan() {
@@ -785,6 +785,7 @@ void NRF24Screen::_addMjTarget(const uint8_t* addr, uint8_t addrLen, uint8_t ch,
     kTypeNames[type & 3],
     addr[0], addr[1], addr[2], ch
   );
+  if (_mjCount == 0 && Achievement.inc("nrf24_mj_found") == 1) Achievement.unlock("nrf24_mj_found");
   _mjCount++;
   _chromeDrawn = false;
   if (Uni.Speaker) Uni.Speaker->playNotification();

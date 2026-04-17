@@ -46,7 +46,8 @@ export const CATALOG = [
   { slug: "gps-wardriving",       title: "GPS & Wardriving",    category: "module",   summary: "Live GPS view, WiFi/BLE wardriving with Wigle CSV export, and Wigle upload integration",             hasDetail: true },
   { slug: "ir-remote",            title: "IR Remote",           category: "module",   summary: "Capture, replay, and manage IR signals — compatible with Flipper Zero and Bruce formats",            hasDetail: true },
   { slug: "sub-ghz",              title: "Sub-GHz (CC1101)",    category: "module",   summary: "Capture, replay, and jam Sub-GHz RF signals — compatible with Flipper Zero .sub format",            hasDetail: true },
-  { slug: "pin-setting",          title: "Pin Setting",         category: "module",   summary: "Configure GPIO pins for external modules: GPS TX/RX/baud, I2C SDA/SCL, CC1101 CS/GDO0",            hasDetail: false },
+  { slug: "nrf24",                 title: "NRF24L01+",           category: "module",   summary: "2.4 GHz spectrum analyzer, multi-mode jammer (10 presets + single-channel + hopper), and MouseJack wireless keyboard injection", hasDetail: true },
+  { slug: "pin-setting",          title: "Pin Setting",         category: "module",   summary: "Configure GPIO pins for external modules: GPS TX/RX/baud, I2C SDA/SCL, CC1101 CS/GDO0, NRF24 CE/CSN",  hasDetail: false },
 
   // Utility
   { slug: "qrcode",               title: "QR Code",             category: "utility",  summary: "Generate and display a QR code from typed or file-loaded text; supports WiFi QR format",            hasDetail: false },

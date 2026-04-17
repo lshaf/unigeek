@@ -13,8 +13,12 @@ Multi-tool firmware for ESP32-based handheld devices. Built with PlatformIO + Ar
 | LilyGO T-Lora Pager | TCA8418 | I2S | Yes | Yes | Yes |
 | M5Stack Cardputer | GPIO Matrix | I2S | Yes | Yes | — |
 | M5Stack Cardputer ADV | TCA8418 | I2S + ES8311 | Yes | Yes | — |
-| LilyGO T-Display 16MB | 2 Buttons | — | — | — | — |
-| DIY Smoochie | — | — | — | — | — |
+| LilyGO T-Display | 2 Buttons | — | — | — | — |
+| LilyGO T-Display S3 | 2 Buttons | — | Yes | — | — |
+| LilyGO T-Embed CC1101 | Rotary Encoder | I2S | — | Yes | — |
+| M5Stack CoreS3 (Unified) | Touch | I2S | Yes | Yes | — |
+| M5StickC S3 | 2 Buttons | I2S | Yes | — | — |
+| DIY Smoochie | 5 Buttons | — | — | Yes | — |
 
 ---
 
@@ -127,7 +131,11 @@ Multi-tool firmware for ESP32-based handheld devices. Built with PlatformIO + Ar
   - **Jammer** — Transmit continuous noise on the configured frequency to disrupt Sub-GHz receivers
   - Compatible with Flipper Zero and Bruce `.sub` file formats
   - On M5StickC: CC1101 SPI (GPIO 32/33) is shared with GPS UART — the firmware manages the handoff automatically
-- **Pin Setting** — Configure GPIO pins for all external modules (GPS TX/RX/baud, external I2C SDA/SCL, CC1101 CS/GDO0); accessible from both Modules menu and Settings
+- **NRF24L01+** — 2.4 GHz spectrum analysis, jamming, and MouseJack wireless keyboard injection ([details](knowledge/nrf24.md))
+  - **Spectrum** — Live 126-channel 2.4 GHz spectrum sweep with peak hold; toggle between peak and bar display modes
+  - **Jammer** — Disrupt 2.4 GHz devices using 10 preset channel lists (Full Spectrum, WiFi 2.4GHz, BLE Data, BLE Adv, BT Classic, USB Dongles, Video/FPV, RC Control, Zigbee, Drone FHSS), single-channel jammer, or configurable channel hopper
+  - **MouseJack** — Scan for unencrypted nRF24-based wireless keyboard/mouse dongles; identifies device type (Microsoft, Microsoft-encrypted, Logitech); inject arbitrary keystrokes into vulnerable targets
+- **Pin Setting** — Configure GPIO pins for all external modules (GPS TX/RX/baud, external I2C SDA/SCL, CC1101 CS/GDO0, NRF24 CE/CSN); accessible from both Modules menu and Settings
 
 ### Character Screen
 Full-screen profile accessible from the main menu. Displays:
@@ -148,7 +156,7 @@ Full-screen profile accessible from the main menu. Displays:
 - Navigation sound toggle
 - Theme color
 - Web file manager password
-- Pin configuration (GPS TX/RX/baud, external I2C SDA/SCL, CC1101 CS/GDO0) — also accessible from Modules menu
+- Pin configuration (GPS TX/RX/baud, external I2C SDA/SCL, CC1101 CS/GDO0, NRF24 CE/CSN) — also accessible from Modules menu
 - Navigation mode — Default or Encoder (M5StickC Plus only)
 
 ---
@@ -270,6 +278,7 @@ This project was built with inspiration and reference from:
   - IR Remote (receive, send, TV-B-Gone with WORLD_IR_CODES database)
   - Sub-GHz CC1101 frequency list, RSSI threshold, and CC1101 wiring for M5StickC (shared SPI/UART bus on GPIO 32/33)
   - BLE Device Spam payloads: Android Fast Pair model IDs, Samsung Galaxy Watch pairing data, iOS Apple Continuity (SourApple/AppleJuice) packets
+  - NRF24L01+ spectrum analyzer, jammer, and MouseJack injection
 - [Flipper-IRDB](https://github.com/Flipper-XFW/Flipper-IRDB) by Flipper-XFW
   - Infrared remote database (46 categories, 2000+ IR remote files)
 - [FrostedFastPair](https://github.com/pivotchip/FrostedFastPair) by PivotChip
@@ -289,4 +298,4 @@ This project was built with inspiration and reference from:
 - implement thermal camera
 - change keyboard to HID instead, mode will be USB and BLE, while BLE and USB only have Keyboard, Mouse and Jiggle Mouse, USB has 1 more option is Mass Storage.
 
-<!-- README last synced at commit: aacd34a (device spam, number guess game, high scores, badusb download) -->
+<!-- README last synced at commit: 25333e2 (nrf24 module, new boards: t_display_s3 / t_embed_cc1101 / cores3_unified / sticks3) -->
