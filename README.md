@@ -64,6 +64,7 @@ Multi-tool firmware for ESP32-based handheld devices. Built with PlatformIO + Ar
   - **Samsung** — Samsung Galaxy Watch pairing popup spam using Samsung manufacturer data with random watch model IDs
 - **BLE Detector** — Passive BLE scanner that detects Flipper Zero devices, credit card skimmers, Apple AirTags/FindMy trackers, BitChat app users, and BLE spam attacks ([details](knowledge/ble-detector.md))
 - **WhisperPair** — Tests Google Fast Pair devices for CVE-2025-36911; performs an ECDH key exchange and forged KBP handshake to detect unauthorized pairing vulnerability ([details](knowledge/whisperpair.md))
+- **Chameleon Ultra** — Bluetooth LE client for ChameleonUltra / ChameleonLite RFID emulator devices; scan and connect via BLE, view device info (firmware version, battery, chip ID), manage emulation slots, read HF cards (ISO14443A: UID, ATQA, SAK) and LF cards (EM410X), clone EM410X to emulator slot
 
 ### Keyboard (HID)
 - **BLE Keyboard** — Act as a wireless Bluetooth HID keyboard (all devices)
@@ -283,6 +284,8 @@ This project was built with inspiration and reference from:
   - Infrared remote database (46 categories, 2000+ IR remote files)
 - [FrostedFastPair](https://github.com/pivotchip/FrostedFastPair) by PivotChip
   - WhisperPair (CVE-2025-36911): Fast Pair KBP vulnerability tester (ECDH + AES-128-ECB handshake exploit)
+- [ChameleonUltraGUI](https://github.com/GameTec-live/ChameleonUltraGUI) by GameTec-live
+  - BLE UART protocol, frame structure (SOF + LRC + header + data + CRC), and command reference for ChameleonUltra integration
 - [LilyGoLib](https://github.com/Xinyuan-LilyGO/LilyGoLib) — Hardware reference for LilyGO T-Lora Pager
 - [M5Unified](https://github.com/m5stack/M5Unified) — Hardware reference for M5Stack devices (speaker, display, power)
 

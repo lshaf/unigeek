@@ -7,6 +7,7 @@
 #include "screens/ble/BLEDeviceSpamMenuScreen.h"
 #include "screens/ble/BLEDetectorScreen.h"
 #include "screens/ble/WhisperPairScreen.h"
+#include "screens/ble/chameleon/ChameleonMenuScreen.h"
 
 void BLEMenuScreen::onInit()
 {
@@ -21,6 +22,7 @@ void BLEMenuScreen::onItemSelected(uint8_t index)
     case 2: Screen.setScreen(new BLEDeviceSpamMenuScreen()); break;
     case 3: Screen.setScreen(new BLEDetectorScreen());       break;
     case 4: Screen.setScreen(new WhisperPairScreen());       break;
+    case 5: Screen.setScreen(new ChameleonMenuScreen());     break;
   }
 }
 

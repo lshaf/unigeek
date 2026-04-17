@@ -1,0 +1,340 @@
+#include "ChameleonMfcDictScreen.h"
+#include "utils/chameleon/ChameleonClient.h"
+#include "ChameleonHFMenuScreen.h"
+#include "core/Device.h"
+#include "core/ScreenManager.h"
+#include "core/AchievementManager.h"
+#include "core/ConfigManager.h"
+#include "ui/views/ProgressView.h"
+#include "ui/actions/ShowStatusAction.h"
+
+// Builtin default Mifare Classic key list (trimmed from upstream gMifareClassicKeysList)
+static constexpr uint8_t kBuiltinKeys[][6] = {
+  {0xFF,0xFF,0xFF,0xFF,0xFF,0xFF},
+  {0xA0,0xA1,0xA2,0xA3,0xA4,0xA5},
+  {0xD3,0xF7,0xD3,0xF7,0xD3,0xF7},
+  {0x00,0x00,0x00,0x00,0x00,0x00},
+  {0xB0,0xB1,0xB2,0xB3,0xB4,0xB5},
+  {0x4D,0x3A,0x99,0xC3,0x51,0xDD},
+  {0x1A,0x98,0x2C,0x7E,0x45,0x9A},
+  {0xAA,0xBB,0xCC,0xDD,0xEE,0xFF},
+  {0x71,0x4C,0x5C,0x88,0x6E,0x97},
+  {0x58,0x7E,0xE5,0xF9,0x35,0x0F},
+  {0xA0,0x47,0x8C,0xC3,0x90,0x91},
+  {0x53,0x3C,0xB6,0xC7,0x23,0xF6},
+  {0x8F,0xD0,0xA4,0xF2,0x56,0xE9},
+  {0x00,0x00,0x00,0x00,0x00,0x01},
+  {0x11,0x22,0x33,0x44,0x55,0x66},
+  {0x26,0x97,0x34,0x3B,0x00,0x00},
+  {0x12,0x34,0x56,0x78,0x9A,0xBC},
+  {0xBD,0x49,0x3A,0x39,0x62,0xB6},
+};
+static constexpr uint8_t kBuiltinCount = sizeof(kBuiltinKeys) / 6;
+
+static constexpr const char* kDictDir = "/unigeek/nfc/dictionaries";
+
+uint8_t ChameleonMfcDictScreen::_trailerBlock(uint8_t sector) {
+  return (sector < 32) ? (sector * 4 + 3) : (128 + (sector - 32) * 16 + 15);
+}
+
+void ChameleonMfcDictScreen::_loadFilePicker() {
+  _fileCount = 0;
+
+  _items[0] = {"Built-in keys"};
+
+  if (Uni.Storage && Uni.Storage->isAvailable()) {
+    IStorage::DirEntry entries[MAX_DICT_FILES];
+    uint8_t total = Uni.Storage->listDir(kDictDir, entries, MAX_DICT_FILES);
+    for (uint8_t i = 0; i < total && _fileCount < MAX_DICT_FILES; i++) {
+      if (!entries[i].isDir && entries[i].name.endsWith(".txt")) {
+        _fileNames[_fileCount] = entries[i].name;
+        _items[1 + _fileCount] = { _fileNames[_fileCount].c_str() };
+        _fileCount++;
+      }
+    }
+  }
+
+  setItems(_items, 1 + _fileCount);
+}
+
+void ChameleonMfcDictScreen::onInit() {
+  _state = STATE_SELECT;
+  _loadFilePicker();
+}
+
+void ChameleonMfcDictScreen::onBack() {
+  Screen.setScreen(new ChameleonHFMenuScreen());
+}
+
+void ChameleonMfcDictScreen::onUpdate() {
+  if (_state == STATE_RUNNING) return;
+
+  if (_state == STATE_RESULT) {
+    if (Uni.Nav->isPressed() && Uni.Nav->heldDuration() >= 1000) {
+      Uni.Nav->suppressCurrentPress();
+      _state = STATE_SELECT;
+      _loadFilePicker();
+      render();
+      return;
+    }
+    if (Uni.Nav->wasPressed()) {
+      auto dir = Uni.Nav->readDirection();
+      if (dir == INavigation::DIR_BACK || dir == INavigation::DIR_PRESS) {
+        _state = STATE_SELECT;
+        _loadFilePicker();
+        render();
+        return;
+      }
+      _scrollView.onNav(dir);
+    }
+    return;
+  }
+
+  ListScreen::onUpdate();
+}
+
+void ChameleonMfcDictScreen::onRender() {
+  if (_state == STATE_RESULT) {
+    _scrollView.render(bodyX(), bodyY(), bodyW(), bodyH());
+    return;
+  }
+  if (_state == STATE_RUNNING) return;
+  ListScreen::onRender();
+}
+
+void ChameleonMfcDictScreen::onItemSelected(uint8_t index) {
+  if (_state != STATE_SELECT) return;
+
+  char srcLabel[40];
+  if (index == 0) {
+    _loadBuiltinKeys();
+    snprintf(srcLabel, sizeof(srcLabel), "Built-in");
+  } else {
+    uint8_t fi = index - 1;
+    if (fi >= _fileCount) return;
+    String path = String(kDictDir) + "/" + _fileNames[fi];
+    if (!_loadFileKeys(path.c_str())) {
+      ShowStatusAction::show("Load keys failed", 1200);
+      render();
+      return;
+    }
+    snprintf(srcLabel, sizeof(srcLabel), "%s", _fileNames[fi].c_str());
+  }
+
+  if (_keyCount == 0) {
+    ShowStatusAction::show("No keys in source", 1200);
+    render();
+    return;
+  }
+
+  _runAttack(srcLabel);
+}
+
+bool ChameleonMfcDictScreen::_loadBuiltinKeys() {
+  _keyCount = kBuiltinCount;
+  memcpy(_keys, kBuiltinKeys, kBuiltinCount * 6);
+  return true;
+}
+
+static bool _parseHexKey(const String& line, uint8_t out[6]) {
+  String s = line;
+  s.trim();
+  if (s.length() == 0 || s.startsWith("#")) return false;
+  s.replace(":", "");
+  s.replace(" ", "");
+  if (s.length() != 12) return false;
+  for (int i = 0; i < 6; i++) {
+    char hex[3] = { s[i * 2], s[i * 2 + 1], 0 };
+    char* end = nullptr;
+    unsigned long v = strtoul(hex, &end, 16);
+    if (*end != 0) return false;
+    out[i] = (uint8_t)v;
+  }
+  return true;
+}
+
+bool ChameleonMfcDictScreen::_loadFileKeys(const char* path) {
+  _keyCount = 0;
+  if (!Uni.Storage || !Uni.Storage->isAvailable()) return false;
+  String content = Uni.Storage->readFile(path);
+  if (content.length() == 0) return false;
+
+  int start = 0;
+  while (start < (int)content.length() && _keyCount < MAX_KEYS) {
+    int nl = content.indexOf('\n', start);
+    if (nl < 0) nl = content.length();
+    String line = content.substring(start, nl);
+    uint8_t k[6];
+    if (_parseHexKey(line, k)) {
+      memcpy(_keys[_keyCount], k, 6);
+      _keyCount++;
+    }
+    start = nl + 1;
+  }
+  return _keyCount > 0;
+}
+
+void ChameleonMfcDictScreen::_runAttack(const char* sourceLabel) {
+  _state      = STATE_RUNNING;
+  _running    = true;
+  _recovered  = 0;
+  for (int s = 0; s < 40; s++) { _foundA[s] = false; _foundB[s] = false; }
+
+  auto& c = ChameleonClient::get();
+  c.setMode(1);
+
+  ProgressView::init();
+  char msg[80];
+
+  snprintf(msg, sizeof(msg), "Src: %s\nScanning card...", sourceLabel);
+  ProgressView::progress(msg, 0);
+
+  uint8_t atqa[2] = {}, sak = 0;
+  if (!c.scan14A(_uid, &_uidLen, atqa, &sak)) {
+    ProgressView::finish();
+    ShowStatusAction::show("No card detected", 1500);
+    _state   = STATE_SELECT;
+    _running = false;
+    _loadFilePicker();
+    render();
+    return;
+  }
+
+  if (sak == 0x18)      _sectors = 40; // 4K
+  else if (sak == 0x01) _sectors = 5;  // Mini
+  else                  _sectors = 16; // 1K
+
+  int totalWork = _sectors * 2;
+  int progress  = 0;
+
+  for (uint8_t s = 0; s < _sectors; s++) {
+    uint8_t block = _trailerBlock(s);
+    for (int kt = 0; kt < 2; kt++) {
+      uint8_t keyType = (kt == 0) ? 0x60 : 0x61;
+      snprintf(msg, sizeof(msg),
+               "Src: %s\nSector %d key %c (%u keys)",
+               sourceLabel, s, kt == 0 ? 'A' : 'B', (unsigned)_keyCount);
+      int pct = (progress * 100) / totalWork;
+      ProgressView::progress(msg, pct);
+
+      bool found = false;
+      for (uint16_t off = 0; off < _keyCount && !found; off += 32) {
+        uint16_t chunk = (_keyCount - off > 32) ? 32 : (_keyCount - off);
+        uint8_t flat[32 * 6];
+        memcpy(flat, _keys[off], chunk * 6);
+
+        uint32_t hits = 0;
+        if (!c.mf1CheckKeysOfBlock(block, keyType, flat, chunk, &hits)) continue;
+        if (!hits) continue;
+
+        for (uint16_t i = 0; i < chunk; i++) {
+          if (hits & (1u << i)) {
+            if (kt == 0) { memcpy(_keysA[s], _keys[off + i], 6); _foundA[s] = true; }
+            else         { memcpy(_keysB[s], _keys[off + i], 6); _foundB[s] = true; }
+            _recovered++;
+            found = true;
+            break;
+          }
+        }
+      }
+      progress++;
+    }
+  }
+
+  ProgressView::progress("Done", 100);
+  ProgressView::finish();
+
+  if (_recovered > 0) {
+    _saveKeys();
+    int n = Achievement.inc("chameleon_dict_attack");
+    if (n == 1) Achievement.unlock("chameleon_dict_attack");
+    Achievement.setMax("chameleon_mfc_keys_found", _recovered);
+    if (_recovered >= 10) Achievement.unlock("chameleon_mfc_keys_found");
+  }
+
+  _buildResultRows();
+  _state   = STATE_RESULT;
+  _running = false;
+  render();
+}
+
+void ChameleonMfcDictScreen::_buildResultRows() {
+  _rowCount = 0;
+
+  char header[32];
+  snprintf(header, sizeof(header), "%d / %d keys", _recovered, _sectors * 2);
+  _rowLabels[_rowCount] = "Recovered";
+  _rowValues[_rowCount] = header;
+  _rows[_rowCount] = { _rowLabels[_rowCount].c_str(), _rowValues[_rowCount] };
+  _rowCount++;
+
+  char uidStr[20] = {};
+  for (uint8_t i = 0; i < _uidLen && i * 2 + 2 < (int)sizeof(uidStr); i++) {
+    char h[4]; snprintf(h, sizeof(h), "%02X", _uid[i]); strcat(uidStr, h);
+  }
+  _rowLabels[_rowCount] = "UID";
+  _rowValues[_rowCount] = uidStr;
+  _rows[_rowCount] = { _rowLabels[_rowCount].c_str(), _rowValues[_rowCount] };
+  _rowCount++;
+
+  for (uint8_t s = 0; s < _sectors && _rowCount + 1 < MAX_RESULT_ROWS; s++) {
+    char lbl[12];
+    char keyHex[16];
+
+    snprintf(lbl, sizeof(lbl), "S%02d A", s);
+    if (_foundA[s]) {
+      snprintf(keyHex, sizeof(keyHex), "%02X%02X%02X%02X%02X%02X",
+               _keysA[s][0], _keysA[s][1], _keysA[s][2],
+               _keysA[s][3], _keysA[s][4], _keysA[s][5]);
+    } else {
+      snprintf(keyHex, sizeof(keyHex), "---");
+    }
+    _rowLabels[_rowCount] = lbl;
+    _rowValues[_rowCount] = keyHex;
+    _rows[_rowCount] = { _rowLabels[_rowCount].c_str(), _rowValues[_rowCount] };
+    _rowCount++;
+
+    snprintf(lbl, sizeof(lbl), "S%02d B", s);
+    if (_foundB[s]) {
+      snprintf(keyHex, sizeof(keyHex), "%02X%02X%02X%02X%02X%02X",
+               _keysB[s][0], _keysB[s][1], _keysB[s][2],
+               _keysB[s][3], _keysB[s][4], _keysB[s][5]);
+    } else {
+      snprintf(keyHex, sizeof(keyHex), "---");
+    }
+    _rowLabels[_rowCount] = lbl;
+    _rowValues[_rowCount] = keyHex;
+    _rows[_rowCount] = { _rowLabels[_rowCount].c_str(), _rowValues[_rowCount] };
+    _rowCount++;
+  }
+
+  _scrollView.setRows(_rows, _rowCount);
+}
+
+void ChameleonMfcDictScreen::_saveKeys() {
+  if (!Uni.Storage || !Uni.Storage->isAvailable()) return;
+  Uni.Storage->makeDir("/unigeek/nfc/keys");
+
+  char uidHex[16] = {};
+  for (uint8_t i = 0; i < _uidLen && i * 2 + 2 < (int)sizeof(uidHex); i++) {
+    char h[4]; snprintf(h, sizeof(h), "%02X", _uid[i]); strcat(uidHex, h);
+  }
+  String path = String("/unigeek/nfc/keys/") + uidHex + ".txt";
+  String buf;
+  for (uint8_t s = 0; s < _sectors; s++) {
+    char line[48];
+    if (_foundA[s]) {
+      snprintf(line, sizeof(line), "S%02d A %02X%02X%02X%02X%02X%02X\n",
+               s, _keysA[s][0], _keysA[s][1], _keysA[s][2],
+               _keysA[s][3], _keysA[s][4], _keysA[s][5]);
+      buf += line;
+    }
+    if (_foundB[s]) {
+      snprintf(line, sizeof(line), "S%02d B %02X%02X%02X%02X%02X%02X\n",
+               s, _keysB[s][0], _keysB[s][1], _keysB[s][2],
+               _keysB[s][3], _keysB[s][4], _keysB[s][5]);
+      buf += line;
+    }
+  }
+  Uni.Storage->writeFile(path.c_str(), buf.c_str());
+}
