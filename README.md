@@ -64,7 +64,23 @@ Multi-tool firmware for ESP32-based handheld devices. Built with PlatformIO + Ar
   - **Samsung** — Samsung Galaxy Watch pairing popup spam using Samsung manufacturer data with random watch model IDs
 - **BLE Detector** — Passive BLE scanner that detects Flipper Zero devices, credit card skimmers, Apple AirTags/FindMy trackers, BitChat app users, and BLE spam attacks ([details](knowledge/ble-detector.md))
 - **WhisperPair** — Tests Google Fast Pair devices for CVE-2025-36911; performs an ECDH key exchange and forged KBP handshake to detect unauthorized pairing vulnerability ([details](knowledge/whisperpair.md))
-- **Chameleon Ultra** — Bluetooth LE client for ChameleonUltra / ChameleonLite RFID emulator devices; scan and connect via BLE, view device info (firmware version, battery, chip ID), manage emulation slots, read HF cards (ISO14443A: UID, ATQA, SAK) and LF cards (EM410X), clone EM410X to emulator slot
+- **Chameleon Ultra** — Bluetooth LE client for ChameleonUltra / ChameleonLite RFID emulator devices ([details](knowledge/chameleon-ultra.md))
+  - **Scan & Connect** — BLE scan with signal strength; connect by address
+  - **Device Info** — firmware version, battery %, chip ID, active slot, mode
+  - **Settings** — animation mode, button A/B short + long-press actions, BLE pairing toggle, save to flash, reset defaults, clear BLE bonds
+  - **Slot Manager** — 8 emulator slots with per-slot edit: set active, HF type, LF type, enable/disable, nickname (HF + LF), load default data, write content (MF Classic .bin from SD or EM410X hex), view emulator content (HF blocks or LF UID), delete, save nicks
+  - **HF Tools**
+    - **Scan 14A** — read UID / ATQA / SAK / UID length / protocol, clone to active slot
+    - **MF Dict Attack** — key picker (built-in defaults or `.txt` files from `/unigeek/nfc/dictionaries/`); batch `mf1CheckKeysOnBlock` (2015) per sector trailer; progress bar then scrollable keys-found result; saves recovered keys to `/unigeek/nfc/keys/<uid>.txt`
+    - **MF Dump Memory** — auto-crack default keys then read every block; streams `.bin` dump to `/unigeek/nfc/dumps/<uid>.bin` (size auto-detected: Mini 320 B, 1K 1024 B, 2K 2048 B, 4K 4096 B)
+    - **Magic Detect** — probes for gen1a (0x40 + 0x43 handshake) and gen3 (30 00 readback) magic cards
+    - **MFKey32 Log** — toggle detection-log capture, fetch record count, export `{uid, nt, nr, ar}` tuples to `/unigeek/nfc/mfkey32/log_<ms>.txt` for offline solver
+  - **LF Tools**
+    - **EM410X** — scan, clone to slot, write to T5577 blank
+    - **HID Prox** — scan, clone to slot, write to T5577 blank
+    - **Viking** — scan, clone to slot, write to T5577 blank
+    - **T5577 Password Cleaner** — brute-force a curated list of common passwords (default, zeros, HID factory, DoorKing, …) to restore a locked T5577 tag to default password
+  - Sample MF dumps ship on the SD card under `/unigeek/nfc/dumps/` (`sample_1k_*.bin`, `sample_mini_*.bin`, `sample_ntag215_*.bin`) for testing without a real card
 
 ### Keyboard (HID)
 - **BLE Keyboard** — Act as a wireless Bluetooth HID keyboard (all devices)
@@ -77,7 +93,7 @@ Multi-tool firmware for ESP32-based handheld devices. Built with PlatformIO + Ar
 - **QR Code** — Generate and display a QR code from typed or file-loaded text; supports WiFi QR format
 - **Barcode** — Generate and display a Code 128 barcode from typed or file-loaded text
 - **File Manager** — Browse, rename, copy, cut, paste, and delete files and folders on storage; directories sorted first then alphabetical; tap a file to view its contents; hold 1s to open context menu
-- **Achievements** — View all achievements grouped by domain; shows tier (Bronze/Silver/Gold/Platinum), description, and unlock status; long-press an unlocked achievement to set it as your Agent Title
+- **Achievements** — View all achievements grouped by domain (13 domains, 199 entries, ≈ 84 800 EXP pool); shows tier (Bronze/Silver/Gold/Platinum), description, and unlock status; long-press an unlocked achievement to set it as your Agent Title ([details](knowledge/achievements.md))
 
 ### Games
 - **HEX Decoder** — Wordle-style game using hexadecimal characters (0–9, A–F)
@@ -140,13 +156,13 @@ Multi-tool firmware for ESP32-based handheld devices. Built with PlatformIO + Ar
 
 ### Character Screen
 Full-screen profile accessible from the main menu. Displays:
-- **AGENT** — device name and current rank (Novice → Hacker → Expert → Elite → Legend) based on total EXP
+- **AGENT** — device name and current rank (Novice → Hacker → Expert → Elite → Legend) based on total EXP (thresholds: 0 / 8 500 / 21 000 / 42 000 / 68 000)
 - **Agent Title** — the achievement title you set via long-press in Achievements; shown as `[RANK] Title` (e.g. `[NOVICE] WiFi First`); defaults to `[RANK] No Title`
 - **EXP** — total experience points with a progress bar toward the next rank
 - **HP** — battery percentage; shows `+CHG` when charging
 - **BRAIN** — free heap as a percentage of total heap
 - **ACHIEVEMENT** — total unlocked achievements out of all available
-- Domain bars for WiFi, Attacks, BT, HID, NFC, IR, RF, GPS showing per-domain completion
+- Domain bars for each achievement domain showing per-domain completion (WiFi, Attacks, BT, HID, NFC, IR, RF, NRF24, GPS, Utility, Games, Settings, Chameleon — 13 domains, 199 achievements total, pool ≈ 84 800 EXP)
 
 ### Settings
 - Device name
@@ -224,6 +240,10 @@ Files are stored under `/unigeek/` on either SD card or LittleFS (fallback):
 /unigeek/utility/passwords/        Password wordlists for EAPOL brute force
 /unigeek/utility/cctv/             CCTV Sniffer target IP lists
 /unigeek/nfc/dictionaries/         MIFARE Classic key dictionary files
+/unigeek/nfc/dumps/                Card dumps (.bin) from MFRC522 / Chameleon Ultra
+/unigeek/nfc/keys/                 Recovered sector keys (<uid>.txt)
+/unigeek/nfc/mfkey32/              MFKey32 detection log exports
+/unigeek/achievements.bin          achievement state (binary)
 /unigeek/rf/                       Sub-GHz signal files (.sub)
 /unigeek/web/file_manager/         Web file manager HTML files
 /unigeek/web/portals/              Portal templates for AP, Evil Twin, Karma (HTML/CSS/JS)
@@ -301,4 +321,4 @@ This project was built with inspiration and reference from:
 - implement thermal camera
 - change keyboard to HID instead, mode will be USB and BLE, while BLE and USB only have Keyboard, Mouse and Jiggle Mouse, USB has 1 more option is Mass Storage.
 
-<!-- README last synced at commit: 25333e2 (nrf24 module, new boards: t_display_s3 / t_embed_cc1101 / cores3_unified / sticks3) -->
+<!-- README last synced at commit: 989b5cd (chameleon ultra client, binary achievement store, character rank retune) -->

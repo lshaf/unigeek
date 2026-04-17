@@ -34,6 +34,7 @@ export const CATALOG = [
   { slug: "ble-beacon-spam",      title: "BLE Beacon Spam",     category: "ble",      summary: "Broadcast iBeacon packets with randomized UUID, major/minor, and spoofed MAC on every cycle",        hasDetail: false },
   { slug: "ble-device-spam",      title: "BLE Device Spam",     category: "ble",      summary: "Targeted BLE spam that triggers pairing popups on Android (Fast Pair), iOS (Apple Continuity), and Samsung (Galaxy Watch)", hasDetail: false },
   { slug: "ble-analyzer",         title: "BLE Analyzer",        category: "ble",      summary: "Scan nearby BLE devices, display name, address, and signal strength",                                 hasDetail: false },
+  { slug: "chameleon-ultra",      title: "Chameleon Ultra",     category: "ble",      summary: "BLE client for ChameleonUltra / ChameleonLite — device info, 8-slot manager, HF/LF scan + clone, MF dict + dump + magic detect, MFKey32 log, T5577 write, password cleaner", hasDetail: true },
 
   // Keyboard (HID)
   { slug: "ducky-script",         title: "Ducky Script",        category: "keyboard", summary: "Run script files from storage to automate keystrokes over BLE or USB HID",                           hasDetail: true },
@@ -54,7 +55,7 @@ export const CATALOG = [
   { slug: "barcode",              title: "Barcode",             category: "utility",  summary: "Generate and display a Code 128 barcode from typed or file-loaded text",                             hasDetail: false },
   { slug: "file-manager",         title: "File Manager",        category: "utility",  summary: "Browse, rename, copy, cut, paste, and delete files on device storage",                               hasDetail: false },
   { slug: "i2c-detector",         title: "I2C Detector",        category: "utility",  summary: "Scan the I2C bus and list all responding device addresses",                                           hasDetail: false },
-  { slug: "achievements",         title: "Achievements",        category: "utility",  summary: "View all achievements grouped by domain; long-press an unlocked achievement to set it as your Agent Title", hasDetail: true },
+  { slug: "achievements",         title: "Achievements",        category: "utility",  summary: "199 achievements across 13 domains (~84 800 EXP pool); long-press an unlocked entry to set it as your Agent Title", hasDetail: true },
 
   // Games
   { slug: "game-flappy",          title: "Flappy Bird",         category: "game",     summary: "Classic side-scrolling game with randomized pipes and scoring",                                       hasDetail: false },
