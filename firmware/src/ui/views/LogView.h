@@ -32,8 +32,10 @@ public:
   {
     static constexpr int lineH   = 10;
     static constexpr int statusH = 11;
-    int cbH      = statusCb ? statusH : 0;
+    // +1 for the separator hline that sits between log area and status bar.
+    int cbH      = statusCb ? statusH + 1 : 0;
     int logAreaH = h - cbH;
+    if (logAreaH < 0) logAreaH = 0;
     int maxVisible = logAreaH / lineH;
     int startIdx   = _count > maxVisible ? _count - maxVisible : 0;
 

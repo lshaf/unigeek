@@ -32,6 +32,12 @@ private:
   HIDKeyboardUtil*  _keyboard    = nullptr;
   uint32_t          _lastBatMs   = 0;
 
+  // Partial-redraw flags — chrome (black fill + static footer) painted once.
+  bool _connectedChromeDrawn = false;
+  bool _connectedLastStatus  = false;  // tracks prev Connected/Waiting to skip redraw
+  bool _scriptChromeDrawn    = false;
+  uint8_t _scriptLastRendered = 0;     // last _scriptLineCount drawn
+
   // File browser
   static constexpr uint8_t kMaxFiles = 40;
   String   _fileLabel[kMaxFiles];

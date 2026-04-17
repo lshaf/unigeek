@@ -45,5 +45,11 @@ Device* Device::createInstance() {
 
   auto* dev = new Device(display, power, &navigation, nullptr, nullptr, &speaker);
   dev->StorageDcPin = SPI_MISO_PIN;
+  // M5Unified owns the internal I2C bus (AXP2101 + FT6336U + AW9523B on
+  // I2C_NUM_1, pins 12/11) via its ESP-IDF driver — exposing &Wire1 here would
+  // collide with that driver. Only expose Grove (Ex_I2C, pins 2/1) as &Wire;
+  // M5 only setPort()s I2C_NUM_0 without claiming it, so Arduino Wire is free
+  // to begin(GROVE_SDA, GROVE_SCL) on demand.
+  dev->ExI2C = &Wire;
   return dev;
 }

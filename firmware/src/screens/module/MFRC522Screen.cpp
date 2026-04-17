@@ -125,7 +125,8 @@ void MFRC522Screen::_initModule() {
     int sda = PinConfig.getInt(PIN_CONFIG_EXT_SDA, PIN_CONFIG_EXT_SDA_DEFAULT);
     int scl = PinConfig.getInt(PIN_CONFIG_EXT_SCL, PIN_CONFIG_EXT_SCL_DEFAULT);
 
-    ProgressView::show("Scanning external I2C...", 10);
+    ProgressView::init();
+    ProgressView::progress("Scanning external I2C...", 10);
     Uni.ExI2C->begin(sda, scl);
     Uni.ExI2C->setTimeOut(50);
     delay(100);
@@ -144,7 +145,7 @@ void MFRC522Screen::_initModule() {
 
   // Fall back to internal I2C
   if (!_activeBus && Uni.InI2C) {
-    ProgressView::show("Scanning internal I2C...", 30);
+    ProgressView::progress("Scanning internal I2C...", 30);
     Uni.InI2C->setTimeOut(50);
     delay(100);
 
@@ -164,7 +165,7 @@ void MFRC522Screen::_initModule() {
     return;
   }
 
-  ProgressView::show("Starting RC522...", 70);
+  ProgressView::progress("Starting RC522...", 70);
   if (_module) delete _module;
   _module = new MFRC522_I2C(I2C_ADDRESS, (byte)-1, _activeBus);
   _module->PCD_Init();
@@ -232,14 +233,12 @@ void MFRC522Screen::_goShowDiscoveredKeys() {
 void MFRC522Screen::_callScanUid() {
   _state = STATE_SCAN_UID;
 
-  Sprite sp(&Uni.Lcd);
-  sp.createSprite(bodyW(), bodyH());
-  sp.fillSprite(TFT_BLACK);
-  sp.setTextDatum(MC_DATUM);
-  sp.setTextSize(1);
-  sp.drawString("Scanning ISO14443...", bodyW() / 2, bodyH() / 2);
-  sp.pushSprite(bodyX(), bodyY());
-  sp.deleteSprite();
+  auto& lcd = Uni.Lcd;
+  lcd.fillRect(bodyX(), bodyY(), bodyW(), bodyH(), TFT_BLACK);
+  lcd.setTextDatum(MC_DATUM);
+  lcd.setTextSize(1);
+  lcd.setTextColor(TFT_WHITE, TFT_BLACK);
+  lcd.drawString("Scanning ISO14443...", bodyX() + bodyW() / 2, bodyY() + bodyH() / 2);
 
   bool isFound = false;
   bool cancelled = false;
@@ -259,9 +258,9 @@ void MFRC522Screen::_callScanUid() {
 
   if (cancelled) { _goMainMenu(); return; }
 
-  sp.createSprite(bodyW(), bodyH());
-  sp.fillSprite(TFT_BLACK);
-  sp.setTextDatum(MC_DATUM);
+  lcd.fillRect(bodyX(), bodyY(), bodyW(), bodyH(), TFT_BLACK);
+  lcd.setTextDatum(MC_DATUM);
+  lcd.setTextColor(TFT_WHITE, TFT_BLACK);
 
   if (isFound) {
     int n = Achievement.inc("nfc_uid_first");
@@ -272,27 +271,25 @@ void MFRC522Screen::_callScanUid() {
     const char* piccName = (const char*)_module->PICC_GetTypeName(piccType);
     std::string uid = _uidToString(_module->uid.uidByte, _module->uid.size);
 
-    sp.setTextSize(1);
-    sp.drawString(piccName, bodyW() / 2, bodyH() / 2 - 24);
-    sp.setTextSize(2);
-    sp.drawString("ISO14443", bodyW() / 2, bodyH() / 2 - 8);
-    sp.drawString(uid.c_str(), bodyW() / 2, bodyH() / 2 + 10);
+    lcd.setTextSize(1);
+    lcd.drawString(piccName, bodyX() + bodyW() / 2, bodyY() + bodyH() / 2 - 24);
+    lcd.setTextSize(2);
+    lcd.drawString("ISO14443", bodyX() + bodyW() / 2, bodyY() + bodyH() / 2 - 8);
+    lcd.drawString(uid.c_str(), bodyX() + bodyW() / 2, bodyY() + bodyH() / 2 + 10);
   } else {
-    sp.setTextSize(2);
-    sp.drawString("No Tag Found", bodyW() / 2, bodyH() / 2 - 4);
+    lcd.setTextSize(2);
+    lcd.drawString("No Tag Found", bodyX() + bodyW() / 2, bodyY() + bodyH() / 2 - 4);
   }
 
-  sp.setTextSize(1);
+  lcd.setTextSize(1);
   #ifdef DEVICE_HAS_KEYBOARD
-    sp.drawString("ENTER: Scan  BACK: Menu", bodyW() / 2, bodyH() - 10);
+    lcd.setTextColor(TFT_WHITE, TFT_BLACK);
+    lcd.drawString("ENTER: Scan  BACK: Menu", bodyX() + bodyW() / 2, bodyY() + bodyH() - 10);
   #else
-    sp.fillRect(0, bodyH() - 16, bodyW(), 16, Config.getThemeColor());
-    sp.setTextColor(TFT_WHITE, Config.getThemeColor());
-    sp.drawString("PRESS: Scan", bodyW() / 2, bodyH() - 8);
+    lcd.fillRect(bodyX(), bodyY() + bodyH() - 16, bodyW(), 16, Config.getThemeColor());
+    lcd.setTextColor(TFT_WHITE, Config.getThemeColor());
+    lcd.drawString("PRESS: Scan", bodyX() + bodyW() / 2, bodyY() + bodyH() - 8);
   #endif
-
-  sp.pushSprite(bodyX(), bodyY());
-  sp.deleteSprite();
 }
 
 bool MFRC522Screen::_resetCardState() {
@@ -353,6 +350,7 @@ void MFRC522Screen::_callAuthenticate() {
 
   _mf1AuthKeys.fill({});
 
+  ProgressView::init();
   bool _keyFoundFired = false;
   for (size_t sector = 0; sector < totalSectors; sector++) {
     for (const auto& keyType : keyTypes) {
@@ -360,7 +358,7 @@ void MFRC522Screen::_callAuthenticate() {
       String msg = "Auth sector " + progress;
       msg += (keyType == MFRC522_I2C::PICC_CMD_MF_AUTH_KEY_A) ? " key A..." : " key B...";
       int pct = (int)((sector * 2 + (keyType == MFRC522_I2C::PICC_CMD_MF_AUTH_KEY_B ? 1 : 0)) * 100 / (totalSectors * 2));
-      ProgressView::show(msg.c_str(), pct);
+      ProgressView::progress(msg.c_str(), pct);
 
       for (const auto& key : NFCUtility::getDefaultKeys()) {
         const auto kv = key.value();
@@ -433,10 +431,11 @@ void MFRC522Screen::_callMemoryReader() {
   size_t totalBlocks = it->second.second;
   int lastValidatedSector = -1;
 
+  ProgressView::init();
   for (size_t block = 0; block < totalBlocks && _rowCount < MAX_ROWS - 1; block++) {
     int pct = (int)(block * 100 / totalBlocks);
     String msg = "Reading block " + String((int)block) + "/" + String((int)(totalBlocks - 1));
-    ProgressView::show(msg.c_str(), pct);
+    ProgressView::progress(msg.c_str(), pct);
 
     int currentSector = (block < 128) ? (block / 4) : ((block - 128) / 16 + 32);
     String blockLabel = "Blk " + String((int)block);
@@ -652,6 +651,7 @@ void MFRC522Screen::_callDictAttackWithFile(uint8_t fileIndex) {
     MFRC522_I2C::PICC_CMD_MF_AUTH_KEY_B
   };
 
+  ProgressView::init();
   for (size_t sector = 0; sector < totalSectors; sector++) {
     for (const auto& keyType : keyTypes) {
       bool isKeyA = (keyType == MFRC522_I2C::PICC_CMD_MF_AUTH_KEY_A);
@@ -662,7 +662,7 @@ void MFRC522Screen::_callDictAttackWithFile(uint8_t fileIndex) {
       char msg[48];
       snprintf(msg, sizeof(msg), "Dict S%d key %c (%d keys)",
         (int)sector, isKeyA ? 'A' : 'B', keyCount);
-      ProgressView::show(msg, pct);
+      ProgressView::progress(msg, pct);
 
       int blockIndex = (sector < 32)
         ? ((int)sector * 4 + 3)
@@ -763,7 +763,8 @@ void MFRC522Screen::_callStaticNested() {
     : (128 + (exploitSector - 32) * 16 + 15);
 
   // Check if card has static nonce
-  ProgressView::show("Checking static nonce...", 5);
+  ProgressView::init();
+  ProgressView::progress("Checking static nonce...", 5);
   if (!StaticNestedAttack::isStaticNonce(_module, uid, exploitCmd, exploitTrailer, exploitKey)) {
     _module->PCD_Init();
     ShowStatusAction::show("Card does not have\nstatic nonce");
@@ -783,13 +784,13 @@ void MFRC522Screen::_callStaticNested() {
     if (!_mf1AuthKeys[s].first) {
       char msg[48];
       snprintf(msg, sizeof(msg), "Static nested S%d A...", (int)s);
-      ProgressView::show(msg, (int)(s * 100 / totalSectors));
+      ProgressView::progress(msg, (int)(s * 100 / totalSectors));
 
       auto result = StaticNestedAttack::crack(
         _module, uid, exploitCmd, exploitTrailer, exploitKey,
         MFRC522_I2C::PICC_CMD_MF_AUTH_KEY_A, targetTrailer,
         [](const char* m, int pct) -> bool {
-          ProgressView::show(m, pct);
+          ProgressView::progress(m, pct);
           return true;
         });
 
@@ -806,13 +807,13 @@ void MFRC522Screen::_callStaticNested() {
     if (!_mf1AuthKeys[s].second) {
       char msg[48];
       snprintf(msg, sizeof(msg), "Static nested S%d B...", (int)s);
-      ProgressView::show(msg, (int)(s * 100 / totalSectors));
+      ProgressView::progress(msg, (int)(s * 100 / totalSectors));
 
       auto result = StaticNestedAttack::crack(
         _module, uid, exploitCmd, exploitTrailer, exploitKey,
         MFRC522_I2C::PICC_CMD_MF_AUTH_KEY_B, targetTrailer,
         [](const char* m, int pct) -> bool {
-          ProgressView::show(m, pct);
+          ProgressView::progress(m, pct);
           return true;
         });
 
@@ -884,13 +885,14 @@ void MFRC522Screen::_callDarksideAttack() {
     uid = (uid << 8) | _currentCard.uidByte[i];
 
   // Attack sector 0 key A (trailer block 3)
-  ProgressView::show("Darkside attack...", 0);
+  ProgressView::init();
+  ProgressView::progress("Darkside attack...", 0);
 
   auto result = DarksideAttack::crack(
     _module, uid, MFRC522_I2C::PICC_CMD_MF_AUTH_KEY_A, 3,
     Uni.Storage,
     [](const char* m, int pct) -> bool {
-      ProgressView::show(m, pct);
+      ProgressView::progress(m, pct);
       return true;
     });
 

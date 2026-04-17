@@ -92,8 +92,13 @@ public:
 
   void onRender() override
   {
-    uint8_t eff     = _effectiveCount();
-    uint8_t visible = bodyH() / ITEM_H;
+    uint8_t eff          = _effectiveCount();
+    uint8_t fullyVisible = bodyH() / ITEM_H;
+    uint8_t leftover     = bodyH() - fullyVisible * ITEM_H;
+    // If at least ~5px remain below the last full row, render a partial last
+    // item (scroll boundary still uses fullyVisible so user can scroll it
+    // fully into view — matching ScrollListView behavior).
+    uint8_t maxRows      = fullyVisible + (leftover >= 5 ? 1 : 0);
 
     auto& lcd = Uni.Lcd;
 
@@ -104,11 +109,16 @@ public:
 
     static const ListItem _backListItem = {"< Back", nullptr};
 
-    uint8_t rendered = 0;
-    for (uint8_t i = 0; i < visible; i++)
+    int16_t usedH = 0;
+    for (uint8_t i = 0; i < maxRows; i++)
     {
       uint8_t idx = i + _scrollOffset;
       if (idx >= eff) break;
+
+      int16_t rowY    = i * ITEM_H;
+      int16_t remain  = (int16_t)bodyH() - rowY;
+      if (remain <= 0) break;
+      int16_t rowH    = (remain < ITEM_H) ? remain : ITEM_H;
 
       const ListItem* item;
       if (_hasBackItem() && idx == _count)
@@ -121,7 +131,7 @@ public:
       uint16_t fg       = selected ? TFT_WHITE : TFT_LIGHTGREY;
 
       Sprite sprite(&lcd);
-      sprite.createSprite(bodyW(), ITEM_H);
+      sprite.createSprite(bodyW(), rowH);
       sprite.fillSprite(TFT_BLACK);
       sprite.setTextDatum(TL_DATUM);
 
@@ -144,14 +154,13 @@ public:
         sprite.drawString(item->label, 6, (ITEM_H / 2) - 4);
       }
 
-      sprite.pushSprite(bodyX(), bodyY() + i * ITEM_H);
+      sprite.pushSprite(bodyX(), bodyY() + rowY);
       sprite.deleteSprite();
-      rendered++;
+      usedH += rowH;
     }
 
     // Clear only the unused rows below the last item.
-    int16_t usedH = rendered * ITEM_H;
-    if (usedH < bodyH())
+    if (usedH < (int16_t)bodyH())
       lcd.fillRect(bodyX(), bodyY() + usedH, bodyW(), bodyH() - usedH, TFT_BLACK);
   }
 

@@ -145,6 +145,8 @@ void KeyboardScreen::_goMenu()
 {
   _state      = STATE_MENU;
   _menuCount  = 0;
+  _connectedChromeDrawn = false;
+  _scriptChromeDrawn    = false;
   StatusBar::bleConnected() = false;
   Uni.Nav->setSuppressKeys(false);
 
@@ -171,6 +173,7 @@ void KeyboardScreen::_goConnected()
   if (nr == 1) Achievement.unlock("kbd_relay_first");
 
   _state = STATE_KEYBOARD;
+  _connectedChromeDrawn = false;
   Uni.Nav->setSuppressKeys(true);
   render();
 }
@@ -215,8 +218,10 @@ void KeyboardScreen::_runDuckyScript(const String& path)
   if (nd == 5)  Achievement.unlock("kbd_ducky_5");
   if (nd == 10) Achievement.unlock("kbd_ducky_10");
 
-  _state           = STATE_RUNNING_SCRIPT;
-  _scriptLineCount = 0;
+  _state            = STATE_RUNNING_SCRIPT;
+  _scriptLineCount  = 0;
+  _scriptChromeDrawn = false;
+  _scriptLastRendered = 0;
   render();
 
   String content = Uni.Storage->readFile(path.c_str());
@@ -255,48 +260,77 @@ void KeyboardScreen::_addScriptLine(const String& text, bool ok)
 
 void KeyboardScreen::_renderConnected()
 {
-  Sprite sp(&Uni.Lcd);
-  sp.createSprite(bodyW(), bodyH());
-  sp.fillSprite(TFT_BLACK);
-
+  auto& lcd = Uni.Lcd;
   bool connected = _keyboard->isConnected() || _mode == MODE_USB;
+
+  if (!_connectedChromeDrawn) {
+    lcd.fillRect(bodyX(), bodyY(), bodyW(), bodyH(), TFT_BLACK);
+    lcd.setTextSize(1);
+    lcd.setTextColor(TFT_DARKGREY, TFT_BLACK);
+    lcd.setTextDatum(BC_DATUM);
+#if defined(DEVICE_M5_CARDPUTER) || defined(DEVICE_M5_CARDPUTER_ADV)
+    lcd.drawString("G0: Stop", bodyX() + bodyW() / 2, bodyY() + bodyH());
+#elif defined(DEVICE_T_LORA_PAGER)
+    lcd.drawString("Encoder press: Stop", bodyX() + bodyW() / 2, bodyY() + bodyH());
+#else
+    lcd.drawString("BACK / ENTER: Stop", bodyX() + bodyW() / 2, bodyY() + bodyH());
+#endif
+    _connectedChromeDrawn = true;
+    _connectedLastStatus  = !connected;  // force first status paint
+  }
+
+  if (_connectedLastStatus == connected) return;
+  _connectedLastStatus = connected;
+
+  const int spH = 20;
+  int pushY = bodyY() + bodyH() / 2 - spH / 2 - 8;
+  Sprite sp(&lcd);
+  sp.createSprite(bodyW(), spH);
+  sp.fillSprite(TFT_BLACK);
   sp.setTextDatum(MC_DATUM);
   sp.setTextSize(2);
   sp.setTextColor(connected ? TFT_GREEN : TFT_RED, TFT_BLACK);
-  sp.drawString(connected ? "Connected" : "Waiting...", bodyW() / 2, bodyH() / 2 - 8);
-  sp.setTextSize(1);
-  sp.setTextColor(TFT_DARKGREY, TFT_BLACK);
-  sp.setTextDatum(BC_DATUM);
-#if defined(DEVICE_M5_CARDPUTER) || defined(DEVICE_M5_CARDPUTER_ADV)
-  sp.drawString("G0: Stop", bodyW() / 2, bodyH());
-#elif defined(DEVICE_T_LORA_PAGER)
-  sp.drawString("Encoder press: Stop", bodyW() / 2, bodyH());
-#else
-  sp.drawString("BACK / ENTER: Stop", bodyW() / 2, bodyH());
-#endif
-
-  sp.pushSprite(bodyX(), bodyY());
+  sp.drawString(connected ? "Connected" : "Waiting...", bodyW() / 2, spH / 2);
+  sp.pushSprite(bodyX(), pushY);
   sp.deleteSprite();
 }
 
 void KeyboardScreen::_renderScript()
 {
-  Sprite sp(&Uni.Lcd);
-  sp.createSprite(bodyW(), bodyH());
+  auto& lcd = Uni.Lcd;
+  lcd.setTextSize(1);
+  uint8_t lineH = lcd.fontHeight() + 2;
+  const int footerH = lineH + 2;
+  const int linesH  = bodyH() - footerH;
+  if (linesH <= 0) return;
+
+  if (!_scriptChromeDrawn) {
+    lcd.fillRect(bodyX(), bodyY(), bodyW(), bodyH(), TFT_BLACK);
+    lcd.setTextDatum(BC_DATUM);
+    lcd.setTextColor(TFT_DARKGREY, TFT_BLACK);
+    lcd.drawString("BACK / ENTER: Close", bodyX() + bodyW() / 2, bodyY() + bodyH());
+    _scriptChromeDrawn  = true;
+    _scriptLastRendered = 0;
+  }
+
+  if (_scriptLineCount == _scriptLastRendered) return;
+  _scriptLastRendered = _scriptLineCount;
+
+  // Redraw all lines in a single sprite (count changes per tick, short text).
+  Sprite sp(&lcd);
+  sp.createSprite(bodyW(), linesH);
   sp.fillSprite(TFT_BLACK);
   sp.setTextDatum(TL_DATUM);
   sp.setTextSize(1);
 
-  uint8_t lineH = sp.fontHeight() + 2;
-  for (uint8_t i = 0; i < _scriptLineCount; i++) {
+  uint8_t maxVisible = (uint8_t)(linesH / lineH);
+  uint8_t start = _scriptLineCount > maxVisible ? _scriptLineCount - maxVisible : 0;
+  for (uint8_t i = start; i < _scriptLineCount; i++) {
+    int y = (i - start) * lineH;
+    if (y + (int)lineH > linesH) break;
     sp.setTextColor(_scriptLines[i].ok ? TFT_GREEN : TFT_RED, TFT_BLACK);
-    sp.drawString(_scriptLines[i].text, 0, i * lineH);
+    sp.drawString(_scriptLines[i].text, 0, y);
   }
-
-  sp.setTextColor(TFT_DARKGREY, TFT_BLACK);
-  sp.setTextDatum(BC_DATUM);
-  sp.drawString("BACK / ENTER: Close", bodyW() / 2, bodyH());
-
   sp.pushSprite(bodyX(), bodyY());
   sp.deleteSprite();
 }
