@@ -1,5 +1,6 @@
 #pragma once
 #include "BaseScreen.h"
+#include "utils/NavCapabilities.h"
 
 class ListScreen : public BaseScreen
 {
@@ -187,18 +188,7 @@ private:
 
   static constexpr uint8_t ITEM_H = 22;
 
-  bool _hasBackItem()
-  {
-#if defined(DEVICE_HAS_TOUCH_NAV) || defined(DEVICE_HAS_KEYBOARD)
-    return false;
-#else
-#ifdef DEVICE_HAS_NAV_MODE_SWITCH
-    if (Config.get(APP_CONFIG_NAV_MODE, APP_CONFIG_NAV_MODE_DEFAULT) == "encoder")
-      return false;
-#endif
-    return true;
-#endif
-  }
+  bool _hasBackItem() { return NavCapabilities::hasBackItem(); }
 
   uint8_t _effectiveCount()
   {

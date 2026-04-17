@@ -4,6 +4,7 @@
 
 #include "MainMenuScreen.h"
 #include "core/ScreenManager.h"
+#include "utils/NavCapabilities.h"
 #include "screens/wifi/WifiMenuScreen.h"
 #include "screens/ble/BLEMenuScreen.h"
 #include "screens/keyboard/KeyboardMenuScreen.h"
@@ -35,15 +36,7 @@ void MainMenuScreen::onInit() {
 
 bool MainMenuScreen::_hasBackItem()
 {
-#if defined(DEVICE_HAS_TOUCH_NAV) || defined(DEVICE_HAS_KEYBOARD)
-  return false;
-#else
-#ifdef DEVICE_HAS_NAV_MODE_SWITCH
-  if (Config.get(APP_CONFIG_NAV_MODE, APP_CONFIG_NAV_MODE_DEFAULT) == "encoder")
-    return false;
-#endif
-  return true;
-#endif
+  return NavCapabilities::hasBackItem();
 }
 
 uint8_t MainMenuScreen::_effectiveCount()

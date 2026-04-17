@@ -27,14 +27,14 @@ void ChameleonLFScreen::_draw() {
       sp.drawString("Place EM410X card near", bw / 2, bh / 2 - 10);
       sp.drawString("Chameleon reader", bw / 2, bh / 2 + 6);
       sp.setTextColor(TFT_WHITE, TFT_BLACK);
-      sp.drawString("[OK] to scan", bw / 2, bh / 2 + 24);
+      sp.drawString("[Press] Scan  [Hold] Menu", bw / 2, bh / 2 + 24);
       break;
 
     case STATE_ERROR:
       sp.setTextColor(TFT_RED, TFT_BLACK);
       sp.drawString("No card found", bw / 2, bh / 2 - 10);
       sp.setTextColor(TFT_DARKGREY, TFT_BLACK);
-      sp.drawString("[OK] to retry", bw / 2, bh / 2 + 8);
+      sp.drawString("[Press] Retry  [Hold] Menu", bw / 2, bh / 2 + 8);
       break;
 
     case STATE_CLONED:
@@ -44,7 +44,7 @@ void ChameleonLFScreen::_draw() {
       sp.drawString("Card loaded to slot.", bw / 2, bh / 2 - 4);
       sp.drawString("Emulating now.", bw / 2, bh / 2 + 12);
       sp.setTextColor(TFT_DARKGREY, TFT_BLACK);
-      sp.drawString("[Back] to menu", bw / 2, bh - 10);
+      sp.drawString("[Press] Rescan  [Hold] Menu", bw / 2, bh - 10);
       break;
 
     default: break;
@@ -109,15 +109,11 @@ void ChameleonLFScreen::_doScan() {
     _rows[_rowCount] = {_rowLabels[_rowCount].c_str(), _rowValues[_rowCount]};
     _rowCount++;
 
-    _rowLabels[_rowCount] = "[Right]"; _rowValues[_rowCount] = "Clone";
-    _rows[_rowCount] = {_rowLabels[_rowCount].c_str(), _rowValues[_rowCount]};
-    _rowCount++;
-
     _rowLabels[_rowCount] = "[Press]"; _rowValues[_rowCount] = "Scan again";
     _rows[_rowCount] = {_rowLabels[_rowCount].c_str(), _rowValues[_rowCount]};
     _rowCount++;
 
-    _rowLabels[_rowCount] = "[Left]"; _rowValues[_rowCount] = "Quit";
+    _rowLabels[_rowCount] = "[Hold]"; _rowValues[_rowCount] = "Menu";
     _rows[_rowCount] = {_rowLabels[_rowCount].c_str(), _rowValues[_rowCount]};
     _rowCount++;
 
@@ -188,53 +184,48 @@ void ChameleonLFScreen::onInit() {
 }
 
 void ChameleonLFScreen::onUpdate() {
-  if (!_scanning && Uni.Nav->isPressed() && Uni.Nav->heldDuration() >= 1000) {
+  if (_scanning) return;
+
+  if (!_holdFired && Uni.Nav->isPressed() && Uni.Nav->heldDuration() >= 700) {
+    _holdFired = true;
     Uni.Nav->suppressCurrentPress();
-    Screen.setScreen(new ChameleonLFMenuScreen());
+    static const InputSelectAction::Option optsIdle[] = {
+      {"Scan",  "scan"},
+      {"Exit",  "exit"},
+    };
+    static const InputSelectAction::Option optsResult[] = {
+      {"Clone to slot",  "slot"},
+      {"Write to T5577", "t5577"},
+      {"Scan again",     "scan"},
+      {"Exit",           "exit"},
+    };
+    const char* r = (_state == STATE_RESULT)
+      ? InputSelectAction::popup("Action", optsResult, 4, nullptr)
+      : InputSelectAction::popup("Action", optsIdle,   2, nullptr);
+    if (!r || strcmp(r, "exit") == 0) {
+      Screen.setScreen(new ChameleonLFMenuScreen());
+      return;
+    }
+    if (strcmp(r, "scan")  == 0) { _doScan(); return; }
+    if (strcmp(r, "slot")  == 0) { _doClone(); return; }
+    if (strcmp(r, "t5577") == 0) { _doT5577(); return; }
+    render();
     return;
   }
 
   if (Uni.Nav->wasPressed()) {
     auto dir = Uni.Nav->readDirection();
-
-    if (_state == STATE_RESULT) {
-      if (dir == INavigation::DIR_RIGHT) {
-        static const InputSelectAction::Option opts[] = {
-          {"Clone to slot",   "slot"},
-          {"Write to T5577",  "t5577"},
-        };
-        const char* r = InputSelectAction::popup("EM410X Action", opts, 2, nullptr);
-        if (r && strcmp(r, "slot")  == 0) _doClone();
-        else if (r && strcmp(r, "t5577") == 0) _doT5577();
-        else render();
-        return;
-      }
-      if (dir == INavigation::DIR_LEFT || dir == INavigation::DIR_BACK) {
-        Screen.setScreen(new ChameleonLFMenuScreen());
-        return;
-      }
-      if (dir == INavigation::DIR_PRESS) {
-        _state     = STATE_IDLE;
-        _needsDraw = true;
-        _doScan();
-        return;
-      }
-      _scrollView.onNav(dir);
-      return;
-    }
-
     if (dir == INavigation::DIR_BACK) {
       Screen.setScreen(new ChameleonLFMenuScreen());
       return;
     }
     if (dir == INavigation::DIR_PRESS) {
-      if (_state == STATE_IDLE || _state == STATE_ERROR) {
-        _doScan();
-      } else if (_state == STATE_CLONED) {
-        Screen.setScreen(new ChameleonLFMenuScreen());
-      }
+      _doScan();
       return;
     }
+    if (_state == STATE_RESULT) _scrollView.onNav(dir);
+  } else if (_holdFired && !Uni.Nav->isPressed()) {
+    _holdFired = false;
   }
 }
 

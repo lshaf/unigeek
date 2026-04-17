@@ -17,6 +17,7 @@ private:
   State _state     = STATE_IDLE;
   bool  _scanning  = false;
   bool  _needsDraw = true;
+  bool  _holdFired = false;
 
   uint8_t _uid[5] = {};
 
