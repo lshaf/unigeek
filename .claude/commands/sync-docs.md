@@ -1,3 +1,8 @@
+---
+name: sync-docs
+description: Sync README.md, knowledge files, and catalog.js with recent firmware commits
+---
+
 # sync-docs
 
 Sync README.md, knowledge/*.md, and website/content/features/catalog.js with recent firmware commits.
