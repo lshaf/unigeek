@@ -5,7 +5,6 @@ export const BOARDS = [
     chip: "ESP32",
     tags: ["WiFi", "BLE", "NFC", "IR", "Encoder"],
     bin: "/firmware/unigeek-m5stickcplus_11.bin",
-    knownIssues: ["NRF24 module untested"],
   },
   {
     id: "m5stickcplus_2",
@@ -13,7 +12,6 @@ export const BOARDS = [
     chip: "ESP32",
     tags: ["WiFi", "BLE", "NFC", "IR", "Encoder"],
     bin: "/firmware/unigeek-m5stickcplus_2.bin",
-    knownIssues: ["NRF24 module untested"],
   },
   {
     id: "t_lora_pager",
