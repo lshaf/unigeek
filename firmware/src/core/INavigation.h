@@ -52,6 +52,16 @@ public:
   void setSuppressKeys(bool s) { _suppressKeys = s; }
   bool suppressKeys() const    { return _suppressKeys; }
 
+  // Used by main.cpp when a press wakes the display from power save: clear any
+  // pending release event and, if a press is currently in progress, drop its
+  // future release so it never propagates as an action. The wake-up press only
+  // turns the screen on — it must not double as an action press.
+  void suppressCurrentPress() {
+    _wasPressed = false;
+    _releasedDirection = DIR_NONE;
+    _suppressRelease = _pressed;
+  }
+
 protected:
   void updateState(Direction currentlyHeld) {
     uint32_t now = millis();
@@ -65,11 +75,16 @@ protected:
 
     } else {
       if (_pressed) {
-        _wasPressed = true;
-        _releasedDirection = _currDirection;
-        _pressDuration = now - _pressStart;
         _pressed = false;
-        _currDirection = DIR_NONE;
+        _pressDuration = now - _pressStart;
+        if (_suppressRelease) {
+          _suppressRelease = false;
+          _currDirection = DIR_NONE;
+        } else {
+          _wasPressed = true;
+          _releasedDirection = _currDirection;
+          _currDirection = DIR_NONE;
+        }
       }
     }
   }
@@ -78,9 +93,10 @@ private:
   Direction _currDirection    = DIR_NONE;
   Direction _releasedDirection = DIR_NONE;
 
-  bool     _pressed      = false;
-  bool     _wasPressed   = false;
-  bool     _suppressKeys = false;
+  bool     _pressed         = false;
+  bool     _wasPressed      = false;
+  bool     _suppressKeys    = false;
+  bool     _suppressRelease = false;
 
   uint32_t _pressStart   = 0;
   uint32_t _pressDuration = 0;
