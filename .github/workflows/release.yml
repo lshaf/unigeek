@@ -29,7 +29,7 @@ jobs:
           - t_display_s3
           - diy_smoochie
           - t_embed_cc1101
-          - m5_cores3_unified
+          - m5_cores3
           - m5sticks3
           - cyd_2432w328r
 

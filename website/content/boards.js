@@ -96,11 +96,11 @@ export const BOARDS = [
     ],
   },
   {
-    id: "m5_cores3_unified",
+    id: "m5_cores3",
     name: "M5 CoreS3",
     chip: "ESP32-S3",
     tags: ["WiFi", "BLE", "Touch", "USB HID"],
-    bin: "/firmware/unigeek-m5_cores3_unified.bin",
+    bin: "/firmware/unigeek-m5_cores3.bin",
     nav: [
       ["Touch", [
         { input: "Touch — left edge (x < 80)", action: "Back" },

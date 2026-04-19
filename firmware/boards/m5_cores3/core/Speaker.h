@@ -22,6 +22,7 @@
 #pragma once
 
 #include "core/SpeakerI2S.h"
+#include "core/sounds/SoundBeeps.h"
 #include "../lib/AW9523B.h"
 #include <driver/i2s.h>
 #include <Wire.h>
@@ -67,12 +68,18 @@ public:
     SpeakerI2S::noTone();
   }
 
-  // +18 semitones: all scale notes land in 740–1397 Hz, above AW88298 audible floor.
+  // Play one of 7 WAV beeps matching scale {60,62,64,65,67,69,71} (C4–B4).
   void playRandomTone(int semitoneShift = 0, uint32_t durationMs = 150) override {
-    static constexpr int scale[] = {60, 62, 64, 65, 67, 69, 71};
-    int      midi = scale[random(0, 7)] + semitoneShift + 18;
-    uint16_t freq = (uint16_t)(440.0f * powf(2.0f, (float)(midi - 69) / 12.0f));
-    tone(freq, durationMs);
+    static const uint8_t* const beeps[7] = {
+      BEEP1_SOUND, BEEP2_SOUND, BEEP3_SOUND, BEEP4_SOUND,
+      BEEP5_SOUND, BEEP6_SOUND, BEEP7_SOUND
+    };
+    static const size_t sizes[7] = {
+      sizeof(BEEP1_SOUND), sizeof(BEEP2_SOUND), sizeof(BEEP3_SOUND), sizeof(BEEP4_SOUND),
+      sizeof(BEEP5_SOUND), sizeof(BEEP6_SOUND), sizeof(BEEP7_SOUND)
+    };
+    int idx = random(0, 7);
+    playWav(beeps[idx], sizes[idx]);
   }
 
 private:
