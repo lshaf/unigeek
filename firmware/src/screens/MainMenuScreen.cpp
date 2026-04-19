@@ -27,8 +27,9 @@ void MainMenuScreen::onInit() {
   _items[7] = {"Power Off", Icons::drawPower};
 #endif
 
-  _selectedIndex = 0;
-  _scrollOffset = 0;
+  _selectedIndex    = 0;
+  _scrollOffset     = 0;
+  _partialTopActive = false;
 
   _calculateLayout();
 }
@@ -64,9 +65,11 @@ void MainMenuScreen::_scrollIfNeeded()
 {
   uint8_t currentRow = _selectedIndex / _cols;
   if (currentRow < _scrollOffset) {
-    _scrollOffset = currentRow;
+    _scrollOffset     = currentRow;
+    _partialTopActive = false;
   } else if (currentRow >= _scrollOffset + _visibleRows) {
-    _scrollOffset = currentRow - _visibleRows + 1;
+    _scrollOffset     = currentRow - _visibleRows + 1;
+    _partialTopActive = true;
   }
 }
 
@@ -168,7 +171,7 @@ void MainMenuScreen::onRender() {
   int16_t curY  = 0;
   int16_t usedH = 0;
 
-  bool showPartialTop = hasPartial && _scrollOffset > 0;
+  bool showPartialTop = hasPartial && _scrollOffset > 0 && _partialTopActive;
 
   // Scrolled down: show bottom `leftover` px of row above, top clipped.
   if (showPartialTop) {

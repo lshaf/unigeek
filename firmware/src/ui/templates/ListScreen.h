@@ -13,10 +13,11 @@ public:
   template <size_t N>
   void setItems(ListItem (&arr)[N])
   {
-    _items = arr;
-    _count = N;
-    _selectedIndex = 0;
-    _scrollOffset = 0;
+    _items            = arr;
+    _count            = N;
+    _selectedIndex    = 0;
+    _scrollOffset     = 0;
+    _partialTopActive = false;
     render();
   }
 
@@ -91,11 +92,8 @@ public:
   {
     uint8_t eff          = _effectiveCount();
     uint8_t fullyVisible = bodyH() / ITEM_H;
-    uint8_t leftover     = bodyH() - fullyVisible * ITEM_H;
-    // If at least ~5px remain below the last full row, render a partial last
-    // item (scroll boundary still uses fullyVisible so user can scroll it
-    // fully into view — matching ScrollListView behavior).
-    uint8_t maxRows      = fullyVisible + (leftover >= 5 ? 1 : 0);
+    int16_t leftover     = (int16_t)bodyH() - fullyVisible * (int16_t)ITEM_H;
+    bool    hasPartial   = leftover >= 5;
 
     auto& lcd = Uni.Lcd;
 
@@ -104,19 +102,8 @@ public:
       return;
     }
 
-    int16_t usedH = 0;
-    for (uint8_t i = 0; i < maxRows; i++)
-    {
-      uint8_t idx = i + _scrollOffset;
-      if (idx >= eff) break;
-
-      int16_t rowY    = i * ITEM_H;
-      int16_t remain  = (int16_t)bodyH() - rowY;
-      if (remain <= 0) break;
-      int16_t rowH    = (remain < ITEM_H) ? remain : ITEM_H;
-
-      const ListItem* item = &_items[idx];
-
+    auto renderRow = [&](uint8_t idx, int16_t screenY, int16_t rowH, int16_t dy) {
+      const ListItem* item     = &_items[idx];
       bool     selected = (idx == _selectedIndex);
       uint16_t bg       = selected ? Config.getThemeColor() : TFT_BLACK;
       uint16_t fg       = selected ? TFT_WHITE : TFT_LIGHTGREY;
@@ -127,30 +114,61 @@ public:
       sprite.setTextDatum(TL_DATUM);
 
       if (selected)
-      {
-        sprite.fillRoundRect(0, 2, bodyW(), ITEM_H - 4, 3, bg);
-      }
+        sprite.fillRoundRect(0, 2 + dy, bodyW(), ITEM_H - 4, 3, bg);
 
       sprite.setTextColor(fg, bg);
 
       if (item->sublabel)
       {
-        sprite.drawString(item->label, 6, (ITEM_H / 2) - 4);
+        sprite.drawString(item->label, 6, (ITEM_H / 2) - 4 + dy);
         sprite.setTextColor(selected ? TFT_CYAN : TFT_DARKGREY, bg);
         int16_t subX = bodyW() - 6 - sprite.textWidth(item->sublabel);
-        sprite.drawString(item->sublabel, subX, (ITEM_H / 2) - 4);
+        sprite.drawString(item->sublabel, subX, (ITEM_H / 2) - 4 + dy);
       }
       else
       {
-        sprite.drawString(item->label, 6, (ITEM_H / 2) - 4);
+        sprite.drawString(item->label, 6, (ITEM_H / 2) - 4 + dy);
       }
 
-      sprite.pushSprite(bodyX(), bodyY() + rowY);
+      sprite.pushSprite(bodyX(), bodyY() + screenY);
       sprite.deleteSprite();
-      usedH += rowH;
+    };
+
+    int16_t curY  = 0;
+    int16_t usedH = 0;
+
+    bool showPartialTop = hasPartial && _scrollOffset > 0 && _partialTopActive;
+
+    // Scrolled down: show bottom `leftover` px of row above, top clipped.
+    if (showPartialTop)
+    {
+      int16_t dy = -(int16_t)(ITEM_H - leftover);
+      renderRow(_scrollOffset - 1, 0, leftover, dy);
+      curY = leftover;
     }
 
-    // Clear only the unused rows below the last item.
+    // Full rows.
+    uint8_t rendered = 0;
+    for (uint8_t i = 0; i < fullyVisible; i++)
+    {
+      uint8_t idx = i + _scrollOffset;
+      if (idx >= eff) break;
+      renderRow(idx, curY + i * ITEM_H, ITEM_H, 0);
+      rendered++;
+    }
+    usedH = curY + rendered * ITEM_H;
+
+    // Peek of next row at bottom (when no partial top is shown).
+    if (hasPartial && !showPartialTop)
+    {
+      uint8_t idx = _scrollOffset + rendered;
+      if (idx < eff)
+      {
+        renderRow(idx, usedH, leftover, 0);
+        usedH += leftover;
+      }
+    }
+
     if (usedH < (int16_t)bodyH())
       lcd.fillRect(bodyX(), bodyY() + usedH, bodyW(), bodyH() - usedH, TFT_BLACK);
   }
@@ -172,9 +190,10 @@ protected:
   }
 
 private:
-  ListItem*     _items        = nullptr;
-  uint8_t       _count        = 0;
-  uint8_t       _scrollOffset = 0;
+  ListItem*     _items            = nullptr;
+  uint8_t       _count            = 0;
+  uint8_t       _scrollOffset     = 0;
+  bool          _partialTopActive = false;
 
   static constexpr uint8_t ITEM_H = 22;
 
@@ -187,10 +206,13 @@ private:
   {
     uint8_t visible = bodyH() / ITEM_H;
     uint8_t eff     = _effectiveCount();
-    if (_selectedIndex < _scrollOffset)
-      _scrollOffset = _selectedIndex;
-    else if (_selectedIndex >= _scrollOffset + visible)
-      _scrollOffset = _selectedIndex - visible + 1;
+    if (_selectedIndex < _scrollOffset) {
+      _scrollOffset     = _selectedIndex;
+      _partialTopActive = false;
+    } else if (_selectedIndex >= _scrollOffset + visible) {
+      _scrollOffset     = _selectedIndex - visible + 1;
+      _partialTopActive = true;
+    }
     (void)eff;
   }
 };

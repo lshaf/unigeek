@@ -35,8 +35,9 @@ private:
 
   GridItem _items[ITEM_COUNT];
 
-  uint8_t _selectedIndex = 0;
-  uint8_t _scrollOffset = 0; // The row offset
+  uint8_t _selectedIndex    = 0;
+  uint8_t _scrollOffset     = 0;
+  bool    _partialTopActive = false;
 
   uint8_t  _cols = 1;
   uint8_t  _rows = 1;
