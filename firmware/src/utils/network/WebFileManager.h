@@ -13,8 +13,8 @@ public:
 
 private:
   AsyncWebServer _server{8080};
-  fs::FS*        _fs             = nullptr;
   fs::File       _fsUpload;
+  String         _uploadTempPath;
   int            _sessionCounter = 0;
   bool           _started        = false;
 

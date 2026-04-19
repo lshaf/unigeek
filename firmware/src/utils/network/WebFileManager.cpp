@@ -10,14 +10,12 @@ bool WebFileManager::begin() {
     _lastError = "WiFi not connected";
     return false;
   }
-  if (Uni.Storage && Uni.Storage->isAvailable()) {
-    _fs = &Uni.Storage->getFS();
-  } else {
+  if (!Uni.Storage || !Uni.Storage->isAvailable()) {
     _lastError = "No storage available";
     return false;
   }
   const String indexPath = String(WEB_PATH) + "/index.htm";
-  if (!_fs->exists(indexPath)) {
+  if (!Uni.Storage->exists(indexPath.c_str())) {
     _lastError = "Web page not installed\nWiFi > Network > Download\n> Web File Manager";
     return false;
   }
@@ -34,7 +32,6 @@ bool WebFileManager::begin() {
 void WebFileManager::end() {
   if (_fsUpload) _fsUpload.close();
   _server.reset();
-  _fs = nullptr;
   MDNS.end();
 }
 
@@ -56,17 +53,17 @@ bool WebFileManager::_isAuthenticated(AsyncWebServerRequest* request, bool logou
 }
 
 bool WebFileManager::_removeDirectory(const String& path) {
-  fs::File dir = _fs->open(path);
+  fs::File dir = Uni.Storage->open(path.c_str(), FILE_READ);
   if (!dir || !dir.isDirectory()) return false;
   fs::File f = dir.openNextFile();
   while (f) {
     String fp = String(f.path());
     if (f.isDirectory()) _removeDirectory(fp);
-    else _fs->remove(fp);
+    else Uni.Storage->deleteFile(fp.c_str());
     f = dir.openNextFile();
   }
   dir.close();
-  return _fs->rmdir(path);
+  return Uni.Storage->removeDir(path.c_str());
 }
 
 String WebFileManager::_getContentType(const String& filename) {
@@ -105,11 +102,11 @@ void WebFileManager::_prepareServer() {
       return;
     }
     const String path = request->arg("file");
-    if (!_fs->exists(path)) {
+    if (!Uni.Storage->exists(path.c_str())) {
       request->send(404, "text/plain", "File not found.");
       return;
     }
-    request->send(*_fs, path, _getContentType(path), true);
+    request->send(Uni.Storage->getFS(), path, _getContentType(path), true);
   });
 
   _server.on("/upload", HTTP_POST,
@@ -117,6 +114,23 @@ void WebFileManager::_prepareServer() {
       if (!_isAuthenticated(request)) {
         request->send(401, "text/plain", "not authenticated.");
         return;
+      }
+      // By the time the completion handler runs, all multipart fields are
+      // parsed — including "folder" even if it arrived after the file data.
+      // Move the file from its temp path to the requested folder if needed.
+      if (!_uploadTempPath.isEmpty()) {
+        String path = request->arg("folder");
+        if (!path.isEmpty()) {
+          if (!path.startsWith("/")) path = "/" + path;
+          if (!path.endsWith("/"))   path += "/";
+          const int sl = _uploadTempPath.lastIndexOf('/');
+          const String target = path + _uploadTempPath.substring(sl + 1);
+          if (target != _uploadTempPath) {
+            Uni.Storage->makeDir(path.substring(0, path.length() - 1).c_str());
+            Uni.Storage->renameFile(_uploadTempPath.c_str(), target.c_str());
+          }
+        }
+        _uploadTempPath = "";
       }
       request->send(200, "text/plain", "ok.");
     },
@@ -127,25 +141,19 @@ void WebFileManager::_prepareServer() {
         return;
       }
       if (!index) {
+        // "folder" may not be in _params yet if it arrives after the file in
+        // the multipart stream. Write to root first; completion handler moves
+        // the file to the correct folder once all params are parsed.
         String path = "/";
-        if (request->hasArg("folder")) {
-          path = request->arg("folder");
+        const String folder = request->arg("folder");
+        if (!folder.isEmpty()) {
+          path = folder;
           if (!path.startsWith("/")) path = "/" + path;
           if (!path.endsWith("/"))   path += "/";
+          Uni.Storage->makeDir(path.substring(0, path.length() - 1).c_str());
         }
-        const String fullPath = path + filename;
-        const int lastSlash = fullPath.lastIndexOf('/');
-        if (lastSlash > 0) {
-          String dir = fullPath.substring(0, lastSlash);
-          for (int i = 1; i < (int)dir.length(); i++) {
-            if (dir[i] == '/') {
-              String sub = dir.substring(0, i);
-              if (!_fs->exists(sub)) _fs->mkdir(sub);
-            }
-          }
-          if (!_fs->exists(dir)) _fs->mkdir(dir);
-        }
-        _fsUpload = _fs->open(fullPath, FILE_WRITE);
+        _uploadTempPath = path + filename;
+        _fsUpload = Uni.Storage->open(_uploadTempPath.c_str(), FILE_WRITE);
       }
       if (len && _fsUpload) _fsUpload.write(data, len);
       if (final && _fsUpload) _fsUpload.close();
@@ -168,18 +176,20 @@ void WebFileManager::_prepareServer() {
       String currentPath = request->hasParam("path", true)
         ? request->getParam("path", true)->value() : "/";
       if (currentPath == "") currentPath = "/";
-      fs::File dir = _fs->open(currentPath);
+      fs::File dir = Uni.Storage->open(currentPath.c_str(), FILE_READ);
       if (!dir || !dir.isDirectory()) {
         request->send(403, "text/plain", "Not a directory.");
         return;
       }
       String resp = "";
-      fs::File f = dir.openNextFile();
-      while (f) {
+      while (true) {
+        fs::File f = dir.openNextFile();
+        if (!f) break;
         resp += (f.isDirectory() ? "DIR:" : "FILE:") +
                 String(f.name()) + ":" + String(f.size()) + "\n";
-        f = dir.openNextFile();
+        f.close();
       }
+      dir.close();
       request->send(200, "text/plain", resp);
 
     } else if (command == "sysinfo") {
@@ -218,11 +228,11 @@ void WebFileManager::_prepareServer() {
       const String path = request->hasParam("path", true)
         ? request->getParam("path", true)->value() : "";
       if (path == "") { request->send(400, "text/plain", "No file specified."); return; }
-      if (!_fs->exists(path)) { request->send(404, "text/plain", "File not found."); return; }
-      fs::File f = _fs->open(path);
+      if (!Uni.Storage->exists(path.c_str())) { request->send(404, "text/plain", "File not found."); return; }
+      fs::File f = Uni.Storage->open(path.c_str(), FILE_READ);
       bool isDir = f.isDirectory();
       f.close();
-      bool ok = isDir ? _removeDirectory(path) : _fs->remove(path);
+      bool ok = isDir ? _removeDirectory(path) : Uni.Storage->deleteFile(path.c_str());
       request->send(ok ? 200 : 500, "text/plain",
         ok ? (isDir ? "Directory deleted." : "File deleted.") : "Failed to delete.");
 
@@ -235,15 +245,15 @@ void WebFileManager::_prepareServer() {
         request->send(400, "text/plain", "Source or destination not specified.");
         return;
       }
-      if (!_fs->exists(src)) { request->send(404, "text/plain", "Source not found."); return; }
-      bool ok = _fs->rename(src, dst);
+      if (!Uni.Storage->exists(src.c_str())) { request->send(404, "text/plain", "Source not found."); return; }
+      bool ok = Uni.Storage->renameFile(src.c_str(), dst.c_str());
       request->send(ok ? 200 : 500, "text/plain", ok ? "Moved." : "Failed to move.");
 
     } else if (command == "mkdir") {
       const String path = request->hasParam("path", true)
         ? request->getParam("path", true)->value() : "";
       if (path == "") { request->send(400, "text/plain", "No directory specified."); return; }
-      bool ok = _fs->mkdir(path);
+      bool ok = Uni.Storage->makeDir(path.c_str());
       request->send(ok ? 200 : 500, "text/plain",
         ok ? "Directory created." : "Failed to create directory.");
 
@@ -251,7 +261,7 @@ void WebFileManager::_prepareServer() {
       const String path = request->hasParam("path", true)
         ? request->getParam("path", true)->value() : "";
       if (path == "") { request->send(400, "text/plain", "No file specified."); return; }
-      fs::File f = _fs->open(path, FILE_WRITE);
+      fs::File f = Uni.Storage->open(path.c_str(), FILE_WRITE);
       if (f) { f.close(); request->send(200, "text/plain", "File created."); }
       else   { request->send(500, "text/plain", "Failed to create file."); }
 
@@ -259,8 +269,8 @@ void WebFileManager::_prepareServer() {
       const String path = request->hasParam("path", true)
         ? request->getParam("path", true)->value() : "";
       if (path == "") { request->send(400, "text/plain", "No file specified."); return; }
-      if (!_fs->exists(path)) { request->send(404, "text/plain", "File not found."); return; }
-      fs::File f = _fs->open(path);
+      if (!Uni.Storage->exists(path.c_str())) { request->send(404, "text/plain", "File not found."); return; }
+      fs::File f = Uni.Storage->open(path.c_str(), FILE_READ);
       String resp = "";
       while (f.available()) resp += char(f.read());
       f.close();
@@ -275,7 +285,7 @@ void WebFileManager::_prepareServer() {
         request->send(400, "text/plain", "File or content not specified.");
         return;
       }
-      fs::File f = _fs->open(path, FILE_WRITE);
+      fs::File f = Uni.Storage->open(path.c_str(), FILE_WRITE);
       if (!f) { request->send(500, "text/plain", "Failed to open file."); return; }
       f.print(content);
       f.close();
@@ -301,12 +311,12 @@ void WebFileManager::_prepareServer() {
     String url = request->url();
     url = url.substring(0, url.length() - 5) + ".htm";
     String filePath = String(WEB_PATH) + url;
-    if (_fs->exists(filePath)) {
-      request->send(*_fs, filePath, "text/html");
+    if (Uni.Storage->exists(filePath.c_str())) {
+      request->send(Uni.Storage->getFS(), filePath, "text/html");
     } else {
       request->send(404, "text/plain", "Not Found");
     }
   });
 
-  _server.serveStatic("/", *_fs, (String(WEB_PATH) + "/").c_str());
+  _server.serveStatic("/", Uni.Storage->getFS(), (String(WEB_PATH) + "/").c_str());
 }
