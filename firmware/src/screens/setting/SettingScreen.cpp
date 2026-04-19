@@ -18,6 +18,9 @@
 #ifdef DEVICE_HAS_TOUCH_NAV
 #include "screens/setting/TouchGuideScreen.h"
 #endif
+#ifdef DEVICE_HAS_SOUND
+#include "screens/setting/SpeakerTestScreen.h"
+#endif
 
 void SettingScreen::onInit() {
   setItems(_items);
@@ -170,6 +173,11 @@ void SettingScreen::onItemSelected(uint8_t index) {
       Config.set(APP_CONFIG_NAV_SOUND, cur ? "0" : "1");
       Config.save(Uni.Storage);
       _refresh();
+      break;
+    }
+
+    case SETT_SPEAKER_TEST: {
+      Screen.setScreen(new SpeakerTestScreen());
       break;
     }
 #endif

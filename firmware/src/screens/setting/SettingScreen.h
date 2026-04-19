@@ -32,6 +32,7 @@ private:
 #endif
 #ifdef DEVICE_HAS_SOUND
     SETT_NAV_SOUND,
+    SETT_SPEAKER_TEST,
 #endif
     SETT_COLOR,
 #ifdef DEVICE_HAS_NAV_MODE_SWITCH
@@ -91,6 +92,7 @@ private:
 #endif
 #ifdef DEVICE_HAS_SOUND
     {"Navigation Sound", ""},
+    {"Speaker Test"},
 #endif
     {"Primary Color",    ""},
 #ifdef DEVICE_HAS_NAV_MODE_SWITCH
