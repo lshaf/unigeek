@@ -46,6 +46,4 @@ private:
 
   void _calculateLayout();
   void _scrollIfNeeded();
-  bool _hasBackItem();
-  uint8_t _effectiveCount();
 };

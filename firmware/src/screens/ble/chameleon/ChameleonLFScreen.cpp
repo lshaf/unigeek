@@ -5,7 +5,6 @@
 #include "core/ScreenManager.h"
 #include "core/AchievementManager.h"
 #include "core/ConfigManager.h"
-#include "ui/actions/InputSelectOption.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -27,14 +26,14 @@ void ChameleonLFScreen::_draw() {
       sp.drawString("Place EM410X card near", bw / 2, bh / 2 - 10);
       sp.drawString("Chameleon reader", bw / 2, bh / 2 + 6);
       sp.setTextColor(TFT_WHITE, TFT_BLACK);
-      sp.drawString("[Press] Scan  [Hold] Menu", bw / 2, bh / 2 + 24);
+      sp.drawString("[Press] Scan", bw / 2, bh / 2 + 24);
       break;
 
     case STATE_ERROR:
       sp.setTextColor(TFT_RED, TFT_BLACK);
       sp.drawString("No card found", bw / 2, bh / 2 - 10);
       sp.setTextColor(TFT_DARKGREY, TFT_BLACK);
-      sp.drawString("[Press] Retry  [Hold] Menu", bw / 2, bh / 2 + 8);
+      sp.drawString("[Press] Retry", bw / 2, bh / 2 + 8);
       break;
 
     case STATE_CLONED:
@@ -44,7 +43,7 @@ void ChameleonLFScreen::_draw() {
       sp.drawString("Card loaded to slot.", bw / 2, bh / 2 - 4);
       sp.drawString("Emulating now.", bw / 2, bh / 2 + 12);
       sp.setTextColor(TFT_DARKGREY, TFT_BLACK);
-      sp.drawString("[Press] Rescan  [Hold] Menu", bw / 2, bh - 10);
+      sp.drawString("[Press] Rescan", bw / 2, bh - 10);
       break;
 
     default: break;
@@ -113,7 +112,7 @@ void ChameleonLFScreen::_doScan() {
     _rows[_rowCount] = {_rowLabels[_rowCount].c_str(), _rowValues[_rowCount]};
     _rowCount++;
 
-    _rowLabels[_rowCount] = "[Hold]"; _rowValues[_rowCount] = "Menu";
+    _rowLabels[_rowCount] = "[Hold]"; _rowValues[_rowCount] = "Copy to slot";
     _rows[_rowCount] = {_rowLabels[_rowCount].c_str(), _rowValues[_rowCount]};
     _rowCount++;
 
@@ -189,27 +188,7 @@ void ChameleonLFScreen::onUpdate() {
   if (!_holdFired && Uni.Nav->isPressed() && Uni.Nav->heldDuration() >= 700) {
     _holdFired = true;
     Uni.Nav->suppressCurrentPress();
-    static const InputSelectAction::Option optsIdle[] = {
-      {"Scan",  "scan"},
-      {"Exit",  "exit"},
-    };
-    static const InputSelectAction::Option optsResult[] = {
-      {"Clone to slot",  "slot"},
-      {"Write to T5577", "t5577"},
-      {"Scan again",     "scan"},
-      {"Exit",           "exit"},
-    };
-    const char* r = (_state == STATE_RESULT)
-      ? InputSelectAction::popup("Action", optsResult, 4, nullptr)
-      : InputSelectAction::popup("Action", optsIdle,   2, nullptr);
-    if (!r || strcmp(r, "exit") == 0) {
-      Screen.setScreen(new ChameleonLFMenuScreen());
-      return;
-    }
-    if (strcmp(r, "scan")  == 0) { _doScan(); return; }
-    if (strcmp(r, "slot")  == 0) { _doClone(); return; }
-    if (strcmp(r, "t5577") == 0) { _doT5577(); return; }
-    render();
+    if (_state == STATE_RESULT) _doClone();
     return;
   }
 

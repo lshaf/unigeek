@@ -5,7 +5,6 @@
 #include "core/ScreenManager.h"
 #include "core/AchievementManager.h"
 #include "core/ConfigManager.h"
-#include "ui/actions/InputSelectOption.h"
 
 const char* ChameleonHFScreen::_inferType(uint8_t sak, const uint8_t atqa[2]) {
   if (sak == 0x01) return "MF Classic Mini";
@@ -40,19 +39,19 @@ void ChameleonHFScreen::_draw() {
     sp.drawString("Place ISO14443 card near", bw / 2, bh / 2 - 10);
     sp.drawString("Chameleon reader face", bw / 2, bh / 2 + 6);
     sp.setTextColor(TFT_WHITE, TFT_BLACK);
-    sp.drawString("[Press] Scan  [Hold] Menu", bw / 2, bh / 2 + 24);
+    sp.drawString("[Press] Scan", bw / 2, bh / 2 + 24);
   } else if (_state == STATE_CLONED) {
     sp.setTextColor(TFT_GREEN, TFT_BLACK);
     sp.drawString("Clone success!", bw / 2, bh / 2 - 18);
     sp.setTextColor(TFT_DARKGREY, TFT_BLACK);
     sp.drawString("Card cloned to active slot", bw / 2, bh / 2);
     sp.setTextColor(TFT_WHITE, TFT_BLACK);
-    sp.drawString("[Press] Rescan  [Hold] Menu", bw / 2, bh / 2 + 18);
+    sp.drawString("[Press] Rescan", bw / 2, bh / 2 + 18);
   } else { // STATE_ERROR
     sp.setTextColor(TFT_RED, TFT_BLACK);
     sp.drawString("No card found", bw / 2, bh / 2 - 10);
     sp.setTextColor(TFT_DARKGREY, TFT_BLACK);
-    sp.drawString("[Press] Retry  [Hold] Menu", bw / 2, bh / 2 + 8);
+    sp.drawString("[Press] Retry", bw / 2, bh / 2 + 8);
   }
 
   sp.pushSprite(bx, by);
@@ -127,7 +126,7 @@ void ChameleonHFScreen::_doScan() {
     _rows[_rowCount] = {_rowLabels[_rowCount].c_str(), _rowValues[_rowCount]};
     _rowCount++;
 
-    _rowLabels[_rowCount] = "[Hold]"; _rowValues[_rowCount] = "Menu";
+    _rowLabels[_rowCount] = "[Hold]"; _rowValues[_rowCount] = "Copy to slot";
     _rows[_rowCount] = {_rowLabels[_rowCount].c_str(), _rowValues[_rowCount]};
     _rowCount++;
 
@@ -187,25 +186,7 @@ void ChameleonHFScreen::onUpdate() {
   if (!_holdFired && Uni.Nav->isPressed() && Uni.Nav->heldDuration() >= 700) {
     _holdFired = true;
     Uni.Nav->suppressCurrentPress();
-    static const InputSelectAction::Option optsIdle[] = {
-      {"Scan",  "scan"},
-      {"Exit",  "exit"},
-    };
-    static const InputSelectAction::Option optsResult[] = {
-      {"Clone to slot", "clone"},
-      {"Scan again",    "scan"},
-      {"Exit",          "exit"},
-    };
-    const char* r = (_state == STATE_RESULT)
-      ? InputSelectAction::popup("Action", optsResult, 3, nullptr)
-      : InputSelectAction::popup("Action", optsIdle,   2, nullptr);
-    if (!r || strcmp(r, "exit") == 0) {
-      Screen.setScreen(new ChameleonHFMenuScreen());
-      return;
-    }
-    if (strcmp(r, "scan") == 0) { _doScan(); return; }
-    if (strcmp(r, "clone") == 0) { _doClone(); return; }
-    render();
+    if (_state == STATE_RESULT) _doClone();
     return;
   }
 
@@ -216,7 +197,7 @@ void ChameleonHFScreen::onUpdate() {
       return;
     }
     if (dir == INavigation::DIR_PRESS) {
-      // Tap = scan (or re-scan). Hold = menu (handled above).
+      // Tap = scan (or re-scan). Hold = copy (handled above).
       _doScan();
       return;
     }

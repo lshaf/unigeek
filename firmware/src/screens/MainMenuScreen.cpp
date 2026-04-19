@@ -4,7 +4,6 @@
 
 #include "MainMenuScreen.h"
 #include "core/ScreenManager.h"
-#include "utils/NavCapabilities.h"
 #include "screens/wifi/WifiMenuScreen.h"
 #include "screens/ble/BLEMenuScreen.h"
 #include "screens/keyboard/KeyboardMenuScreen.h"
@@ -34,16 +33,6 @@ void MainMenuScreen::onInit() {
   _calculateLayout();
 }
 
-bool MainMenuScreen::_hasBackItem()
-{
-  return NavCapabilities::hasBackItem();
-}
-
-uint8_t MainMenuScreen::_effectiveCount()
-{
-  return ITEM_COUNT + (_hasBackItem() ? 1 : 0);
-}
-
 void MainMenuScreen::_calculateLayout()
 {
   // Measure widest label — item must be at least as wide as text + 2px each side.
@@ -68,7 +57,7 @@ void MainMenuScreen::_calculateLayout()
   _visibleRows = bodyH() / _itemH;
   if (_visibleRows == 0) _visibleRows = 1;
 
-  _rows = (_effectiveCount() + _cols - 1) / _cols;
+  _rows = (ITEM_COUNT + _cols - 1) / _cols;
 }
 
 void MainMenuScreen::_scrollIfNeeded()
@@ -90,8 +79,7 @@ void MainMenuScreen::onUpdate() {
       return;
     }
 
-    uint8_t eff = _effectiveCount();
-    if (eff == 0) return;
+    constexpr uint8_t eff = ITEM_COUNT;
 
 #ifdef DEVICE_HAS_4WAY_NAV
     if (dir == INavigation::DIR_UP) {
@@ -135,25 +123,15 @@ void MainMenuScreen::onUpdate() {
       if (Uni.Speaker) Uni.Speaker->beep();
     }
     else if (dir == INavigation::DIR_PRESS) {
-#ifndef DEVICE_HAS_KEYBOARD
-      if (_hasBackItem() && _selectedIndex == ITEM_COUNT) { onBack(); return; }
-#endif
       onItemSelected(_selectedIndex);
     }
   }
 }
 
 void MainMenuScreen::onRender() {
-  uint8_t eff = _effectiveCount();
+  constexpr uint8_t eff = ITEM_COUNT;
 
   auto& lcd = Uni.Lcd;
-
-  if (eff == 0) {
-    lcd.fillRect(bodyX(), bodyY(), bodyW(), bodyH(), TFT_BLACK);
-    return;
-  }
-
-  static const GridItem _backGridItem = {"Back", Icons::drawBack};
 
   uint8_t renderedRows = 0;
   for (uint8_t r = 0; r < _visibleRows; r++) {
@@ -165,11 +143,7 @@ void MainMenuScreen::onRender() {
       uint8_t idx = rowIdx * _cols + c;
       if (idx >= eff) break;
 
-      const GridItem* item;
-      if (_hasBackItem() && idx == ITEM_COUNT)
-        item = &_backGridItem;
-      else
-        item = &_items[idx];
+      const GridItem* item = &_items[idx];
 
       bool selected = (idx == _selectedIndex);
 

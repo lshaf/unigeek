@@ -1,6 +1,5 @@
 #pragma once
 #include "BaseScreen.h"
-#include "utils/NavCapabilities.h"
 
 class ListScreen : public BaseScreen
 {
@@ -83,9 +82,6 @@ public:
       }
       else if (dir == INavigation::DIR_PRESS)
       {
-#ifndef DEVICE_HAS_KEYBOARD
-        if (_hasBackItem() && _selectedIndex == _count) { onBack(); return; }
-#endif
         onItemSelected(_selectedIndex);
       }
     }
@@ -108,8 +104,6 @@ public:
       return;
     }
 
-    static const ListItem _backListItem = {"< Back", nullptr};
-
     int16_t usedH = 0;
     for (uint8_t i = 0; i < maxRows; i++)
     {
@@ -121,11 +115,7 @@ public:
       if (remain <= 0) break;
       int16_t rowH    = (remain < ITEM_H) ? remain : ITEM_H;
 
-      const ListItem* item;
-      if (_hasBackItem() && idx == _count)
-        item = &_backListItem;
-      else
-        item = &_items[idx];
+      const ListItem* item = &_items[idx];
 
       bool     selected = (idx == _selectedIndex);
       uint16_t bg       = selected ? Config.getThemeColor() : TFT_BLACK;
@@ -188,11 +178,9 @@ private:
 
   static constexpr uint8_t ITEM_H = 22;
 
-  bool _hasBackItem() { return NavCapabilities::hasBackItem(); }
-
   uint8_t _effectiveCount()
   {
-    return _count + (_hasBackItem() ? 1 : 0);
+    return _count;
   }
 
   void _scrollIfNeeded()
