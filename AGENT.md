@@ -146,6 +146,8 @@ sdcard/ directory contains sample SD card data (portals, duckyscript, passwords,
   are exempt. See `docs/SCREEN_PATTERNS.md` → Partial-Redraw Pattern
 - Do NOT allocate full-body sprites even for one-shot renders — boards with large displays and small RAM
   will OOM (e.g. 320×240 @ 16-bit = ~150 KB). ALWAYS use per-block sprites (per-row, per-line, per-cell)
+- Do NOT edit Navigation.h or Navigation.cpp without also updating the affected board's section
+  in docs/NAVIGATION.md
 
 ---
 
@@ -155,4 +157,10 @@ When completing a task that changes architecture, patterns, or conventions,
 update CLAUDE.md and AGENT.md immediately — do not wait for user to ask.
 
 Triggers: new board, new interface, new UI pattern, Device constructor change,
-ScreenManager change, new build flag, new library dependency, convention change.
+ScreenManager change, new build flag, new library dependency, convention change,
+navigation change (any Navigation.h or Navigation.cpp edit).
+
+**Navigation changes specifically:** whenever any board's Navigation.h or Navigation.cpp
+is added or modified (new input, changed GPIO, new direction mapping, new threshold),
+update the affected board's section in `docs/NAVIGATION.md`.
+Update only the affected board's table/notes — do not rewrite unrelated boards.

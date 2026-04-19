@@ -9,6 +9,7 @@ All hardware differences are isolated in board-specific folders.
 
 **Detailed references:**
 - `docs/HARDWARE.md`       — ISpeaker, IKeyboard, library deps, board hardware constraints
+- `docs/NAVIGATION.md`     — Per-board input→direction tables (buttons, encoder, touch, keyboard)
 - `docs/SCREEN_PATTERNS.md` — Rendering rules, back nav, overlays, views, config, storage, achievements
 - `docs/WEBSITE.md`        — Website sync, crediting refs, release process, build gates
 
@@ -233,6 +234,13 @@ Rule: every new screen with meaningful actions must have achievements. See `docs
 
 ---
 
+## Board Navigation Reference
+
+See `docs/NAVIGATION.md` — per-board physical input→direction tables for all boards.
+**Update docs/NAVIGATION.md whenever any Navigation.h or Navigation.cpp is changed.**
+
+---
+
 ## Known Constraints
 
 - static constexpr const char*[] arrays as class members cause linker errors
@@ -270,7 +278,8 @@ When making changes that affect architecture, conventions, or patterns:
 Never silently update CLAUDE.md or AGENT.md as a side effect of another task.
 
 Triggers: new board, new interface, new UI pattern, Device constructor change,
-ScreenManager change, new build flag, new library dependency, convention change.
+ScreenManager change, new build flag, new library dependency, convention change,
+navigation change (any Navigation.h or Navigation.cpp edit → update Board Navigation Reference).
 
 ---
 
