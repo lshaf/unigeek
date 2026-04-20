@@ -68,6 +68,13 @@ private:
   uint8_t _pipeSpeed = 0;
   uint16_t _pipeInterval = 0;
 
+#ifdef DEVICE_HAS_TOUCH_NAV
+  static constexpr uint16_t kTouchFirstRepeatMs = 350;
+  static constexpr uint16_t kTouchRepeatMs      = 200;
+  bool     _prevTouching  = false;
+  uint32_t _touchRepeatAt = 0;
+#endif
+
   void _initGame();
   void _flap();
   void _updateGame();

@@ -26,6 +26,22 @@ void GameFlappyScreen::onUpdate()
 
   if (_state == STATE_PLAY) {
     // Input before frame gate for lowest jump latency
+#ifdef DEVICE_HAS_TOUCH_NAV
+    {
+      bool touching = Uni.Nav->isPressed() &&
+                      Uni.Nav->currentDirection() != INavigation::DIR_BACK;
+      uint32_t now  = millis();
+      if (touching && !_prevTouching) {
+        _flap();
+        _touchRepeatAt = now + kTouchFirstRepeatMs;
+      } else if (touching && now >= _touchRepeatAt) {
+        _flap();
+        _touchRepeatAt = now + kTouchRepeatMs;
+      }
+      _prevTouching = touching;
+      if (hasNav && dir == INavigation::DIR_BACK) { _state = STATE_MENU; render(); return; }
+    }
+#else
     if (hasNav) {
       if (dir == INavigation::DIR_PRESS || dir == INavigation::DIR_UP) _flap();
       else if (dir == INavigation::DIR_BACK) { _state = STATE_MENU; render(); return; }
@@ -35,6 +51,7 @@ void GameFlappyScreen::onUpdate()
       char c = Uni.Keyboard->getKey();
       if (c == ' ' || c == '\n') { _flap(); break; }
     }
+#endif
 #endif
     uint32_t now = millis();
     if (now - _lastFrameMs >= 33) {
@@ -94,6 +111,11 @@ void GameFlappyScreen::_initGame()
   _state     = STATE_PLAY;
 
   _prevBirdY = -1;
+
+#ifdef DEVICE_HAS_TOUCH_NAV
+  _prevTouching  = false;
+  _touchRepeatAt = 0;
+#endif
 
   int n = Achievement.inc("flappy_first_play");
   if (n == 1) Achievement.unlock("flappy_first_play");
@@ -288,13 +310,18 @@ void GameFlappyScreen::_renderPlay()
     int gapTop = _pipes[i].gapY - _gapH / 2;
     int gapBot = _pipes[i].gapY + _gapH / 2;
 
-    // Erase vacated strip: one past new cap's right edge, width = pipeSpeed
-    // This is the ONLY area that turns from green to black this frame
+    // Erase the strip vacated by the pipe this frame.
+    // If the cap will be fully off-screen next frame, erase all the way to x=0
+    // now — the pipe will be removed by _updateGame() before the next render
+    // would have a chance to do it.
     if (px != oldX) {
-      int eraseX = px + kPipeW + 1;       // just past new cap right edge
-      int eraseW = min(oldX - px, w - eraseX);  // = _pipeSpeed, clamped
-      if (eraseX >= 0 && eraseX < w && eraseW > 0)
-        lcd.fillRect(bx + eraseX, by0, eraseW, groundTop, TFT_BLACK);
+      int oldCapR = min(oldX + kPipeW + 1, w);
+      int newCapR = (px + kPipeW + 1 <= (int)_pipeSpeed)
+                      ? 0
+                      : max(0, min(px + kPipeW + 1, w));
+      int eraseW  = oldCapR - newCapR;
+      if (newCapR < w && eraseW > 0)
+        lcd.fillRect(bx + newCapR, by0, eraseW, groundTop, TFT_BLACK);
     }
 
     // Draw pipe with coordinates clamped to body bounds
@@ -329,13 +356,13 @@ void GameFlappyScreen::_renderPlay()
   snprintf(buf, sizeof(buf), "%d", _score);
   lcd.setTextDatum(TC_DATUM);
   lcd.setTextSize(2);
-  lcd.setTextColor(TFT_WHITE, TFT_BLACK);
+  lcd.setTextColor(TFT_WHITE);
   lcd.drawString(buf, bx + w / 2, by0 + 2);
 
   snprintf(buf, sizeof(buf), "%ufps", _fps);
   lcd.setTextDatum(TR_DATUM);
   lcd.setTextSize(1);
-  lcd.setTextColor(TFT_DARKGREY, TFT_BLACK);
+  lcd.setTextColor(TFT_DARKGREY);
   lcd.drawString(buf, bx + w - 2, by0 + 2);
 }
 
