@@ -33,6 +33,7 @@ private:
   // Pipes
   struct Pipe {
     int16_t x;
+    int16_t prevX;
     uint8_t gapY;
     bool    scored;
   };
@@ -53,6 +54,14 @@ private:
   // Partial-redraw tracking
   State   _prevState   = (State)0xFF;
   int8_t  _lastMenuIdx = -1;
+
+  // Play-state dirty tracking
+  int16_t _prevBirdY = -1;
+
+  // FPS counter
+  uint32_t _fpsTimer = 0;
+  uint8_t  _fpsCount = 0;
+  uint8_t  _fps      = 0;
 
   // Derived from screen size
   uint8_t _gapH      = 0;

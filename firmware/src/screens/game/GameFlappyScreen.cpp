@@ -21,13 +21,14 @@ void GameFlappyScreen::onInit()
 
 void GameFlappyScreen::onUpdate()
 {
-  // Game loop ~30fps
+  bool hasNav = Uni.Nav->wasPressed();
+  INavigation::Direction dir = hasNav ? Uni.Nav->readDirection() : INavigation::DIR_NONE;
+
   if (_state == STATE_PLAY) {
-    uint32_t now = millis();
-    if (now - _lastFrameMs >= 33) {
-      _lastFrameMs = now;
-      _updateGame();
-      render();
+    // Input before frame gate for lowest jump latency
+    if (hasNav) {
+      if (dir == INavigation::DIR_PRESS || dir == INavigation::DIR_UP) _flap();
+      else if (dir == INavigation::DIR_BACK) { _state = STATE_MENU; render(); return; }
     }
 #ifdef DEVICE_HAS_KEYBOARD
     while (Uni.Keyboard->available()) {
@@ -35,10 +36,16 @@ void GameFlappyScreen::onUpdate()
       if (c == ' ' || c == '\n') { _flap(); break; }
     }
 #endif
+    uint32_t now = millis();
+    if (now - _lastFrameMs >= 33) {
+      _lastFrameMs = now;
+      _updateGame();
+      if (_state == STATE_PLAY) render();
+    }
+    return;
   }
 
-  if (!Uni.Nav->wasPressed()) return;
-  auto dir = Uni.Nav->readDirection();
+  if (!hasNav) return;
 
   if (_state == STATE_MENU) {
     switch (dir) {
@@ -54,13 +61,8 @@ void GameFlappyScreen::onUpdate()
     }
   } else if (_state == STATE_HIGH_SCORES) {
     if (dir != INavigation::DIR_NONE) { _state = STATE_MENU; render(); }
-  } else if (_state == STATE_PLAY) {
-    if (dir == INavigation::DIR_PRESS || dir == INavigation::DIR_UP) _flap();
-    else if (dir == INavigation::DIR_BACK) { _state = STATE_MENU; render(); }
   } else if (_state == STATE_RESULT) {
-    if (dir != INavigation::DIR_NONE) {
-      _state = STATE_MENU; _menuIdx = 0; render();
-    }
+    if (dir != INavigation::DIR_NONE) { _state = STATE_MENU; _menuIdx = 0; render(); }
   }
 }
 
@@ -91,6 +93,8 @@ void GameFlappyScreen::_initGame()
   _lastFrameMs = millis();
   _state     = STATE_PLAY;
 
+  _prevBirdY = -1;
+
   int n = Achievement.inc("flappy_first_play");
   if (n == 1) Achievement.unlock("flappy_first_play");
 
@@ -113,7 +117,8 @@ void GameFlappyScreen::_spawnPipe()
   uint8_t  maxGY = h - _gapH / 2 - 4;
   uint8_t  gapY  = minGY + random(maxGY - minGY + 1);
 
-  _pipes[_pipeCount++] = { (int16_t)bodyW(), gapY, false };
+  int16_t spawnX = (int16_t)bodyW();
+  _pipes[_pipeCount++] = { spawnX, spawnX, gapY, false };
 }
 
 void GameFlappyScreen::_updateGame()
@@ -245,70 +250,93 @@ void GameFlappyScreen::_renderMenu()
 
 void GameFlappyScreen::_renderPlay()
 {
+  auto& lcd    = Uni.Lcd;
+  int   bx     = bodyX(), by0 = bodyY();
+  int   w      = (int)bodyW(), h = (int)bodyH();
+  int   birdX  = 16, birdY = (int)_birdY;
+  int   groundTop = h - kGroundH;
+
+  // One-time init: clear screen + draw static ground
   if (_prevState != STATE_PLAY) {
-    Uni.Lcd.fillRect(bodyX(), bodyY(), bodyW(), bodyH(), TFT_BLACK);
+    lcd.fillRect(bx, by0, w, h, TFT_BLACK);
+    lcd.fillRect(bx, by0 + groundTop, w, kGroundH, TFT_BROWN);
+    for (int gx = 0; gx < w; gx += 8)
+      lcd.fillRect(bx + gx, by0 + groundTop, 4, 2, TFT_OLIVE);
+    _prevBirdY = -1;
+    _fpsCount  = 0;
+    _fps       = 0;
+    _fpsTimer  = millis();
     _prevState = STATE_PLAY;
   }
 
-  uint16_t w = bodyW();
-  uint16_t h = bodyH();
-  int birdX  = 16;
-  int by     = (int)_birdY;
-
-  const uint8_t kBands    = 4;
-  const int     bandH     = (h + kBands - 1) / kBands;
-
-  for (uint8_t b = 0; b < kBands; b++) {
-    int yStart = b * bandH;
-    int yEnd   = yStart + bandH;
-    if (yEnd > h) yEnd = h;
-    int thisBandH = yEnd - yStart;
-    if (thisBandH <= 0) continue;
-
-    Sprite sp(&Uni.Lcd);
-    sp.createSprite(w, thisBandH);
-    sp.fillSprite(TFT_BLACK);
-
-    int groundTop = h - kGroundH;
-    if (yEnd > groundTop) {
-      int gy = groundTop - yStart;
-      if (gy < 0) gy = 0;
-      sp.fillRect(0, gy, w, thisBandH - gy, TFT_BROWN);
-      for (int gx = 0; gx < w; gx += 8)
-        sp.fillRect(gx, gy, 4, 2, TFT_OLIVE);
-    }
-
-    for (uint8_t i = 0; i < _pipeCount; i++) {
-      int px     = _pipes[i].x;
-      int gapTop = _pipes[i].gapY - _gapH / 2;
-      int gapBot = _pipes[i].gapY + _gapH / 2;
-
-      if (gapTop > 0)
-        sp.fillRect(px, 0 - yStart, kPipeW, gapTop, TFT_DARKGREEN);
-      sp.fillRect(px - 1, gapTop - 3 - yStart, kPipeW + 2, 3, TFT_GREEN);
-
-      int botH = h - kGroundH - gapBot;
-      if (botH > 0)
-        sp.fillRect(px, gapBot - yStart, kPipeW, botH, TFT_DARKGREEN);
-      sp.fillRect(px - 1, gapBot - yStart, kPipeW + 2, 3, TFT_GREEN);
-    }
-
-    sp.fillRect(birdX, by - yStart, kBirdW, kBirdH, TFT_YELLOW);
-    sp.fillRect(birdX + kBirdW - 3, by + 1 - yStart, 2, 2, TFT_BLACK);
-    sp.fillRect(birdX + kBirdW, by + 3 - yStart, 3, 2, TFT_ORANGE);
-
-    if (b == 0) {
-      char buf[8];
-      snprintf(buf, sizeof(buf), "%d", _score);
-      sp.setTextDatum(TC_DATUM);
-      sp.setTextSize(2);
-      sp.setTextColor(TFT_WHITE);
-      sp.drawString(buf, w / 2, 2);
-    }
-
-    sp.pushSprite(bodyX(), bodyY() + yStart);
-    sp.deleteSprite();
+  // FPS counter
+  _fpsCount++;
+  uint32_t now = millis();
+  if (now - _fpsTimer >= 1000) {
+    _fps = _fpsCount; _fpsCount = 0; _fpsTimer = now;
   }
+
+  // 1. Erase old bird (body + beak extent)
+  if (_prevBirdY >= 0)
+    lcd.fillRect(bx + birdX - 1, by0 + _prevBirdY, kBirdW + 5, kBirdH, TFT_BLACK);
+
+  // 2. Per-pipe: erase only the vacated trailing right strip, then draw
+  //    prevX is stored in each Pipe struct — survives index shift on pipe removal
+  for (uint8_t i = 0; i < _pipeCount; i++) {
+    int px     = _pipes[i].x;
+    int oldX   = _pipes[i].prevX;
+    int gapTop = _pipes[i].gapY - _gapH / 2;
+    int gapBot = _pipes[i].gapY + _gapH / 2;
+
+    // Erase vacated strip: one past new cap's right edge, width = pipeSpeed
+    // This is the ONLY area that turns from green to black this frame
+    if (px != oldX) {
+      int eraseX = px + kPipeW + 1;       // just past new cap right edge
+      int eraseW = min(oldX - px, w - eraseX);  // = _pipeSpeed, clamped
+      if (eraseX >= 0 && eraseX < w && eraseW > 0)
+        lcd.fillRect(bx + eraseX, by0, eraseW, groundTop, TFT_BLACK);
+    }
+
+    // Draw pipe with coordinates clamped to body bounds
+    if (px + kPipeW > 0 && px < w) {
+      int bL = max(0, px),      bR = min(px + kPipeW,     w), bw = bR - bL;
+      int cL = max(0, px - 1),  cR = min(px + kPipeW + 1, w), cw = cR - cL;
+
+      if (bw > 0 && gapTop > 0)
+        lcd.fillRect(bx + bL, by0, bw, gapTop, TFT_DARKGREEN);
+      if (cw > 0 && gapTop > 3)
+        lcd.fillRect(bx + cL, by0 + gapTop - 3, cw, 3, TFT_GREEN);
+
+      if (bw > 0) {
+        int botH = groundTop - gapBot;
+        if (botH > 0) lcd.fillRect(bx + bL, by0 + gapBot, bw, botH, TFT_DARKGREEN);
+      }
+      if (cw > 0 && gapBot < groundTop)
+        lcd.fillRect(bx + cL, by0 + gapBot, cw, min(3, groundTop - gapBot), TFT_GREEN);
+    }
+
+    _pipes[i].prevX = (int16_t)px;
+  }
+
+  // 3. Draw bird
+  lcd.fillRect(bx + birdX,              by0 + birdY,     kBirdW, kBirdH, TFT_YELLOW);
+  lcd.fillRect(bx + birdX + kBirdW - 3, by0 + birdY + 1, 2,      2,      TFT_BLACK);
+  lcd.fillRect(bx + birdX + kBirdW,     by0 + birdY + 3, 3,      2,      TFT_ORANGE);
+  _prevBirdY = (int16_t)birdY;
+
+  // 4. Score + FPS — always redraw on top to cover pipe overdraw
+  char buf[16];
+  snprintf(buf, sizeof(buf), "%d", _score);
+  lcd.setTextDatum(TC_DATUM);
+  lcd.setTextSize(2);
+  lcd.setTextColor(TFT_WHITE, TFT_BLACK);
+  lcd.drawString(buf, bx + w / 2, by0 + 2);
+
+  snprintf(buf, sizeof(buf), "%ufps", _fps);
+  lcd.setTextDatum(TR_DATUM);
+  lcd.setTextSize(1);
+  lcd.setTextColor(TFT_DARKGREY, TFT_BLACK);
+  lcd.drawString(buf, bx + w - 2, by0 + 2);
 }
 
 void GameFlappyScreen::_renderResult()
