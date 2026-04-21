@@ -28,7 +28,8 @@ static const uint8_t SCL = GROVE_SCL;
 // ─── LCD ──────────────────────────────────────────────────
 #define LCD_CS   17
 #define LCD_DC   16
-#define LCD_BL   32   // backlight: HIGH = on, PWM capable
+#define LCD_BL     32
+#define LCD_BL_CH  7
 
 // ─── SD Card (dedicated HSPI: SCK=14, MISO=12, MOSI=13) ──
 #define SDCARD_CS    21

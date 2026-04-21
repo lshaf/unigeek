@@ -26,7 +26,8 @@ static const uint8_t SCL = GROVE_SCL;
 // ─── LCD ──────────────────────────────────────────────────
 #define LCD_CS  38
 #define LCD_DC  37
-#define LCD_BL  42
+#define LCD_BL     42
+#define LCD_BL_CH  7
 
 // ─── SD Card ──────────────────────────────────────────────
 #define SD_CS  21

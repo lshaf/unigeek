@@ -27,7 +27,8 @@ static const uint8_t SCL = 48;
 #define LCD_CS   7
 #define LCD_DC   15
 #define LCD_RST  16
-#define LCD_BL   6
+#define LCD_BL     6
+#define LCD_BL_CH  7
 
 // ─── SD Card (shares display SPI bus: SCK=18, MISO=8, MOSI=17) ───
 #define SD_CS  3

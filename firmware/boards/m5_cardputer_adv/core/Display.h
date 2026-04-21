@@ -12,8 +12,8 @@ public:
     static bool _ready = false;
     if (!_ready) {
       // Match M5GFX Light_PWM: GPIO38, ch7, 256 Hz, 9-bit
-      ledcSetup(7, 256, 9);
-      ledcAttachPin(LCD_BL, 7);
+      ledcSetup(LCD_BL_CH, 256, 9);
+      ledcAttachPin(LCD_BL, LCD_BL_CH);
       _ready = true;
     }
 
@@ -28,6 +28,6 @@ public:
       duty += 1u << 6u;  // 1 << (15 - PWM_BITS)
       duty >>= 7u;       // >> (16 - PWM_BITS)
     }
-    ledcWrite(7, duty);
+    ledcWrite(LCD_BL_CH, duty);
   }
 };

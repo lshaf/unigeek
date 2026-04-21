@@ -3,8 +3,6 @@
 #include "core/IPower.h"
 #include "pins_arduino.h"
 
-#define BAT_ADC_PIN  10
-
 class PowerImpl : public IPower
 {
 public:

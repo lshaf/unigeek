@@ -27,7 +27,9 @@ static const uint8_t SCL = 15;
 #define LCD_CS   37
 #define LCD_DC   34
 #define LCD_RST  33
-#define LCD_BL   38
+#define LCD_BL     38
+#define LCD_BL_CH  7
+#define BAT_ADC_PIN  10
 
 // ─── SD Card ──────────────────────────────────────────────
 #define SD_CS  12

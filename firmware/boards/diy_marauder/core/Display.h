@@ -11,11 +11,11 @@ public:
 
     static bool _ready = false;
     if (!_ready) {
-      ledcSetup(7, 5000, 8);
-      ledcAttachPin(LCD_BL, 7);
+      ledcSetup(LCD_BL_CH, 5000, 8);
+      ledcAttachPin(LCD_BL, LCD_BL_CH);
       _ready = true;
     }
 
-    ledcWrite(7, (uint32_t)pct * 255 / 100);
+    ledcWrite(LCD_BL_CH, (uint32_t)pct * 255 / 100);
   }
 };
