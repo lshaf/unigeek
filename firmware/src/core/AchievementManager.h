@@ -38,7 +38,7 @@ public:
   struct Catalog { const AchDef* defs; uint16_t count; };
 
   // Returns catalog pointer + count derived from sizeof — no manual counting needed
-  // Next available sequential ID: 200  (IDs 164–198 already used; 199 placed in domain 9)
+  // Next available sequential ID: 206  (IDs 164–198 already used; 199 placed in domain 9; 200–205 in domain 1)
   static Catalog catalog() {
     static constexpr AchDef kAchs[] = {
       // ── WiFi Network (domain 0) ────────────────────────────────────────────
@@ -103,9 +103,15 @@ public:
       { 57, "wifi_espnow_sent",          "Air Courier",            1, 0, "Send an ESP-NOW message" },
       { 58, "wifi_espnow_received",      "Air Interceptor",        1, 1, "Receive an ESP-NOW message" },
       { 59, "wifi_karma_support_pair",   "Support Bot",            1, 1, "Pair a support device via Karma" },
+      { 202, "wifi_karma_test_run",      "Karma Hunter",           1, 0, "Run the Karma detection test" },
+      { 203, "wifi_karma_detected",      "Caught Karma",           1, 2, "Detect a Karma-enabled rogue AP" },
+      { 204, "wifi_karma_detected_5",    "Karma Slayer",           1, 3, "Detect 5 Karma-enabled rogue APs" },
+      { 205, "wifi_evil_twin_detected",  "Twin Spotter",           1, 2, "Detect a potential evil twin AP in the wild" },
       { 60, "wifi_cctv_scan",            "Camera Sweep",           1, 1, "Scan for IP cameras on the network" },
       { 61, "wifi_cctv_found",           "Found You",              1, 2, "Discover an IP camera on the network" },
       { 62, "wifi_cctv_stream",          "Live Feed",              1, 2, "View a live IP camera stream" },
+      { 200, "wifi_probe_logged",        "Probe Collector",        1, 1, "Detect a device leaking its preferred network list" },
+      { 201, "wifi_beacon_flood",        "Flood Watcher",          1, 2, "Detect a beacon flood attack" },
       // ── Bluetooth (domain 2) ──────────────────────────────────────────────
       { 63, "ble_analyzer_scan",         "Bluetooth Scout",        2, 0, "Scan for nearby BLE devices" },
       { 64, "ble_analyzer_detail",       "BLE Inspector",          2, 0, "View details of a BLE device" },
