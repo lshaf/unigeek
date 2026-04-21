@@ -199,6 +199,11 @@ Key rules (brief):
 
 Rule: every new screen with meaningful actions must have achievements. See `docs/SCREEN_PATTERNS.md`.
 
+Achievement rules:
+- Always call `inc()` first, then `unlock()` on the returned count: `if (Achievement.inc("id") == 1) Achievement.unlock("id");`
+- Place new entries near other entries of the same domain in the catalog array, not at the end
+- After adding any new achievement, update the "Next available sequential ID" comment in `AchievementManager.h::catalog()`
+
 ---
 
 ## Code Conventions

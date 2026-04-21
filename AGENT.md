@@ -55,7 +55,11 @@ section with the repo link, author, and specific features taken as sub-bullets.
 8. **Think about achievements**: for every meaningful user action in the screen,
    add appropriate achievements to the catalog in `AchievementManager.h::catalog()`
    and hook `Achievement.inc()` / `Achievement.setMax()` / `Achievement.unlock()` calls
-   at the appropriate points in the screen implementation
+   at the appropriate points in the screen implementation.
+   Rules:
+   - Always `inc()` then `unlock()`: `if (Achievement.inc("id") == 1) Achievement.unlock("id");`
+   - Place new catalog entries near other entries of the same domain — not at the end of the file
+   - After adding entries, update the "Next available sequential ID" comment in `AchievementManager.h::catalog()`
 
 See `docs/SCREEN_PATTERNS.md` for full rendering rules, overlays, LogView, config, storage, and achievement details.
 
