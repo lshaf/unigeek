@@ -68,7 +68,7 @@ jobs:
         env:
           FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
         with:
-          files: unigeek-${{ matrix.env }}.bin
+          files: builds/unigeek-${{ matrix.env }}.bin
 
   build-website:
     runs-on: ubuntu-latest
