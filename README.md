@@ -25,8 +25,6 @@ Multi-tool firmware for ESP32-based handheld devices. Built with PlatformIO + Ar
 ### Known issues
 
 - **M5Stick S3** — CC1101, NRF24, and internal IR untested.
-- **CYD 2432W328R** — newly released, most external modules untested.
-- **CYD 2432S028 (2USB)** — newly released, most external modules untested.
 
 ---
 

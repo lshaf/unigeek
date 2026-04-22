@@ -254,7 +254,6 @@ export const BOARDS = [
     bootloader: "Auto (no buttons)",
     storage: "SD + LittleFS",
     bootNotes: "\"Cheap Yellow Display\" — touch-only. Some clones lack auto-reset; hold BOOT + tap EN if flashing fails.",
-    knownIssues: ["New addition — most modules untested"],
     nav: [
       ["Touch", [
         { input: "Touch — left edge (x < 80)", action: "Back" },
@@ -275,7 +274,6 @@ export const BOARDS = [
     bootloader: "Auto (no buttons)",
     storage: "SD + LittleFS",
     bootNotes: "\"Cheap Yellow Display\" 2-USB variant — ILI9341 with inverted colors, dedicated XPT2046 SPI. Some clones lack auto-reset; hold BOOT + tap EN if flashing fails.",
-    knownIssues: ["New addition — most modules untested"],
     nav: [
       ["Touch", [
         { input: "Touch — left edge (x < 80)", action: "Back" },
