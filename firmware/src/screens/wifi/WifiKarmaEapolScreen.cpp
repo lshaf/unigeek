@@ -46,7 +46,13 @@ struct KarmaEapolPcapPktHdr {
 
 WifiKarmaEapolScreen::~WifiKarmaEapolScreen()
 {
-  _stopAttack();
+  if (_state == STATE_RUNNING) {
+    _stopAttack();
+  } else if (_state == STATE_PAIR_SCAN) {
+    esp_now_unregister_recv_cb();
+    esp_now_deinit();
+    WiFi.mode(WIFI_OFF);
+  }
   _instance = nullptr;
 }
 
