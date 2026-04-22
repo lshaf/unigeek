@@ -1383,6 +1383,29 @@ button { font: inherit; color: inherit; background: transparent; border: 0; }
   letter-spacing: 0.04em;
 }
 
+.brand-filter {
+  display: flex; gap: 8px;
+  margin-bottom: 16px;
+}
+.brand-btn {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 5px 14px;
+  border: 1px solid var(--line);
+  background: var(--bg-elev);
+  color: var(--ink-muted);
+  cursor: pointer;
+  transition: all .15s;
+}
+.brand-btn:hover { border-color: var(--line-strong); color: var(--ink); }
+.brand-btn.active {
+  border-color: var(--accent);
+  background: var(--accent-dim);
+  color: var(--accent);
+}
+
 .board-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);

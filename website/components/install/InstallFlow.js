@@ -21,12 +21,33 @@ const METHODS = [
   },
 ];
 
+const BRANDS = [
+  { id: 'm5stack', label: 'M5Stack' },
+  { id: 'lilygo', label: 'LilyGo' },
+  { id: 'other', label: 'Other' },
+];
+
+function getBrand(id) {
+  if (id.startsWith('m5')) return 'm5stack';
+  if (id.startsWith('t_')) return 'lilygo';
+  return 'other';
+}
+
 export default function InstallFlow({ boards }) {
   const [boardId, setBoardId] = useState(boards[0]?.id ?? null);
   const [method, setMethod] = useState('web');
+  const [brand, setBrand] = useState('m5stack');
 
-  const board = boards.find((b) => b.id === boardId) || boards[0];
+  const filteredBoards = brand ? boards.filter((b) => getBrand(b.id) === brand) : boards;
+  const board = filteredBoards.find((b) => b.id === boardId) || filteredBoards[0];
   const methodInfo = METHODS.find((m) => m.id === method);
+
+  function handleBrandChange(newBrand) {
+    const next = newBrand === brand ? null : newBrand;
+    setBrand(next);
+    const visible = next ? boards.filter((b) => getBrand(b.id) === next) : boards;
+    if (!visible.find((b) => b.id === boardId)) setBoardId(visible[0]?.id ?? null);
+  }
 
   return (
     <>
@@ -34,10 +55,22 @@ export default function InstallFlow({ boards }) {
       <div className="step-head">
         <div className="step-num">Step 01</div>
         <div className="step-title">Select your board</div>
-        <div className="step-sub">{boards.length} available</div>
+        <div className="step-sub">{filteredBoards.length} of {boards.length} boards</div>
+      </div>
+      <div className="brand-filter">
+        {BRANDS.map((br) => (
+          <button
+            key={br.id}
+            type="button"
+            className={`brand-btn${brand === br.id ? ' active' : ''}`}
+            onClick={() => handleBrandChange(br.id)}
+          >
+            {br.label}
+          </button>
+        ))}
       </div>
       <div className="board-grid">
-        {boards.map((b) => (
+        {filteredBoards.map((b) => (
           <button
             key={b.id}
             type="button"
