@@ -23,11 +23,12 @@ public:
   virtual void update() = 0;
   virtual void begin() = 0;
 
-  // Optional post-render hook. Touch-nav boards use this to draw a live edge
-  // indicator showing which zone is currently being held. Called by main.cpp
-  // every loop AFTER Screen.update() so the overlay paints on top of all
-  // screen content. Default: no-op (button-nav boards don't need it).
-  virtual void drawOverlay() {}
+  // Post-render hook: draws the live edge indicator for the active touch zone.
+  // Skipped automatically when suppressKeys is set (e.g. touch-nav overall grid).
+  // Board NavigationImpl overrides _doDrawOverlay(); never override drawOverlay().
+  void drawOverlay() {
+    if (!_suppressKeys) _doDrawOverlay();
+  }
 
   bool isPressed()          const { return _pressed; }
   Direction currentDirection() const { return _currDirection; }
@@ -52,6 +53,9 @@ public:
   void setSuppressKeys(bool s) { _suppressKeys = s; }
   bool suppressKeys() const    { return _suppressKeys; }
 
+  int16_t lastTouchX() const { return _lastTouchX; }
+  int16_t lastTouchY() const { return _lastTouchY; }
+
   void setRightHand(bool v)  { _rightHand = v; }
 
   // Used by main.cpp when a press wakes the display from power save: clear any
@@ -65,6 +69,11 @@ public:
   }
 
 protected:
+  virtual void _doDrawOverlay() {}
+
+  int16_t _lastTouchX = -1;
+  int16_t _lastTouchY = -1;
+
   Direction orientDir(Direction d) const {
     if (_rightHand) {
       if (d == DIR_UP)   return DIR_DOWN;

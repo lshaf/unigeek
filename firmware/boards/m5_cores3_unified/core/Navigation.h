@@ -22,9 +22,11 @@
 class NavigationImpl : public INavigation
 {
 public:
-  void begin()       override {}
-  void update()      override;
-  void drawOverlay() override;
+  void begin()  override {}
+  void update() override;
+
+protected:
+  void _doDrawOverlay() override;
 
 private:
   Direction _curDir     = DIR_NONE;

@@ -79,6 +79,8 @@ void NavigationImpl::update() {
     else                       dir = DIR_DOWN;
   }
 
+  _lastTouchX = sx;
+  _lastTouchY = sy;
   _curDir = dir;
   updateState(_curDir);
 }
@@ -127,7 +129,7 @@ void NavigationImpl::_paintZone(Direction d, bool lit) {
   bar.deleteSprite();
 }
 
-void NavigationImpl::drawOverlay() {
+void NavigationImpl::_doDrawOverlay() {
   if (_curDir == _lastDir) return;
   if (_lastDir != DIR_NONE) _paintZone(_lastDir, false);  // clear old
   if (_curDir  != DIR_NONE) _paintZone(_curDir,  true);   // light new
