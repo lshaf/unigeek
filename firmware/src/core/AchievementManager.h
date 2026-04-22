@@ -38,7 +38,7 @@ public:
   struct Catalog { const AchDef* defs; uint16_t count; };
 
   // Returns catalog pointer + count derived from sizeof — no manual counting needed
-  // Next available sequential ID: 210  (IDs 164–198 already used; 199 placed in domain 9; 200–209 in domain 1)
+  // Next available sequential ID: 213  (IDs 164–198 already used; 199 placed in domain 9; 200–209 in domain 1; 210–212 in domain 9)
   static Catalog catalog() {
     static constexpr AchDef kAchs[] = {
       // ── WiFi Network (domain 0) ────────────────────────────────────────────
@@ -227,6 +227,9 @@ public:
       { 162, "filemgr_copy_first",        "Duplicator",             9, 0, "Copy a file in the file manager" },
       { 163, "fileview_first",            "Page Turner",            9, 0, "View a file in the file viewer" },
       { 199, "hexview_first",             "Hex Peeper",             9, 0, "View a file in the hex viewer" },
+      { 210, "totp_first_view",           "Time Keeper",            9, 0, "View a TOTP code for the first time" },
+      { 211, "totp_add_account",          "Key Chain",              9, 0, "Add a TOTP account" },
+      { 212, "totp_view_10",              "OTP Veteran",            9, 1, "View TOTP codes 10 times" },
       // ── Games (domain 10) ─────────────────────────────────────────────────
       { 164, "flappy_first_play",         "First Flight",          10, 0, "Play Flappy Bird for the first time" },
       { 165, "flappy_score_10",           "Skilled Flapper",       10, 1, "Score 10 points in Flappy Bird" },
