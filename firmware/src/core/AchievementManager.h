@@ -38,7 +38,7 @@ public:
   struct Catalog { const AchDef* defs; uint16_t count; };
 
   // Returns catalog pointer + count derived from sizeof — no manual counting needed
-  // Next available sequential ID: 206  (IDs 164–198 already used; 199 placed in domain 9; 200–205 in domain 1)
+  // Next available sequential ID: 210  (IDs 164–198 already used; 199 placed in domain 9; 200–209 in domain 1)
   static Catalog catalog() {
     static constexpr AchDef kAchs[] = {
       // ── WiFi Network (domain 0) ────────────────────────────────────────────
@@ -70,6 +70,7 @@ public:
       { 24, "wifi_deauth_10",            "Persistent Jammer",      1, 2, "Perform 10 separate deauth attacks" },
       { 25, "wifi_beacon_spam_first",    "SSID Flood",             1, 0, "Start beacon spam to flood SSIDs" },
       { 26, "wifi_beacon_spam_100",      "SSID Storm",             1, 1, "Broadcast 100+ fake SSID beacons" },
+      { 206, "wifi_beacon_flood_test",  "Flood Generator",        1, 0, "Launch a beacon flood to test the watchdog detector" },
       { 27, "wifi_evil_twin_started",    "Dark Mirror",            1, 1, "Start an evil twin AP attack" },
       { 28, "wifi_evil_twin_captured",   "Credential Thief",       1, 2, "Capture credentials via evil twin" },
       { 29, "wifi_evil_twin_5",          "Master Deceiver",        1, 3, "Capture 5 credential sets via evil twin" },
@@ -103,9 +104,12 @@ public:
       { 57, "wifi_espnow_sent",          "Air Courier",            1, 0, "Send an ESP-NOW message" },
       { 58, "wifi_espnow_received",      "Air Interceptor",        1, 1, "Receive an ESP-NOW message" },
       { 59, "wifi_karma_support_pair",   "Support Bot",            1, 1, "Pair a support device via Karma" },
-      { 202, "wifi_karma_test_run",      "Karma Hunter",           1, 0, "Run the Karma detection test" },
-      { 203, "wifi_karma_detected",      "Caught Karma",           1, 2, "Detect a Karma-enabled rogue AP" },
-      { 204, "wifi_karma_detected_5",    "Karma Slayer",           1, 3, "Detect 5 Karma-enabled rogue APs" },
+      { 202, "wifi_karma_test_run",           "Karma Hunter",       1, 0, "Run the Karma detection test" },
+      { 203, "wifi_karma_detected",           "Caught Karma",       1, 2, "Detect a Karma-enabled rogue AP" },
+      { 204, "wifi_karma_detected_5",         "Karma Slayer",       1, 3, "Detect 5 Karma-enabled rogue APs" },
+      { 207, "wifi_karma_detector_run",       "Karma Bloodhound",   1, 0, "Run the Karma Detector scanner" },
+      { 208, "wifi_karma_attack_detected",    "Karma Buster",       1, 2, "Detect an active Karma attack in the wild" },
+      { 209, "wifi_karma_attack_detected_5",  "Karma Nemesis",      1, 3, "Detect 5 active Karma attacks in the wild" },
       { 205, "wifi_evil_twin_detected",  "Twin Spotter",           1, 2, "Detect a potential evil twin AP in the wild" },
       { 60, "wifi_cctv_scan",            "Camera Sweep",           1, 1, "Scan for IP cameras on the network" },
       { 61, "wifi_cctv_found",           "Found You",              1, 2, "Discover an IP camera on the network" },
