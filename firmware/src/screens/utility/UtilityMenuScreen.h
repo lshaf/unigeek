@@ -12,12 +12,13 @@ public:
   void onItemSelected(uint8_t index) override;
 
 private:
-  ListItem _items[6] = {
+  ListItem _items[7] = {
     {"I2C Detector"},
     {"QR Code"},
     {"Barcode"},
     {"File Manager"},
     {"Achievements"},
     {"TOTP Auth"},
+    {"UART Terminal"},
   };
 };

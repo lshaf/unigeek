@@ -7,6 +7,7 @@
 #include "screens/utility/FileManagerScreen.h"
 #include "screens/utility/AchievementScreen.h"
 #include "screens/utility/TotpScreen.h"
+#include "screens/utility/UartTerminalScreen.h"
 
 void UtilityMenuScreen::onInit() {
   setItems(_items);
@@ -24,5 +25,6 @@ void UtilityMenuScreen::onItemSelected(uint8_t index) {
     case 3: Screen.setScreen(new FileManagerScreen());   break;
     case 4: Screen.setScreen(new AchievementScreen());   break;
     case 5: Screen.setScreen(new TotpScreen());          break;
+    case 6: Screen.setScreen(new UartTerminalScreen());  break;
   }
 }
