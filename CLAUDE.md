@@ -272,6 +272,13 @@ See `docs/NAVIGATION.md` — per-board physical input→direction tables for all
 
 ---
 
+## Git Policy
+
+Never run `git commit`, `git push`, or any other git write operation without the user explicitly requesting it.
+After making file edits, stop — do not stage, commit, or push. Proposing a commit message is fine; executing it is not.
+
+---
+
 ## Self-Updating This Document
 
 When making changes that affect architecture, conventions, or patterns:

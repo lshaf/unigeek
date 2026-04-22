@@ -31,6 +31,13 @@ section with the repo link, author, and specific features taken as sub-bullets.
 
 ---
 
+## Git Policy
+
+Never run `git commit`, `git push`, or any other git write operation without the user explicitly requesting it.
+After making file edits, stop — do not stage, commit, or push. Proposing a commit message is fine; executing it is not.
+
+---
+
 ## Before Making Any Changes
 
 1. Identify the target — is the change shared or board-specific?
