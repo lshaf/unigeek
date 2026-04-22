@@ -264,6 +264,27 @@ export const BOARDS = [
       ], "Touch-only navigation. Colored edge indicators are drawn on screen to show active zones."],
     ],
   },
+  {
+    id: "cyd_2432s028_2usb",
+    name: "CYD 2432S028 (2USB)",
+    chip: "ESP32",
+    tags: ["WiFi", "BLE", "Touch"],
+    bin: "/firmware/unigeek-cyd_2432s028_2usb.bin",
+    port: "Micro-USB or USB-C (CH340)",
+    baud: 921600,
+    bootloader: "Auto (no buttons)",
+    storage: "SD + LittleFS",
+    bootNotes: "\"Cheap Yellow Display\" 2-USB variant — ILI9341 with inverted colors, dedicated XPT2046 SPI. Some clones lack auto-reset; hold BOOT + tap EN if flashing fails.",
+    knownIssues: ["New addition — most modules untested"],
+    nav: [
+      ["Touch", [
+        { input: "Touch — left edge (x < 80)", action: "Back" },
+        { input: "Touch — right top third", action: "Up" },
+        { input: "Touch — right middle third", action: "Select" },
+        { input: "Touch — right bottom third", action: "Down" },
+      ], "Touch-only navigation. Colored edge indicators are drawn on screen to show active zones."],
+    ],
+  },
 ];
 
 export function getBoardById(id) {

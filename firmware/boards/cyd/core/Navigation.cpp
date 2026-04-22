@@ -131,8 +131,13 @@ static bool _readTouch(uint16_t* tx, uint16_t* ty) {
 
   if (xr < CAL_X_MIN || xr > CAL_X_MAX || yr < CAL_Y_MIN || yr > CAL_Y_MAX) return false;
 
+#ifdef CAL_SWAP_XY
+  *tx = (uint16_t)map((long)yr, CAL_Y_MIN, CAL_Y_MAX, 0, SCREEN_W - 1);
+  *ty = (uint16_t)map((long)xr, CAL_X_MIN, CAL_X_MAX, 0, SCREEN_H - 1);
+#else
   *tx = (uint16_t)map((long)xr, CAL_X_MIN, CAL_X_MAX, 0, SCREEN_W - 1);
   *ty = (uint16_t)map((long)yr, CAL_Y_MIN, CAL_Y_MAX, 0, SCREEN_H - 1);
+#endif
   return true;
 }
 
