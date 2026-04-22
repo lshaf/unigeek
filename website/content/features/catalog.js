@@ -6,7 +6,7 @@ export const CATEGORIES = [
   { id: "ble",      label: "BLE",      desc: "Bluetooth Low Energy scanning and spam" },
   { id: "keyboard", label: "Keyboard", desc: "HID over USB and BLE" },
   { id: "module",   label: "Modules",  desc: "NFC, IR, Sub-GHz, NRF24, GPS" },
-  { id: "utility",  label: "Utility",  desc: "QR, barcode, file manager, achievements" },
+  { id: "utility",  label: "Utility",  desc: "QR, barcode, file manager, TOTP, UART terminal, achievements" },
   { id: "game",     label: "Games",    desc: "Lightweight on-device games" },
   { id: "setting",  label: "Settings", desc: "Device preferences and pins" },
 ];
@@ -66,7 +66,9 @@ export const CATALOG = [
   { slug: "file-manager",         title: "File Manager",        category: "utility",  summary: "Browse, rename, copy, cut, paste, and delete files on device storage",                               hasDetail: false, stable: true },
   { slug: "hex-viewer",           title: "File Hex Viewer",     category: "utility",  summary: "View any file as a scrollable hex dump with offset, hex byte columns, and ASCII representation",      hasDetail: false, stable: true },
   { slug: "i2c-detector",         title: "I2C Detector",        category: "utility",  summary: "Scan the I2C bus and list all responding device addresses",                                           hasDetail: false, stable: true },
-  { slug: "achievements",         title: "Achievements",        category: "utility",  summary: "199 achievements across 13 domains (~84 800 EXP pool); set any unlocked entry as your Agent Title", hasDetail: true,  stable: true },
+  { slug: "achievements",         title: "Achievements",        category: "utility",  summary: "217 achievements across 13 domains (~91 000 EXP pool); set any unlocked entry as your Agent Title", hasDetail: true,  stable: true },
+  { slug: "totp-auth",            title: "TOTP Auth",           category: "utility",  summary: "Time-based OTP authenticator; add accounts by Base32 secret, view live 6/8-digit codes with countdown, hold to view or delete",  hasDetail: true,  stable: true },
+  { slug: "uart-terminal",        title: "UART Terminal",       category: "utility",  summary: "Serial terminal over configurable GPIO pins; text/hex send modes, real-time receive, optional session log save",                   hasDetail: true,  stable: true },
 
   // Games
   { slug: "game-flappy",          title: "Flappy Bird",         category: "game",     summary: "Classic side-scrolling game with randomized pipes and scoring",                                       hasDetail: false, stable: true },

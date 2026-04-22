@@ -102,7 +102,9 @@ Multi-tool firmware for ESP32-based handheld devices. Built with PlatformIO + Ar
 - **Barcode** — Generate and display a Code 128 barcode from typed or file-loaded text
 - **File Manager** — Browse, rename, copy, cut, paste, and delete files and folders on storage; directories sorted first then alphabetical; tap a file to view its contents; hold 1s to open context menu
 - **File Hex Viewer** — View any file as a scrollable hex dump with offset, hex byte columns, and ASCII representation
-- **Achievements** — View all achievements grouped by domain (13 domains, 199 entries, ≈ 84 800 EXP pool); shows tier (Bronze/Silver/Gold/Platinum), description, and unlock status; long-press an unlocked achievement to set it as your Agent Title ([details](knowledge/achievements.md))
+- **Achievements** — View all achievements grouped by domain (13 domains, 217 entries, ≈ 91 000 EXP pool); shows tier (Bronze/Silver/Gold/Platinum), description, and unlock status; long-press an unlocked achievement to set it as your Agent Title ([details](knowledge/achievements.md))
+- **TOTP Auth** — Time-based one-time password authenticator; add accounts by name and Base32 secret, view live 6- or 8-digit codes with a countdown progress bar, hold an account row to view or delete it; keeps display on while viewing a code ([details](knowledge/totp-auth.md))
+- **UART Terminal** — Serial terminal over configurable GPIO pins; set baud rate, RX and TX GPIOs, switch between string and hex send mode (UP/DOWN toggle), send commands via dialog, receive data in real time, and optionally save the session log to storage ([details](knowledge/uart-terminal.md))
 
 ### Games
 - **HEX Decoder** — Wordle-style game using hexadecimal characters (0–9, A–F)
@@ -171,7 +173,7 @@ Full-screen profile accessible from the main menu. Displays:
 - **HP** — battery percentage; shows `+CHG` when charging
 - **BRAIN** — free heap as a percentage of total heap
 - **ACHIEVEMENT** — total unlocked achievements out of all available
-- Domain bars for each achievement domain showing per-domain completion (WiFi, Attacks, BT, HID, NFC, IR, RF, NRF24, GPS, Utility, Games, Settings, Chameleon — 13 domains, 199 achievements total, pool ≈ 84 800 EXP)
+- Domain bars for each achievement domain showing per-domain completion (WiFi, Attacks, BT, HID, NFC, IR, RF, NRF24, GPS, Utility, Games, Settings, Chameleon — 13 domains, 217 achievements total, pool ≈ 91 000 EXP)
 
 ### Settings
 - Device name
@@ -250,6 +252,8 @@ Files are stored under `/unigeek/` on either SD card or LittleFS (fallback):
 /unigeek/wigle_token               Wigle API token
 /unigeek/utility/passwords/        Password wordlists for EAPOL brute force
 /unigeek/utility/cctv/             CCTV Sniffer target IP lists
+/unigeek/utility/totp/             TOTP account key files (<name>.key)
+/unigeek/utility/uart/             UART session log files (<name>.log)
 /unigeek/nfc/dictionaries/         MIFARE Classic key dictionary files
 /unigeek/nfc/dumps/                Card dumps (.bin) from MFRC522 / Chameleon Ultra
 /unigeek/nfc/keys/                 Recovered sector keys (<uid>.txt)
@@ -331,4 +335,4 @@ This project was built with inspiration and reference from:
 - implement thermal camera
 - change keyboard to HID instead, mode will be USB and BLE, while BLE and USB only have Keyboard, Mouse and Jiggle Mouse, USB has 1 more option is Mass Storage.
 
-<!-- README last synced at commit: 3ac3f8d (CYD 2USB board, WiFi Watchdog, Karma Detector, Beacon Spam rework, File Hex Viewer) -->
+<!-- README last synced at commit: 7067c07 (TOTP Auth, UART Terminal, hex input mode) -->
