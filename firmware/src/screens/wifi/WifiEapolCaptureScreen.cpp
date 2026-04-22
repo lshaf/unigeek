@@ -408,7 +408,7 @@ bool WifiEapolCaptureScreen::_checkFreeSpace() {
   if (!StorageUtil::hasSpace()) {
     _storageOk = false;
     _logView.addLine("Storage full! Stopped.", TFT_RED);
-    ShowStatusAction::show("Storage full!\nCapture stopped.", 2000);
+    ShowStatusAction::show("Storage full! Capture stopped.", 2000);
     return false;
   }
   return true;

@@ -560,7 +560,7 @@ void MFRC522Screen::_callDictionaryAttack() {
   }
 
   if (_dictFileCount == 0) {
-    ShowStatusAction::show("No dictionary files\nin nfc/dictionaries/");
+    ShowStatusAction::show("No dictionary files in nfc/dictionaries/");
     _goMifareClassic();
     return;
   }
@@ -749,7 +749,7 @@ void MFRC522Screen::_callStaticNested() {
   }
 
   if (exploitSector < 0) {
-    ShowStatusAction::show("Need at least one\nknown key first!");
+    ShowStatusAction::show("Need at least one known key first!");
     render();
     return;
   }
@@ -767,7 +767,7 @@ void MFRC522Screen::_callStaticNested() {
   ProgressView::progress("Checking static nonce...", 5);
   if (!StaticNestedAttack::isStaticNonce(_module, uid, exploitCmd, exploitTrailer, exploitKey)) {
     _module->PCD_Init();
-    ShowStatusAction::show("Card does not have\nstatic nonce");
+    ShowStatusAction::show("Card does not have static nonce");
     _goMifareClassic();
     return;
   }

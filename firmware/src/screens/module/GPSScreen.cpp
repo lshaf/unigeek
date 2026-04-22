@@ -79,7 +79,7 @@ void GPSScreen::onUpdate() {
       return;
     }
     if (millis() - _initTime > 5000 && _gps.gps.charsProcessed() < 10) {
-      ShowStatusAction::show("GPS not detected!\nCheck connection");
+      ShowStatusAction::show("GPS not detected! Check connection");
       _gps.end();
       _disableGnssPower();
       Screen.setScreen(new ModuleMenuScreen());
@@ -222,7 +222,7 @@ void GPSScreen::onItemSelected(uint8_t index) {
         _gps.setScanMode(_scanMode);
         _gps.setWardriveMode(_wardMode);
         if (!_gps.initWardrive(Uni.Storage)) {
-          ShowStatusAction::show(("Wardrive error:\n" + _gps.wardriveError()).c_str());
+          ShowStatusAction::show(("Wardrive error: " + _gps.wardriveError()).c_str());
           render();
           return;
         }
@@ -429,15 +429,15 @@ void GPSScreen::_connectInternet() {
   for (uint8_t i = 0; i < count; i++) {
     if (strcmp(scanned[i].ssid, selected) != 0) continue;
 
-    ShowStatusAction::show(("Connecting to\n" + String(scanned[i].ssid) + "...").c_str(), 0);
+    ShowStatusAction::show(("Connecting to " + String(scanned[i].ssid) + "...").c_str(), 0);
     auto result = WifiUtility::connectWithPrompt(scanned[i].bssid, scanned[i].ssid);
 
     if (result == WifiUtility::CONNECT_OK) {
       ShowStatusAction::show("Checking internet...", 0);
       if (WifiUtility::checkInternet()) {
-        ShowStatusAction::show(("Connected to\n" + WiFi.SSID()).c_str(), 1500);
+        ShowStatusAction::show(("Connected to " + WiFi.SSID()).c_str(), 1500);
       } else {
-        ShowStatusAction::show("Connected but\nno internet access");
+        ShowStatusAction::show("Connected but no internet access");
       }
     } else if (result == WifiUtility::CONNECT_FAILED) {
       ShowStatusAction::show("Connection failed");

@@ -121,7 +121,7 @@ void DownloadScreen::_downloadWebPage() {
                       Uni.Storage->exists((base + "/index.css").c_str()) &&
                       Uni.Storage->exists((base + "/index.js").c_str());
     if (local == sha && filesExist) {
-      ShowStatusAction::show(("Already up to date\nv" + sha.substring(0, 7)).c_str(), 1500);
+      ShowStatusAction::show(("Already up to date v" + sha.substring(0, 7)).c_str(), 1500);
       _showMenu();
       return;
     }

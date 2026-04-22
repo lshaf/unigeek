@@ -253,9 +253,9 @@ bool WigleUtil::uploadFile(IStorage* storage, const String& fileName) {
     ShowStatusAction::show("Upload successful!");
     return true;
   } else if (response.indexOf("401") >= 0 || response.indexOf("\"success\":false") >= 0) {
-    ShowStatusAction::show("Upload failed!\nCheck token");
+    ShowStatusAction::show("Upload failed! Check token");
   } else {
-    ShowStatusAction::show("Upload error\nCheck connection");
+    ShowStatusAction::show("Upload error. Check connection");
   }
   return false;
 }

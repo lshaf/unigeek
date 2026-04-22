@@ -321,7 +321,7 @@ void ChameleonSlotEditScreen::_writeContent() {
       }
     }
     if (count == 0) {
-      ShowStatusAction::show("No .bin in\nnfc/dumps", 1500);
+      ShowStatusAction::show("No .bin in nfc/dumps", 1500);
       render();
       return;
     }

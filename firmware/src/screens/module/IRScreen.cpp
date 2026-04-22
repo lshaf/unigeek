@@ -453,7 +453,7 @@ void IRScreen::_loadBrowseDir(const String& path) {
   }
 
   if (_browseCount == 0 && path == kRootPath) {
-    ShowStatusAction::show("No IR files found\nin /unigeek/ir/");
+    ShowStatusAction::show("No IR files found in /unigeek/ir/");
     _showMenu();
     return;
   }

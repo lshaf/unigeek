@@ -45,7 +45,7 @@ public:
     }
 
     if (optCount == 0) {
-      ShowStatusAction::show("No portals found\nWiFi > Network > Download\n> Firmware Sample Files");
+      ShowStatusAction::show("No portals found. WiFi > Network > Download > Firmware Sample Files");
       return false;
     }
 

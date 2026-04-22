@@ -69,7 +69,7 @@ void NetworkMitmScreen::onItemSelected(uint8_t index)
     case 4: { // File Manager
       if (!_fmEnabled) {
         if (!Uni.Storage || !Uni.Storage->exists(WebFileManager::WEB_PATH)) {
-          ShowStatusAction::show("File manager not\ndownloaded", 1500);
+          ShowStatusAction::show("File manager not downloaded", 1500);
           render();
           break;
         }
@@ -196,7 +196,7 @@ void NetworkMitmScreen::_showMenu()
 void NetworkMitmScreen::_start()
 {
   if (!_rogueEnabled && !_dnsEnabled && !_fmEnabled && !_starvEnabled) {
-    ShowStatusAction::show("Enable at least\none option!");
+    ShowStatusAction::show("Enable at least one option!");
     return;
   }
   if (_dnsEnabled && !StorageUtil::hasSpace()) {

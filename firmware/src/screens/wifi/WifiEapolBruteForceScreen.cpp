@@ -201,7 +201,7 @@ void WifiEapolBruteForceScreen::onItemSelected(uint8_t index) {
       _browseRoot = PCAP_DIR;
       _currentDir = PCAP_DIR;
       if (!_listFiles(".pcap")) {
-        ShowStatusAction::show("No PCAP files found.\nCapture EAPOL first.");
+        ShowStatusAction::show("No PCAP files found. Capture EAPOL first.");
         render();
         return;
       }
@@ -228,7 +228,7 @@ void WifiEapolBruteForceScreen::onItemSelected(uint8_t index) {
       }
       ShowStatusAction::show("Parsing PCAP...", 0);
       if (!_parsePcap(_selectedPcap)) {
-        ShowStatusAction::show("Handshake incomplete.\nM2 (SNonce) missing.\nRecapture needed.");
+        ShowStatusAction::show("Handshake incomplete. M2 missing. Recapture needed.");
         render();
         return;
       }
