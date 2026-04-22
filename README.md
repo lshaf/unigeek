@@ -50,9 +50,9 @@ Multi-tool firmware for ESP32-based handheld devices. Built with PlatformIO + Ar
   - **Wigle** — Upload wardrive logs, view user stats, and manage Wigle API token ([details](knowledge/gps-wardriving.md))
 - **Access Point** — Create a custom WiFi hotspot with optional DNS spoofing, captive portal, web file manager, and WiFi QR code for easy sharing ([details](knowledge/access-point.md))
 - **Evil Twin** — Clone a target AP's SSID with a captive portal; optional deauth and real-time password verification ([details](knowledge/evil-twin.md))
-- **Karma Captive** — Detect nearby probe requests and respond with a fake open AP serving a phishing portal to capture credentials ([details](knowledge/karma-attack.md))
-- **Karma EAPOL** — Detect nearby probe requests and deploy fake WPA2 APs via a paired Karma Support device; captures M1+M2 EAPOL handshakes for offline cracking, advances automatically on capture ([details](knowledge/karma-attack.md))
-- **Karma Support** — Companion screen for a second device; receives deploy commands over ESP-NOW and hosts the fake WPA2 AP on behalf of the attack device ([details](knowledge/karma-attack.md))
+- **Karma Captive** — Detect nearby probe requests and respond with a fake open AP serving a phishing portal to capture credentials ([details](knowledge/karma-captive.md))
+- **Karma EAPOL** — Detect nearby probe requests and deploy fake WPA2 APs via a paired Karma Support device; captures M1+M2 EAPOL handshakes for offline cracking, advances automatically on capture ([details](knowledge/karma-eapol.md))
+- **Karma Support** — Companion screen for a second device; receives deploy commands over ESP-NOW and hosts the fake WPA2 AP on behalf of the attack device ([details](knowledge/karma-eapol.md))
 - **Karma Detector** — Scan for rogue APs responding to probes by broadcasting fake probe requests across all channels and monitoring for unexpected responses
 - **WiFi Analyzer** — Scan and display nearby networks with signal strength and channel info
 - **Packet Monitor** — Visualize WiFi traffic by channel
