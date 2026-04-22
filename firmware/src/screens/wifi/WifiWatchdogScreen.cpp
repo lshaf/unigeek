@@ -62,11 +62,13 @@ WifiWatchdogScreen::~WifiWatchdogScreen()
 
 void WifiWatchdogScreen::onInit()
 {
-  _view       = VIEW_OVERALL;
-  _state      = STATE_EMPTY;
-  _channel    = 1;
-  _itemCount  = 0;
-  _lastUpdate = millis();
+  _view        = VIEW_OVERALL;
+  _channel     = 1;
+  _itemCount   = 0;
+  _gridSel     = 0;
+  _prevGridSel = -1;
+  for (int i = 0; i < 4; i++) _prevCounts[i] = -1;
+  _lastUpdate  = millis();
 
   _ringHead = _ringTail = 0;
   _ssidRingHead = _ssidRingTail = 0;
@@ -84,26 +86,86 @@ void WifiWatchdogScreen::onInit()
   esp_wifi_set_promiscuous(true);
   esp_wifi_set_promiscuous_rx_cb(&WifiWatchdogScreen::_promiscuousCb);
 
+#ifdef DEVICE_HAS_TOUCH_NAV
+  Uni.Nav->setSuppressKeys(true);
+#endif
+
   render();
 }
 
 void WifiWatchdogScreen::onUpdate()
 {
-  if (Uni.Nav->wasPressed()) {
-    auto dir = Uni.Nav->readDirection();
-    if (dir == INavigation::DIR_BACK) {
-      onBack();
-      return;
+  if (_view == VIEW_OVERALL) {
+    if (Uni.Nav->wasPressed()) {
+      auto dir = Uni.Nav->readDirection();
+
+#ifdef DEVICE_HAS_TOUCH_NAV
+      const int16_t tx = Uni.Nav->lastTouchX();
+      const int16_t ty = Uni.Nav->lastTouchY();
+      const int backW  = bodyW() / 6;
+      if (dir == INavigation::DIR_BACK || (tx >= 0 && (int)tx < (int)bodyX() + backW)) {
+        onBack(); return;
+      }
+      if (tx >= 0) {
+        const int gx  = (int)tx - (int)bodyX() - backW;
+        const int gw  = bodyW() - backW;
+        const int col = gx / (gw / 2);
+        const int row = ((int)ty - (int)bodyY()) / (bodyH() / 2);
+        if (col >= 0 && col < 2 && row >= 0 && row < 2) {
+          static constexpr View kViewMap[] = {VIEW_DEAUTH, VIEW_PROBES, VIEW_FLOOD, VIEW_EVILTWIN};
+          Uni.Nav->setSuppressKeys(false);
+          _view      = kViewMap[row * 2 + col];
+          _itemCount = 0;
+          _renderView();
+        }
+      }
+#else
+      if (dir == INavigation::DIR_BACK) { onBack(); return; }
+
+#ifdef DEVICE_HAS_4WAY_NAV
+      if (dir == INavigation::DIR_UP || dir == INavigation::DIR_DOWN) {
+        _gridSel ^= 2;
+        _renderOverall();
+        if (Uni.Speaker) Uni.Speaker->beep();
+      } else if (dir == INavigation::DIR_LEFT || dir == INavigation::DIR_RIGHT) {
+        _gridSel ^= 1;
+        _renderOverall();
+        if (Uni.Speaker) Uni.Speaker->beep();
+      } else
+#endif
+      if (dir == INavigation::DIR_LEFT || dir == INavigation::DIR_UP) {
+        _gridSel = (_gridSel + 3) % 4;
+        _renderOverall();
+        if (Uni.Speaker) Uni.Speaker->beep();
+      } else if (dir == INavigation::DIR_RIGHT || dir == INavigation::DIR_DOWN) {
+        _gridSel = (_gridSel + 1) % 4;
+        _renderOverall();
+        if (Uni.Speaker) Uni.Speaker->beep();
+      } else if (dir == INavigation::DIR_PRESS) {
+        static constexpr View kViewMap[] = {VIEW_DEAUTH, VIEW_PROBES, VIEW_FLOOD, VIEW_EVILTWIN};
+        _view      = kViewMap[_gridSel];
+        _itemCount = 0;
+        _renderView();
+        return;
+      }
+#endif
     }
-    if (dir == INavigation::DIR_UP) {
-      _view = (View)((_view + 4) % 5);
-      _renderView();
-      return;
-    }
-    if (dir == INavigation::DIR_DOWN) {
-      _view = (View)((_view + 1) % 5);
-      _renderView();
-      return;
+
+  } else {
+    if (Uni.Nav->wasPressed()) {
+      auto dir = Uni.Nav->readDirection();
+      if (dir == INavigation::DIR_BACK || dir == INavigation::DIR_PRESS) {
+        _view        = VIEW_OVERALL;
+        _prevGridSel = -1;
+#ifdef DEVICE_HAS_TOUCH_NAV
+        Uni.Nav->setSuppressKeys(true);
+#endif
+        render();
+        return;
+      }
+      if (dir == INavigation::DIR_UP || dir == INavigation::DIR_DOWN) {
+        _scroll.onNav(dir);
+      }
     }
   }
 
@@ -120,20 +182,30 @@ void WifiWatchdogScreen::onUpdate()
 
 void WifiWatchdogScreen::onRender()
 {
-  if (_state == STATE_LISTED) {
-    ListScreen::onRender();
+  if (_view == VIEW_OVERALL) {
+    _prevGridSel = -1;
+    _renderOverall();
     return;
   }
-
-  auto& lcd = Uni.Lcd;
-  lcd.fillRect(bodyX(), bodyY(), bodyW(), bodyH(), TFT_BLACK);
-  lcd.setTextDatum(MC_DATUM);
-  lcd.setTextColor(TFT_DARKGREY, TFT_BLACK);
-  lcd.drawString("Monitoring...", bodyX() + bodyW() / 2, bodyY() + bodyH() / 2);
+  if (_itemCount > 0) {
+    _scroll.render(bodyX(), bodyY(), bodyW(), bodyH());
+  } else {
+    Sprite sp(&Uni.Lcd);
+    sp.createSprite(bodyW(), bodyH());
+    sp.fillSprite(TFT_BLACK);
+    sp.setTextDatum(MC_DATUM);
+    sp.setTextColor(TFT_DARKGREY, TFT_BLACK);
+    sp.drawString("Monitoring...", bodyW() / 2, bodyH() / 2);
+    sp.pushSprite(bodyX(), bodyY());
+    sp.deleteSprite();
+  }
 }
 
 void WifiWatchdogScreen::onBack()
 {
+#ifdef DEVICE_HAS_TOUCH_NAV
+  Uni.Nav->setSuppressKeys(false);
+#endif
   Screen.setScreen(new WifiMenuScreen());
 }
 
@@ -306,7 +378,8 @@ void WifiWatchdogScreen::_renderEviltwin()
              b0.bssid[0], b0.bssid[1], b0.bssid[2], b0.channel,
              b1.bssid[0], b1.bssid[1], b1.bssid[2], b1.channel);
 
-    _items[n] = {_labels[n], _sublabels[n]};
+    _rows[n].label = _labels[n];
+    _rows[n].value = _sublabels[n];
     n++;
 
     if (Achievement.inc("wifi_evil_twin_detected") == 1)
@@ -318,19 +391,9 @@ void WifiWatchdogScreen::_renderEviltwin()
 
 void WifiWatchdogScreen::_setListState(int newCount)
 {
-  if (newCount == 0) {
-    if (_state != STATE_EMPTY) {
-      _state     = STATE_EMPTY;
-      _itemCount = 0;
-      render();
-    }
-    return;
-  }
-  const bool countChanged = (newCount != _itemCount);
   _itemCount = newCount;
-  _state     = STATE_LISTED;
-  if (countChanged) setItems(_items, _itemCount);
-  else              render();
+  _scroll.setRows(_rows, (uint8_t)_itemCount);
+  render();
 }
 
 void WifiWatchdogScreen::_renderOverall()
@@ -349,60 +412,48 @@ void WifiWatchdogScreen::_renderOverall()
     for (auto& k : toErase) _probeMap.erase(k);
   }
 
-  int n = 0;
+  int counts[4];
+  counts[0] = (int)_deauthMap.size();
+  counts[1] = (int)_probeMap.size();
+  counts[2] = 0;
+  for (auto& kv : _beaconMap)
+    if (kv.second.ratePerSec >= FLOOD_THRESHOLD) counts[2]++;
+  counts[3] = 0;
+  for (auto& kv : _twinMap)
+    if ((int)kv.second.size() >= 2) counts[3]++;
 
-  for (auto& kv : _deauthMap) {
-    if (n >= MAX_ITEMS) break;
-    const MacAddr&     mac = kv.first;
-    const DeauthEntry& e   = kv.second;
-    const char* tag = e.isDisassoc ? "[DIS]" : "[DEA]";
-    char cnt[8];
-    snprintf(cnt, sizeof(cnt), e.counter >= 1000 ? "999+" : "%d", e.counter);
-    if (!e.ssid.empty())
-      snprintf(_labels[n], sizeof(_labels[n]), "%s %s x%s", tag, e.ssid.c_str(), cnt);
-    else
-      snprintf(_labels[n], sizeof(_labels[n]), "%s %02X:%02X:%02X x%s",
-               tag, mac[0], mac[1], mac[2], cnt);
-    const unsigned long s = (now - e.timestamp) / 1000UL;
-    if (s == 0) snprintf(_sublabels[n], sizeof(_sublabels[n]), "just now");
-    else        snprintf(_sublabels[n], sizeof(_sublabels[n]), "%lus ago", s);
-    _items[n] = {_labels[n], _sublabels[n]};
-    n++;
+  const bool forceAll = (_prevGridSel < 0);
+
+#ifdef DEVICE_HAS_TOUCH_NAV
+  if (forceAll) {
+    const int backW = bodyW() / 6;
+    Sprite back(&Uni.Lcd);
+    back.createSprite(backW, bodyH());
+    back.fillSprite(TFT_BLACK);
+    back.drawRoundRect(2, 2, backW - 4, bodyH() - 4, 6, 0x2104);
+    back.setTextDatum(MC_DATUM);
+    back.setTextColor(TFT_DARKGREY, TFT_BLACK);
+    back.drawString("<", backW / 2, bodyH() / 2);
+    back.pushSprite(bodyX(), bodyY());
+    back.deleteSprite();
   }
-
-  for (auto& kv : _probeMap) {
-    if (n >= MAX_ITEMS) break;
-    const MacAddr&    mac = kv.first;
-    const ProbeEntry& e   = kv.second;
-    snprintf(_labels[n], sizeof(_labels[n]),
-             "[PRB] %02X:%02X:%02X:%02X x%d",
-             mac[0], mac[1], mac[2], mac[3], e.count);
-    if (e.ssidCount > 1)
-      snprintf(_sublabels[n], sizeof(_sublabels[n]), "%s +%d more", e.ssids[0], e.ssidCount - 1);
-    else if (e.ssidCount == 1)
-      snprintf(_sublabels[n], sizeof(_sublabels[n]), "%s", e.ssids[0]);
-    else
-      snprintf(_sublabels[n], sizeof(_sublabels[n]), "wildcard");
-    _items[n] = {_labels[n], _sublabels[n]};
-    n++;
+  for (int i = 0; i < 4; i++) {
+    if (forceAll || counts[i] != _prevCounts[i]) {
+      _drawGridCell(i, counts[i]);
+      _prevCounts[i] = counts[i];
+    }
   }
-
-  for (auto& kv : _beaconMap) {
-    if (n >= MAX_ITEMS) break;
-    if (kv.second.ratePerSec < FLOOD_THRESHOLD) continue;
-    const MacAddr&     mac = kv.first;
-    const BeaconEntry& e   = kv.second;
-    if (e.ssid[0] != '\0')
-      snprintf(_labels[n], sizeof(_labels[n]), "[BCN!] %s %d/s", e.ssid, e.ratePerSec);
-    else
-      snprintf(_labels[n], sizeof(_labels[n]), "[BCN!] %02X:%02X:%02X %d/s",
-               mac[0], mac[1], mac[2], e.ratePerSec);
-    snprintf(_sublabels[n], sizeof(_sublabels[n]), "beacon flood");
-    _items[n] = {_labels[n], _sublabels[n]};
-    n++;
+  _prevGridSel = 0;
+#else
+  for (int i = 0; i < 4; i++) {
+    const bool selDirty = (i == (int)_gridSel) != (i == _prevGridSel);
+    if (forceAll || selDirty || counts[i] != _prevCounts[i]) {
+      _drawGridCell(i, counts[i]);
+      _prevCounts[i] = counts[i];
+    }
   }
-
-  _setListState(n);
+  _prevGridSel = (int)_gridSel;
+#endif
 }
 
 void WifiWatchdogScreen::_renderDeauth()
@@ -431,7 +482,8 @@ void WifiWatchdogScreen::_renderDeauth()
     const unsigned long s = (now - e.timestamp) / 1000UL;
     if (s == 0) snprintf(_sublabels[n], sizeof(_sublabels[n]), "just now");
     else        snprintf(_sublabels[n], sizeof(_sublabels[n]), "%lus ago", s);
-    _items[n] = {_labels[n], _sublabels[n]};
+    _rows[n].label = _labels[n];
+    _rows[n].value = _sublabels[n];
     n++;
   }
 
@@ -466,7 +518,8 @@ void WifiWatchdogScreen::_renderProbes()
       }
       snprintf(_sublabels[n], sizeof(_sublabels[n]), "%s", buf);
     }
-    _items[n] = {_labels[n], _sublabels[n]};
+    _rows[n].label = _labels[n];
+    _rows[n].value = _sublabels[n];
     n++;
   }
 
@@ -489,11 +542,72 @@ void WifiWatchdogScreen::_renderFlood()
                flood ? "!! " : "",
                mac[0], mac[1], mac[2], mac[3], mac[4], mac[5], e.ratePerSec);
     snprintf(_sublabels[n], sizeof(_sublabels[n]), "%s", flood ? "beacon flood!" : "normal");
-    _items[n] = {_labels[n], _sublabels[n]};
+    _rows[n].label = _labels[n];
+    _rows[n].value = _sublabels[n];
     n++;
   }
 
   _setListState(n);
+}
+
+// ── Grid cell renderer ────────────────────────────────────────────────────────
+
+void WifiWatchdogScreen::_drawGridCell(int idx, int count)
+{
+  static constexpr const char* kNames[] = {
+    "Deauth", "Probes", "Beacon Flood", "Evil Twin"
+  };
+
+#ifdef DEVICE_HAS_TOUCH_NAV
+  const int backW = bodyW() / 6;
+  const int gw    = bodyW() - backW;
+  const int cellW = gw / 2;
+  const int cellH = bodyH() / 2;
+  const int px    = bodyX() + backW + (idx % 2) * cellW;
+  const int py    = bodyY() + (idx / 2) * cellH;
+
+  Sprite sp(&Uni.Lcd);
+  sp.createSprite(cellW, cellH);
+  sp.fillSprite(TFT_BLACK);
+  sp.drawRoundRect(2, 2, cellW - 4, cellH - 4, 4, 0x2104);
+  sp.setTextSize(1);
+  sp.setTextDatum(TC_DATUM);
+  sp.setTextColor(TFT_LIGHTGREY, TFT_BLACK);
+  sp.drawString(kNames[idx], cellW / 2, 8);
+  char buf[6];
+  snprintf(buf, sizeof(buf), "%d", count);
+  sp.setTextSize(2);
+  sp.setTextDatum(MC_DATUM);
+  sp.setTextColor(count > 0 ? TFT_RED : TFT_DARKGREY, TFT_BLACK);
+  sp.drawString(buf, cellW / 2, cellH / 2 + 4);
+  sp.setTextSize(1);
+  sp.pushSprite(px, py);
+  sp.deleteSprite();
+#else
+  const int  cellW = bodyW() / 2;
+  const int  cellH = bodyH() / 2;
+  const int  px    = bodyX() + (idx % 2) * cellW;
+  const int  py    = bodyY() + (idx / 2) * cellH;
+  const bool sel   = (idx == (int)_gridSel);
+
+  Sprite sp(&Uni.Lcd);
+  sp.createSprite(cellW, cellH);
+  sp.fillSprite(TFT_BLACK);
+  sp.drawRoundRect(2, 2, cellW - 4, cellH - 4, 4, sel ? TFT_CYAN : 0x2104);
+  sp.setTextSize(1);
+  sp.setTextDatum(TC_DATUM);
+  sp.setTextColor(sel ? TFT_WHITE : TFT_LIGHTGREY, TFT_BLACK);
+  sp.drawString(kNames[idx], cellW / 2, 8);
+  char buf[6];
+  snprintf(buf, sizeof(buf), "%d", count);
+  sp.setTextSize(2);
+  sp.setTextDatum(MC_DATUM);
+  sp.setTextColor(count > 0 ? TFT_RED : TFT_DARKGREY, TFT_BLACK);
+  sp.drawString(buf, cellW / 2, cellH / 2 + 4);
+  sp.setTextSize(1);
+  sp.pushSprite(px, py);
+  sp.deleteSprite();
+#endif
 }
 
 // ── Promiscuous callback ──────────────────────────────────────────────────────

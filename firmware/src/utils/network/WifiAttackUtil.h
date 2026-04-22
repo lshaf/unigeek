@@ -12,6 +12,7 @@ public:
   esp_err_t deauthenticate(const MacAddr bssid, uint8_t channel);
   esp_err_t deauthenticate(const MacAddr ap, const MacAddr bssid, uint8_t channel);
   esp_err_t beaconSpam(const char* ssid, uint8_t channel);
+  esp_err_t beaconFlood(const uint8_t* bssid, const char* ssid, uint8_t channel);
   esp_err_t setChannel(uint8_t channel);
 
 private:

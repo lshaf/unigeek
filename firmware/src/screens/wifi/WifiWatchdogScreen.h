@@ -7,9 +7,10 @@
 #include <WiFi.h>
 #include <esp_wifi.h>
 
-#include "ui/templates/ListScreen.h"
+#include "ui/templates/BaseScreen.h"
+#include "ui/views/ScrollListView.h"
 
-class WifiWatchdogScreen : public ListScreen
+class WifiWatchdogScreen : public BaseScreen
 {
 public:
   const char* title() override;
@@ -20,8 +21,7 @@ public:
   void onInit() override;
   void onUpdate() override;
   void onRender() override;
-  void onBack() override;
-  void onItemSelected(uint8_t index) override {}
+  void onBack();
 
   using MacAddr = std::array<uint8_t, 6>;
 
@@ -86,7 +86,6 @@ private:
   static constexpr int           FLOOD_THRESHOLD = 50;
 
   enum View  { VIEW_OVERALL, VIEW_DEAUTH, VIEW_PROBES, VIEW_FLOOD, VIEW_EVILTWIN };
-  enum State { STATE_LISTED, STATE_EMPTY };
 
   struct DeauthEvent {
     MacAddr       mac;
@@ -128,20 +127,23 @@ private:
 
   static portMUX_TYPE    _ringLock;
 
-  View          _view       = VIEW_OVERALL;
-  State         _state      = STATE_EMPTY;
-  int           _channel    = 1;
-  unsigned long _lastUpdate = 0;
-  int           _itemCount  = 0;
-
-  ListItem _items[MAX_ITEMS]         = {};
-  char     _labels[MAX_ITEMS][64]    = {};
-  char     _sublabels[MAX_ITEMS][64] = {};
+  View                _view             = VIEW_OVERALL;
+  int                 _channel          = 1;
+  unsigned long       _lastUpdate       = 0;
+  int                 _itemCount        = 0;
+  uint8_t             _gridSel          = 0;
+  int                 _prevGridSel      = -1;
+  int                 _prevCounts[4]    = {-1, -1, -1, -1};
+  ScrollListView      _scroll;
+  ScrollListView::Row _rows[MAX_ITEMS]         = {};
+  char                _labels[MAX_ITEMS][64]   = {};
+  char                _sublabels[MAX_ITEMS][64] = {};
 
   void _drainRings();
   void _updateRates();
   void _renderView();
   void _renderOverall();
+  void _drawGridCell(int idx, int count);
   void _renderDeauth();
   void _renderProbes();
   void _renderFlood();

