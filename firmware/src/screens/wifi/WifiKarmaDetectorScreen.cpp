@@ -1,4 +1,4 @@
-#include "WifiKarmaTestScreen.h"
+#include "WifiKarmaDetectorScreen.h"
 #include "core/Device.h"
 #include "core/ScreenManager.h"
 #include "core/AchievementManager.h"
@@ -8,11 +8,11 @@
 #include <esp_random.h>
 #include <cstring>
 
-WifiKarmaTestScreen* WifiKarmaTestScreen::_instance = nullptr;
+WifiKarmaDetectorScreen* WifiKarmaDetectorScreen::_instance = nullptr;
 
 // ── Destructor ────────────────────────────────────────────────────────────────
 
-WifiKarmaTestScreen::~WifiKarmaTestScreen()
+WifiKarmaDetectorScreen::~WifiKarmaDetectorScreen()
 {
   _stopScan();
   _instance = nullptr;
@@ -20,25 +20,27 @@ WifiKarmaTestScreen::~WifiKarmaTestScreen()
 
 // ── Lifecycle ─────────────────────────────────────────────────────────────────
 
-void WifiKarmaTestScreen::onInit()
+void WifiKarmaDetectorScreen::onInit()
 {
-  _instance  = this;
-  _hitCount  = 0;
-  _itemCount = 0;
-  _state     = STATE_EMPTY;
+  _instance   = this;
+  _state      = STATE_SCANNING;
+  _newHit     = false;
+  _detectedAt = 0;
+  memset(_hitBssid, 0, sizeof(_hitBssid));
+  _hitRssi    = 0;
+  _hitChannel = 0;
   _startScan();
   render();
 }
 
-void WifiKarmaTestScreen::onUpdate()
+void WifiKarmaDetectorScreen::onUpdate()
 {
   if (Uni.Nav->wasPressed()) {
     auto dir = Uni.Nav->readDirection();
     if (dir == INavigation::DIR_BACK) { onBack(); return; }
     if (dir == INavigation::DIR_PRESS) {
-      _hitCount  = 0;
-      _itemCount = 0;
-      _state     = STATE_EMPTY;
+      _state      = STATE_SCANNING;
+      _detectedAt = 0;
       _startScan();
       render();
       return;
@@ -47,40 +49,71 @@ void WifiKarmaTestScreen::onUpdate()
 
   if (!_scanning) return;
 
+  if (_newHit) {
+    _newHit = false;
+    _onHit();
+    return;
+  }
+
+  // Linger timeout: back to scanning if AP stopped responding
+  if (_state == STATE_DETECTED && millis() - _detectedAt >= LINGER_MS) {
+    _state = STATE_SCANNING;
+    render();
+  }
+
   if (millis() - _lastProbe >= PROBE_WAIT_MS) {
     _channel = (_channel % CHANNELS) + 1;
     esp_wifi_set_channel(_channel, WIFI_SECOND_CHAN_NONE);
     _sendProbe();
     snprintf(_statusLine, sizeof(_statusLine), "CH:%d  %s", _channel, _fakeSSID);
-    if (_state == STATE_EMPTY) render();
+    if (_state == STATE_SCANNING) render();
   }
 }
 
-void WifiKarmaTestScreen::onRender()
+void WifiKarmaDetectorScreen::onRender()
 {
-  if (_state == STATE_LISTED) {
-    ListScreen::onRender();
-    return;
+  Sprite sp(&Uni.Lcd);
+  sp.createSprite(bodyW(), bodyH());
+  sp.fillSprite(TFT_BLACK);
+
+  if (_state == STATE_SCANNING) {
+    sp.setTextDatum(MC_DATUM);
+    sp.setTextColor(TFT_DARKGREY, TFT_BLACK);
+    sp.drawString(_statusLine[0] ? _statusLine : "Starting...", bodyW() / 2, bodyH() / 2 - 8);
+    sp.drawString("No Karma Attacks Found", bodyW() / 2, bodyH() / 2 + 8);
+  } else {
+    // Alert view
+    const int cy = bodyH() / 2;
+    sp.setTextDatum(MC_DATUM);
+
+    sp.setTextColor(TFT_RED, TFT_BLACK);
+    sp.drawString("!! Karma Attack Detected !!", bodyW() / 2, cy - 20);
+
+    char bssid[20];
+    snprintf(bssid, sizeof(bssid), "%02X:%02X:%02X:%02X:%02X:%02X",
+             _hitBssid[0], _hitBssid[1], _hitBssid[2],
+             _hitBssid[3], _hitBssid[4], _hitBssid[5]);
+    sp.setTextColor(TFT_WHITE, TFT_BLACK);
+    sp.drawString(bssid, bodyW() / 2, cy);
+
+    char info[32];
+    snprintf(info, sizeof(info), "%d dBm   CH:%d", (int)_hitRssi, _hitChannel);
+    sp.setTextColor(TFT_YELLOW, TFT_BLACK);
+    sp.drawString(info, bodyW() / 2, cy + 20);
   }
 
-  auto& lcd = Uni.Lcd;
-  lcd.fillRect(bodyX(), bodyY(), bodyW(), bodyH(), TFT_BLACK);
-  lcd.setTextDatum(MC_DATUM);
-  const int cx = bodyX() + bodyW() / 2;
-  const int cy = bodyY() + bodyH() / 2;
-  lcd.setTextColor(TFT_DARKGREY, TFT_BLACK);
-  lcd.drawString(_statusLine[0] ? _statusLine : "Starting...", cx, cy - 8);
-  lcd.drawString("No Karma APs found", cx, cy + 8);
+  sp.pushSprite(bodyX(), bodyY());
+  sp.deleteSprite();
 }
 
-void WifiKarmaTestScreen::onBack()
+void WifiKarmaDetectorScreen::onBack()
 {
   Screen.setScreen(new WifiMenuScreen());
 }
 
 // ── Private ───────────────────────────────────────────────────────────────────
 
-void WifiKarmaTestScreen::_startScan()
+void WifiKarmaDetectorScreen::_startScan()
 {
   snprintf(_fakeSSID, sizeof(_fakeSSID), "ktest-%08lX", (unsigned long)esp_random());
   snprintf(_statusLine, sizeof(_statusLine), "CH:1  %s", _fakeSSID);
@@ -90,22 +123,22 @@ void WifiKarmaTestScreen::_startScan()
 
   WiFi.mode(WIFI_MODE_STA);
   esp_wifi_set_promiscuous(true);
-  esp_wifi_set_promiscuous_rx_cb(&WifiKarmaTestScreen::_promiscuousCb);
+  esp_wifi_set_promiscuous_rx_cb(&WifiKarmaDetectorScreen::_promiscuousCb);
   esp_wifi_set_channel(_channel, WIFI_SECOND_CHAN_NONE);
   _sendProbe();
 
-  if (Achievement.inc("wifi_karma_test_run") == 1)
-    Achievement.unlock("wifi_karma_test_run");
+  if (Achievement.inc("wifi_karma_detector_run") == 1)
+    Achievement.unlock("wifi_karma_detector_run");
 }
 
-void WifiKarmaTestScreen::_stopScan()
+void WifiKarmaDetectorScreen::_stopScan()
 {
   _scanning = false;
   esp_wifi_set_promiscuous_rx_cb(nullptr);
   esp_wifi_set_promiscuous(false);
 }
 
-void WifiKarmaTestScreen::_sendProbe()
+void WifiKarmaDetectorScreen::_sendProbe()
 {
   _lastProbe = millis();
 
@@ -113,17 +146,17 @@ void WifiKarmaTestScreen::_sendProbe()
   uint8_t frame[64] = {};
   int pos = 0;
 
-  frame[pos++] = 0x40; frame[pos++] = 0x00;  // FC: probe request
-  frame[pos++] = 0x00; frame[pos++] = 0x00;  // Duration
-  memset(frame + pos, 0xFF, 6); pos += 6;    // DA: broadcast
+  frame[pos++] = 0x40; frame[pos++] = 0x00;
+  frame[pos++] = 0x00; frame[pos++] = 0x00;
+  memset(frame + pos, 0xFF, 6); pos += 6;
   uint8_t mac[6];
   esp_wifi_get_mac(WIFI_IF_STA, mac);
-  memcpy(frame + pos, mac, 6); pos += 6;     // SA: our MAC
-  memset(frame + pos, 0xFF, 6); pos += 6;    // BSSID: wildcard
-  frame[pos++] = 0x00; frame[pos++] = 0x00;  // SeqCtrl
-  frame[pos++] = 0x00; frame[pos++] = ssidLen;  // SSID IE
+  memcpy(frame + pos, mac, 6); pos += 6;
+  memset(frame + pos, 0xFF, 6); pos += 6;
+  frame[pos++] = 0x00; frame[pos++] = 0x00;
+  frame[pos++] = 0x00; frame[pos++] = ssidLen;
   memcpy(frame + pos, _fakeSSID, ssidLen); pos += ssidLen;
-  frame[pos++] = 0x01; frame[pos++] = 0x08;  // Supported Rates IE
+  frame[pos++] = 0x01; frame[pos++] = 0x08;
   frame[pos++] = 0x82; frame[pos++] = 0x84;
   frame[pos++] = 0x8B; frame[pos++] = 0x96;
   frame[pos++] = 0x24; frame[pos++] = 0x30;
@@ -132,32 +165,22 @@ void WifiKarmaTestScreen::_sendProbe()
   esp_wifi_80211_tx(WIFI_IF_STA, frame, pos, false);
 }
 
-void WifiKarmaTestScreen::_rebuild()
+void WifiKarmaDetectorScreen::_onHit()
 {
-  int n = 0;
-  for (int i = 0; i < _hitCount; i++) {
-    const KarmaHit& h = _hits[i];
-    snprintf(_labels[n], sizeof(_labels[n]),
-             "!! %02X:%02X:%02X:%02X:%02X:%02X",
-             h.bssid[0], h.bssid[1], h.bssid[2],
-             h.bssid[3], h.bssid[4], h.bssid[5]);
-    snprintf(_sublabels[n], sizeof(_sublabels[n]),
-             "CH:%d  %ddBm  \"%s\"", h.channel, (int)h.rssi, h.ssid);
-    _items[n] = {_labels[n], _sublabels[n]};
-    n++;
-  }
+  _state      = STATE_DETECTED;
+  _detectedAt = millis();
 
-  const bool countChanged = (n != _itemCount);
-  _itemCount = n;
-  _state     = (n > 0) ? STATE_LISTED : STATE_EMPTY;
+  int n = Achievement.inc("wifi_karma_attack_detected");
+  if (n == 1) Achievement.unlock("wifi_karma_attack_detected");
+  if (n == 5) Achievement.unlock("wifi_karma_attack_detected_5");
 
-  if (countChanged) setItems(_items, _itemCount);
-  else              render();
+  render();
+  if (Uni.Speaker) Uni.Speaker->playNotification();
 }
 
 // ── Promiscuous callback ──────────────────────────────────────────────────────
 
-void WifiKarmaTestScreen::_promiscuousCb(void* buf, wifi_promiscuous_pkt_type_t type)
+void WifiKarmaDetectorScreen::_promiscuousCb(void* buf, wifi_promiscuous_pkt_type_t type)
 {
   if (type != WIFI_PKT_MGMT || buf == nullptr || _instance == nullptr) return;
 
@@ -171,7 +194,6 @@ void WifiKarmaTestScreen::_promiscuousCb(void* buf, wifi_promiscuous_pkt_type_t 
   const uint8_t fc_type = (pay[0] >> 2) & 0x03;
   if (fc_type != 0 || fc_sub != 5) return;  // probe response only
 
-  // Parse SSID IE starting at offset 36
   char ssid[33] = {};
   size_t pos = 36;
   while (pos + 2 <= len) {
@@ -188,26 +210,9 @@ void WifiKarmaTestScreen::_promiscuousCb(void* buf, wifi_promiscuous_pkt_type_t 
 
   if (strcmp(ssid, _instance->_fakeSSID) != 0) return;
 
-  // Dedup by BSSID
-  const uint8_t* bssid = pay + 16;
-  for (int i = 0; i < _instance->_hitCount; i++)
-    if (memcmp(_instance->_hits[i].bssid, bssid, 6) == 0) return;
-
-  if (_instance->_hitCount >= MAX_HITS) return;
-
-  KarmaHit& h = _instance->_hits[_instance->_hitCount++];
-  memcpy(h.bssid, bssid, 6);
-  h.rssi    = pkt->rx_ctrl.rssi;
-  h.channel = pkt->rx_ctrl.channel;
-  strncpy(h.ssid, ssid, 32);
-
-  if (Achievement.inc("wifi_karma_detected") == 1)
-    Achievement.unlock("wifi_karma_detected");
-  if (_instance->_hitCount == 5) {
-    if (Achievement.inc("wifi_karma_detected_5") == 1)
-      Achievement.unlock("wifi_karma_detected_5");
-  }
-
-  _instance->_rebuild();
-  if (Uni.Speaker) Uni.Speaker->playNotification();
+  // Write hit data before setting flag (main loop reads after flag check)
+  memcpy(_instance->_hitBssid, pay + 16, 6);
+  _instance->_hitRssi    = pkt->rx_ctrl.rssi;
+  _instance->_hitChannel = pkt->rx_ctrl.channel;
+  _instance->_newHit     = true;
 }
