@@ -80,6 +80,7 @@ public:
 
 private:
   static constexpr int           MAX_ITEMS       = 10;
+  static constexpr int           MAX_ROWS        = 90;
   static constexpr unsigned long WINDOW_MS       = 30000UL;
   static constexpr int           MAX_RING        = 64;
   static constexpr int           MAX_BEACON_RING = 128;
@@ -135,8 +136,8 @@ private:
   int                 _prevGridSel      = -1;
   int                 _prevCounts[4]    = {-1, -1, -1, -1};
   ScrollListView      _scroll;
-  ScrollListView::Row _rows[MAX_ITEMS]         = {};
-  char                _labels[MAX_ITEMS][64]   = {};
+  ScrollListView::Row _rows[MAX_ROWS]          = {};
+  char                _labels[MAX_ROWS][64]    = {};
   char                _sublabels[MAX_ITEMS][64] = {};
 
   void _drainRings();

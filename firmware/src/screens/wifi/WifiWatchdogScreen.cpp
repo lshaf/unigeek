@@ -116,6 +116,7 @@ void WifiWatchdogScreen::onUpdate()
           Uni.Nav->setSuppressKeys(false);
           _view      = kViewMap[row * 2 + col];
           _itemCount = 0;
+          _scroll.resetScroll();
           _renderView();
         }
       }
@@ -145,6 +146,7 @@ void WifiWatchdogScreen::onUpdate()
         static constexpr View kViewMap[] = {VIEW_DEAUTH, VIEW_PROBES, VIEW_FLOOD, VIEW_EVILTWIN};
         _view      = kViewMap[_gridSel];
         _itemCount = 0;
+        _scroll.resetScroll();
         _renderView();
         return;
       }
@@ -163,7 +165,8 @@ void WifiWatchdogScreen::onUpdate()
         render();
         return;
       }
-      if (dir == INavigation::DIR_UP || dir == INavigation::DIR_DOWN) {
+      if (dir == INavigation::DIR_UP   || dir == INavigation::DIR_DOWN  ||
+          dir == INavigation::DIR_LEFT  || dir == INavigation::DIR_RIGHT) {
         _scroll.onNav(dir);
       }
     }
@@ -363,27 +366,30 @@ void WifiWatchdogScreen::_renderView()
 void WifiWatchdogScreen::_renderEviltwin()
 {
   int n = 0;
+  int ssidCount = 0;
   for (auto& kv : _twinMap) {
-    if (n >= MAX_ITEMS) break;
+    if (ssidCount >= MAX_ITEMS || n >= MAX_ROWS) break;
     if (kv.second.size() < 2) continue;
 
     snprintf(_labels[n], sizeof(_labels[n]),
-             "?? %s  (%d BSSIDs)", kv.first.c_str(), (int)kv.second.size());
-
-    // Show first two BSSIDs with their channels in sublabel
-    const BssidInfo& b0 = kv.second[0];
-    const BssidInfo& b1 = kv.second[1];
-    snprintf(_sublabels[n], sizeof(_sublabels[n]),
-             "%02X:%02X:%02X CH%d / %02X:%02X:%02X CH%d",
-             b0.bssid[0], b0.bssid[1], b0.bssid[2], b0.channel,
-             b1.bssid[0], b1.bssid[1], b1.bssid[2], b1.channel);
-
+             "?? %s (%d)", kv.first.c_str(), (int)kv.second.size());
     _rows[n].label = _labels[n];
-    _rows[n].value = _sublabels[n];
+    _rows[n].value = "";
     n++;
+
+    for (const auto& b : kv.second) {
+      if (n >= MAX_ROWS) break;
+      snprintf(_labels[n], sizeof(_labels[n]),
+               "  - %02X:%02X:%02X CH%d",
+               b.bssid[0], b.bssid[1], b.bssid[2], b.channel);
+      _rows[n].label = _labels[n];
+      _rows[n].value = "";
+      n++;
+    }
 
     if (Achievement.inc("wifi_evil_twin_detected") == 1)
       Achievement.unlock("wifi_evil_twin_detected");
+    ssidCount++;
   }
 
   _setListState(n);
@@ -501,26 +507,35 @@ void WifiWatchdogScreen::_renderProbes()
   }
 
   int n = 0;
+  int macCount = 0;
   for (auto& kv : _probeMap) {
-    if (n >= MAX_ITEMS) break;
+    if (macCount >= MAX_ITEMS || n >= MAX_ROWS) break;
     const MacAddr&    mac = kv.first;
     const ProbeEntry& e   = kv.second;
+
     snprintf(_labels[n], sizeof(_labels[n]),
              "%02X:%02X:%02X:%02X:%02X:%02X (x%d)",
              mac[0], mac[1], mac[2], mac[3], mac[4], mac[5], e.count);
-    if (e.ssidCount == 0) {
-      snprintf(_sublabels[n], sizeof(_sublabels[n]), "wildcard probe");
-    } else {
-      char buf[64] = {};
-      for (int i = 0; i < e.ssidCount; i++) {
-        if (i > 0) strncat(buf, ", ", sizeof(buf) - strlen(buf) - 1);
-        strncat(buf, e.ssids[i], sizeof(buf) - strlen(buf) - 1);
-      }
-      snprintf(_sublabels[n], sizeof(_sublabels[n]), "%s", buf);
-    }
     _rows[n].label = _labels[n];
-    _rows[n].value = _sublabels[n];
+    _rows[n].value = "";
     n++;
+
+    if (e.ssidCount == 0) {
+      if (n < MAX_ROWS) {
+        snprintf(_labels[n], sizeof(_labels[n]), "  - (wildcard)");
+        _rows[n].label = _labels[n];
+        _rows[n].value = "";
+        n++;
+      }
+    } else {
+      for (int i = 0; i < e.ssidCount && n < MAX_ROWS; i++) {
+        snprintf(_labels[n], sizeof(_labels[n]), "  - %s", e.ssids[i]);
+        _rows[n].label = _labels[n];
+        _rows[n].value = "";
+        n++;
+      }
+    }
+    macCount++;
   }
 
   _setListState(n);

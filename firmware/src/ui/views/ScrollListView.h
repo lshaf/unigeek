@@ -15,10 +15,16 @@ public:
   };
 
   void setRows(Row* rows, uint8_t count) {
-    _rows   = rows;
-    _count  = count;
-    _offset = 0;
+    _rows  = rows;
+    _count = count;
+    // clamp offset so the list stays scrolled as far as possible
+    int fullyVisible = (_h > 0) ? _h / ROW_H : 1;
+    if (fullyVisible < 1) fullyVisible = 1;
+    int maxOffset = (_count > fullyVisible) ? _count - fullyVisible : 0;
+    if (_offset > maxOffset) _offset = maxOffset;
   }
+
+  void resetScroll() { _offset = 0; }
 
   void render(int x, int y, int w, int h) {
     _x = x; _y = y; _w = w; _h = h;
@@ -31,13 +37,26 @@ public:
     // the user can still scroll one more step to bring it fully into view.
     int fullyVisible = _h / ROW_H;
     if (fullyVisible < 1) fullyVisible = 1;
+    int maxOffset = (_count > fullyVisible) ? _count - fullyVisible : 0;
     if (dir == INavigation::DIR_UP && _offset > 0) {
       _offset--;
       _draw();
       return true;
     }
-    if (dir == INavigation::DIR_DOWN && _offset + fullyVisible < _count) {
+    if (dir == INavigation::DIR_DOWN && _offset < maxOffset) {
       _offset++;
+      _draw();
+      return true;
+    }
+    if (dir == INavigation::DIR_LEFT && _offset > 0) {
+      _offset -= fullyVisible;
+      if (_offset < 0) _offset = 0;
+      _draw();
+      return true;
+    }
+    if (dir == INavigation::DIR_RIGHT && _offset < maxOffset) {
+      _offset += fullyVisible;
+      if (_offset > maxOffset) _offset = maxOffset;
       _draw();
       return true;
     }
