@@ -1,14 +1,15 @@
 //
-// CYD-2432W328R / 2432S024R — Device factory.
+// CYD — Device factory (all variants).
 //
-// Display:  ILI9341 on HSPI (MOSI=13, MISO=12, SCK=14, CS=15, DC=2), BL=27
-// Touch:    XPT2046 on same HSPI (CS=33, IRQ=36) via TFT_eSPI getTouch()
+// Display:  HSPI (MOSI=13, MISO=12, SCK=14, CS=15, DC=2) — ILI9341 or ST7796
+// Touch:    XPT2046 (shared HSPI or dedicated bit-bang) or CST816S/GT911 (I2C)
+//           Wiring variant selected at compile time; see Navigation.cpp.
 // SD card:  VSPI default SPI (SCK=18, MISO=19, MOSI=23, CS=5)
 // LittleFS: fallback when SD is absent
 //
 // SPI busses:
-//   HSPI — display + touch (TFT_eSPI handles this internally with USE_HSPI_PORT)
-//   VSPI — SD card (Arduino default SPI, init by initStorage() via SPI_SCK/MISO/MOSI pins)
+//   HSPI — display (TFT_eSPI handles internally with USE_HSPI_PORT)
+//   VSPI — SD card (Arduino default SPI)
 //
 
 #include "core/Device.h"
