@@ -88,3 +88,10 @@ Notif: NO           ← no reply → Safe
 - If the public key is not available (neither in ads nor via GATT), the test falls back to a random key and will almost certainly report **Safe** — this is a test limitation, not confirmation the device is secure.
 - The test does not actually complete a full pairing — it only confirms whether the device accepted the initial KBP handshake.
 - Devices that have already started a legitimate pairing session may not respond during the test window.
+## Achievements
+
+| Achievement | Tier |
+|------------|------|
+| **Whisper Scout** | Bronze |
+| **Broken Pairing** | Gold |
+| **Vulnerability Hunter** | Gold |

@@ -100,3 +100,16 @@ Send power-off codes to TVs using the WORLD_IR_CODES database (271 codes).
 | Raw | Yes | Yes |
 
 Unsupported protocols are captured as raw signals and can still be replayed.
+
+## Achievements
+
+| Achievement | Tier |
+|------------|------|
+| **Signal Catcher** | Bronze |
+| **Zapper** | Bronze |
+| **Remote Saved** | Silver |
+| **TV-B-Gone** | Silver |
+| **Remote Keeper** | Gold |
+| **TV Screen Killer** | Gold |
+| **Universal Remote** | Gold |
+| **IR Librarian** | Platinum |

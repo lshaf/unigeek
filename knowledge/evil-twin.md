@@ -37,3 +37,13 @@ Create your own portal by adding a folder under `/unigeek/web/portals/`:
 ```
 
 The login form must use `POST` method to `/`. Include an input named `password` to enable password verification. All POST parameters are captured regardless of field names.
+
+## Achievements
+
+| Achievement | Tier |
+|------------|------|
+| **Dark Mirror** | Silver |
+| **Credential Thief** | Gold |
+| **Master Deceiver** | Platinum |
+| **Twin Overlord** | Platinum |
+| **Identity Harvester** | Platinum |

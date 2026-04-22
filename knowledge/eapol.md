@@ -59,3 +59,12 @@ Cracks WPA2 passwords offline from previously captured handshake PCAP files usin
 - Only WPA2-PSK handshakes with valid M1+M2 pairs are crackable
 - Passwords must be 8–63 characters (WPA2 specification)
 - Cracking speed depends on the ESP32 variant
+## Achievements
+
+| Achievement | Tier |
+|------------|------|
+| **Passive Listener** | Silver |
+| **WPA Trophy** | Gold |
+| **Handshake Collector** | Platinum |
+| **Handshake Hoarder** | Platinum |
+| **Handshake Legend** | Platinum |

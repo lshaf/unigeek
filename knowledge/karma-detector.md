@@ -54,8 +54,8 @@ A notification sound plays on detection (boards with a speaker).
 
 ## Achievements
 
-| ID | Achievement | How to unlock |
-|----|------------|---------------|
-| 207 | **Karma Bloodhound** | Run the Karma Detector scanner |
-| — | **Karma Catcher** | Detect a karma attack |
-| — | **Repeat Offender** | Detect karma attacks 5 times |
+| Achievement | Tier |
+|------------|------|
+| **Karma Bloodhound** | Bronze |
+| **Karma Buster** | Gold |
+| **Karma Nemesis** | Platinum |

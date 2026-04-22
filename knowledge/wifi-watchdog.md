@@ -90,9 +90,9 @@ The promiscuous callback runs in an ISR context and writes events into **lock-pr
 
 ## Achievements
 
-| ID | Achievement | How to unlock |
-|----|------------|---------------|
-| 55 | **Watcher** | Detect a deauth attack in the wild |
-| 200 | **Probe Collector** | Detect a device leaking its preferred network list |
-| 201 | **Flood Watcher** | Detect a beacon flood attack (≥ 50 beacons/s from one BSSID) |
-| 205 | **Twin Spotter** | Detect a potential evil twin AP (same SSID, 2+ BSSIDs) |
+| Achievement | Tier |
+|------------|------|
+| **Watcher** | Silver |
+| **Probe Collector** | Silver |
+| **Flood Watcher** | Gold |
+| **Twin Spotter** | Gold |

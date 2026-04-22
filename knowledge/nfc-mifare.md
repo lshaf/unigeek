@@ -75,3 +75,15 @@ Recovers the first key when no keys are known at all.
 ```
 /unigeek/nfc/dictionaries/     Key dictionary files (.txt)
 ```
+
+## Achievements
+
+| Achievement | Tier |
+|------------|------|
+| **Card Detected** | Bronze |
+| **Card Collector** | Silver |
+| **Dictionary Diver** | Silver |
+| **Key Found** | Gold |
+| **Full Dump** | Gold |
+| **Nested Attacker** | Gold |
+| **Dark Art** | Platinum |

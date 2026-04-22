@@ -156,3 +156,15 @@ The CC1101 is configured for **ASK/OOK** (amplitude-shift keying / on-off keying
 - Gate and barrier remotes
 
 FSK/GFSK/MSK signals (used by some IoT devices) can be captured in RAW mode if they happen to trigger the OOK decoder, but are not natively decoded.
+
+## Achievements
+
+| Achievement | Tier |
+|------------|------|
+| **RF Listener** | Bronze |
+| **RF Transmitter** | Bronze |
+| **RF Archive** | Silver |
+| **Frequency Finder** | Silver |
+| **Frequency Disruptor** | Silver |
+| **RF Collector** | Gold |
+| **RF Library** | Platinum |

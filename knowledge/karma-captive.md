@@ -47,3 +47,13 @@ Press **BACK** or **SELECT** to stop.
 
 - Works best against older devices, IoT gadgets, and laptops. Modern iOS/Android use randomized or hidden probes, reducing effectiveness.
 - Cannot run simultaneously with other WiFi features (Evil Twin, EAPOL Capture, etc.) as they share the radio.
+
+## Achievements
+
+| Achievement | Tier |
+|------------|------|
+| **Open Arms** | Silver |
+| **Bait & Hook** | Gold |
+| **Mass Trap** | Platinum |
+| **Portal Warden** | Platinum |
+| **Net Caster** | Platinum |

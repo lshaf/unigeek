@@ -76,3 +76,19 @@ Lists wardrive CSV files sorted by name (newest first). Uploaded files are marke
 /unigeek/gps/wardriver/      Wardrive CSV log files
 /unigeek/wigle_token         Wigle API token
 ```
+
+## Achievements
+
+| Achievement | Tier |
+|------------|------|
+| **Locked On** | Silver |
+| **Street Racer** | Silver |
+| **Network Scout** | Gold |
+| **City Cartographer** | Platinum |
+| **Urban Mapper** | Platinum |
+| **Mass Surveyor** | Platinum |
+| **Cloud Reporter** | Silver |
+| **Street Mapper** | Gold |
+| **Signal Archivist** | Platinum |
+| **WiGLE Legend** | Platinum |
+| **WiGLE Titan** | Platinum |

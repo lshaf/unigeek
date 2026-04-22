@@ -81,3 +81,11 @@ Pins are saved to `/unigeek/pin_config` and persist across reboots.
 ## Reference
 
 Based on the NRF24 module from [Bruce firmware](https://github.com/pr3y/Bruce) by pr3y (spectrum, jammer, MouseJack).
+## Achievements
+
+| Achievement | Tier |
+|------------|------|
+| **2.4G Watcher** | Bronze |
+| **First Mouse** | Silver |
+| **2.4G Disruptor** | Silver |
+| **MouseJacker** | Gold |

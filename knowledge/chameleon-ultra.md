@@ -140,7 +140,40 @@ All Chameleon screens follow the house rules in `CLAUDE.md`: scan-result views u
 
 ## Achievements
 
-32 achievements live in their own **Chameleon** domain (domain 12), covering connect, scan, clone, nickname, slot write/view, dictionary attack, MF dump, magic detect, MFKey32 export, HID / Viking scan, T5577 write/clean, settings save/reset/clear-bonds.
+| Achievement | Tier |
+|------------|------|
+| **Chameleon Link** | Silver |
+| **Chameleon Tamer** | Silver |
+| **Field Intel** | Bronze |
+| **Slot Warden** | Bronze |
+| **Slot Shifter** | Bronze |
+| **Slot Juggler** | Silver |
+| **HF Tag Reader** | Silver |
+| **HF Collector** | Silver |
+| **ISO Archaeologist** | Gold |
+| **LF Tag Reader** | Silver |
+| **LF Stalker** | Silver |
+| **Frequency Hunter** | Gold |
+| **Card Clone** | Gold |
+| **Copy Maker** | Gold |
+| **Identity Library** | Platinum |
+| **Tuner** | Bronze |
+| **Persisted** | Silver |
+| **Fresh Start** | Bronze |
+| **Slot Tinkerer** | Bronze |
+| **Name Tag** | Silver |
+| **Transplant** | Gold |
+| **Slot Inspector** | Bronze |
+| **Dictionary Diver II** | Gold |
+| **Keyring** | Gold |
+| **Full Impression** | Gold |
+| **Magic Detector** | Gold |
+| **Honey Pot** | Bronze |
+| **Honey Harvest** | Gold |
+| **Badge Reader** | Silver |
+| **Viking Scout** | Silver |
+| **Blank Re-writer** | Gold |
+| **Lockpick LF** | Gold |
 
 ---
 

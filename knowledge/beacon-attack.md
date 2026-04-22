@@ -60,8 +60,8 @@ This lets you verify the detector works in your environment before using it pass
 
 ## Achievements
 
-| ID | Achievement | How to unlock |
-|----|------------|---------------|
-| 25 | **SSID Flood** | Start beacon spam for the first time |
-| 26 | **SSID Storm** | Broadcast 100+ fake SSID beacons |
-| 206 | **Flood Generator** | Launch a beacon flood to test the watchdog detector |
+| Achievement | Tier |
+|------------|------|
+| **SSID Flood** | Bronze |
+| **SSID Storm** | Silver |
+| **Flood Generator** | Bronze |

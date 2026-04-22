@@ -75,3 +75,9 @@ Requires web files to be installed on storage first — download them via **WiFi
 - SSID and password are persisted in the device config, so they survive reboots
 - The AP uses channel 1 by default
 - Maximum SSID length is 32 characters (WiFi standard limit)
+## Achievements
+
+| Achievement | Tier |
+|------------|------|
+| **Fake Hotspot** | Bronze |
+| **First Guest** | Silver |

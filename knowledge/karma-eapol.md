@@ -95,3 +95,14 @@ Karma Support runs on the second device and acts as a remote-controlled AP host.
 - Both devices must be on the same channel (channel 1 by default)
 - The support device does not need to be within WiFi range of the target — only ESP-NOW range (~200 m line of sight)
 - Press **BACK** or **SELECT** to stop
+
+## Achievements
+
+| Achievement | Tier |
+|------------|------|
+| **Support Bot** | Silver |
+| **Handshake Hustler** | Silver |
+| **EAPOL Farmer** | Gold |
+| **Handshake Poacher** | Platinum |
+| **Karma Reaper** | Platinum |
+| **Karma God** | Platinum |

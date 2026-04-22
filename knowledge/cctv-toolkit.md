@@ -48,3 +48,11 @@ Camera Menu:
 - LAN mode only scans the local /24 subnet
 - Live streaming only works with HTTP cameras (not RTSP-only)
 - Must be connected to a WiFi network before scanning
+
+## Achievements
+
+| Achievement | Tier |
+|------------|------|
+| **Camera Sweep** | Silver |
+| **Found You** | Gold |
+| **Live Feed** | Gold |

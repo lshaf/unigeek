@@ -71,3 +71,9 @@ Browser-based file manager on port 8080 for managing device storage during the a
 - Enterprise networks with DHCP snooping or 802.1X will resist this attack
 - Only catches devices that request a new IP lease — already-connected devices are unaffected until their lease expires (that's why Deauth Burst is useful)
 - Devices on different VLANs won't be affected
+
+## Achievements
+
+| Achievement | Tier |
+|------------|------|
+| **Man in the Middle** | Silver |

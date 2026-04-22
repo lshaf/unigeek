@@ -18,3 +18,10 @@ Passively scans for nearby Bluetooth Low Energy devices and identifies potential
 2. The scanner runs continuously, listing detected threats in real-time
 3. Each entry shows the device type, name (if available), signal strength, and MAC address
 4. Press **BACK** or **Press** to stop scanning
+
+## Achievements
+
+| Achievement | Tier |
+|------------|------|
+| **Spam Radar** | Bronze |
+| **Caught Red-Handed** | Silver |

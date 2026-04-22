@@ -88,3 +88,11 @@ Ready-made samples are available via **WiFi > Network > Download > Firmware Samp
 
 > [!warn]
 > Only run scripts on hosts you own or have explicit permission to test. Several samples modify security settings or fetch remote payloads — review the source before executing.
+
+## Achievements
+
+| Achievement | Tier |
+|------------|------|
+| **Script Kiddie** | Silver |
+| **Macro Maestro** | Gold |
+| **Automation God** | Platinum |
