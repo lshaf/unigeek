@@ -63,7 +63,7 @@ void CctvSnifferScreen::onItemSelected(uint8_t index)
         }
         case 1: // IP or File or Network (depends on mode)
           if (_mode == MODE_SINGLE_IP) {
-            String ip = InputTextAction::popup("Target IP", _targetIp, true);
+            String ip = InputTextAction::popup("Target IP", _targetIp, InputTextAction::INPUT_NUMBER);
             if (ip.length()) _targetIp = ip;
             _showConfig();
           } else if (_mode == MODE_FILE_IP) {

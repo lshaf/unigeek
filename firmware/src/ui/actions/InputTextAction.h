@@ -10,8 +10,10 @@
 class InputTextAction
 {
 public:
-  static String popup(const char* title, const String& defaultValue = "", bool numberMode = false) {
-    InputTextAction action(title, defaultValue, numberMode);
+  enum Mode : uint8_t { INPUT_TEXT = 0, INPUT_NUMBER = 1, INPUT_HEX = 2 };
+
+  static String popup(const char* title, const String& defaultValue = "", Mode mode = INPUT_TEXT) {
+    InputTextAction action(title, defaultValue, mode);
     String result = action._run();
     _cancelledFlag() = action._cancelled;
     Uni.lastActiveMs = millis();
@@ -37,7 +39,7 @@ private:
     SPN_COUNT
   };
 
-  static constexpr int      MAX_SETS   = 15;
+  static constexpr int      MAX_SETS   = 20;
   static constexpr uint32_t COMMIT_MS  = 1000;
   static constexpr uint32_t BLINK_MS   = 500;
   static constexpr int      PAD        = 4;
@@ -66,7 +68,7 @@ private:
   int         _tapCount    = 0;
   uint32_t    _lastTapTime = 0;
 
-  bool        _numberMode  = false;
+  Mode        _mode        = INPUT_TEXT;
   bool        _capsLock    = false;
   bool        _symbolMode  = false;
   bool        _done        = false;
@@ -77,8 +79,8 @@ private:
 
   static bool& _cancelledFlag() { static bool v = false; return v; }
 
-  explicit InputTextAction(const char* title, const String& defaultValue, bool numberMode)
-  : _title(title), _input(defaultValue), _numberMode(numberMode)
+  explicit InputTextAction(const char* title, const String& defaultValue, Mode mode)
+  : _title(title), _input(defaultValue), _mode(mode)
   {
     _buildSets();
   }
@@ -86,7 +88,20 @@ private:
   void _buildSets() {
     _setCount = 0;
 
-    if (_numberMode) {
+    if (_mode == INPUT_HEX) {
+      static constexpr const char* hexLabels[] = {
+        "0","1","2","3","4","5","6","7","8","9",
+        "A","B","C","D","E","F"," ",
+      };
+      for (int i = 0; i < 17; i++) {
+        _sets[_setCount++] = { hexLabels[i], hexLabels[i], false, SP_SAVE };
+      }
+      static constexpr const char* hexSpecialLabels[SPN_COUNT] = { "SAVE", "DEL", "CANCEL" };
+      static constexpr Special hexSpecialMap[SPN_COUNT] = { SP_SAVE, SP_DELETE, SP_CANCEL };
+      for (int i = 0; i < SPN_COUNT; i++) {
+        _sets[_setCount++] = { nullptr, hexSpecialLabels[i], true, hexSpecialMap[i] };
+      }
+    } else if (_mode == INPUT_NUMBER) {
       static constexpr const char* numLabels[] = {
         "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", ".",
       };
@@ -186,7 +201,11 @@ private:
             _cancelled = true;
           }
         } else if (c != '\0') {
-          if (!_numberMode || isdigit(c) || c == '.') {
+          bool allow = _mode == INPUT_HEX    ? (isxdigit(c) || c == ' ')
+                     : _mode == INPUT_NUMBER ? (isdigit(c) || c == '.')
+                     : true;
+          if (allow) {
+            if (_mode == INPUT_HEX && isalpha(c)) c = toupper(c);
             _input += c;
             cursorOn  = true;
             lastBlink = millis();
@@ -219,7 +238,9 @@ private:
 
     lcd.setTextColor(TFT_DARKGREY);
     lcd.setCursor(x + PAD, y + KB_H - PAD - 8);
-    lcd.print(_numberMode ? "0-9 . + ENTER to confirm" : "Type + ENTER to confirm");
+    lcd.print(_mode == HEX    ? "0-9 A-F SPACE + ENTER"
+                             : _mode == INPUT_NUMBER ? "0-9 . + ENTER to confirm"
+                             : "Type + ENTER to confirm");
   }
 
   void _drawInputKeyboard(bool cursorOn) {
@@ -373,7 +394,7 @@ private:
     lcd.print(_title);
 
     lcd.setTextColor(TFT_DARKGREY);
-    lcd.drawString(_numberMode ? "UP/DN:digit  PRESS:sel" : "UP/DN:set  PRESS:char",
+    lcd.drawString(_mode != INPUT_TEXT ? "UP/DN:digit  PRESS:sel" : "UP/DN:set  PRESS:char",
                    x + PAD, y + hintY);
   }
 
