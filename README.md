@@ -20,11 +20,13 @@ Multi-tool firmware for ESP32-based handheld devices. Built with PlatformIO + Ar
 | M5Stick S3 | 2 Buttons | I2S | Yes | — | — |
 | DIY Smoochie | 5 Buttons | — | — | Yes | — |
 | CYD 2432W328R | Touch (XPT2046) | — | — | Yes | — |
+| CYD 2432S028 (2USB) | Touch (XPT2046) | — | — | Yes | — |
 
 ### Known issues
 
 - **M5Stick S3** — CC1101, NRF24, and internal IR untested.
 - **CYD 2432W328R** — newly released, most external modules untested.
+- **CYD 2432S028 (2USB)** — newly released, most external modules untested.
 
 ---
 
@@ -51,11 +53,13 @@ Multi-tool firmware for ESP32-based handheld devices. Built with PlatformIO + Ar
 - **Karma Captive** — Detect nearby probe requests and respond with a fake open AP serving a phishing portal to capture credentials ([details](knowledge/karma-attack.md))
 - **Karma EAPOL** — Detect nearby probe requests and deploy fake WPA2 APs via a paired Karma Support device; captures M1+M2 EAPOL handshakes for offline cracking, advances automatically on capture ([details](knowledge/karma-attack.md))
 - **Karma Support** — Companion screen for a second device; receives deploy commands over ESP-NOW and hosts the fake WPA2 AP on behalf of the attack device ([details](knowledge/karma-attack.md))
+- **Karma Detector** — Scan for rogue APs responding to probes by broadcasting fake probe requests across all channels and monitoring for unexpected responses
 - **WiFi Analyzer** — Scan and display nearby networks with signal strength and channel info
 - **Packet Monitor** — Visualize WiFi traffic by channel
 - **WiFi Deauther** — Disconnect clients from a target network
 - **Deauther Detector** — Monitor for deauthentication attacks nearby
-- **Beacon Spam** — Flood the area with fake SSIDs
+- **WiFi Watchdog** — Passive promiscuous monitor with five views: overall summary, deauth/disassoc events, probe request leaks, beacon flood detection, and evil twin AP detection
+- **Beacon Attack** — Flood the area with fake SSIDs; Spam mode (dictionary or random names) or Flood mode targeting a specific AP with high-rate cloned beacons
 - **CIW Zeroclick** — Broadcast SSIDs with injection payloads to test how nearby devices handle untrusted network names
 - **ESPNOW Chat** — Peer-to-peer text chat over ESP-NOW (no router needed)
 - **EAPOL Capture** — Capture WPA2 handshakes from nearby networks and save to storage; configurable discovery dwell, attack dwell, channel hopping, and max deauth attempts ([details](knowledge/eapol.md))
@@ -99,6 +103,7 @@ Multi-tool firmware for ESP32-based handheld devices. Built with PlatformIO + Ar
 - **QR Code** — Generate and display a QR code from typed or file-loaded text; supports WiFi QR format
 - **Barcode** — Generate and display a Code 128 barcode from typed or file-loaded text
 - **File Manager** — Browse, rename, copy, cut, paste, and delete files and folders on storage; directories sorted first then alphabetical; tap a file to view its contents; hold 1s to open context menu
+- **File Hex Viewer** — View any file as a scrollable hex dump with offset, hex byte columns, and ASCII representation
 - **Achievements** — View all achievements grouped by domain (13 domains, 199 entries, ≈ 84 800 EXP pool); shows tier (Bronze/Silver/Gold/Platinum), description, and unlock status; long-press an unlocked achievement to set it as your Agent Title ([details](knowledge/achievements.md))
 
 ### Games
@@ -328,4 +333,4 @@ This project was built with inspiration and reference from:
 - implement thermal camera
 - change keyboard to HID instead, mode will be USB and BLE, while BLE and USB only have Keyboard, Mouse and Jiggle Mouse, USB has 1 more option is Mass Storage.
 
-<!-- README last synced at commit: 0745632 (sticks3 IR improvement, hand orientation, speaker test) -->
+<!-- README last synced at commit: 3ac3f8d (CYD 2USB board, WiFi Watchdog, Karma Detector, Beacon Spam rework, File Hex Viewer) -->
