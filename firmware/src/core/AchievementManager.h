@@ -38,7 +38,7 @@ public:
   struct Catalog { const AchDef* defs; uint16_t count; };
 
   // Returns catalog pointer + count derived from sizeof — no manual counting needed
-  // Next available sequential ID: 217  (IDs 164–198 already used; 199 placed in domain 9; 200–209 in domain 1; 210–216 in domain 9)
+  // Next available sequential ID: 220  (IDs 164–198 already used; 199 placed in domain 9; 200–209 in domain 1; 210–219 in domain 9)
   static Catalog catalog() {
     static constexpr AchDef kAchs[] = {
       // ── WiFi Network (domain 0) ────────────────────────────────────────────
@@ -234,6 +234,9 @@ public:
       { 214, "uart_receive_data",         "Signal Caught",          9, 1, "Receive data over UART" },
       { 215, "uart_log_saved",            "Terminal Logger",        9, 0, "Save a UART session log to storage" },
       { 216, "uart_send_command",         "Terminal Operator",      9, 0, "Send a command over UART" },
+      { 217, "pomodoro_first",            "Focus Mode",             9, 0, "Complete your first Pomodoro work session" },
+      { 218, "pomodoro_5",                "Flow State",             9, 1, "Complete 5 Pomodoro work sessions" },
+      { 219, "pomodoro_20",               "Deep Worker",            9, 2, "Complete 20 Pomodoro work sessions" },
       // ── Games (domain 10) ─────────────────────────────────────────────────
       { 164, "flappy_first_play",         "First Flight",          10, 0, "Play Flappy Bird for the first time" },
       { 165, "flappy_score_10",           "Skilled Flapper",       10, 1, "Score 10 points in Flappy Bird" },
