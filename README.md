@@ -339,4 +339,4 @@ This project was built with inspiration and reference from:
 - implement thermal camera
 - change keyboard to HID instead, mode will be USB and BLE, while BLE and USB only have Keyboard, Mouse and Jiggle Mouse, USB has 1 more option is Mass Storage.
 
-<!-- README last synced at commit: 7067c07 (TOTP Auth, UART Terminal, hex input mode) -->
+<!-- README last synced at commit: 63757a9 (Pomodoro, push/goBack stack, UART bg receive, Chameleon dump keys, input rework) -->

@@ -68,7 +68,8 @@ export const CATALOG = [
   { slug: "i2c-detector",         title: "I2C Detector",        category: "utility",  summary: "Scan the I2C bus and list all responding device addresses",                                           hasDetail: false, stable: true },
   { slug: "achievements",         title: "Achievements",        category: "utility",  summary: "217 achievements across 13 domains (~91 000 EXP pool); set any unlocked entry as your Agent Title", hasDetail: true,  stable: true },
   { slug: "totp-auth",            title: "TOTP Auth",           category: "utility",  summary: "Time-based OTP authenticator; add accounts by Base32 secret, view live 6/8-digit codes with countdown, hold to view or delete",  hasDetail: true,  stable: true },
-  { slug: "uart-terminal",        title: "UART Terminal",       category: "utility",  summary: "Serial terminal over configurable GPIO pins; text/hex send modes, real-time receive, optional session log save",                   hasDetail: true,  stable: true },
+  { slug: "uart-terminal",        title: "UART Terminal",       category: "utility",  summary: "Serial terminal over configurable GPIO pins; text/hex send modes, background receive, optional session log save",                hasDetail: true,  stable: true },
+  { slug: "pomodoro",             title: "Pomodoro Timer",      category: "utility",  summary: "Focus/break timer with configurable work and break durations, progress bar, speaker notification, and session counter", hasDetail: false, stable: true },
 
   // Games
   { slug: "game-flappy",          title: "Flappy Bird",         category: "game",     summary: "Classic side-scrolling game with randomized pipes and scoring",                                       hasDetail: false, stable: true },

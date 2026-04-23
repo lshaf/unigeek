@@ -1,6 +1,6 @@
 # UART Terminal
 
-A serial terminal that communicates with external hardware over configurable GPIO pins. Set baud rate and RX/TX GPIOs, send commands in text or raw hex, receive incoming data in real time, and optionally save the full session log to storage.
+A serial terminal that communicates with external hardware over configurable GPIO pins. Set baud rate and RX/TX GPIOs, send commands in text or raw hex, receive incoming data in the background while you type, and optionally save the full session log to storage.
 
 > [!note]
 > Requires external hardware wired to the device's GPIO pins. Default pins are taken from the **Pin Configuration** settings (Grove SDA/SCL). Change them in the setup screen before starting.

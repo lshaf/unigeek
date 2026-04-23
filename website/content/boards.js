@@ -131,6 +131,7 @@ export const BOARDS = [
     bootloader: "Hold BTN A while connecting USB-C",
     storage: "SD + LittleFS",
     bootNotes: "Touch-first UI; physical buttons are hidden. Use on-screen controls for navigation.",
+    knownIssues: ["Port A UART is not working yet"],
     nav: [
       ["Touch", [
         { input: "Touch — left edge (x < 80)", action: "Back" },
