@@ -19,8 +19,12 @@ Multi-tool firmware for ESP32-based handheld devices. Built with PlatformIO + Ar
 | M5Stack CoreS3 (Unified) | Touch | I2S | Yes | Yes | — |
 | M5Stick S3 | 2 Buttons | I2S | Yes | — | — |
 | DIY Smoochie | 5 Buttons | — | — | Yes | — |
-| CYD 2432W328R | Touch (XPT2046) | — | — | Yes | — |
+| CYD 2432W328R / 2432S024R | Touch (XPT2046) | — | — | Yes | — |
+| CYD 2432S028 | Touch (XPT2046) | — | — | Yes | — |
 | CYD 2432S028 (2USB) | Touch (XPT2046) | — | — | Yes | — |
+| CYD 2432W328C | Touch (CST816S) | — | — | Yes | — |
+| CYD 3248S035R | Touch (XPT2046) | — | — | Yes | — |
+| CYD 3248S035C | Touch (GT911) | — | — | Yes | — |
 
 ### Known issues
 
@@ -102,9 +106,10 @@ Multi-tool firmware for ESP32-based handheld devices. Built with PlatformIO + Ar
 - **Barcode** — Generate and display a Code 128 barcode from typed or file-loaded text
 - **File Manager** — Browse, rename, copy, cut, paste, and delete files and folders on storage; directories sorted first then alphabetical; tap a file to view its contents; hold 1s to open context menu
 - **File Hex Viewer** — View any file as a scrollable hex dump with offset, hex byte columns, and ASCII representation
-- **Achievements** — View all achievements grouped by domain (13 domains, 217 entries, ≈ 91 000 EXP pool); shows tier (Bronze/Silver/Gold/Platinum), description, and unlock status; long-press an unlocked achievement to set it as your Agent Title ([details](knowledge/achievements.md))
+- **Achievements** — View all achievements grouped by domain (13 domains, 220 entries, ≈ 92 000 EXP pool); shows tier (Bronze/Silver/Gold/Platinum), description, and unlock status; long-press an unlocked achievement to set it as your Agent Title ([details](knowledge/achievements.md))
 - **TOTP Auth** — Time-based one-time password authenticator; add accounts by name and Base32 secret, view live 6- or 8-digit codes with a countdown progress bar, hold an account row to view or delete it; keeps display on while viewing a code ([details](knowledge/totp-auth.md))
 - **UART Terminal** — Serial terminal over configurable GPIO pins; set baud rate, RX and TX GPIOs, switch between string and hex send mode (UP/DOWN toggle), send commands via dialog, receive data in real time, and optionally save the session log to storage ([details](knowledge/uart-terminal.md))
+- **Pomodoro Timer** — 25/5-minute focus timer; configurable work (15–60 min) and break (5–15 min) durations; press to pause/resume; speaker beep on phase transition; tracks session count and shows progress bar; keeps display on while running
 
 ### Games
 - **HEX Decoder** — Wordle-style game using hexadecimal characters (0–9, A–F)
@@ -173,7 +178,7 @@ Full-screen profile accessible from the main menu. Displays:
 - **HP** — battery percentage; shows `+CHG` when charging
 - **BRAIN** — free heap as a percentage of total heap
 - **ACHIEVEMENT** — total unlocked achievements out of all available
-- Domain bars for each achievement domain showing per-domain completion (WiFi, Attacks, BT, HID, NFC, IR, RF, NRF24, GPS, Utility, Games, Settings, Chameleon — 13 domains, 217 achievements total, pool ≈ 91 000 EXP)
+- Domain bars for each achievement domain showing per-domain completion (WiFi, Attacks, BT, HID, NFC, IR, RF, NRF24, GPS, Utility, Games, Settings, Chameleon — 13 domains, 220 achievements total, pool ≈ 92 000 EXP)
 
 ### Settings
 - Device name
