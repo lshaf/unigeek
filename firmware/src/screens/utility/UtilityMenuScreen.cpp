@@ -8,6 +8,7 @@
 #include "screens/utility/AchievementScreen.h"
 #include "screens/utility/TotpScreen.h"
 #include "screens/utility/UartTerminalScreen.h"
+#include "screens/utility/PomodoroScreen.h"
 
 void UtilityMenuScreen::onInit() {
   setItems(_items);
@@ -26,5 +27,6 @@ void UtilityMenuScreen::onItemSelected(uint8_t index) {
     case 4: Screen.push(new AchievementScreen());   break;
     case 5: Screen.push(new TotpScreen());          break;
     case 6: Screen.push(new UartTerminalScreen());  break;
+    case 7: Screen.push(new PomodoroScreen());       break;
   }
 }
