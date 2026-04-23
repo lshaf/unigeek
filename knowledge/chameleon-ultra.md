@@ -73,7 +73,7 @@ Source picker shows **"Built-in keys"** plus every `.txt` file under `/unigeek/n
 Result view shows `Recovered N / M keys`, the UID, and every `S00 A / S00 B … SNN A / SNN B` pair discovered. Keys are saved to `/unigeek/nfc/keys/<uid>.txt` for later offline use.
 
 ### MF Dump Memory
-Runs the built-in dictionary against the card, then reads every block with the matching key via `mf1ReadBlock` (2008). Trailers get their key bytes overlaid into the dump so the resulting `.bin` carries discovered keys. Output streams straight to `/unigeek/nfc/dumps/<uid>.bin` — file size = 320 B (Mini), 1 KB (1K), 2 KB (2K), or 4 KB (4K).
+Loads sector keys from the Dict Attack result at `/unigeek/nfc/keys/<uid>.txt`. If no key file exists or no keys were recovered, a status prompt appears directing you to run the Dict Attack first. Once keys are loaded, reads every block via `mf1ReadBlock` (2008) using the matched key (A first, then B). Trailers get their key bytes overlaid into the dump so the resulting `.bin` carries the discovered keys. Output streams to `/unigeek/nfc/dumps/<uid>.bin` — file size = 320 B (Mini), 1 KB (1K), 4 KB (4K).
 
 ### Magic Detect
 Probes via `hf14ARaw` (2010):

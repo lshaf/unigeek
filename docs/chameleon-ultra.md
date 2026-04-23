@@ -293,16 +293,20 @@ ESP32 plan:
 
 Data budget per 1K card: 16 sectors × 2 keys × (status + 6-byte key) ≈ 224 B.
 
-### 3.7 Mifare Classic dump / read — **Easy win**
+### 3.7 Mifare Classic dump / read — **DONE**
 
 Dart: `recovery.dart::dumpData` (line 564).
 Command: `2008 mf1ReadBlock`.
-Iterates sectors × blocks, using the known key (A first, else B). Rewrites the
-sector trailer's `[0..6]` with key A and `[10..16]` with key B before saving.
 
-RAM: 1K = 1024 B dump. 4K = 4096 B. Both fit even on M5StickC if allocated
-from PSRAM-backed boards, otherwise stream straight to SD:
-`/unigeek/chameleon/dumps/<uid>_<timestamp>.bin`.
+ESP32 flow (`ChameleonMfcDumpScreen`):
+1. `scan14A` → UID, SAK (sector count from SAK).
+2. Load keys from `/unigeek/nfc/keys/<uid>.txt` (written by the Dict Attack screen).
+   If file missing or no keys recovered → show status "Run Dict Attack first" and abort.
+3. Iterate every block; try key A then key B. Trailer blocks get key bytes overlaid
+   (`[0..6]` = key A, `[10..16]` = key B) before write.
+4. Stream to `/unigeek/nfc/dumps/<uid>.bin` — 320 B (Mini), 1 KB (1K), 4 KB (4K).
+
+**Requires Dict Attack to have been run first for the same card.**
 
 ### 3.8 Device settings — **Easy win**
 

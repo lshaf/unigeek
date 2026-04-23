@@ -22,6 +22,7 @@ private:
   LogView _log;
 
   void _run();
+  bool _loadKeys(const char* path, uint8_t (*keyA)[6], uint8_t (*keyB)[6], bool* hasA, bool* hasB, int* recovered);
   uint8_t  _trailerBlock(uint8_t sector);
   uint16_t _totalBlocks(uint8_t sectors);
 };

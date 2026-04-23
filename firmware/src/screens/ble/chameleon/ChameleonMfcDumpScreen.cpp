@@ -6,23 +6,6 @@
 #include "core/AchievementManager.h"
 #include "ui/actions/ShowStatusAction.h"
 
-static constexpr uint8_t kDumpKeys[][6] = {
-  {0xFF,0xFF,0xFF,0xFF,0xFF,0xFF},
-  {0xA0,0xA1,0xA2,0xA3,0xA4,0xA5},
-  {0xD3,0xF7,0xD3,0xF7,0xD3,0xF7},
-  {0x00,0x00,0x00,0x00,0x00,0x00},
-  {0xB0,0xB1,0xB2,0xB3,0xB4,0xB5},
-  {0x4D,0x3A,0x99,0xC3,0x51,0xDD},
-  {0x1A,0x98,0x2C,0x7E,0x45,0x9A},
-  {0xAA,0xBB,0xCC,0xDD,0xEE,0xFF},
-  {0x71,0x4C,0x5C,0x88,0x6E,0x97},
-  {0x58,0x7E,0xE5,0xF9,0x35,0x0F},
-  {0xA0,0x47,0x8C,0xC3,0x90,0x91},
-  {0x53,0x3C,0xB6,0xC7,0x23,0xF6},
-  {0x8F,0xD0,0xA4,0xF2,0x56,0xE9},
-};
-static constexpr uint8_t kDumpKeyCount = sizeof(kDumpKeys) / 6;
-
 uint8_t ChameleonMfcDumpScreen::_trailerBlock(uint8_t sector) {
   return (sector < 32) ? (sector * 4 + 3) : (128 + (sector - 32) * 16 + 15);
 }
@@ -70,6 +53,55 @@ void ChameleonMfcDumpScreen::onRender() {
   _log.draw(Uni.Lcd, bodyX(), bodyY(), bodyW(), bodyH());
 }
 
+bool ChameleonMfcDumpScreen::_loadKeys(const char* path,
+                                        uint8_t (*keyA)[6], uint8_t (*keyB)[6],
+                                        bool* hasA, bool* hasB, int* recovered) {
+  *recovered = 0;
+  if (!Uni.Storage || !Uni.Storage->isAvailable()) return false;
+  String content = Uni.Storage->readFile(path);
+  if (content.length() == 0) return false;
+
+  int start = 0;
+  while (start < (int)content.length()) {
+    int nl = content.indexOf('\n', start);
+    if (nl < 0) nl = content.length();
+    String line = content.substring(start, nl);
+    line.trim();
+    // Parse lines written by _saveKeys(): "S%02d A/B %02X%02X%02X%02X%02X%02X"
+    if (line.length() >= 10 && line[0] == 'S') {
+      int s = line.substring(1, 3).toInt();
+      if (s >= 0 && s < 40) {
+        char type = line[4];
+        String hexStr = line.substring(6);
+        hexStr.trim();
+        if (hexStr.length() == 12) {
+          uint8_t key[6];
+          bool valid = true;
+          for (int i = 0; i < 6 && valid; i++) {
+            char hex[3] = { hexStr[i * 2], hexStr[i * 2 + 1], 0 };
+            char* end = nullptr;
+            key[i] = (uint8_t)strtoul(hex, &end, 16);
+            if (*end != 0) valid = false;
+          }
+          if (valid) {
+            if (type == 'A' && !hasA[s]) {
+              memcpy(keyA[s], key, 6);
+              hasA[s] = true;
+              (*recovered)++;
+            } else if (type == 'B' && !hasB[s]) {
+              memcpy(keyB[s], key, 6);
+              hasB[s] = true;
+              (*recovered)++;
+            }
+          }
+        }
+      }
+    }
+    start = nl + 1;
+  }
+  return true;
+}
+
 void ChameleonMfcDumpScreen::_run() {
   _state   = STATE_RUNNING;
   _running = true;
@@ -93,42 +125,33 @@ void ChameleonMfcDumpScreen::_run() {
   else if (sak == 0x01) sectors = 5;
   uint16_t totalBlocks = _totalBlocks(sectors);
 
-  char msg[48];
-  snprintf(msg, sizeof(msg), "Detecting keys (%d sectors)", sectors);
-  _log.addLine(msg, TFT_WHITE);
-  _needsDraw = true; onRender();
+  char uidHex[16] = {};
+  for (uint8_t i = 0; i < _uidLen && i * 2 + 2 < (int)sizeof(uidHex); i++) {
+    char h[4]; snprintf(h, sizeof(h), "%02X", _uid[i]); strcat(uidHex, h);
+  }
 
   uint8_t keyA[40][6] = {}, keyB[40][6] = {};
   bool    hasA[40] = {}, hasB[40] = {};
-  int recovered = 0;
+  int     recovered = 0;
 
-  uint8_t flatKeys[32 * 6];
-  memcpy(flatKeys, kDumpKeys, kDumpKeyCount * 6);
+  char keyPath[64];
+  snprintf(keyPath, sizeof(keyPath), "/unigeek/nfc/keys/%s.txt", uidHex);
 
-  for (uint8_t s = 0; s < sectors; s++) {
-    uint8_t trailer = _trailerBlock(s);
-    for (int kt = 0; kt < 2; kt++) {
-      uint8_t keyType = (kt == 0) ? 0x60 : 0x61;
-      uint8_t matched[6];
-      if (!c.mf1CheckKeysOfBlock(trailer, keyType, flatKeys, kDumpKeyCount, matched)) continue;
-      if (kt == 0) { memcpy(keyA[s], matched, 6); hasA[s] = true; }
-      else         { memcpy(keyB[s], matched, 6); hasB[s] = true; }
-      recovered++;
-    }
-  }
+  bool fileFound = _loadKeys(keyPath, keyA, keyB, hasA, hasB, &recovered);
 
-  snprintf(msg, sizeof(msg), "Keys: %d/%d", recovered, sectors * 2);
-  _log.addLine(msg, TFT_GREEN);
-  _needsDraw = true; onRender();
-
-  if (recovered == 0) {
-    _log.addLine("No keys — cannot dump", TFT_RED);
+  if (!fileFound || recovered == 0) {
     _state = STATE_DONE; _running = false;
+    _needsDraw = true; onRender();
+    ShowStatusAction::show("Run Dict Attack first", 1500);
     _needsDraw = true; onRender();
     return;
   }
 
-  // Read every block with a known key
+  char msg[48];
+  snprintf(msg, sizeof(msg), "Keys: %d", recovered);
+  _log.addLine(msg, TFT_GREEN);
+  _needsDraw = true; onRender();
+
   if (!Uni.Storage || !Uni.Storage->isAvailable()) {
     _log.addLine("No storage", TFT_RED);
     _state = STATE_DONE; _running = false;
@@ -137,10 +160,6 @@ void ChameleonMfcDumpScreen::_run() {
   }
   Uni.Storage->makeDir("/unigeek/nfc/dumps");
 
-  char uidHex[16] = {};
-  for (uint8_t i = 0; i < _uidLen && i * 2 + 2 < (int)sizeof(uidHex); i++) {
-    char h[4]; snprintf(h, sizeof(h), "%02X", _uid[i]); strcat(uidHex, h);
-  }
   char path[80];
   snprintf(path, sizeof(path), "/unigeek/nfc/dumps/%s.bin", uidHex);
   fs::File f = Uni.Storage->open(path, "w");
@@ -153,7 +172,6 @@ void ChameleonMfcDumpScreen::_run() {
 
   int blocksWritten = 0;
   for (uint16_t block = 0; block < totalBlocks; block++) {
-    // Compute which sector this block belongs to
     uint8_t s = (block < 128) ? (uint8_t)(block / 4)
                               : (uint8_t)(32 + (block - 128) / 16);
 
@@ -162,11 +180,8 @@ void ChameleonMfcDumpScreen::_run() {
     if (hasA[s] && c.mf1ReadBlock(block, 0x60, keyA[s], data)) ok = true;
     else if (hasB[s] && c.mf1ReadBlock(block, 0x61, keyB[s], data)) ok = true;
 
-    if (!ok) {
-      memset(data, 0, 16);
-    }
+    if (!ok) memset(data, 0, 16);
 
-    // Overlay trailer key bytes if this is a trailer (so dump holds discovered keys)
     if (block == _trailerBlock(s)) {
       if (hasA[s]) memcpy(data, keyA[s], 6);
       if (hasB[s]) memcpy(data + 10, keyB[s], 6);
