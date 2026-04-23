@@ -154,8 +154,10 @@ function readReleaseFile(filePath) {
   const h1 = raw.match(/^#\s+(.+)$/m);
   const title = h1 ? h1[1].trim() : null;
 
-  // Drop first H1 line so splitByH2 only sees body.
-  const body = raw.replace(/^#\s+.+\n?/, "");
+  // Drop first H1 line and optional *YYYY-MM-DD* date line (shown via git tag date instead).
+  const body = raw
+    .replace(/^#\s+.+\n?/, "")
+    .replace(/^\*\d{4}-\d{2}-\d{2}\*\s*\n?/, "");
 
   const sections = splitByH2(body);
 
