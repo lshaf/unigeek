@@ -2,6 +2,7 @@
 #include "core/Device.h"
 #include "core/ScreenManager.h"
 #include "core/AchievementManager.h"
+#include "core/ConfigManager.h"
 #include "screens/wifi/WifiMenuScreen.h"
 
 #include <vector>
@@ -67,6 +68,7 @@ void WifiWatchdogScreen::onInit()
   _itemCount   = 0;
   _gridSel     = 0;
   _prevGridSel = -1;
+  _holdCell    = -1;
   for (int i = 0; i < 4; i++) _prevCounts[i] = -1;
   _lastUpdate  = millis();
 
@@ -114,6 +116,7 @@ void WifiWatchdogScreen::onUpdate()
         if (col >= 0 && col < 2 && row >= 0 && row < 2) {
           static constexpr View kViewMap[] = {VIEW_DEAUTH, VIEW_PROBES, VIEW_FLOOD, VIEW_EVILTWIN};
           Uni.Nav->setSuppressKeys(false);
+          _holdCell  = -1;
           _view      = kViewMap[row * 2 + col];
           _itemCount = 0;
           _scroll.resetScroll();
@@ -153,6 +156,43 @@ void WifiWatchdogScreen::onUpdate()
 #endif
     }
 
+#ifdef DEVICE_HAS_TOUCH_NAV
+    {
+      const int backW = bodyW() / 6;
+      if (Uni.Nav->isPressed()) {
+        const int16_t tx = Uni.Nav->lastTouchX();
+        const int16_t ty = Uni.Nav->lastTouchY();
+        int newHold = -1;
+        if (tx >= 0) {
+          if ((int)tx < (int)bodyX() + backW) {
+            newHold = 4; // back zone
+          } else {
+            const int gx  = (int)tx - (int)bodyX() - backW;
+            const int gw  = bodyW() - backW;
+            const int col = gx / (gw / 2);
+            const int row = ((int)ty - (int)bodyY()) / (bodyH() / 2);
+            if (col >= 0 && col < 2 && row >= 0 && row < 2)
+              newHold = row * 2 + col;
+          }
+        }
+        if (newHold != _holdCell) {
+          const bool backChanged = (_holdCell == 4) || (newHold == 4);
+          if (_holdCell >= 0 && _holdCell < 4) _prevCounts[_holdCell] = -1;
+          if (newHold  >= 0 && newHold  < 4)  _prevCounts[newHold]   = -1;
+          _holdCell = newHold;
+          if (backChanged) _drawBackButton();
+          _renderOverall();
+        }
+      } else if (_holdCell >= 0) {
+        const bool backWasHeld = (_holdCell == 4);
+        if (_holdCell < 4) _prevCounts[_holdCell] = -1;
+        _holdCell = -1;
+        if (backWasHeld) _drawBackButton();
+        _renderOverall();
+      }
+    }
+#endif
+
   } else {
     if (Uni.Nav->wasPressed()) {
       auto dir = Uni.Nav->readDirection();
@@ -160,8 +200,10 @@ void WifiWatchdogScreen::onUpdate()
         _view        = VIEW_OVERALL;
         _prevGridSel = -1;
 #ifdef DEVICE_HAS_TOUCH_NAV
+        Uni.Nav->drawOverlay();  // clear bar now, before suppress turns it into a no-op
         Uni.Nav->setSuppressKeys(true);
 #endif
+        Uni.Lcd.fillRect(bodyX(), bodyY(), bodyW(), bodyH(), TFT_BLACK);
         render();
         return;
       }
@@ -432,16 +474,7 @@ void WifiWatchdogScreen::_renderOverall()
 
 #ifdef DEVICE_HAS_TOUCH_NAV
   if (forceAll) {
-    const int backW = bodyW() / 6;
-    Sprite back(&Uni.Lcd);
-    back.createSprite(backW, bodyH());
-    back.fillSprite(TFT_BLACK);
-    back.drawRoundRect(2, 2, backW - 4, bodyH() - 4, 6, 0x2104);
-    back.setTextDatum(MC_DATUM);
-    back.setTextColor(TFT_DARKGREY, TFT_BLACK);
-    back.drawString("<", backW / 2, bodyH() / 2);
-    back.pushSprite(bodyX(), bodyY());
-    back.deleteSprite();
+    _drawBackButton();
   }
   for (int i = 0; i < 4; i++) {
     if (forceAll || counts[i] != _prevCounts[i]) {
@@ -565,6 +598,25 @@ void WifiWatchdogScreen::_renderFlood()
   _setListState(n);
 }
 
+// ── Back button renderer ──────────────────────────────────────────────────────
+
+void WifiWatchdogScreen::_drawBackButton()
+{
+#ifdef DEVICE_HAS_TOUCH_NAV
+  const int backW = bodyW() / 6;
+  const bool held = (_holdCell == 4);
+  Sprite back(&Uni.Lcd);
+  back.createSprite(backW, bodyH());
+  back.fillSprite(TFT_BLACK);
+  back.drawRoundRect(2, 2, backW - 4, bodyH() - 4, 6, held ? Config.getThemeColor() : 0x2104);
+  back.setTextDatum(MC_DATUM);
+  back.setTextColor(held ? TFT_WHITE : TFT_DARKGREY, TFT_BLACK);
+  back.drawString("<", backW / 2, bodyH() / 2);
+  back.pushSprite(bodyX(), bodyY());
+  back.deleteSprite();
+#endif
+}
+
 // ── Grid cell renderer ────────────────────────────────────────────────────────
 
 void WifiWatchdogScreen::_drawGridCell(int idx, int count)
@@ -581,13 +633,14 @@ void WifiWatchdogScreen::_drawGridCell(int idx, int count)
   const int px    = bodyX() + backW + (idx % 2) * cellW;
   const int py    = bodyY() + (idx / 2) * cellH;
 
+  const bool held = (idx == _holdCell);
   Sprite sp(&Uni.Lcd);
   sp.createSprite(cellW, cellH);
   sp.fillSprite(TFT_BLACK);
-  sp.drawRoundRect(2, 2, cellW - 4, cellH - 4, 4, 0x2104);
+  sp.drawRoundRect(2, 2, cellW - 4, cellH - 4, 4, held ? Config.getThemeColor() : 0x2104);
   sp.setTextSize(1);
   sp.setTextDatum(TC_DATUM);
-  sp.setTextColor(TFT_LIGHTGREY, TFT_BLACK);
+  sp.setTextColor(held ? TFT_WHITE : TFT_LIGHTGREY, TFT_BLACK);
   sp.drawString(kNames[idx], cellW / 2, 8);
   char buf[6];
   snprintf(buf, sizeof(buf), "%d", count);
@@ -608,7 +661,7 @@ void WifiWatchdogScreen::_drawGridCell(int idx, int count)
   Sprite sp(&Uni.Lcd);
   sp.createSprite(cellW, cellH);
   sp.fillSprite(TFT_BLACK);
-  sp.drawRoundRect(2, 2, cellW - 4, cellH - 4, 4, sel ? TFT_CYAN : 0x2104);
+  sp.drawRoundRect(2, 2, cellW - 4, cellH - 4, 4, sel ? Config.getThemeColor() : 0x2104);
   sp.setTextSize(1);
   sp.setTextDatum(TC_DATUM);
   sp.setTextColor(sel ? TFT_WHITE : TFT_LIGHTGREY, TFT_BLACK);

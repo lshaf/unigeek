@@ -134,6 +134,7 @@ private:
   int                 _itemCount        = 0;
   uint8_t             _gridSel          = 0;
   int                 _prevGridSel      = -1;
+  int                 _holdCell         = -1;
   int                 _prevCounts[4]    = {-1, -1, -1, -1};
   ScrollListView      _scroll;
   ScrollListView::Row _rows[MAX_ROWS]          = {};
@@ -150,4 +151,5 @@ private:
   void _renderFlood();
   void _renderEviltwin();
   void _setListState(int newCount);
+  void _drawBackButton();
 };
