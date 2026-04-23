@@ -10,7 +10,7 @@
 class InputTextAction
 {
 public:
-  enum Mode : uint8_t { INPUT_TEXT = 0, INPUT_NUMBER = 1, INPUT_HEX = 2 };
+  enum Mode : uint8_t { INPUT_TEXT = 0, INPUT_IP_ADDRESS = 1, INPUT_HEX = 2 };
 
   static String popup(const char* title, const String& defaultValue = "", Mode mode = INPUT_TEXT) {
     InputTextAction action(title, defaultValue, mode);
@@ -90,30 +90,29 @@ private:
     _setCount = 0;
 
     if (_mode == INPUT_HEX) {
-      static constexpr const char* hexLabels[] = {
+      // rows 0-2: 0-9, A-E  row 3: CNCL F · DEL SAVE
+      static constexpr const char* hexDigits[] = {
+        "0","1","2","3","4","5","6","7","8","9","A","B","C","D","E",
+      };
+      for (int i = 0; i < 15; i++)
+        _sets[_setCount++] = { hexDigits[i], hexDigits[i], false, SP_SAVE };
+      _sets[_setCount++] = { nullptr, "CNCL", true,  SP_CANCEL };
+      _sets[_setCount++] = { "F",     "F",    false, SP_SAVE   };
+      _sets[_setCount++] = { " ",     " ",    false, SP_SAVE   };
+      _sets[_setCount++] = { nullptr, "DEL",  true,  SP_DELETE };
+      _sets[_setCount++] = { nullptr, "SAVE", true,  SP_SAVE   };
+    } else if (_mode == INPUT_IP_ADDRESS) {
+      // rows 0-1: 0-9  row 2: CNCL · DEL SAVE
+      static constexpr const char* ipDigits[] = {
         "0","1","2","3","4","5","6","7","8","9",
-        "A","B","C","D","E","F"," ",
       };
-      for (int i = 0; i < 17; i++) {
-        _sets[_setCount++] = { hexLabels[i], hexLabels[i], false, SP_SAVE };
-      }
-      static constexpr const char* hexSpecialLabels[SPN_COUNT] = { "SAVE", "DEL", "CNCL" };
-      static constexpr Special hexSpecialMap[SPN_COUNT] = { SP_SAVE, SP_DELETE, SP_CANCEL };
-      for (int i = 0; i < SPN_COUNT; i++) {
-        _sets[_setCount++] = { nullptr, hexSpecialLabels[i], true, hexSpecialMap[i] };
-      }
-    } else if (_mode == INPUT_NUMBER) {
-      static constexpr const char* numLabels[] = {
-        "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", ".",
-      };
-      for (int i = 0; i < 11; i++) {
-        _sets[_setCount++] = { numLabels[i], numLabels[i], false, SP_SAVE };
-      }
-      static constexpr const char* numSpecialLabels[SPN_COUNT] = { "SAVE", "DEL", "CNCL" };
-      static constexpr Special numSpecialMap[SPN_COUNT] = { SP_SAVE, SP_DELETE, SP_CANCEL };
-      for (int i = 0; i < SPN_COUNT; i++) {
-        _sets[_setCount++] = { nullptr, numSpecialLabels[i], true, numSpecialMap[i] };
-      }
+      for (int i = 0; i < 10; i++)
+        _sets[_setCount++] = { ipDigits[i], ipDigits[i], false, SP_SAVE };
+      _sets[_setCount++] = { nullptr, "CNCL", true,  SP_CANCEL };
+      _sets[_setCount++] = { ".",     ".",    false, SP_SAVE   };
+      _sets[_setCount++] = { nullptr, "DEL",  true,  SP_DELETE };
+      _sets[_setCount++] = { nullptr, "",     false, SP_SAVE   };  // spacer
+      _sets[_setCount++] = { nullptr, "SAVE", true,  SP_SAVE   };
     } else {
       static constexpr const char* charLabels[] = {
         " 0",    ",.1",   "abc2",  "def3",  "ghi4",
@@ -207,6 +206,8 @@ private:
         if (tx >= 0 && ty >= HDR_H) {
           int idx = (int)(ty - HDR_H) / _gridCellH() * _gridCols() + (int)tx / _gridCellW();
           if (idx >= 0 && idx < _setCount) {
+            const CharSet& hit = _sets[idx];
+            if (!hit.isSpecial && hit.chars == nullptr) { delay(10); continue; }
             bool sameCell = (idx == _scrollPos);
             if (!sameCell) {
               _commitTap();
@@ -228,20 +229,16 @@ private:
 
       switch (dir) {
       case INavigation::DIR_UP:
-        _commitTap();
-        _scrollPos = (_scrollPos - 1 + _setCount) % _setCount;
-        break;
-      case INavigation::DIR_DOWN:
-        _commitTap();
-        _scrollPos = (_scrollPos + 1) % _setCount;
-        break;
       case INavigation::DIR_LEFT:
         _commitTap();
-        _scrollPos = (_scrollPos - 1 + _setCount) % _setCount;
+        do { _scrollPos = (_scrollPos - 1 + _setCount) % _setCount; }
+        while (!_sets[_scrollPos].isSpecial && _sets[_scrollPos].chars == nullptr);
         break;
+      case INavigation::DIR_DOWN:
       case INavigation::DIR_RIGHT:
         _commitTap();
-        _scrollPos = (_scrollPos + 1) % _setCount;
+        do { _scrollPos = (_scrollPos + 1) % _setCount; }
+        while (!_sets[_scrollPos].isSpecial && _sets[_scrollPos].chars == nullptr);
         break;
       case INavigation::DIR_PRESS: {
         bool pc = _capsLock, ps = _symbolMode;
@@ -299,12 +296,22 @@ private:
       }
     } else {
       const char* chars = s.chars;
-      int   len = strlen(chars);
-      char  c   = chars[_tapCount % len];
-      if (_capsLock && isalpha(c)) c = toupper(c);
-      _pendingChar = String(c);
-      _tapCount++;
-      _lastTapTime = millis();
+      if (!chars || chars[0] == '\0') return;
+      int  len = strlen(chars);
+      if (len == 1) {
+        char c = chars[0];
+        if (_capsLock && isalpha(c)) c = toupper(c);
+        _input      += c;
+        _pendingChar = "";
+        _tapCount    = 0;
+        _lastTapTime = 0;
+      } else {
+        char c = chars[_tapCount % len];
+        if (_capsLock && isalpha(c)) c = toupper(c);
+        _pendingChar = String(c);
+        _tapCount++;
+        _lastTapTime = millis();
+      }
     }
   }
 
@@ -347,6 +354,15 @@ private:
     int col = idx % _gridCols(), row = idx / _gridCols();
     bool sel = (idx == _scrollPos);
     const CharSet& s = _sets[idx];
+
+    if (!s.isSpecial && s.chars == nullptr) {
+      Sprite sp(&lcd);
+      sp.createSprite(cW, cH);
+      sp.fillSprite(TFT_BLACK);
+      sp.pushSprite(col * cW, HDR_H + row * cH);
+      sp.deleteSprite();
+      return;
+    }
 
     Sprite sp(&lcd);
     sp.createSprite(cW, cH);
@@ -400,7 +416,7 @@ private:
           }
         } else if (c != '\0') {
           bool allow = _mode == INPUT_HEX    ? (isxdigit(c) || c == ' ')
-                     : _mode == INPUT_NUMBER ? (isdigit(c) || c == '.')
+                     : _mode == INPUT_IP_ADDRESS ? (isdigit(c) || c == '.')
                      : true;
           if (allow) {
             if (_mode == INPUT_HEX && isalpha(c)) c = toupper(c);
@@ -437,7 +453,7 @@ private:
     lcd.setTextColor(TFT_DARKGREY);
     lcd.setCursor(x + PAD, y + KB_H - PAD - 8);
     lcd.print(_mode == INPUT_HEX    ? "0-9 A-F SPACE + ENTER"
-            : _mode == INPUT_NUMBER ? "0-9 . + ENTER to confirm"
+            : _mode == INPUT_IP_ADDRESS ? "0-9 . + ENTER to confirm"
             :                         "Type + ENTER to confirm");
   }
 

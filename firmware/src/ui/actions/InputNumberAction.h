@@ -29,8 +29,10 @@ private:
   static constexpr int ERR_H   = 10;
   static constexpr int RANGE_H = 10;
 
-  // grid scroll mode header: PAD + title(10) + PAD + [range(10)+PAD] + input(16) + PAD + err(10) + PAD
-  // computed dynamically via _gridHdrH()
+  // grid scroll mode header: PAD + title(10) + PAD + info(10) + PAD + input(16) + PAD = 52 (fixed)
+  static constexpr int HDR_INFO_Y = PAD + 10 + PAD;                         // 18
+  static constexpr int HDR_INP_Y  = HDR_INFO_Y + 10 + PAD;                  // 32
+  static constexpr int HDR_H      = HDR_INP_Y + INP_H + PAD;                // 52
 
   const char* _title;
   int         _minValidator;
@@ -49,7 +51,7 @@ private:
 
   static bool& _cancelledFlag() { static bool v = false; return v; }
 
-  static constexpr int DIGIT_COUNT = 13;
+  static constexpr int DIGIT_COUNT = 16;
   int _scrollPos = 0;
 
   struct DigitSet {
@@ -70,16 +72,18 @@ private:
   {}
 
   void _buildSets() {
-    static constexpr const char* digits[] = {
-      "0","1","2","3","4","5","6","7","8","9"
-    };
+    // 3 cols × 5 rows = 15 items
+    // rows 0-2: 1-9  row 3: dummy 0 dummy  row 4: CNCL DEL SAVE
+    static constexpr const char* d[] = { "1","2","3","4","5","6","7","8","9" };
     _setCount = 0;
-    for (int i = 0; i < 10; i++) {
-      _sets[_setCount++] = { digits[i], false, DigitSet::ACT_DEL };
-    }
-    _sets[_setCount++] = { "DEL",  true, DigitSet::ACT_DEL    };
-    _sets[_setCount++] = { "SAVE", true, DigitSet::ACT_SAVE   };
-    _sets[_setCount++] = { "CNCL", true, DigitSet::ACT_CANCEL };
+    for (int i = 0; i < 9; i++)
+      _sets[_setCount++] = { d[i], false, DigitSet::ACT_DEL };
+    _sets[_setCount++] = { "",     false, DigitSet::ACT_DEL    };  // dummy
+    _sets[_setCount++] = { "0",    false, DigitSet::ACT_DEL    };
+    _sets[_setCount++] = { "",     false, DigitSet::ACT_DEL    };  // dummy
+    _sets[_setCount++] = { "CNCL", true,  DigitSet::ACT_CANCEL };
+    _sets[_setCount++] = { "DEL",  true,  DigitSet::ACT_DEL    };
+    _sets[_setCount++] = { "SAVE", true,  DigitSet::ACT_SAVE   };
   }
 
   bool _validate() {
@@ -125,13 +129,8 @@ private:
 
   // ── grid scroll mode ────────────────────────────────────────────────────────
 
-  int _gridHdrH() const {
-    int h = PAD + 10 + PAD + INP_H + PAD;
-    if (_hasMin || _hasMax) h += RANGE_H + PAD;
-    h += ERR_H + PAD;
-    return h;
-  }
-  int _gridCols()  const { return 4; }
+  int _gridHdrH() const { return HDR_H; }
+  int _gridCols()  const { return 3; }
   int _gridRows()  const { return (_setCount + _gridCols() - 1) / _gridCols(); }
   int _gridCellW() const { return Uni.Lcd.width() / _gridCols(); }
   int _gridCellH() const { return (Uni.Lcd.height() - _gridHdrH()) / _gridRows(); }
@@ -162,11 +161,12 @@ private:
         if (tx >= 0 && ty >= hdr) {
           int idx = (int)(ty - hdr) / _gridCellH() * _gridCols() + (int)tx / _gridCellW();
           if (idx >= 0 && idx < _setCount) {
+            if (!_sets[idx].isAction && _sets[idx].label[0] == '\0') { delay(10); continue; }
             _scrollPos = idx;
             String prevErr = _error;
             _handleSelect();
             if (!_done && !_cancelled) {
-              if (prevErr != _error) _drawGridError();
+              if (prevErr != _error) _drawGridInfo();
               else { _drawGridCell(prev); _drawGridCell(_scrollPos); }
               _cursorVisible = true; _lastBlinkTime = millis();
               _drawGridInput();
@@ -177,24 +177,21 @@ private:
       }
 #endif
 
+      auto _isDummy = [&](int i) { return !_sets[i].isAction && _sets[i].label[0] == '\0'; };
       switch (dir) {
       case INavigation::DIR_UP:
-        _scrollPos = (_scrollPos - 1 + _setCount) % _setCount;
+      case INavigation::DIR_LEFT:
+        do { _scrollPos = (_scrollPos - 1 + _setCount) % _setCount; } while (_isDummy(_scrollPos));
         break;
       case INavigation::DIR_DOWN:
-        _scrollPos = (_scrollPos + 1) % _setCount;
-        break;
-      case INavigation::DIR_LEFT:
-        _scrollPos = (_scrollPos - 1 + _setCount) % _setCount;
-        break;
       case INavigation::DIR_RIGHT:
-        _scrollPos = (_scrollPos + 1) % _setCount;
+        do { _scrollPos = (_scrollPos + 1) % _setCount; } while (_isDummy(_scrollPos));
         break;
       case INavigation::DIR_PRESS: {
         String prevErr = _error;
         _handleSelect();
         if (!_done && !_cancelled) {
-          if (prevErr != _error) _drawGridError();
+          if (prevErr != _error) _drawGridInfo();
           else _drawGridCell(prev);
           _cursorVisible = true; _lastBlinkTime = millis();
           _drawGridInput();
@@ -233,41 +230,25 @@ private:
           break;
       }
     } else {
-      _input += s.label;
+      if (s.label && s.label[0] != '\0') _input += s.label;
     }
   }
 
   void _drawFullGrid() {
     auto& lcd = Uni.Lcd;
-    int hdr = _gridHdrH();
     lcd.fillScreen(TFT_BLACK);
     lcd.setTextSize(1);
     lcd.setTextDatum(TL_DATUM);
     lcd.setTextColor(TFT_YELLOW, TFT_BLACK);
     lcd.drawString(_title, PAD, PAD);
-
-    int y = PAD + 10 + PAD;
-    if (_hasMin || _hasMax) {
-      lcd.setTextColor(TFT_DARKGREY, TFT_BLACK);
-      String rangeStr;
-      if (_hasMin && _hasMax) rangeStr = String(_minValidator) + " - " + String(_maxValidator);
-      else if (_hasMin)       rangeStr = "Min: " + String(_minValidator);
-      else                    rangeStr = "Max: " + String(_maxValidator);
-      lcd.drawString(rangeStr.c_str(), PAD, y);
-      y += RANGE_H + PAD;
-    }
-
+    _drawGridInfo();
     _drawGridInput();
-    _drawGridError();
     for (int i = 0; i < _setCount; i++) _drawGridCell(i);
   }
 
   void _drawGridInput() {
     auto& lcd = Uni.Lcd;
     int   iW  = lcd.width() - PAD * 2;
-    int   hdr = _gridHdrH();
-    int   y   = hdr - ERR_H - PAD - INP_H - PAD;
-
     Sprite sp(&lcd);
     sp.createSprite(iW, INP_H);
     sp.fillSprite(TFT_BLACK);
@@ -278,26 +259,30 @@ private:
     if (_cursorVisible) display += '_';
     if (display.length() == 0) display = _cursorVisible ? "_" : " ";
     sp.drawString(display.c_str(), 3, 3);
-    sp.pushSprite(PAD, y);
+    sp.pushSprite(PAD, HDR_INP_Y);
     sp.deleteSprite();
   }
 
-  void _drawGridError() {
+  void _drawGridInfo() {
     auto& lcd = Uni.Lcd;
     int   iW  = lcd.width() - PAD * 2;
-    int   hdr = _gridHdrH();
-    int   y   = hdr - ERR_H - PAD;
-
     Sprite sp(&lcd);
-    sp.createSprite(iW, ERR_H);
+    sp.createSprite(iW, 10);
     sp.fillSprite(TFT_BLACK);
     sp.setTextSize(1);
     sp.setTextDatum(TL_DATUM);
     if (_error.length() > 0) {
       sp.setTextColor(TFT_RED, TFT_BLACK);
       sp.drawString(_error.c_str(), 0, 0);
+    } else if (_hasMin || _hasMax) {
+      sp.setTextColor(TFT_DARKGREY, TFT_BLACK);
+      String s;
+      if (_hasMin && _hasMax) s = String(_minValidator) + " - " + String(_maxValidator);
+      else if (_hasMin)       s = "Min: " + String(_minValidator);
+      else                    s = "Max: " + String(_maxValidator);
+      sp.drawString(s.c_str(), 0, 0);
     }
-    sp.pushSprite(PAD, y);
+    sp.pushSprite(PAD, HDR_INFO_Y);
     sp.deleteSprite();
     _lastError = _error;
   }
@@ -311,6 +296,15 @@ private:
     int col = idx % _gridCols(), row = idx / _gridCols();
     bool sel = (idx == _scrollPos);
     const DigitSet& s = _sets[idx];
+
+    if (!s.isAction && s.label[0] == '\0') {
+      Sprite sp(&lcd);
+      sp.createSprite(cW, cH);
+      sp.fillSprite(TFT_BLACK);
+      sp.pushSprite(col * cW, hdr + row * cH);
+      sp.deleteSprite();
+      return;
+    }
 
     Sprite sp(&lcd);
     sp.createSprite(cW, cH);
