@@ -32,9 +32,13 @@ private:
   ListItem _configItems[5];
 
   // ── terminal state ────────────────────────────────────────
-  HardwareSerial _serial{ 1 };
-  bool     _serialRunning = false;
-  bool     _hexMode       = false;
+  HardwareSerial    _serial{ 2 };
+  bool              _serialRunning = false;
+  bool              _hexMode       = false;
+
+  TaskHandle_t      _taskHandle  = nullptr;
+  SemaphoreHandle_t _mutex       = nullptr;
+  String            _rxSharedBuf;
 
   LogView  _log;
   String   _rxLineBuf;
@@ -45,6 +49,7 @@ private:
   static constexpr int MAX_SAVE_LINES = 200;
 
   static void _statusBarCb(Sprite& sp, int barY, int w, void* user);
+  static void _serialTask(void* arg);
 
   void _updateLabels();
   void _configBaud();
@@ -53,6 +58,6 @@ private:
   void _configSaveFile();
   void _startTerminal();
   void _sendCommand();
-  void _pollSerial();
+  void _drainShared();
   void _saveLog();
 };

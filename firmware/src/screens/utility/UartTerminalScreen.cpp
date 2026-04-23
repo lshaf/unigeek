@@ -7,12 +7,16 @@
 #include "screens/utility/UtilityMenuScreen.h"
 #include "ui/actions/InputSelectOption.h"
 #include "ui/actions/InputTextAction.h"
+#include "ui/actions/InputNumberAction.h"
 #include "ui/actions/ShowStatusAction.h"
 #include <time.h>
+#include <driver/gpio.h>
 
 // ── Lifecycle ─────────────────────────────────────────────────────────────────
 
 UartTerminalScreen::~UartTerminalScreen() {
+  if (_taskHandle) { vTaskDelete(_taskHandle); _taskHandle = nullptr; }
+  if (_mutex)      { vSemaphoreDelete(_mutex); _mutex = nullptr; }
   if (_serialRunning) _serial.end();
 }
 
@@ -40,7 +44,7 @@ void UartTerminalScreen::onUpdate() {
   }
 
   // STATE_RUNNING
-  _pollSerial();
+  _drainShared();
 
   if (millis() - _lastDrawMs >= 200) {
     _lastDrawMs = millis();
@@ -108,12 +112,8 @@ void UartTerminalScreen::_configBaud() {
 }
 
 void UartTerminalScreen::_configRx() {
-  char cur[6];
-  if (_rxPin < 0) snprintf(cur, sizeof(cur), "0");
-  else            snprintf(cur, sizeof(cur), "%d", _rxPin);
-  String v = InputTextAction::popup("RX GPIO (0=none)", cur, InputTextAction::INPUT_NUMBER);
-  if (!InputTextAction::wasCancelled()) {
-    int pin = v.toInt();
+  int pin = InputNumberAction::popup("RX GPIO (0=none)", 0, 48, _rxPin >= 0 ? _rxPin : 0);
+  if (!InputNumberAction::wasCancelled()) {
     _rxPin = (pin == 0) ? -1 : pin;
     _updateLabels();
   }
@@ -121,12 +121,8 @@ void UartTerminalScreen::_configRx() {
 }
 
 void UartTerminalScreen::_configTx() {
-  char cur[6];
-  if (_txPin < 0) snprintf(cur, sizeof(cur), "0");
-  else            snprintf(cur, sizeof(cur), "%d", _txPin);
-  String v = InputTextAction::popup("TX GPIO (0=none)", cur, InputTextAction::INPUT_NUMBER);
-  if (!InputTextAction::wasCancelled()) {
-    int pin = v.toInt();
+  int pin = InputNumberAction::popup("TX GPIO (0=none)", 0, 48, _txPin >= 0 ? _txPin : 0);
+  if (!InputNumberAction::wasCancelled()) {
     _txPin = (pin == 0) ? -1 : pin;
     _updateLabels();
   }
@@ -155,9 +151,18 @@ void UartTerminalScreen::_configSaveFile() {
 // ── Terminal ──────────────────────────────────────────────────────────────────
 
 void UartTerminalScreen::_startTerminal() {
+  if (_rxPin >= 0) {
+    gpio_reset_pin((gpio_num_t)_rxPin);
+    gpio_set_direction((gpio_num_t)_rxPin, GPIO_MODE_INPUT);
+  }
+  if (_txPin >= 0) gpio_reset_pin((gpio_num_t)_txPin);
+
   _serial.begin(_baud, SERIAL_8N1, _rxPin, _txPin);
   _serialRunning = true;
   _state = STATE_RUNNING;
+
+  _mutex = xSemaphoreCreateMutex();
+  xTaskCreatePinnedToCore(_serialTask, "uart_rx", 4096, this, 1, &_taskHandle, 0);
 
   _log.addLine("UART ready", TFT_GREEN);
   char info[48];
@@ -175,10 +180,29 @@ void UartTerminalScreen::_startTerminal() {
   render();
 }
 
-void UartTerminalScreen::_pollSerial() {
+void UartTerminalScreen::_serialTask(void* arg) {
+  auto* self = static_cast<UartTerminalScreen*>(arg);
+  while (true) {
+    if (self->_serial.available()) {
+      xSemaphoreTake(self->_mutex, portMAX_DELAY);
+      while (self->_serial.available()) self->_rxSharedBuf += (char)self->_serial.read();
+      xSemaphoreGive(self->_mutex);
+    }
+    vTaskDelay(pdMS_TO_TICKS(10));
+  }
+}
+
+void UartTerminalScreen::_drainShared() {
+  if (!_mutex) return;
+  if (xSemaphoreTake(_mutex, 0) != pdTRUE) return;
+  String chunk = _rxSharedBuf;
+  _rxSharedBuf = "";
+  xSemaphoreGive(_mutex);
+  if (chunk.isEmpty()) return;
+
   bool gotData = false;
-  while (_serial.available()) {
-    char c = _serial.read();
+  for (int i = 0; i < (int)chunk.length(); i++) {
+    char c = chunk[i];
     if (c == '\r') continue;
     if (c == '\n' || _rxLineBuf.length() >= 58) {
       _log.addLine(_rxLineBuf.c_str(), TFT_WHITE);
