@@ -24,9 +24,13 @@ private:
   static constexpr uint32_t BLINK_MS = 500;
   static constexpr int      PAD      = 4;
   static constexpr int      INP_H    = 16;
-  static constexpr int      ROW_H    = 18;
-  static constexpr int      ERR_H    = 10;
-  static constexpr int      RANGE_H  = 10;
+
+  // keyboard mode overlay
+  static constexpr int ERR_H   = 10;
+  static constexpr int RANGE_H = 10;
+
+  // grid scroll mode header: PAD + title(10) + PAD + [range(10)+PAD] + input(16) + PAD + err(10) + PAD
+  // computed dynamically via _gridHdrH()
 
   const char* _title;
   int         _minValidator;
@@ -38,15 +42,15 @@ private:
   String      _error;
   String      _lastError;
 
-  bool        _done        = false;
-  bool        _cancelled   = false;
+  bool        _done           = false;
+  bool        _cancelled      = false;
   bool        _cursorVisible  = true;
   uint32_t    _lastBlinkTime  = 0;
 
   static bool& _cancelledFlag() { static bool v = false; return v; }
 
-  static constexpr int DIGIT_COUNT = 12;
-  int         _scrollPos   = 0;
+  static constexpr int DIGIT_COUNT = 13;
+  int _scrollPos = 0;
 
   struct DigitSet {
     const char* label;
@@ -54,7 +58,7 @@ private:
     enum Action { ACT_DEL, ACT_SAVE, ACT_CANCEL } action;
   };
 
-  DigitSet _sets[13];
+  DigitSet _sets[DIGIT_COUNT];
   int      _setCount = 0;
 
   explicit InputNumberAction(const char* title, int min, int max, int defaultValue)
@@ -73,23 +77,23 @@ private:
     for (int i = 0; i < 10; i++) {
       _sets[_setCount++] = { digits[i], false, DigitSet::ACT_DEL };
     }
-    _sets[_setCount++] = { "DEL",    true, DigitSet::ACT_DEL    };
-    _sets[_setCount++] = { "SAVE",   true, DigitSet::ACT_SAVE   };
-    _sets[_setCount++] = { "CANCEL", true, DigitSet::ACT_CANCEL };
+    _sets[_setCount++] = { "DEL",  true, DigitSet::ACT_DEL    };
+    _sets[_setCount++] = { "SAVE", true, DigitSet::ACT_SAVE   };
+    _sets[_setCount++] = { "CNCL", true, DigitSet::ACT_CANCEL };
   }
 
   bool _validate() {
     if (_input.length() == 0) {
-      _error = "Please enter a number";
+      _error = "Enter a number";
       return false;
     }
     int val = _input.toInt();
     if (_hasMin && val < _minValidator) {
-      _error = "Min value: " + String(_minValidator);
+      _error = "Min: " + String(_minValidator);
       return false;
     }
     if (_hasMax && val > _maxValidator) {
-      _error = "Max value: " + String(_maxValidator);
+      _error = "Max: " + String(_maxValidator);
       return false;
     }
     _error = "";
@@ -104,22 +108,229 @@ private:
 #endif
   }
 
+  // keyboard mode overlay geometry
   int _overlayH() {
-    int h = 12 + 22 + 10 + 22 + 10 + 16 + PAD * 4;
-    if (!_hasMin && !_hasMax) h -= 10;
+    int h = 12 + INP_H + ERR_H + PAD * 4;
+    if (_hasMin || _hasMax) h += RANGE_H + PAD;
     return h;
   }
   int _overlayW() { return Uni.Lcd.width() - (PAD * 2 + 8); }
   int _overlayX() { return PAD + 4; }
   int _overlayY() { return (Uni.Lcd.height() - _overlayH()) / 2; }
+  int _inputY()   { return PAD + 12; }
+  int _rangeY()   { return _inputY() + INP_H + PAD; }
+  int _rowY()     { return _rangeY() + (_hasMin || _hasMax ? RANGE_H + PAD : 0); }
+  int _errorY()   { return _rowY() + PAD; }
+  int _hintY()    { return _overlayH() - PAD - 8; }
 
-  int _inputY()  { return PAD + 12; }
-  int _rangeY()  { return _inputY() + INP_H + PAD; }
-  int _rowY()    { return _rangeY() + (_hasMin || _hasMax ? RANGE_H : 0) + PAD; }
-  int _errorY()  { return _rowY()   + ROW_H + PAD; }
-  int _hintY()   { return _overlayH() - PAD - 8; }
+  // ── grid scroll mode ────────────────────────────────────────────────────────
 
-  // ── keyboard mode ──────────────────────────────────────
+  int _gridHdrH() const {
+    int h = PAD + 10 + PAD + INP_H + PAD;
+    if (_hasMin || _hasMax) h += RANGE_H + PAD;
+    h += ERR_H + PAD;
+    return h;
+  }
+  int _gridCols()  const { return 4; }
+  int _gridRows()  const { return (_setCount + _gridCols() - 1) / _gridCols(); }
+  int _gridCellW() const { return Uni.Lcd.width() / _gridCols(); }
+  int _gridCellH() const { return (Uni.Lcd.height() - _gridHdrH()) / _gridRows(); }
+
+  int _runScroll() {
+    _buildSets();
+    _lastBlinkTime = millis();
+    _cursorVisible = true;
+    _drawFullGrid();
+
+    while (!_done && !_cancelled) {
+      Uni.update();
+
+      if (millis() - _lastBlinkTime >= BLINK_MS) {
+        _cursorVisible = !_cursorVisible; _lastBlinkTime = millis();
+        _drawGridInput();
+      }
+
+      if (!Uni.Nav->wasPressed()) { delay(10); continue; }
+      auto dir  = Uni.Nav->readDirection();
+      int  prev = _scrollPos;
+
+#ifdef DEVICE_HAS_TOUCH_NAV
+      {
+        int16_t tx = Uni.Nav->lastTouchX();
+        int16_t ty = Uni.Nav->lastTouchY();
+        int hdr = _gridHdrH();
+        if (tx >= 0 && ty >= hdr) {
+          int idx = (int)(ty - hdr) / _gridCellH() * _gridCols() + (int)tx / _gridCellW();
+          if (idx >= 0 && idx < _setCount) {
+            _scrollPos = idx;
+            String prevErr = _error;
+            _handleSelect();
+            if (!_done && !_cancelled) {
+              if (prevErr != _error) _drawGridError();
+              else { _drawGridCell(prev); _drawGridCell(_scrollPos); }
+              _cursorVisible = true; _lastBlinkTime = millis();
+              _drawGridInput();
+            }
+          }
+          delay(10); continue;
+        }
+      }
+#endif
+
+      switch (dir) {
+      case INavigation::DIR_UP:
+        _scrollPos = (_scrollPos - 1 + _setCount) % _setCount;
+        break;
+      case INavigation::DIR_DOWN:
+        _scrollPos = (_scrollPos + 1) % _setCount;
+        break;
+      case INavigation::DIR_LEFT:
+        _scrollPos = (_scrollPos - 1 + _setCount) % _setCount;
+        break;
+      case INavigation::DIR_RIGHT:
+        _scrollPos = (_scrollPos + 1) % _setCount;
+        break;
+      case INavigation::DIR_PRESS: {
+        String prevErr = _error;
+        _handleSelect();
+        if (!_done && !_cancelled) {
+          if (prevErr != _error) _drawGridError();
+          else _drawGridCell(prev);
+          _cursorVisible = true; _lastBlinkTime = millis();
+          _drawGridInput();
+        }
+        delay(10); continue;
+      }
+      case INavigation::DIR_BACK:
+        _cancelled = true; break;
+      default: break;
+      }
+
+      if (!_done && !_cancelled && prev != _scrollPos) {
+        _drawGridCell(prev);
+        _drawGridCell(_scrollPos);
+      }
+      delay(10);
+    }
+
+    Uni.Lcd.fillScreen(TFT_BLACK);
+    return _cancelled ? 0 : _input.toInt();
+  }
+
+  void _handleSelect() {
+    const DigitSet& s = _sets[_scrollPos];
+    _error = "";
+    if (s.isAction) {
+      switch (s.action) {
+        case DigitSet::ACT_SAVE:
+          if (_validate()) _done = true;
+          break;
+        case DigitSet::ACT_DEL:
+          if (_input.length() > 0) _input.remove(_input.length() - 1);
+          break;
+        case DigitSet::ACT_CANCEL:
+          _cancelled = true;
+          break;
+      }
+    } else {
+      _input += s.label;
+    }
+  }
+
+  void _drawFullGrid() {
+    auto& lcd = Uni.Lcd;
+    int hdr = _gridHdrH();
+    lcd.fillScreen(TFT_BLACK);
+    lcd.setTextSize(1);
+    lcd.setTextDatum(TL_DATUM);
+    lcd.setTextColor(TFT_YELLOW, TFT_BLACK);
+    lcd.drawString(_title, PAD, PAD);
+
+    int y = PAD + 10 + PAD;
+    if (_hasMin || _hasMax) {
+      lcd.setTextColor(TFT_DARKGREY, TFT_BLACK);
+      String rangeStr;
+      if (_hasMin && _hasMax) rangeStr = String(_minValidator) + " - " + String(_maxValidator);
+      else if (_hasMin)       rangeStr = "Min: " + String(_minValidator);
+      else                    rangeStr = "Max: " + String(_maxValidator);
+      lcd.drawString(rangeStr.c_str(), PAD, y);
+      y += RANGE_H + PAD;
+    }
+
+    _drawGridInput();
+    _drawGridError();
+    for (int i = 0; i < _setCount; i++) _drawGridCell(i);
+  }
+
+  void _drawGridInput() {
+    auto& lcd = Uni.Lcd;
+    int   iW  = lcd.width() - PAD * 2;
+    int   hdr = _gridHdrH();
+    int   y   = hdr - ERR_H - PAD - INP_H - PAD;
+
+    Sprite sp(&lcd);
+    sp.createSprite(iW, INP_H);
+    sp.fillSprite(TFT_BLACK);
+    sp.drawRoundRect(0, 0, iW, INP_H, 2, TFT_DARKGREY);
+    sp.setTextColor(TFT_WHITE, TFT_BLACK);
+    sp.setTextDatum(TL_DATUM);
+    String display = _input;
+    if (_cursorVisible) display += '_';
+    if (display.length() == 0) display = _cursorVisible ? "_" : " ";
+    sp.drawString(display.c_str(), 3, 3);
+    sp.pushSprite(PAD, y);
+    sp.deleteSprite();
+  }
+
+  void _drawGridError() {
+    auto& lcd = Uni.Lcd;
+    int   iW  = lcd.width() - PAD * 2;
+    int   hdr = _gridHdrH();
+    int   y   = hdr - ERR_H - PAD;
+
+    Sprite sp(&lcd);
+    sp.createSprite(iW, ERR_H);
+    sp.fillSprite(TFT_BLACK);
+    sp.setTextSize(1);
+    sp.setTextDatum(TL_DATUM);
+    if (_error.length() > 0) {
+      sp.setTextColor(TFT_RED, TFT_BLACK);
+      sp.drawString(_error.c_str(), 0, 0);
+    }
+    sp.pushSprite(PAD, y);
+    sp.deleteSprite();
+    _lastError = _error;
+  }
+
+  void _drawGridCell(int idx) {
+    if (idx < 0 || idx >= _setCount) return;
+    auto&    lcd   = Uni.Lcd;
+    uint16_t theme = Config.getThemeColor();
+    int hdr = _gridHdrH();
+    int cW  = _gridCellW(), cH = _gridCellH();
+    int col = idx % _gridCols(), row = idx / _gridCols();
+    bool sel = (idx == _scrollPos);
+    const DigitSet& s = _sets[idx];
+
+    Sprite sp(&lcd);
+    sp.createSprite(cW, cH);
+    sp.fillSprite(TFT_BLACK);
+    sp.setTextSize(1);
+    sp.setTextDatum(MC_DATUM);
+    if (sel) {
+      sp.fillRoundRect(1, 1, cW - 2, cH - 2, 3, theme);
+      sp.setTextColor(TFT_WHITE, theme);
+    } else {
+      sp.drawRoundRect(1, 1, cW - 2, cH - 2, 3, 0x2104);
+      sp.setTextColor(s.isAction ? TFT_CYAN : TFT_LIGHTGREY, TFT_BLACK);
+    }
+    sp.drawString(s.label, cW / 2, cH / 2);
+    sp.pushSprite(col * cW, hdr + row * cH);
+    sp.deleteSprite();
+  }
+
+  // ── keyboard mode ────────────────────────────────────────────────────────────
+
   int _runKeyboard() {
     _drawChrome();
     _drawInput(true);
@@ -187,97 +398,6 @@ private:
     return _cancelled ? 0 : _input.toInt();
   }
 
-  // ── scroll mode ────────────────────────────────────────
-  int _runScroll() {
-    _buildSets();
-    _lastBlinkTime = millis();
-    _cursorVisible = true;
-    _drawChrome();
-    _drawInput(true);
-    _drawRow();
-    _lastError = _error;
-
-    while (!_done && !_cancelled) {
-      Uni.update();
-
-      if (millis() - _lastBlinkTime >= BLINK_MS) {
-        _cursorVisible = !_cursorVisible;
-        _lastBlinkTime = millis();
-        _drawInput(_cursorVisible);
-      }
-
-      if (Uni.Nav->wasPressed()) {
-        switch (Uni.Nav->readDirection()) {
-          case INavigation::DIR_UP: {
-            String prevErr = _error;
-            _scrollPos     = (_scrollPos - 1 + _setCount) % _setCount;
-            _error         = "";
-            _cursorVisible = true;
-            _lastBlinkTime = millis();
-            _drawRow();
-            if (prevErr != _error) _drawError();
-            break;
-          }
-
-          case INavigation::DIR_DOWN: {
-            String prevErr = _error;
-            _scrollPos     = (_scrollPos + 1) % _setCount;
-            _error         = "";
-            _cursorVisible = true;
-            _lastBlinkTime = millis();
-            _drawRow();
-            if (prevErr != _error) _drawError();
-            break;
-          }
-
-          case INavigation::DIR_PRESS: {
-            String prevErr = _error;
-            _handleSelect();
-            if (!_done && !_cancelled) {
-              _cursorVisible = true;
-              _lastBlinkTime = millis();
-              _drawInput(true);
-              if (prevErr != _error) _drawError();
-            }
-            break;
-          }
-
-          case INavigation::DIR_BACK:
-            _cancelled = true;
-            break;
-
-          default: break;
-        }
-      }
-      delay(10);
-    }
-
-    Uni.Lcd.fillRect(_overlayX(), _overlayY(), _overlayW(), _overlayH(), TFT_BLACK);
-    return _cancelled ? 0 : _input.toInt();
-  }
-
-  void _handleSelect() {
-    const DigitSet& s = _sets[_scrollPos];
-    _error = "";
-
-    if (s.isAction) {
-      switch (s.action) {
-        case DigitSet::ACT_SAVE:
-          if (_validate()) _done = true;
-          break;
-        case DigitSet::ACT_DEL:
-          if (_input.length() > 0)
-            _input.remove(_input.length() - 1);
-          break;
-        case DigitSet::ACT_CANCEL:
-          _cancelled = true;
-          break;
-      }
-    } else {
-      _input += s.label;
-    }
-  }
-
   void _drawChrome() {
     auto& lcd = Uni.Lcd;
     int w = _overlayW();
@@ -306,11 +426,7 @@ private:
 
     lcd.setTextColor(TFT_DARKGREY);
     lcd.setCursor(x + PAD, y + _hintY());
-#ifdef DEVICE_HAS_KEYBOARD
     lcd.print("Numbers only + ENTER to confirm");
-#else
-    lcd.print("UP/DN:digit  PRESS:select");
-#endif
   }
 
   void _drawInput(bool cursorOn) {
@@ -330,46 +446,6 @@ private:
     if (cursorOn) display += '_';
     sp.drawString(display.length() > 0 ? display.c_str() : (cursorOn ? "_" : " "), 3, 4);
     sp.pushSprite(x + PAD, y + _inputY());
-    sp.deleteSprite();
-  }
-
-  void _drawRow() {
-    auto& lcd = Uni.Lcd;
-    uint16_t themeColor = Config.getThemeColor();
-    int w      = _overlayW();
-    int x      = _overlayX();
-    int y      = _overlayY();
-    int innerW = w - PAD * 2;
-    int midX   = innerW / 2;
-
-    int prev = (_scrollPos - 1 + _setCount) % _setCount;
-    int curr =  _scrollPos;
-    int next = (_scrollPos + 1) % _setCount;
-
-    const char* prevLabel = _sets[prev].label;
-    const char* currLabel = _sets[curr].label;
-    const char* nextLabel = _sets[next].label;
-
-    int currW = max(20, (int)(strlen(currLabel) * 6) + 10);
-
-    Sprite sp(&lcd);
-    sp.createSprite(innerW, ROW_H);
-    sp.fillSprite(TFT_BLACK);
-    sp.setTextSize(1);
-    sp.setTextDatum(MC_DATUM);
-
-    sp.setTextColor(TFT_DARKGREY);
-    sp.drawString(prevLabel, midX - currW / 2 - 24, ROW_H / 2);
-
-    sp.fillRoundRect(midX - currW / 2, 0, currW, ROW_H, 3, themeColor);
-    sp.drawRoundRect(midX - currW / 2, 0, currW, ROW_H, 3, TFT_WHITE);
-    sp.setTextColor(TFT_WHITE);
-    sp.drawString(currLabel, midX, ROW_H / 2);
-
-    sp.setTextColor(TFT_DARKGREY);
-    sp.drawString(nextLabel, midX + currW / 2 + 24, ROW_H / 2);
-
-    sp.pushSprite(x + PAD, y + _rowY());
     sp.deleteSprite();
   }
 

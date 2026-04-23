@@ -149,6 +149,7 @@ void TouchGuideScreen::onRender() {
 void TouchGuideScreen::_markDone() {
   Config.set("touch_guide_shown", "1");
   Config.save(Uni.Storage);
+  Uni.Lcd.fillScreen(TFT_BLACK);
   if (_fromSettings)
     Screen.goBack();
   else

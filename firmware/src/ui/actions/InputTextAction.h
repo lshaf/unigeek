@@ -44,11 +44,12 @@ private:
   static constexpr uint32_t BLINK_MS   = 500;
   static constexpr int      PAD        = 4;
 
+  // keyboard mode overlay
   static constexpr int KB_H   = 80;
-  static constexpr int SCR_H  = 116;
   static constexpr int INP_H  = 16;
-  static constexpr int ROW_H  = 18;
-  static constexpr int IND_H  = 10;
+
+  // grid scroll mode
+  static constexpr int HDR_H  = 38;   // PAD + title(10) + PAD + input(16) + PAD
 
   struct CharSet {
     const char* chars;
@@ -96,7 +97,7 @@ private:
       for (int i = 0; i < 17; i++) {
         _sets[_setCount++] = { hexLabels[i], hexLabels[i], false, SP_SAVE };
       }
-      static constexpr const char* hexSpecialLabels[SPN_COUNT] = { "SAVE", "DEL", "CANCEL" };
+      static constexpr const char* hexSpecialLabels[SPN_COUNT] = { "SAVE", "DEL", "CNCL" };
       static constexpr Special hexSpecialMap[SPN_COUNT] = { SP_SAVE, SP_DELETE, SP_CANCEL };
       for (int i = 0; i < SPN_COUNT; i++) {
         _sets[_setCount++] = { nullptr, hexSpecialLabels[i], true, hexSpecialMap[i] };
@@ -108,9 +109,7 @@ private:
       for (int i = 0; i < 11; i++) {
         _sets[_setCount++] = { numLabels[i], numLabels[i], false, SP_SAVE };
       }
-      static constexpr const char* numSpecialLabels[SPN_COUNT] = {
-        "SAVE", "DEL", "CANCEL"
-      };
+      static constexpr const char* numSpecialLabels[SPN_COUNT] = { "SAVE", "DEL", "CNCL" };
       static constexpr Special numSpecialMap[SPN_COUNT] = { SP_SAVE, SP_DELETE, SP_CANCEL };
       for (int i = 0; i < SPN_COUNT; i++) {
         _sets[_setCount++] = { nullptr, numSpecialLabels[i], true, numSpecialMap[i] };
@@ -131,10 +130,13 @@ private:
       }
 
       static constexpr const char* specialLabels[SP_COUNT] = {
-        "SAVE", "DEL", "CAPS", "SYM", "CANCEL"
+        "CNCL", "DEL", "CAPS", "SYM", "SAVE"
+      };
+      static constexpr Special specialMap[SP_COUNT] = {
+        SP_CANCEL, SP_DELETE, SP_CAPS, SP_SYMBOL, SP_SAVE
       };
       for (int i = 0; i < SP_COUNT; i++) {
-        _sets[_setCount++] = { nullptr, specialLabels[i], true, (Special)i };
+        _sets[_setCount++] = { nullptr, specialLabels[i], true, specialMap[i] };
       }
     }
   }
@@ -165,12 +167,208 @@ private:
 #endif
   }
 
-  int _overlayW() { return Uni.Lcd.width() - (PAD * 2 + 8); }
-  int _overlayX() { return PAD + 4; }
+  int _overlayW()   { return Uni.Lcd.width() - (PAD * 2 + 8); }
+  int _overlayX()   { return PAD + 4; }
   int _overlayYKb() { return (Uni.Lcd.height() - KB_H) / 2; }
-  int _overlayYScroll() { return (Uni.Lcd.height() - SCR_H) / 2; }
 
-  // ── keyboard mode ──────────────────────────────────────
+  // ── grid scroll mode ────────────────────────────────────────────────────────
+
+  int _gridCols()  const { return 5; }
+  int _gridRows()  const { return (_setCount + _gridCols() - 1) / _gridCols(); }
+  int _gridCellW() const { return Uni.Lcd.width() / _gridCols(); }
+  int _gridCellH() const { return (Uni.Lcd.height() - HDR_H) / _gridRows(); }
+
+  String _runScroll() {
+    _lastBlinkTime = millis();
+    _cursorVisible = true;
+    _drawFullGrid();
+
+    while (!_done && !_cancelled) {
+      Uni.update();
+
+      if (_tapCount > 0 && millis() - _lastTapTime >= COMMIT_MS) {
+        _commitTap();
+        _cursorVisible = true; _lastBlinkTime = millis();
+        _drawGridInput();
+      }
+      if (_tapCount == 0 && millis() - _lastBlinkTime >= BLINK_MS) {
+        _cursorVisible = !_cursorVisible; _lastBlinkTime = millis();
+        _drawGridInput();
+      }
+
+      if (!Uni.Nav->wasPressed()) { delay(10); continue; }
+      auto dir  = Uni.Nav->readDirection();
+      int  prev = _scrollPos;
+
+#ifdef DEVICE_HAS_TOUCH_NAV
+      {
+        int16_t tx = Uni.Nav->lastTouchX();
+        int16_t ty = Uni.Nav->lastTouchY();
+        if (tx >= 0 && ty >= HDR_H) {
+          int idx = (int)(ty - HDR_H) / _gridCellH() * _gridCols() + (int)tx / _gridCellW();
+          if (idx >= 0 && idx < _setCount) {
+            bool sameCell = (idx == _scrollPos);
+            if (!sameCell) {
+              _commitTap();
+              _scrollPos = idx;
+            }
+            bool pc = _capsLock, ps = _symbolMode;
+            _handleSelect();
+            if (!_done && !_cancelled) {
+              if (pc != _capsLock || ps != _symbolMode) _drawFullGrid();
+              else { _drawGridCell(prev); _drawGridCell(_scrollPos); }
+              _cursorVisible = true; _lastBlinkTime = millis();
+              _drawGridInput();
+            }
+          }
+          delay(10); continue;
+        }
+      }
+#endif
+
+      switch (dir) {
+      case INavigation::DIR_UP:
+        _commitTap();
+        _scrollPos = (_scrollPos - 1 + _setCount) % _setCount;
+        break;
+      case INavigation::DIR_DOWN:
+        _commitTap();
+        _scrollPos = (_scrollPos + 1) % _setCount;
+        break;
+      case INavigation::DIR_LEFT:
+        _commitTap();
+        _scrollPos = (_scrollPos - 1 + _setCount) % _setCount;
+        break;
+      case INavigation::DIR_RIGHT:
+        _commitTap();
+        _scrollPos = (_scrollPos + 1) % _setCount;
+        break;
+      case INavigation::DIR_PRESS: {
+        bool pc = _capsLock, ps = _symbolMode;
+        _handleSelect();
+        if (!_done && !_cancelled) {
+          if (pc != _capsLock || ps != _symbolMode) _drawFullGrid();
+          else _drawGridCell(prev);
+          _cursorVisible = true; _lastBlinkTime = millis();
+          _drawGridInput();
+        }
+        delay(10); continue;
+      }
+      case INavigation::DIR_BACK:
+        _commitTap(); _cancelled = true; break;
+      default: break;
+      }
+
+      if (!_done && !_cancelled && prev != _scrollPos) {
+        _drawGridCell(prev);
+        _drawGridCell(_scrollPos);
+      }
+      delay(10);
+    }
+
+    Uni.Lcd.fillScreen(TFT_BLACK);
+    return _cancelled ? "" : _input;
+  }
+
+  void _handleSelect() {
+    const CharSet& s = _sets[_scrollPos];
+
+    if (s.isSpecial) {
+      _commitTap();
+      switch (s.special) {
+        case SP_SAVE:   _done = true;                   break;
+        case SP_DELETE:
+          if (_pendingChar.length() > 0) {
+            _pendingChar = "";
+            _tapCount    = 0;
+            _lastTapTime = 0;
+          } else if (_input.length() > 0) {
+            _input.remove(_input.length() - 1);
+          }
+          break;
+        case SP_CAPS:   _capsLock = !_capsLock;         break;
+        case SP_SYMBOL:
+          _symbolMode  = !_symbolMode;
+          _buildSets();
+          _scrollPos   = 0;
+          _tapCount    = 0;
+          _pendingChar = "";
+          break;
+        case SP_CANCEL: _cancelled = true;              break;
+        default: break;
+      }
+    } else {
+      const char* chars = s.chars;
+      int   len = strlen(chars);
+      char  c   = chars[_tapCount % len];
+      if (_capsLock && isalpha(c)) c = toupper(c);
+      _pendingChar = String(c);
+      _tapCount++;
+      _lastTapTime = millis();
+    }
+  }
+
+  void _drawFullGrid() {
+    auto& lcd = Uni.Lcd;
+    lcd.fillScreen(TFT_BLACK);
+    lcd.setTextSize(1);
+    lcd.setTextDatum(TL_DATUM);
+    lcd.setTextColor(TFT_YELLOW, TFT_BLACK);
+    lcd.drawString(_title, PAD, PAD);
+    int ix = PAD + lcd.textWidth(_title) + PAD;
+    if (_capsLock)   { lcd.setTextColor(TFT_GREEN, TFT_BLACK); lcd.drawString("CAPS", ix, PAD); ix += lcd.textWidth("CAPS") + PAD; }
+    if (_symbolMode) { lcd.setTextColor(TFT_CYAN,  TFT_BLACK); lcd.drawString("SYM",  ix, PAD); }
+    _drawGridInput();
+    for (int i = 0; i < _setCount; i++) _drawGridCell(i);
+  }
+
+  void _drawGridInput() {
+    auto& lcd = Uni.Lcd;
+    int   iW  = lcd.width() - PAD * 2;
+    Sprite sp(&lcd);
+    sp.createSprite(iW, INP_H);
+    sp.fillSprite(TFT_BLACK);
+    sp.drawRoundRect(0, 0, iW, INP_H, 2, TFT_DARKGREY);
+    sp.setTextColor(TFT_WHITE, TFT_BLACK);
+    sp.setTextDatum(TL_DATUM);
+    String display = _input + _pendingChar;
+    if (_tapCount == 0 && _cursorVisible) display += '_';
+    if (display.length() == 0) display = _cursorVisible ? "_" : " ";
+    sp.drawString(display.c_str(), 3, 3);
+    sp.pushSprite(PAD, HDR_H - INP_H - PAD);
+    sp.deleteSprite();
+  }
+
+  void _drawGridCell(int idx) {
+    if (idx < 0 || idx >= _setCount) return;
+    auto&    lcd   = Uni.Lcd;
+    uint16_t theme = Config.getThemeColor();
+    int cW  = _gridCellW(), cH = _gridCellH();
+    int col = idx % _gridCols(), row = idx / _gridCols();
+    bool sel = (idx == _scrollPos);
+    const CharSet& s = _sets[idx];
+
+    Sprite sp(&lcd);
+    sp.createSprite(cW, cH);
+    sp.fillSprite(TFT_BLACK);
+    sp.setTextSize(1);
+    sp.setTextDatum(MC_DATUM);
+    if (sel) {
+      sp.fillRoundRect(1, 1, cW - 2, cH - 2, 3, theme);
+      sp.setTextColor(TFT_WHITE, theme);
+    } else {
+      sp.drawRoundRect(1, 1, cW - 2, cH - 2, 3, 0x2104);
+      sp.setTextColor(s.isSpecial ? TFT_CYAN : TFT_LIGHTGREY, TFT_BLACK);
+    }
+    String lbl = String(s.label);
+    if (!s.isSpecial && _capsLock && _mode == INPUT_TEXT) lbl.toUpperCase();
+    sp.drawString(lbl.c_str(), cW / 2, cH / 2);
+    sp.pushSprite(col * cW, HDR_H + row * cH);
+    sp.deleteSprite();
+  }
+
+  // ── keyboard mode ────────────────────────────────────────────────────────────
+
   String _runKeyboard() {
     if (Uni.Nav) Uni.Nav->setSuppressKeys(true);
     _drawChromeKeyboard();
@@ -238,9 +436,9 @@ private:
 
     lcd.setTextColor(TFT_DARKGREY);
     lcd.setCursor(x + PAD, y + KB_H - PAD - 8);
-    lcd.print(_mode == HEX    ? "0-9 A-F SPACE + ENTER"
-                             : _mode == INPUT_NUMBER ? "0-9 . + ENTER to confirm"
-                             : "Type + ENTER to confirm");
+    lcd.print(_mode == INPUT_HEX    ? "0-9 A-F SPACE + ENTER"
+            : _mode == INPUT_NUMBER ? "0-9 . + ENTER to confirm"
+            :                         "Type + ENTER to confirm");
   }
 
   void _drawInputKeyboard(bool cursorOn) {
@@ -261,231 +459,6 @@ private:
     if (cursorOn) display += '_';
     sp.drawString(display.length() > 0 ? display.c_str() : (cursorOn ? "_" : " "), 3, 4);
     sp.pushSprite(x + PAD, y + inputY);
-    sp.deleteSprite();
-  }
-
-  // ── scroll mode ────────────────────────────────────────
-  String _runScroll() {
-    _lastBlinkTime = millis();
-    _cursorVisible = true;
-    _drawChromeScroll();
-    _drawInputScroll();
-    _drawRowScroll();
-    _drawIndicatorsScroll();
-
-    while (!_done && !_cancelled) {
-      Uni.update();
-
-      if (_tapCount > 0 && (millis() - _lastTapTime >= COMMIT_MS)) {
-        _commitTap();
-        _cursorVisible = true;
-        _lastBlinkTime = millis();
-        _drawInputScroll();
-      }
-
-      if (_tapCount == 0 && (millis() - _lastBlinkTime >= BLINK_MS)) {
-        _cursorVisible = !_cursorVisible;
-        _lastBlinkTime = millis();
-        _drawInputScroll();
-      }
-
-      if (Uni.Nav->wasPressed()) {
-        switch (Uni.Nav->readDirection()) {
-        case INavigation::DIR_UP:
-          _commitTap();
-          _scrollPos     = (_scrollPos - 1 + _setCount) % _setCount;
-          _cursorVisible = true;
-          _lastBlinkTime = millis();
-          _drawInputScroll();
-          _drawRowScroll();
-          break;
-
-        case INavigation::DIR_DOWN:
-          _commitTap();
-          _scrollPos     = (_scrollPos + 1) % _setCount;
-          _cursorVisible = true;
-          _lastBlinkTime = millis();
-          _drawInputScroll();
-          _drawRowScroll();
-          break;
-
-        case INavigation::DIR_PRESS: {
-          bool prevCaps = _capsLock;
-          bool prevSym  = _symbolMode;
-          _handleSelect();
-          if (!_done && !_cancelled) {
-            _cursorVisible = true;
-            _lastBlinkTime = millis();
-            _drawInputScroll();
-            _drawRowScroll();
-            if (prevCaps != _capsLock || prevSym != _symbolMode)
-              _drawIndicatorsScroll();
-          }
-          break;
-        }
-
-        case INavigation::DIR_BACK:
-          _commitTap();
-          _cancelled = true;
-          break;
-
-        default: break;
-        }
-      }
-      delay(10);
-    }
-
-    Uni.Lcd.fillRect(_overlayX(), _overlayYScroll(), _overlayW(), SCR_H, TFT_BLACK);
-    return _cancelled ? "" : _input;
-  }
-
-  void _handleSelect() {
-    const CharSet& s = _sets[_scrollPos];
-
-    if (s.isSpecial) {
-      _commitTap();
-      switch (s.special) {
-        case SP_SAVE:   _done = true;                   break;
-        case SP_DELETE:
-          if (_pendingChar.length() > 0) {
-            _pendingChar = "";
-            _tapCount    = 0;
-            _lastTapTime = 0;
-          } else if (_input.length() > 0) {
-            _input.remove(_input.length() - 1);
-          }
-          break;
-        case SP_CAPS:   _capsLock = !_capsLock;         break;
-        case SP_SYMBOL:
-          _symbolMode  = !_symbolMode;
-          _buildSets();
-          _scrollPos   = 0;
-          _tapCount    = 0;
-          _pendingChar = "";
-          break;
-        case SP_CANCEL: _cancelled = true;              break;
-        default: break;
-      }
-    } else {
-      const char* chars = s.chars;
-      int   len = strlen(chars);
-      char  c   = chars[_tapCount % len];
-      if (_capsLock && isalpha(c)) c = toupper(c);
-      _pendingChar = String(c);
-      _tapCount++;
-      _lastTapTime = millis();
-    }
-  }
-
-  void _drawChromeScroll() {
-    auto& lcd = Uni.Lcd;
-    int w = _overlayW();
-    int x = _overlayX();
-    int y = _overlayYScroll();
-    int hintY = SCR_H - PAD - 8;
-
-    lcd.fillRect(x, y, w, SCR_H, TFT_BLACK);
-    lcd.drawRoundRect(x, y, w, SCR_H, 4, TFT_WHITE);
-
-    lcd.setTextColor(TFT_YELLOW);
-    lcd.setTextSize(1);
-    lcd.setTextDatum(TL_DATUM);
-    lcd.setCursor(x + PAD, y + PAD);
-    lcd.print(_title);
-
-    lcd.setTextColor(TFT_DARKGREY);
-    lcd.drawString(_mode != INPUT_TEXT ? "UP/DN:digit  PRESS:sel" : "UP/DN:set  PRESS:char",
-                   x + PAD, y + hintY);
-  }
-
-  void _drawInputScroll() {
-    auto& lcd  = Uni.Lcd;
-    int w      = _overlayW();
-    int x      = _overlayX();
-    int y      = _overlayYScroll();
-    int innerW = w - PAD * 2;
-    int inputY = PAD + 12;
-
-    Sprite sp(&lcd);
-    sp.createSprite(innerW, INP_H);
-    sp.fillSprite(TFT_BLACK);
-    sp.drawRoundRect(0, 0, innerW, INP_H, 3, TFT_DARKGREY);
-    sp.setTextColor(TFT_WHITE);
-    sp.setTextDatum(TL_DATUM);
-    String display = _input + _pendingChar;
-    if (_tapCount == 0 && _cursorVisible) display += '_';
-    sp.drawString(display.length() > 0 ? display.c_str() : (_cursorVisible ? "_" : " "), 3, 3);
-    sp.pushSprite(x + PAD, y + inputY);
-    sp.deleteSprite();
-  }
-
-  void _drawRowScroll() {
-    auto& lcd = Uni.Lcd;
-    uint16_t themeColor = Config.getThemeColor();
-    int w      = _overlayW();
-    int x      = _overlayX();
-    int y      = _overlayYScroll();
-    int innerW = w - PAD * 2;
-    int rowY   = PAD + 12 + INP_H + PAD + 2;
-    int midX   = innerW / 2;
-
-    int prev = (_scrollPos - 1 + _setCount) % _setCount;
-    int curr =  _scrollPos;
-    int next = (_scrollPos + 1) % _setCount;
-
-    const char* prevLabel = _sets[prev].label;
-    const char* currLabel = _sets[curr].label;
-    const char* nextLabel = _sets[next].label;
-
-    int currW = max(20, (int)(strlen(currLabel) * 6) + 10);
-
-    Sprite sp(&lcd);
-    sp.createSprite(innerW, ROW_H);
-    sp.fillSprite(TFT_BLACK);
-    sp.setTextSize(1);
-    sp.setTextDatum(MC_DATUM);
-
-    sp.setTextColor(TFT_DARKGREY);
-    sp.drawString(prevLabel, midX - currW / 2 - 24, ROW_H / 2);
-
-    sp.fillRoundRect(midX - currW / 2, 0, currW, ROW_H, 3, themeColor);
-    sp.drawRoundRect(midX - currW / 2, 0, currW, ROW_H, 3, TFT_WHITE);
-    sp.setTextColor(TFT_WHITE);
-    sp.drawString(currLabel, midX, ROW_H / 2);
-
-    sp.setTextColor(TFT_DARKGREY);
-    sp.drawString(nextLabel, midX + currW / 2 + 24, ROW_H / 2);
-
-    sp.pushSprite(x + PAD, y + rowY);
-    sp.deleteSprite();
-  }
-
-  void _drawIndicatorsScroll() {
-    auto& lcd = Uni.Lcd;
-    int w      = _overlayW();
-    int x      = _overlayX();
-    int y      = _overlayYScroll();
-    int innerW = w - PAD * 2;
-    int indY   = PAD + 12 + INP_H + PAD + 2 + ROW_H + PAD;
-
-    Sprite sp(&lcd);
-    sp.createSprite(innerW, IND_H);
-    sp.fillSprite(TFT_BLACK);
-    sp.setTextSize(1);
-    sp.setTextDatum(TL_DATUM);
-
-    int indX = 0;
-    if (_capsLock) {
-      sp.setTextColor(TFT_GREEN);
-      sp.drawString("CAPS", indX, 0);
-      indX += 32;
-    }
-    if (_symbolMode) {
-      sp.setTextColor(TFT_CYAN);
-      sp.drawString("SYM", indX, 0);
-    }
-
-    sp.pushSprite(x + PAD, y + indY);
     sp.deleteSprite();
   }
 };

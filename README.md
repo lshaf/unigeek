@@ -330,7 +330,6 @@ This project was built with inspiration and reference from:
 
 - LoRa
 - ST25 nfc implementation for lora https://github.com/m5stack/M5Unit-NFC
-- easier input action for touch screen
 - sticks3 ir receive not functional (RMT/ES8311 conflict); transmit works
 - implement thermal camera
 - change keyboard to HID instead, mode will be USB and BLE, while BLE and USB only have Keyboard, Mouse and Jiggle Mouse, USB has 1 more option is Mass Storage.
