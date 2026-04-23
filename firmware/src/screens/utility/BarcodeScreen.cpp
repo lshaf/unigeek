@@ -25,7 +25,7 @@ void BarcodeScreen::onBack() {
     }
     return;
   }
-  Screen.setScreen(new UtilityMenuScreen());
+  Screen.goBack();
 }
 
 void BarcodeScreen::onItemSelected(uint8_t index) {

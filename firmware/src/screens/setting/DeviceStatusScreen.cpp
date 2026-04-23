@@ -60,5 +60,5 @@ void DeviceStatusScreen::onInit() {
 }
 
 void DeviceStatusScreen::onBack() {
-  Screen.setScreen(new SettingScreen());
+  Screen.goBack();
 }

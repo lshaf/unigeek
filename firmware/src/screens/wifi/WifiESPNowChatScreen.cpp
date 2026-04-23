@@ -35,7 +35,7 @@ void WifiESPNowChatScreen::onInit()
 
   if (esp_now_init() != ESP_OK) {
     ShowStatusAction::show("ESP-NOW init failed!", 1500);
-    Screen.setScreen(new WifiMenuScreen());
+    Screen.goBack();
     return;
   }
 
@@ -47,7 +47,7 @@ void WifiESPNowChatScreen::onInit()
   if (!esp_now_is_peer_exist(_broadcast)) {
     if (esp_now_add_peer(&peer) != ESP_OK) {
       ShowStatusAction::show("Failed to add peer!", 1500);
-      Screen.setScreen(new WifiMenuScreen());
+      Screen.goBack();
       return;
     }
   }
@@ -67,7 +67,7 @@ void WifiESPNowChatScreen::onUpdate()
   if (Uni.Nav->wasPressed()) {
     auto dir = Uni.Nav->readDirection();
     if (dir == INavigation::DIR_BACK) {
-      Screen.setScreen(new WifiMenuScreen());
+      Screen.goBack();
       return;
     }
     // DIR_PRESS = encoder button (no-keyboard) or ENTER key (keyboard boards)

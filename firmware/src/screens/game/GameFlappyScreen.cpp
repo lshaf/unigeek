@@ -71,9 +71,9 @@ void GameFlappyScreen::onUpdate()
       case INavigation::DIR_PRESS:
         if (_menuIdx == 0)      _initGame();
         else if (_menuIdx == 1) { _state = STATE_HIGH_SCORES; render(); }
-        else                    Screen.setScreen(new GameMenuScreen());
+        else                    Screen.goBack();
         break;
-      case INavigation::DIR_BACK: Screen.setScreen(new GameMenuScreen()); break;
+      case INavigation::DIR_BACK: Screen.goBack(); break;
       default: break;
     }
   } else if (_state == STATE_HIGH_SCORES) {

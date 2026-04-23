@@ -95,7 +95,7 @@ void WhisperPairScreen::onBack()
   }
   NimBLEDevice::deinit(true);
   _bleScan = nullptr;
-  Screen.setScreen(new BLEMenuScreen());
+  Screen.goBack();
 }
 
 // ── Private ────────────────────────────────────────────────────────────────

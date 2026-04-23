@@ -195,7 +195,7 @@ void ChameleonLFScreen::onUpdate() {
   if (Uni.Nav->wasPressed()) {
     auto dir = Uni.Nav->readDirection();
     if (dir == INavigation::DIR_BACK) {
-      Screen.setScreen(new ChameleonLFMenuScreen());
+      Screen.goBack();
       return;
     }
     if (dir == INavigation::DIR_PRESS) {

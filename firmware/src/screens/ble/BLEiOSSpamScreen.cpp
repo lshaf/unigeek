@@ -42,7 +42,7 @@ void BLEiOSSpamScreen::onUpdate()
     auto dir = Uni.Nav->readDirection();
     if (dir == INavigation::DIR_BACK || dir == INavigation::DIR_PRESS) {
       _stop();
-      Screen.setScreen(new BLEDeviceSpamMenuScreen());
+      Screen.goBack();
       return;
     }
   }

@@ -75,7 +75,7 @@ void ChameleonSettingsScreen::onInit() {
 }
 
 void ChameleonSettingsScreen::onBack() {
-  Screen.setScreen(new ChameleonMenuScreen());
+  Screen.goBack();
 }
 
 void ChameleonSettingsScreen::_editAnim() {

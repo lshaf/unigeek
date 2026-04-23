@@ -215,7 +215,7 @@ void WifiCiwZeroclickScreen::onBack()
     _state = STATE_MENU;
     _refreshMenu();
   } else {
-    Screen.setScreen(new WifiMenuScreen());
+    Screen.goBack();
   }
 }
 

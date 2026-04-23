@@ -19,19 +19,19 @@ void KeyboardMenuScreen::onItemSelected(uint8_t index)
     _usbMode = !_usbMode;
     _refreshMode();
   } else if (index == 1) {
-    Screen.setScreen(new KeyboardScreen(_usbMode ? KeyboardScreen::MODE_USB
-                                                 : KeyboardScreen::MODE_BLE));
+    Screen.push(new KeyboardScreen(_usbMode ? KeyboardScreen::MODE_USB
+                                             : KeyboardScreen::MODE_BLE));
   }
 #else
   if (index == 0) {
-    Screen.setScreen(new KeyboardScreen(KeyboardScreen::MODE_BLE));
+    Screen.push(new KeyboardScreen(KeyboardScreen::MODE_BLE));
   }
 #endif
 }
 
 void KeyboardMenuScreen::onBack()
 {
-  Screen.setScreen(new MainMenuScreen());
+  Screen.goBack();
 }
 
 #ifdef DEVICE_HAS_USB_HID

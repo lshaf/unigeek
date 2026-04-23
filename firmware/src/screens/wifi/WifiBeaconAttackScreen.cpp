@@ -150,7 +150,7 @@ void WifiBeaconAttackScreen::onBack()
     setItems(_menuItems, 3); // resets selection to 0 — fine for back nav
     return;
   }
-  Screen.setScreen(new WifiMenuScreen());
+  Screen.goBack();
 }
 
 // ── Private ───────────────────────────────────────────────────────────────────

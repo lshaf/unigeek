@@ -18,5 +18,5 @@ void SpeakerTestScreen::onItemSelected(uint8_t index) {
 }
 
 void SpeakerTestScreen::onBack() {
-  Screen.setScreen(new SettingScreen());
+  Screen.goBack();
 }

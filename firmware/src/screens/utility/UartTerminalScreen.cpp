@@ -51,7 +51,7 @@ void UartTerminalScreen::onUpdate() {
   auto dir = Uni.Nav->readDirection();
   if (dir == INavigation::DIR_BACK) {
     if (_saveFilename.length() > 0 && _saveBuffer.length() > 0) _saveLog();
-    Screen.setScreen(new UtilityMenuScreen());
+    Screen.goBack();
   } else if (dir == INavigation::DIR_PRESS) {
     _sendCommand();
   } else if (dir == INavigation::DIR_UP || dir == INavigation::DIR_DOWN) {
@@ -69,7 +69,7 @@ void UartTerminalScreen::onRender() {
 }
 
 void UartTerminalScreen::onBack() {
-  Screen.setScreen(new UtilityMenuScreen());
+  Screen.goBack();
 }
 
 void UartTerminalScreen::onItemSelected(uint8_t index) {

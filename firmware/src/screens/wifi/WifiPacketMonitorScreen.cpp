@@ -192,5 +192,5 @@ void WifiPacketMonitorScreen::_quit()
   delay(10);
   esp_wifi_set_promiscuous(false);
 
-  Screen.setScreen(new WifiMenuScreen());
+  Screen.goBack();
 }

@@ -170,13 +170,13 @@ void WifiEapolCaptureScreen::onItemSelected(uint8_t index) {
 
       if (!Uni.Storage || !Uni.Storage->isAvailable()) {
         ShowStatusAction::show("No storage available.");
-        Screen.setScreen(new WifiMenuScreen());
+        Screen.goBack();
         return;
       }
 
       if (!StorageUtil::hasSpace()) {
         ShowStatusAction::show("Storage full! (<20KB free)");
-        Screen.setScreen(new WifiMenuScreen());
+        Screen.goBack();
         return;
       }
 
@@ -312,7 +312,7 @@ void WifiEapolCaptureScreen::onRender() {
 }
 
 void WifiEapolCaptureScreen::onBack() {
-  Screen.setScreen(new WifiMenuScreen());
+  Screen.goBack();
 }
 
 // ── Phase helpers ─────────────────────────────────────────────────────────

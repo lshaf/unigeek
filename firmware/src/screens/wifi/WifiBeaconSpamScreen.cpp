@@ -92,7 +92,7 @@ void WifiBeaconSpamScreen::onBack()
   if (_state == STATE_SPAMMING) {
     _stop();
   } else {
-    Screen.setScreen(new WifiMenuScreen());
+    Screen.goBack();
   }
 }
 

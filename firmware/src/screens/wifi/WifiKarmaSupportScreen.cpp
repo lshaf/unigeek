@@ -54,7 +54,7 @@ void WifiKarmaSupportScreen::onUpdate()
   if (Uni.Nav->wasPressed()) {
     auto dir = Uni.Nav->readDirection();
     if (dir == INavigation::DIR_BACK || dir == INavigation::DIR_PRESS) {
-      Screen.setScreen(new WifiMenuScreen());
+      Screen.goBack();
       return;
     }
   }

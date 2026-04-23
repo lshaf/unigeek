@@ -177,7 +177,7 @@ void SettingScreen::onItemSelected(uint8_t index) {
     }
 
     case SETT_SPEAKER_TEST: {
-      Screen.setScreen(new SpeakerTestScreen());
+      Screen.push(new SpeakerTestScreen());
       break;
     }
 #endif
@@ -208,7 +208,7 @@ void SettingScreen::onItemSelected(uint8_t index) {
 
 #ifdef DEVICE_HAS_TOUCH_NAV
     case SETT_TOUCH_GUIDE: {
-      Screen.setScreen(new TouchGuideScreen(true));
+      Screen.push(new TouchGuideScreen(true));
       break;
     }
 
@@ -233,17 +233,17 @@ void SettingScreen::onItemSelected(uint8_t index) {
     }
 
     case SETT_PIN_SETTING: {
-      Screen.setScreen(new PinSettingScreen());
+      Screen.push(new PinSettingScreen());
       break;
     }
 
     case SETT_DEVICE_STATUS: {
-      Screen.setScreen(new DeviceStatusScreen());
+      Screen.push(new DeviceStatusScreen());
       break;
     }
 
     case SETT_ABOUT: {
-      Screen.setScreen(new AboutScreen());
+      Screen.push(new AboutScreen());
       break;
     }
 
@@ -279,5 +279,5 @@ void SettingScreen::onItemSelected(uint8_t index) {
 }
 
 void SettingScreen::onBack() {
-  Screen.setScreen(new MainMenuScreen());
+  Screen.goBack();
 }

@@ -63,7 +63,7 @@ void ChameleonMfcDictScreen::onInit() {
 }
 
 void ChameleonMfcDictScreen::onBack() {
-  Screen.setScreen(new ChameleonHFMenuScreen());
+  Screen.goBack();
 }
 
 void ChameleonMfcDictScreen::onUpdate() {

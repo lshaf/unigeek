@@ -18,14 +18,14 @@ void ChameleonHFMenuScreen::onInit() {
 
 void ChameleonHFMenuScreen::onItemSelected(uint8_t index) {
   switch (index) {
-    case 0: Screen.setScreen(new ChameleonHFScreen());       break;
-    case 1: Screen.setScreen(new ChameleonMfcDictScreen());   break;
-    case 2: Screen.setScreen(new ChameleonMfcDumpScreen());   break;
-    case 3: Screen.setScreen(new ChameleonMagicScreen());     break;
-    case 4: Screen.setScreen(new ChameleonMfkey32Screen());   break;
+    case 0: Screen.push(new ChameleonHFScreen());       break;
+    case 1: Screen.push(new ChameleonMfcDictScreen());   break;
+    case 2: Screen.push(new ChameleonMfcDumpScreen());   break;
+    case 3: Screen.push(new ChameleonMagicScreen());     break;
+    case 4: Screen.push(new ChameleonMfkey32Screen());   break;
   }
 }
 
 void ChameleonHFMenuScreen::onBack() {
-  Screen.setScreen(new ChameleonMenuScreen());
+  Screen.goBack();
 }

@@ -108,7 +108,7 @@ void WifiKarmaDetectorScreen::onRender()
 
 void WifiKarmaDetectorScreen::onBack()
 {
-  Screen.setScreen(new WifiMenuScreen());
+  Screen.goBack();
 }
 
 // ── Private ───────────────────────────────────────────────────────────────────

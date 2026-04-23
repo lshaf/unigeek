@@ -193,7 +193,7 @@ void ChameleonHFScreen::onUpdate() {
   if (Uni.Nav->wasPressed()) {
     auto dir = Uni.Nav->readDirection();
     if (dir == INavigation::DIR_BACK) {
-      Screen.setScreen(new ChameleonHFMenuScreen());
+      Screen.goBack();
       return;
     }
     if (dir == INavigation::DIR_PRESS) {

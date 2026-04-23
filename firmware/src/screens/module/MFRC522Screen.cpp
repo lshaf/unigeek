@@ -101,7 +101,7 @@ void MFRC522Screen::_cleanup() {
 void MFRC522Screen::onBack() {
   if (_state == STATE_MAIN_MENU) {
     _cleanup();
-    Screen.setScreen(new ModuleMenuScreen());
+    Screen.goBack();
   } else if (_state == STATE_MIFARE_CLASSIC) {
     _currentCard = {};
     _mf1AuthKeys.fill({});
@@ -114,7 +114,7 @@ void MFRC522Screen::onBack() {
 void MFRC522Screen::_initModule() {
   if (!Uni.ExI2C && !Uni.InI2C) {
     ShowStatusAction::show("No I2C bus available!");
-    Screen.setScreen(new ModuleMenuScreen());
+    Screen.goBack();
     return;
   }
 
@@ -161,7 +161,7 @@ void MFRC522Screen::_initModule() {
 
   if (!_activeBus) {
     ShowStatusAction::show("Module not found!");
-    Screen.setScreen(new ModuleMenuScreen());
+    Screen.goBack();
     return;
   }
 

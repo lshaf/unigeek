@@ -36,7 +36,7 @@ void CctvSnifferScreen::onBack()
       _showConfig();
       break;
     default:
-      Screen.setScreen(new NetworkMenuScreen());
+      Screen.goBack();
       break;
   }
 }

@@ -26,19 +26,19 @@ void ChameleonMagicScreen::onUpdate() {
 
   if (Uni.Nav->isPressed() && Uni.Nav->heldDuration() >= 1000) {
     Uni.Nav->suppressCurrentPress();
-    Screen.setScreen(new ChameleonHFMenuScreen());
+    Screen.goBack();
     return;
   }
 
   if (Uni.Nav->wasPressed()) {
     auto dir = Uni.Nav->readDirection();
     if (dir == INavigation::DIR_BACK) {
-      Screen.setScreen(new ChameleonHFMenuScreen());
+      Screen.goBack();
       return;
     }
     if (dir == INavigation::DIR_PRESS) {
       if (!_done) _run();
-      else Screen.setScreen(new ChameleonHFMenuScreen());
+      else Screen.goBack();
     }
   }
 }

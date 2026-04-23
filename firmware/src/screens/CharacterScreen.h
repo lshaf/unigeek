@@ -11,9 +11,10 @@ public:
   void update() override;
   void render() override;
 
-  void onInit()   override;
-  void onUpdate() override;
-  void onRender() override;
+  void onInit()    override;
+  void onUpdate()  override;
+  void onRender()  override;
+  void onRestore() override;
 
   ~CharacterScreen() override;
 

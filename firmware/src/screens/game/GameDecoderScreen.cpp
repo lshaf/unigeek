@@ -57,10 +57,10 @@ void GameDecoderScreen::onUpdate()
           _state = STATE_HIGH_SCORES;
           render();
         } else {
-          Screen.setScreen(new GameMenuScreen());
+          Screen.goBack();
         }
         break;
-      case INavigation::DIR_BACK: Screen.setScreen(new GameMenuScreen()); break;
+      case INavigation::DIR_BACK: Screen.goBack(); break;
       default: break;
     }
 

@@ -204,18 +204,18 @@ void MainMenuScreen::onRender() {
 }
 
 void MainMenuScreen::onBack() {
-  Screen.setScreen(new CharacterScreen());
+  Screen.goBack();
 }
 
 void MainMenuScreen::onItemSelected(uint8_t index) {
   switch (index) {
-  case 0: Screen.setScreen(new WifiMenuScreen());     break;
-  case 1: Screen.setScreen(new BLEMenuScreen());      break;
-  case 2: Screen.setScreen(new KeyboardMenuScreen()); break;
-  case 3: Screen.setScreen(new ModuleMenuScreen());   break;
-  case 4: Screen.setScreen(new UtilityMenuScreen());  break;
-  case 5: Screen.setScreen(new GameMenuScreen());     break;
-  case 6: Screen.setScreen(new SettingScreen());      break;
+  case 0: Screen.push(new WifiMenuScreen());     break;
+  case 1: Screen.push(new BLEMenuScreen());      break;
+  case 2: Screen.push(new KeyboardMenuScreen()); break;
+  case 3: Screen.push(new ModuleMenuScreen());   break;
+  case 4: Screen.push(new UtilityMenuScreen());  break;
+  case 5: Screen.push(new GameMenuScreen());     break;
+  case 6: Screen.push(new SettingScreen());      break;
 #ifdef APP_MENU_POWER_OFF
   case 7: Uni.Power.powerOff(); break;
 #endif

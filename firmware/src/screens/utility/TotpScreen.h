@@ -54,6 +54,7 @@ private:
   bool    _holdFired = false;
 
   void _loadAccounts();
+  void _reloadMenu();
   void _addNew();
   void _enterAdd();
   void _updateAddLabels();

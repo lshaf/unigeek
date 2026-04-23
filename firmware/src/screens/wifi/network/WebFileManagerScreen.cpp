@@ -11,7 +11,7 @@
 void WebFileManagerScreen::onInit() {
   if (!Uni.Storage || !Uni.Storage->isAvailable()) {
     ShowStatusAction::show("No storage available");
-    Screen.setScreen(new NetworkMenuScreen());
+    Screen.goBack();
     return;
   }
   _showMenu();
@@ -21,7 +21,7 @@ void WebFileManagerScreen::onBack() {
   if (_state == STATE_RUNNING) {
     _stop();
   } else {
-    Screen.setScreen(new NetworkMenuScreen());
+    Screen.goBack();
   }
 }
 

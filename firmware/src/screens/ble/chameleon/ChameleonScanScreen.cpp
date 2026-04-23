@@ -158,7 +158,7 @@ void ChameleonScanScreen::onItemSelected(uint8_t index) {
     int n = Achievement.inc("chameleon_connected");
     if (n == 1) Achievement.unlock("chameleon_connected");
     if (n == 5) Achievement.unlock("chameleon_connect_5");
-    Screen.setScreen(new ChameleonMenuScreen());
+    Screen.push(new ChameleonMenuScreen());
   } else {
     lcd.fillRect(bodyX(), bodyY(), bodyW(), bodyH(), TFT_BLACK);
     lcd.setTextDatum(MC_DATUM);
@@ -176,5 +176,5 @@ void ChameleonScanScreen::onItemSelected(uint8_t index) {
 void ChameleonScanScreen::onBack() {
   _stopScan();
   NimBLEDevice::deinit(true);
-  Screen.setScreen(new BLEMenuScreen());
+  Screen.goBack();
 }

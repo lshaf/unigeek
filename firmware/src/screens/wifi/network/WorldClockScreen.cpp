@@ -11,7 +11,7 @@
 #include <esp_sntp.h>
 
 void WorldClockScreen::_back() {
-  Screen.setScreen(new NetworkMenuScreen());
+  Screen.goBack();
 }
 
 void WorldClockScreen::onInit() {

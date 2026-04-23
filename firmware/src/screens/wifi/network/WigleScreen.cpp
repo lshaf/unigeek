@@ -40,7 +40,7 @@ void WigleScreen::onBack() {
     _showMenu();
     return;
   }
-  Screen.setScreen(new NetworkMenuScreen());
+  Screen.goBack();
 }
 
 void WigleScreen::onItemSelected(uint8_t index) {

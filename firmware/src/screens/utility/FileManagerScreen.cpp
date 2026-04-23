@@ -14,7 +14,7 @@ void FileManagerScreen::onInit()
 {
   if (!Uni.Storage || !Uni.Storage->isAvailable()) {
     ShowStatusAction::show("Storage not available", 1500);
-    Screen.setScreen(new UtilityMenuScreen());
+    Screen.goBack();
     return;
   }
   int n = Achievement.inc("filemgr_opened");
@@ -46,15 +46,25 @@ void FileManagerScreen::onUpdate()
 void FileManagerScreen::onBack()
 {
   if (_state == STATE_MENU) {
-    _loadDir(_curPath);
+    _loadDir(_curPath, _menuSelIdx);
     return;
   }
   if (_curPath == "/") {
-    Screen.setScreen(new UtilityMenuScreen());
+    _pathDepth = 0;
+    Screen.goBack();
     return;
   }
   int slash = _curPath.lastIndexOf('/');
-  _loadDir(slash > 0 ? _curPath.substring(0, slash) : "/");
+  String parentPath = (slash > 0) ? _curPath.substring(0, slash) : "/";
+
+  uint8_t restoreIdx = 0;
+  if (_pathDepth > 0 && _pathHistory[_pathDepth - 1].path == parentPath) {
+    restoreIdx = _pathHistory[--_pathDepth].index;
+  } else if (_pathDepth > 0) {
+    --_pathDepth;
+  }
+
+  _loadDir(parentPath, restoreIdx);
 }
 
 void FileManagerScreen::onItemSelected(uint8_t index)
@@ -62,9 +72,12 @@ void FileManagerScreen::onItemSelected(uint8_t index)
   if (_state == STATE_FILE) {
     if (index < _fileCount) {
       if (_fileIsDir[index]) {
+        if (_pathDepth < kMaxPathDepth) {
+          _pathHistory[_pathDepth++] = { _curPath, _selectedIndex };
+        }
         _loadDir(_filePath[index]);
       } else {
-        Screen.setScreen(new FileViewerScreen(_filePath[index]));
+        Screen.push(new FileViewerScreen(_filePath[index]));
       }
     }
   } else if (_state == STATE_MENU) {
@@ -74,7 +87,7 @@ void FileManagerScreen::onItemSelected(uint8_t index)
 
 // ── Private ─────────────────────────────────────────────────────────────────
 
-void FileManagerScreen::_loadDir(const String& path)
+void FileManagerScreen::_loadDir(const String& path, uint8_t restoreIdx)
 {
   _state     = STATE_FILE;
   _curPath   = path;
@@ -108,7 +121,7 @@ void FileManagerScreen::_loadDir(const String& path)
   _fileCount = count;
 
   _updateTitle();
-  setItems(_fileItems, _fileCount);
+  setItems(_fileItems, _fileCount, restoreIdx);
 }
 
 void FileManagerScreen::_openMenu(uint8_t fileIdx)
@@ -189,11 +202,11 @@ void FileManagerScreen::_handleMenuAction(uint8_t index)
   switch (_menuActions[index]) {
 
     case ACT_VIEW:
-      Screen.setScreen(new FileViewerScreen(targetPath));
+      Screen.push(new FileViewerScreen(targetPath));
       return;
 
     case ACT_VIEW_HEX:
-      Screen.setScreen(new FileHexViewerScreen(targetPath));
+      Screen.push(new FileHexViewerScreen(targetPath));
       return;
 
     case ACT_NEW_FOLDER: {
@@ -287,7 +300,7 @@ void FileManagerScreen::_handleMenuAction(uint8_t index)
       return;
 
     case ACT_EXIT:
-      Screen.setScreen(new UtilityMenuScreen());
+      Screen.goBack();
       return;
   }
 

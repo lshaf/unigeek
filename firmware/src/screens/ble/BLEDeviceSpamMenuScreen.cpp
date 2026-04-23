@@ -14,13 +14,13 @@ void BLEDeviceSpamMenuScreen::onInit()
 void BLEDeviceSpamMenuScreen::onItemSelected(uint8_t index)
 {
   switch (index) {
-    case 0: Screen.setScreen(new BLEAndroidSpamScreen()); break;
-    case 1: Screen.setScreen(new BLEiOSSpamScreen());     break;
-    case 2: Screen.setScreen(new BLESamsungSpamScreen()); break;
+    case 0: Screen.push(new BLEAndroidSpamScreen()); break;
+    case 1: Screen.push(new BLEiOSSpamScreen());     break;
+    case 2: Screen.push(new BLESamsungSpamScreen()); break;
   }
 }
 
 void BLEDeviceSpamMenuScreen::onBack()
 {
-  Screen.setScreen(new BLEMenuScreen());
+  Screen.goBack();
 }

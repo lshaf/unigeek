@@ -13,7 +13,7 @@
 void DownloadScreen::onInit() {
   if (!Uni.Storage || !Uni.Storage->isAvailable()) {
     ShowStatusAction::show("No storage available");
-    Screen.setScreen(new NetworkMenuScreen());
+    Screen.goBack();
     return;
   }
   _showMenu();
@@ -40,7 +40,7 @@ void DownloadScreen::onBack() {
     _showBadUSBOSFromCache();
     return;
   }
-  Screen.setScreen(new NetworkMenuScreen());
+  Screen.goBack();
 }
 
 void DownloadScreen::onItemSelected(uint8_t index) {

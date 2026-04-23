@@ -25,7 +25,7 @@ void QRCodeScreen::onBack() {
     }
     return;
   }
-  Screen.setScreen(new UtilityMenuScreen());
+  Screen.goBack();
 }
 
 void QRCodeScreen::onItemSelected(uint8_t index) {

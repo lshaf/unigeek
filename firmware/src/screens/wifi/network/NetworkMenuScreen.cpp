@@ -34,7 +34,7 @@ void NetworkMenuScreen::onInit() {
 
 void NetworkMenuScreen::onBack() {
   WiFi.disconnect(true);
-  Screen.setScreen(new WifiMenuScreen());
+  Screen.goBack();
 }
 
 void NetworkMenuScreen::onUpdate() {
@@ -59,14 +59,14 @@ void NetworkMenuScreen::onItemSelected(uint8_t index) {
     switch (index) {
       case 0: _showInformation(); break;
       case 1: _showWifiQR(); break;
-      case 2: Screen.setScreen(new WorldClockScreen()); break;
-      case 3: Screen.setScreen(new IPScannerScreen());  break;
-      case 4: Screen.setScreen(new PortScannerScreen()); break;
-      case 5: Screen.setScreen(new WebFileManagerScreen()); break;
-      case 6: Screen.setScreen(new DownloadScreen()); break;
-      case 7: Screen.setScreen(new NetworkMitmScreen()); break;
-      case 8: Screen.setScreen(new CctvSnifferScreen()); break;
-      case 9: Screen.setScreen(new WigleScreen()); break;
+      case 2: Screen.push(new WorldClockScreen()); break;
+      case 3: Screen.push(new IPScannerScreen());  break;
+      case 4: Screen.push(new PortScannerScreen()); break;
+      case 5: Screen.push(new WebFileManagerScreen()); break;
+      case 6: Screen.push(new DownloadScreen()); break;
+      case 7: Screen.push(new NetworkMitmScreen()); break;
+      case 8: Screen.push(new CctvSnifferScreen()); break;
+      case 9: Screen.push(new WigleScreen()); break;
     }
   } else if (_state == STATE_INFORMATION) {
     _showMenu();

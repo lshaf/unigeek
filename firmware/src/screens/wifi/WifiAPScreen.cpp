@@ -234,7 +234,7 @@ void WifiAPScreen::onBack()
     return;
   }
   _activeInstance = nullptr;
-  Screen.setScreen(new WifiMenuScreen());
+  Screen.goBack();
 }
 
 // ── Private ────────────────────────────────────────────────────────────────

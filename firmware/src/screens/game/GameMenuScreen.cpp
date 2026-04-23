@@ -14,17 +14,17 @@ void GameMenuScreen::onInit()
 
 void GameMenuScreen::onBack()
 {
-  Screen.setScreen(new MainMenuScreen());
+  Screen.goBack();
 }
 
 void GameMenuScreen::onItemSelected(uint8_t index)
 {
   switch (index) {
-    case 0: Screen.setScreen(new GameDecoderScreen()); break;
-    case 1: Screen.setScreen(new GameWordleScreen(GameWordleScreen::LANG_EN)); break;
-    case 2: Screen.setScreen(new GameWordleScreen(GameWordleScreen::LANG_ID)); break;
-    case 3: Screen.setScreen(new GameFlappyScreen()); break;
-    case 4: Screen.setScreen(new GameMemoryScreen()); break;
-    case 5: Screen.setScreen(new GameNumberGuessScreen()); break;
+    case 0: Screen.push(new GameDecoderScreen()); break;
+    case 1: Screen.push(new GameWordleScreen(GameWordleScreen::LANG_EN)); break;
+    case 2: Screen.push(new GameWordleScreen(GameWordleScreen::LANG_ID)); break;
+    case 3: Screen.push(new GameFlappyScreen()); break;
+    case 4: Screen.push(new GameMemoryScreen()); break;
+    case 5: Screen.push(new GameNumberGuessScreen()); break;
   }
 }

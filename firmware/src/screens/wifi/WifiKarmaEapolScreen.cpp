@@ -278,7 +278,7 @@ void WifiKarmaEapolScreen::onBack()
     _showMenu();
   } else {
     _notifyDone();
-    Screen.setScreen(new WifiMenuScreen());
+    Screen.goBack();
   }
 }
 

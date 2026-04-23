@@ -21,7 +21,7 @@ void NetworkMitmScreen::onBack()
     _stop();
     _showMenu();
   } else {
-    Screen.setScreen(new NetworkMenuScreen());
+    Screen.goBack();
   }
 }
 

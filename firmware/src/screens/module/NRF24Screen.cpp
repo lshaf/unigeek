@@ -108,14 +108,14 @@ void NRF24Screen::onInit() {
 
   if (_cePin < 0 || _csnPin < 0) {
     ShowStatusAction::show("Set NRF24 CE/CSN pins first");
-    Screen.setScreen(new ModuleMenuScreen());
+    Screen.goBack();
     return;
   }
 
   ProgressView::progress("Detecting NRF24...", 30);
   if (!_radioBegin()) {
     ShowStatusAction::show("NRF24 not found!");
-    Screen.setScreen(new ModuleMenuScreen());
+    Screen.goBack();
     return;
   }
   _radioEnd();
@@ -428,7 +428,7 @@ void NRF24Screen::onBack() {
   switch (_state) {
     case STATE_MENU:
       _radioEnd();
-      Screen.setScreen(new ModuleMenuScreen());
+      Screen.goBack();
       break;
     case STATE_JAMMER_MENU:
       _showMenu();

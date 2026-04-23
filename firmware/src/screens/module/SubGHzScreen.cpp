@@ -16,7 +16,7 @@ void SubGHzScreen::onInit() {
 
   if (_csPin < 0 || _gdo0Pin < 0) {
     ShowStatusAction::show("Set CC1101 pins first");
-    Screen.setScreen(new ModuleMenuScreen());
+    Screen.goBack();
     return;
   }
 
@@ -24,7 +24,7 @@ void SubGHzScreen::onInit() {
   ProgressView::progress("Detecting CC1101...", 30);
   if (!_rf.begin(Uni.Spi, _csPin, _gdo0Pin)) {
     ShowStatusAction::show("CC1101 not found!");
-    Screen.setScreen(new ModuleMenuScreen());
+    Screen.goBack();
     return;
   }
   _rf.end();
@@ -287,7 +287,7 @@ void SubGHzScreen::onRender() {
 void SubGHzScreen::onBack() {
   if (_state == STATE_MENU) {
     _rf.end();
-    Screen.setScreen(new ModuleMenuScreen());
+    Screen.goBack();
   } else if (_state == STATE_RECEIVING) {
     _rf.end();
     _showMenu();

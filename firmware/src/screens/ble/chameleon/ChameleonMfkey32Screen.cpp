@@ -34,7 +34,7 @@ void ChameleonMfkey32Screen::onInit() {
 }
 
 void ChameleonMfkey32Screen::onBack() {
-  Screen.setScreen(new ChameleonHFMenuScreen());
+  Screen.goBack();
 }
 
 void ChameleonMfkey32Screen::_toggle() {

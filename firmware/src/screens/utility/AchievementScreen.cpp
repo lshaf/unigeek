@@ -41,7 +41,7 @@ void AchievementScreen::onItemSelected(uint8_t index)
 void AchievementScreen::onBack()
 {
   if (_state == STATE_DOMAIN) _showDomains();
-  else                        Screen.setScreen(new UtilityMenuScreen());
+  else                        Screen.goBack();
 }
 
 void AchievementScreen::onUpdate()
@@ -96,7 +96,7 @@ void AchievementScreen::_showDomains()
     _domainItems[d] = { AchievementManager::domainName(d), _domainSubs[d] };
   }
 
-  setItems(_domainItems, AchievementManager::kDomainCount);
+  setItems(_domainItems, AchievementManager::kDomainCount, _activeDomain);
 }
 
 void AchievementScreen::_showDomain(uint8_t domain)

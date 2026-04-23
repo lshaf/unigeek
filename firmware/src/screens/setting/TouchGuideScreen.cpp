@@ -150,7 +150,7 @@ void TouchGuideScreen::_markDone() {
   Config.set("touch_guide_shown", "1");
   Config.save(Uni.Storage);
   if (_fromSettings)
-    Screen.setScreen(new SettingScreen());
+    Screen.goBack();
   else
     Screen.setScreen(new CharacterScreen());
 }

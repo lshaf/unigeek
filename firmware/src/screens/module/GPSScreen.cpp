@@ -51,7 +51,7 @@ void GPSScreen::onUpdate() {
         ShowStatusAction::show("Stopping GPS...", 0);
         _gps.end();
         _disableGnssPower();
-        Screen.setScreen(new ModuleMenuScreen());
+        Screen.goBack();
       }
     }
     if (_gps.gps.location.isValid()) {
@@ -82,7 +82,7 @@ void GPSScreen::onUpdate() {
       ShowStatusAction::show("GPS not detected! Check connection");
       _gps.end();
       _disableGnssPower();
-      Screen.setScreen(new ModuleMenuScreen());
+      Screen.goBack();
       return;
     }
     return;
@@ -197,7 +197,7 @@ void GPSScreen::onBack() {
     WiFi.mode(WIFI_OFF);
     _gps.end();
     _disableGnssPower();
-    Screen.setScreen(new ModuleMenuScreen());
+    Screen.goBack();
   } else {
     _showMenu();
   }

@@ -112,7 +112,7 @@ void ChameleonVikingScreen::_doT5577() {
 void ChameleonVikingScreen::onUpdate() {
   if (!_scanning && Uni.Nav->isPressed() && Uni.Nav->heldDuration() >= 1000) {
     Uni.Nav->suppressCurrentPress();
-    Screen.setScreen(new ChameleonLFMenuScreen());
+    Screen.goBack();
     return;
   }
 
@@ -124,7 +124,7 @@ void ChameleonVikingScreen::onUpdate() {
         _needsDraw = true;
         render();
       } else {
-        Screen.setScreen(new ChameleonLFMenuScreen());
+        Screen.goBack();
       }
       return;
     }
@@ -141,7 +141,7 @@ void ChameleonVikingScreen::onUpdate() {
         else if (r && strcmp(r, "t5577") == 0) _doT5577();
         else render();
       } else if (_state == STATE_CLONED) {
-        Screen.setScreen(new ChameleonLFMenuScreen());
+        Screen.goBack();
       }
     }
   }

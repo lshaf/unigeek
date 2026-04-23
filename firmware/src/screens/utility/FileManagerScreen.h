@@ -23,8 +23,9 @@ private:
     ACT_COPY, ACT_CUT, ACT_PASTE, ACT_CANCEL_CLIP, ACT_CLOSE_MENU, ACT_EXIT,
   };
 
-  static constexpr uint8_t kMaxFiles = 40;
-  static constexpr uint8_t kMaxMenu  = 11;
+  static constexpr uint8_t kMaxFiles     = 40;
+  static constexpr uint8_t kMaxMenu      = 11;
+  static constexpr uint8_t kMaxPathDepth = 8;
 
   // File browser
   String   _curPath = "/";
@@ -35,6 +36,11 @@ private:
   uint8_t  _fileCount  = 0;
   uint8_t  _menuSelIdx = 0;
   bool     _holdFired  = false;
+
+  // Navigation history (folder path + selected index, pushed on dir enter)
+  struct PathState { String path; uint8_t index; };
+  PathState _pathHistory[kMaxPathDepth];
+  uint8_t   _pathDepth = 0;
 
   // Clipboard
   String _clipPath;
@@ -48,7 +54,7 @@ private:
   // Dynamic title (folder name)
   char _titleBuf[64] = "File Manager";
 
-  void _loadDir(const String& path);
+  void _loadDir(const String& path, uint8_t restoreIdx = 0);
   void _openMenu(uint8_t fileIdx);
   void _handleMenuAction(uint8_t index);
   bool _removeDir(const String& path);

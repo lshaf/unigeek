@@ -209,7 +209,7 @@ void WifiWatchdogScreen::onBack()
 #ifdef DEVICE_HAS_TOUCH_NAV
   Uni.Nav->setSuppressKeys(false);
 #endif
-  Screen.setScreen(new WifiMenuScreen());
+  Screen.goBack();
 }
 
 // ── Private: ring draining ────────────────────────────────────────────────────

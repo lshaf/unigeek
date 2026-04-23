@@ -135,7 +135,7 @@ void KeyboardScreen::onBack()
       _goMenu();
     }
   } else {
-    Screen.setScreen(new KeyboardMenuScreen());
+    Screen.goBack();
   }
 }
 

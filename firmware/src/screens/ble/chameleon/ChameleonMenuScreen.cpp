@@ -35,7 +35,7 @@ void ChameleonMenuScreen::onUpdate()
 {
   if (_toScan) {
     _toScan = false;
-    Screen.setScreen(new ChameleonScanScreen());
+    Screen.push(new ChameleonScanScreen());
     return;
   }
   ListScreen::onUpdate();
@@ -54,16 +54,16 @@ void ChameleonMenuScreen::onItemSelected(uint8_t index)
   if (index == 0) {
     c.disconnect();
     StatusBar::bleConnected() = false;
-    Screen.setScreen(new ChameleonScanScreen());
+    Screen.push(new ChameleonScanScreen());
     return;
   }
 
   switch (index) {
-    case 1: Screen.setScreen(new ChameleonDeviceScreen());   break;
-    case 2: Screen.setScreen(new ChameleonSlotsScreen());    break;
-    case 3: Screen.setScreen(new ChameleonHFMenuScreen());   break;
-    case 4: Screen.setScreen(new ChameleonLFMenuScreen());   break;
-    case 5: Screen.setScreen(new ChameleonSettingsScreen()); break;
+    case 1: Screen.push(new ChameleonDeviceScreen());   break;
+    case 2: Screen.push(new ChameleonSlotsScreen());    break;
+    case 3: Screen.push(new ChameleonHFMenuScreen());   break;
+    case 4: Screen.push(new ChameleonLFMenuScreen());   break;
+    case 5: Screen.push(new ChameleonSettingsScreen()); break;
   }
 }
 
@@ -72,5 +72,5 @@ void ChameleonMenuScreen::onBack()
   ChameleonClient::get().disconnect();
   StatusBar::bleConnected() = false;
   NimBLEDevice::deinit(true);
-  Screen.setScreen(new BLEMenuScreen());
+  Screen.goBack();
 }

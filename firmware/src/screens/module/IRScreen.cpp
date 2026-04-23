@@ -114,7 +114,7 @@ void IRScreen::onRender() {
 void IRScreen::onBack() {
   if (_state == STATE_MENU) {
     _ir.end();
-    Screen.setScreen(new ModuleMenuScreen());
+    Screen.goBack();
   } else if (_state == STATE_RECEIVING) {
     _ir.end();
     _showMenu();

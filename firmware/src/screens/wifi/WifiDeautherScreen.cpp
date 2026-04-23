@@ -92,7 +92,7 @@ void WifiDeautherScreen::onBack()
   } else if (_state == STATE_DEAUTHING) {
     _stopDeauth();
   } else {
-    Screen.setScreen(new WifiMenuScreen());
+    Screen.goBack();
   }
 }
 

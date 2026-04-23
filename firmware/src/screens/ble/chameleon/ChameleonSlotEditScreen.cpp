@@ -85,7 +85,7 @@ void ChameleonSlotEditScreen::onInit() {
 }
 
 void ChameleonSlotEditScreen::onBack() {
-  Screen.setScreen(new ChameleonSlotsScreen());
+  Screen.goBack();
 }
 
 void ChameleonSlotEditScreen::_setActive() {
@@ -295,7 +295,7 @@ void ChameleonSlotEditScreen::_viewContent() {
   const char* r = InputSelectAction::popup("View which?", opts, 2, nullptr);
   if (!r) { render(); return; }
   bool lf = (strcmp(r, "lf") == 0);
-  Screen.setScreen(new ChameleonSlotViewScreen(_slot, lf));
+  Screen.push(new ChameleonSlotViewScreen(_slot, lf));
 }
 
 void ChameleonSlotEditScreen::_writeContent() {

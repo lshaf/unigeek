@@ -64,7 +64,7 @@ void I2CDetectorScreen::onUpdate() {
     _scanning = true;
     render();
   } else if (dir == INavigation::DIR_PRESS || dir == INavigation::DIR_BACK) {
-    Screen.setScreen(new UtilityMenuScreen());
+    Screen.goBack();
   }
 }
 

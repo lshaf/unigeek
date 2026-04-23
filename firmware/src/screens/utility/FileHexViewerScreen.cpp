@@ -166,7 +166,5 @@ void FileHexViewerScreen::_renderHex()
 
 void FileHexViewerScreen::_goBack()
 {
-  int slash = _path.lastIndexOf('/');
-  String dir = (slash > 0) ? _path.substring(0, slash) : "/";
-  Screen.setScreen(new FileManagerScreen(dir));
+  Screen.goBack();
 }

@@ -77,7 +77,7 @@ void BLEDetectorScreen::onUpdate()
     auto dir = Uni.Nav->readDirection();
     if (dir == INavigation::DIR_BACK || dir == INavigation::DIR_PRESS) {
       _stopScan();
-      Screen.setScreen(new BLEMenuScreen());
+      Screen.goBack();
       return;
     }
     if (dir == INavigation::DIR_UP && _scrollOffset > 0) {

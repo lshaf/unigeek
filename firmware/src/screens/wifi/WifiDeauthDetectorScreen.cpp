@@ -141,7 +141,7 @@ void WifiDeauthDetectorScreen::onRender()
 
 void WifiDeauthDetectorScreen::onBack()
 {
-  Screen.setScreen(new WifiMenuScreen());
+  Screen.goBack();
 }
 
 // ── Private ───────────────────────────────────────────────────────────────

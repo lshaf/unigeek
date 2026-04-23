@@ -252,6 +252,12 @@ void CharacterScreen::render()
   onRender();
 }
 
+void CharacterScreen::onRestore()
+{
+  _firstRender = true;
+  _dirtyMask   = 0xFF;
+}
+
 void CharacterScreen::onInit()
 {
   _lastRefreshMs = 0;
@@ -525,5 +531,5 @@ void CharacterScreen::onRender()
 
 void CharacterScreen::_enterMainMenu()
 {
-  Screen.setScreen(new MainMenuScreen());
+  Screen.push(new MainMenuScreen());
 }

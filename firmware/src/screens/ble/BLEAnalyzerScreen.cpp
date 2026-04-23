@@ -61,7 +61,7 @@ void BLEAnalyzerScreen::onBack()
              _state == STATE_MANUFACTURE_DATA) {
     _showInfo();
   } else {
-    Screen.setScreen(new BLEMenuScreen());
+    Screen.goBack();
   }
 }
 

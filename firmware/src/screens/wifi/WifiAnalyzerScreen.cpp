@@ -50,7 +50,7 @@ void WifiAnalyzerScreen::onBack()
     _showScan();
   } else {
     WiFi.scanDelete();
-    Screen.setScreen(new WifiMenuScreen());
+    Screen.goBack();
   }
 }
 

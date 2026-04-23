@@ -175,6 +175,5 @@ void PinSettingScreen::onItemSelected(uint8_t index) {
 }
 
 void PinSettingScreen::onBack() {
-  if (_backFn) Screen.setScreen(_backFn());
-  else Screen.setScreen(new SettingScreen());
+  Screen.goBack();
 }

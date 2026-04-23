@@ -149,7 +149,7 @@ void ChameleonSlotViewScreen::onUpdate() {
 
   if (Uni.Nav->isPressed() && Uni.Nav->heldDuration() >= 1000) {
     Uni.Nav->suppressCurrentPress();
-    Screen.setScreen(new ChameleonSlotEditScreen(_slot));
+    Screen.goBack();
     return;
   }
 
@@ -157,7 +157,7 @@ void ChameleonSlotViewScreen::onUpdate() {
     auto dir = Uni.Nav->readDirection();
     if (dir == INavigation::DIR_BACK ||
         dir == INavigation::DIR_PRESS) {
-      Screen.setScreen(new ChameleonSlotEditScreen(_slot));
+      Screen.goBack();
       return;
     }
     _scrollView.onNav(dir);

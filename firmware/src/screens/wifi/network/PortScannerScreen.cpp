@@ -16,7 +16,7 @@ void PortScannerScreen::onBack() {
   if (_state == STATE_RESULTS) {
     _showInput();
   } else {
-    Screen.setScreen(new NetworkMenuScreen());
+    Screen.goBack();
   }
 }
 

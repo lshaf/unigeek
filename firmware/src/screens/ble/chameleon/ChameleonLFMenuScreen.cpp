@@ -16,13 +16,13 @@ void ChameleonLFMenuScreen::onInit() {
 
 void ChameleonLFMenuScreen::onItemSelected(uint8_t index) {
   switch (index) {
-    case 0: Screen.setScreen(new ChameleonLFScreen());            break;
-    case 1: Screen.setScreen(new ChameleonHIDProxScreen());       break;
-    case 2: Screen.setScreen(new ChameleonVikingScreen());        break;
-    case 3: Screen.setScreen(new ChameleonT5577CleanerScreen());  break;
+    case 0: Screen.push(new ChameleonLFScreen());            break;
+    case 1: Screen.push(new ChameleonHIDProxScreen());       break;
+    case 2: Screen.push(new ChameleonVikingScreen());        break;
+    case 3: Screen.push(new ChameleonT5577CleanerScreen());  break;
   }
 }
 
 void ChameleonLFMenuScreen::onBack() {
-  Screen.setScreen(new ChameleonMenuScreen());
+  Screen.goBack();
 }

@@ -1,5 +1,6 @@
 #pragma once
 #include "BaseScreen.h"
+#include "core/ScreenManager.h"
 
 class ListScreen : public BaseScreen
 {
@@ -27,6 +28,18 @@ public:
     _count         = count;
     _selectedIndex = 0;
     _scrollOffset  = 0;
+    render();
+  }
+
+  void setItems(ListItem* arr, uint8_t count, uint8_t selectedIdx)
+  {
+    _items         = arr;
+    _count         = count;
+    uint8_t eff    = count;
+    _selectedIndex = (eff > 0 && selectedIdx < eff) ? selectedIdx : 0;
+    _scrollOffset  = 0;
+    _partialTopActive = false;
+    _scrollIfNeeded();
     render();
   }
 
@@ -174,7 +187,7 @@ public:
   }
 
   virtual void onItemSelected(uint8_t index) = 0;
-  virtual void onBack() {}
+  virtual void onBack() { Screen.goBack(); }
 
 protected:
   uint8_t _selectedIndex = 0;

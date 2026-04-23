@@ -39,9 +39,9 @@ void ChameleonSlotsScreen::onInit() {
 }
 
 void ChameleonSlotsScreen::onItemSelected(uint8_t index) {
-  Screen.setScreen(new ChameleonSlotEditScreen(index));
+  Screen.push(new ChameleonSlotEditScreen(index));
 }
 
 void ChameleonSlotsScreen::onBack() {
-  Screen.setScreen(new ChameleonMenuScreen());
+  Screen.goBack();
 }

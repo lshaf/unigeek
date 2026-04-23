@@ -17,16 +17,16 @@ void BLEMenuScreen::onInit()
 void BLEMenuScreen::onItemSelected(uint8_t index)
 {
   switch (index) {
-    case 0: Screen.setScreen(new BLEAnalyzerScreen());       break;
-    case 1: Screen.setScreen(new BLESpamScreen());           break;
-    case 2: Screen.setScreen(new BLEDeviceSpamMenuScreen()); break;
-    case 3: Screen.setScreen(new BLEDetectorScreen());       break;
-    case 4: Screen.setScreen(new WhisperPairScreen());       break;
-    case 5: Screen.setScreen(new ChameleonMenuScreen());     break;
+    case 0: Screen.push(new BLEAnalyzerScreen());       break;
+    case 1: Screen.push(new BLESpamScreen());           break;
+    case 2: Screen.push(new BLEDeviceSpamMenuScreen()); break;
+    case 3: Screen.push(new BLEDetectorScreen());       break;
+    case 4: Screen.push(new WhisperPairScreen());       break;
+    case 5: Screen.push(new ChameleonMenuScreen());     break;
   }
 }
 
 void BLEMenuScreen::onBack()
 {
-  Screen.setScreen(new MainMenuScreen());
+  Screen.goBack();
 }

@@ -5,7 +5,6 @@
 #include "core/ScreenManager.h"
 #include "core/ConfigManager.h"
 #include "core/AchievementManager.h"
-#include "screens/utility/UtilityMenuScreen.h"
 #include "ui/actions/InputSelectOption.h"
 #include "ui/actions/InputTextAction.h"
 #include "ui/actions/ShowStatusAction.h"
@@ -19,9 +18,14 @@ const char* TotpScreen::title() {
 }
 
 void TotpScreen::onInit() {
+  _reloadMenu();
+}
+
+void TotpScreen::_reloadMenu() {
   _loadAccounts();
   for (uint8_t i = 0; i < _accountCount; i++) _items[i] = { _accounts[i].name, nullptr };
   _items[_accountCount] = { "Add New", nullptr };
+  _state = STATE_MENU;
   setItems(_items, _accountCount + 1);
 }
 
@@ -71,7 +75,7 @@ void TotpScreen::onBack() {
     render();
     return;
   }
-  Screen.setScreen(new UtilityMenuScreen());
+  Screen.goBack();
 }
 
 void TotpScreen::onItemSelected(uint8_t index) {
@@ -233,7 +237,7 @@ void TotpScreen::_saveNew() {
   } else {
     ShowStatusAction::show("Save failed", 1000);
   }
-  Screen.setScreen(new TotpScreen());
+  _reloadMenu();
 }
 
 // ── Account menu (hold) ───────────────────────────────────────────────────────
@@ -258,7 +262,7 @@ void TotpScreen::_deleteAccount(uint8_t index) {
   String path = String(DIR) + "/" + _accounts[index].name + ".key";
   bool ok = Uni.Storage->deleteFile(path.c_str());
   ShowStatusAction::show(ok ? "Deleted" : "Delete failed", 1000);
-  Screen.setScreen(new TotpScreen());
+  _reloadMenu();
 }
 
 // ── View helpers ──────────────────────────────────────────────────────────────

@@ -31,5 +31,5 @@ void AboutScreen::onInit()
 
 void AboutScreen::onBack()
 {
-  Screen.setScreen(new SettingScreen());
+  Screen.goBack();
 }

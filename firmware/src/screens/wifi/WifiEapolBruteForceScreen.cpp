@@ -111,7 +111,7 @@ void WifiEapolBruteForceScreen::_showMenu() {
 void WifiEapolBruteForceScreen::onInit() {
   if (!Uni.Storage || !Uni.Storage->isAvailable()) {
     ShowStatusAction::show("No storage available.");
-    Screen.setScreen(new WifiMenuScreen());
+    Screen.goBack();
     return;
   }
 
@@ -191,7 +191,7 @@ void WifiEapolBruteForceScreen::onBack() {
     }
     return;
   }
-  Screen.setScreen(new WifiMenuScreen());
+  Screen.goBack();
 }
 
 void WifiEapolBruteForceScreen::onItemSelected(uint8_t index) {

@@ -162,7 +162,5 @@ void FileViewerScreen::_renderContent() {
 
 void FileViewerScreen::_goBack() {
   if (_lines) { free(_lines); _lines = nullptr; }
-  int slash = _path.lastIndexOf('/');
-  String dir = (slash > 0) ? _path.substring(0, slash) : "/";
-  Screen.setScreen(new FileManagerScreen(dir));
+  Screen.goBack();
 }

@@ -167,7 +167,7 @@ void WifiEvilTwinScreen::onBack()
     _stopAttack();
     _showMenu();
   } else {
-    Screen.setScreen(new WifiMenuScreen());
+    Screen.goBack();
   }
 }
 

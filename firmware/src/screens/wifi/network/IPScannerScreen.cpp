@@ -30,7 +30,7 @@ void IPScannerScreen::onBack() {
       _showConfiguration();
       break;
     default:
-      Screen.setScreen(new NetworkMenuScreen());
+      Screen.goBack();
       break;
   }
 }
