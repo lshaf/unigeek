@@ -24,6 +24,13 @@ static constexpr int16_t ZONE_H   = SCREEN_H / 3;   //  80 — right 3/4 split t
 // Consecutive no-touch polls required to confirm a release (~60 ms at 20 ms poll rate)
 static constexpr uint8_t NO_TOUCH_THRESHOLD = 3;
 
+// Flips both axes 180° so zones track the rotated display in right-hand mode.
+// M5.Touch coordinates are not rotation-aware (M5Unified uses its own M5.Display
+// rotation, not Uni.Lcd), so we compensate manually here.
+static bool _gRightHand = false;
+
+void NavigationImpl::setRightHand(bool v) { _gRightHand = v; }
+
 void NavigationImpl::update() {
   static uint32_t lastPoll = 0;
 
@@ -51,6 +58,11 @@ void NavigationImpl::update() {
   int16_t sy = t.y;
   if (sx < 0) sx = 0; if (sx >= SCREEN_W) sx = SCREEN_W - 1;
   if (sy < 0) sy = 0; if (sy >= SCREEN_H) sy = SCREEN_H - 1;
+
+  if (_gRightHand) {
+    sx = (SCREEN_W - 1) - sx;
+    sy = (SCREEN_H - 1) - sy;
+  }
 
   Direction dir;
   if (sx < BACK_END) {

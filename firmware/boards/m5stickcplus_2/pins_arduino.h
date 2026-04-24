@@ -99,5 +99,5 @@ static const uint8_t SCL = GROVE_SCL;
 #define DEVICE_HAS_SOUND          // buzzer attached — enables audio paths and sound settings
                                   // NOTE: no DEVICE_HAS_VOLUME_CONTROL — piezo buzzer has no real volume control
 #define DEVICE_HAS_NAV_MODE_SWITCH // supports switching between default (buttons) and encoder navigation
-#define DEVICE_HAS_HAND_ORIENT    // screen rotation + UP/DOWN swap for left/right hand orientation
+#define DEVICE_HAS_SCREEN_ORIENT    // screen rotation + UP/DOWN swap for left/right hand orientation
 #define APP_MENU_POWER_OFF        // show Power Off in main menu (hardware power cut via GPIO 4 + deep sleep)

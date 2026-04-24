@@ -21,8 +21,9 @@
 class NavigationImpl : public INavigation
 {
 public:
-  void begin()  override;
-  void update() override;
+  void begin()              override;
+  void update()             override;
+  void setRightHand(bool v) override;
 
   TouchFT6336U touch;
 

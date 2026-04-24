@@ -46,8 +46,8 @@ void SettingScreen::_refresh() {
 #ifdef DEVICE_HAS_NAV_MODE_SWITCH
   _navModeSub  = Config.get(APP_CONFIG_NAV_MODE, APP_CONFIG_NAV_MODE_DEFAULT) == "encoder" ? "Encoder" : "Default";
 #endif
-#ifdef DEVICE_HAS_HAND_ORIENT
-  _handOrientSub = Config.get(APP_CONFIG_HAND_ORIENT, APP_CONFIG_HAND_ORIENT_DEFAULT) == "right" ? "Right" : "Left";
+#ifdef DEVICE_HAS_SCREEN_ORIENT
+  _screenOrientSub = Config.get(APP_CONFIG_SCREEN_ORIENT, APP_CONFIG_SCREEN_ORIENT_DEFAULT) == "flipped" ? "Flipped" : "Normal";
 #endif
 #ifdef DEVICE_HAS_TOUCH_NAV
   _overlaySub  = Config.get(APP_CONFIG_SHOW_OVERLAY, APP_CONFIG_SHOW_OVERLAY_DEFAULT).toInt() ? "Show" : "Hide";
@@ -72,8 +72,8 @@ void SettingScreen::_refresh() {
 #ifdef DEVICE_HAS_NAV_MODE_SWITCH
   _items[SETT_NAV_MODE].sublabel     = _navModeSub.c_str();
 #endif
-#ifdef DEVICE_HAS_HAND_ORIENT
-  _items[SETT_HAND_ORIENT].sublabel  = _handOrientSub.c_str();
+#ifdef DEVICE_HAS_SCREEN_ORIENT
+  _items[SETT_SCREEN_ORIENT].sublabel  = _screenOrientSub.c_str();
 #endif
 #ifdef DEVICE_HAS_TOUCH_NAV
   _items[SETT_OVERLAY].sublabel      = _overlaySub.c_str();
@@ -265,10 +265,10 @@ void SettingScreen::onItemSelected(uint8_t index) {
     }
 #endif
 
-#ifdef DEVICE_HAS_HAND_ORIENT
-    case SETT_HAND_ORIENT: {
-      bool isRight = Config.get(APP_CONFIG_HAND_ORIENT, APP_CONFIG_HAND_ORIENT_DEFAULT) == "right";
-      Config.set(APP_CONFIG_HAND_ORIENT, isRight ? "left" : "right");
+#ifdef DEVICE_HAS_SCREEN_ORIENT
+    case SETT_SCREEN_ORIENT: {
+      bool isFlipped = Config.get(APP_CONFIG_SCREEN_ORIENT, APP_CONFIG_SCREEN_ORIENT_DEFAULT) == "flipped";
+      Config.set(APP_CONFIG_SCREEN_ORIENT, isFlipped ? "normal" : "flipped");
       Config.save(Uni.Storage);
       Uni.applyOrientation();
       _refresh();

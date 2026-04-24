@@ -18,8 +18,10 @@
 class NavigationImpl : public INavigation
 {
 public:
-  void begin()          override;
-  void update()         override;
+  void begin()                override;
+  void update()               override;
+  void setRightHand(bool v)   override;
+  void setTouchSwapXY(bool v) override;
 
 protected:
   void _doDrawOverlay() override;

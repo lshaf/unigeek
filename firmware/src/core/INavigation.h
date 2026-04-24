@@ -22,6 +22,7 @@ public:
   virtual ~INavigation() = default;
   virtual void update() = 0;
   virtual void begin() = 0;
+  virtual void setTouchSwapXY(bool) {}
 
   // Post-render hook: draws the live edge indicator for the active touch zone.
   // Skipped automatically when suppressKeys is set (e.g. touch-nav overall grid).
@@ -56,7 +57,7 @@ public:
   int16_t lastTouchX() const { return _lastTouchX; }
   int16_t lastTouchY() const { return _lastTouchY; }
 
-  void setRightHand(bool v)  { _rightHand = v; }
+  virtual void setRightHand(bool v) { _rightHand = v; }
 
   // Used by main.cpp when a press wakes the display from power save: clear any
   // pending release event and, if a press is currently in progress, drop its

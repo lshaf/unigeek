@@ -14,11 +14,18 @@
 #ifdef DEVICE_HAS_TOUCH_NAV
 #include "screens/setting/TouchGuideScreen.h"
 #endif
+#ifdef DEVICE_CYD
+#include "screens/setting/CYDTouchCalScreen.h"
+#endif
 
 void _bootSplash() {
   // ── Pre-draw init (config needed for theme colour) ────────────────────────
   Config.load(Uni.Storage);
   PinConfig.load(Uni.Storage);
+#ifdef DEVICE_CYD
+  if (Uni.Nav)
+    Uni.Nav->setTouchSwapXY(Config.get(APP_CONFIG_TOUCH_SWAP_XY, APP_CONFIG_TOUCH_SWAP_XY_DEFAULT) == "1");
+#endif
   Uni.applyOrientation();   // rotate screen + flip nav before any drawing
   Uni.Lcd.setBrightness((uint8_t)Config.get(APP_CONFIG_BRIGHTNESS, APP_CONFIG_BRIGHTNESS_DEFAULT).toInt());
 
@@ -85,6 +92,10 @@ void setup() {
   RtcManager::syncSystemFromRtc();
 #endif
   _bootSplash();
+#ifdef DEVICE_CYD
+  if (Config.get(APP_CONFIG_TOUCH_CALIBRATED, APP_CONFIG_TOUCH_CALIBRATED_DEFAULT).length() == 0)
+    Screen.setScreen(new CYDTouchCalScreen());
+#endif
 #ifdef DEVICE_HAS_TOUCH_NAV
   if (Config.get("touch_guide_shown", "0") == "0")
     Screen.setScreen(new TouchGuideScreen(false));

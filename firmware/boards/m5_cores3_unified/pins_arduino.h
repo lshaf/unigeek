@@ -88,5 +88,6 @@ static const uint8_t SCK  = SPI_SCK_PIN;
 #define DEVICE_HAS_USB_HID            // ESP32-S3 native USB HID
 #define APP_MENU_POWER_OFF            // AXP2101 power-off
 #define DEVICE_HAS_TOUCH_NAV          // touch-only navigation (no physical buttons)
+#define DEVICE_HAS_SCREEN_ORIENT        // display rotates 180° for right-hand mode
 
 #endif // Pins_Arduino_h

@@ -114,3 +114,4 @@ static const uint8_t SCL = GROVE_SCL;
 
 // ─── Firmware Feature Flags ───────────────────────────────
 #define DEVICE_HAS_TOUCH_NAV
+#define DEVICE_HAS_SCREEN_ORIENT

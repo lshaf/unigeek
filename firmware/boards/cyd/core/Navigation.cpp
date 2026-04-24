@@ -37,6 +37,15 @@ static constexpr int16_t ZONE_H   = SCREEN_H / 3;
 
 static constexpr uint8_t NO_TOUCH_THRESHOLD = 3;
 
+// Runtime XY-swap flag — set via setTouchSwapXY() after config is loaded.
+// Only has effect in the TOUCH_SPI_MOSI backend; all other backends are no-ops.
+static bool _gSwapXY = false;
+
+// Runtime right-hand flag — set via setRightHand() from applyOrientation().
+// Flips both axes 180° after touch mapping so zones track the rotated display.
+// Does NOT set INavigation::_rightHand, so orientDir() (UP↔DOWN) never fires.
+static bool _gRightHand = false;
+
 // ─── Touch backend ────────────────────────────────────────────────────────────
 
 #ifdef TOUCH_CST816S
@@ -131,13 +140,13 @@ static bool _readTouch(uint16_t* tx, uint16_t* ty) {
 
   if (xr < CAL_X_MIN || xr > CAL_X_MAX || yr < CAL_Y_MIN || yr > CAL_Y_MAX) return false;
 
-#ifdef CAL_SWAP_XY
-  *tx = (uint16_t)map((long)yr, CAL_Y_MIN, CAL_Y_MAX, 0, SCREEN_W - 1);
-  *ty = (uint16_t)map((long)xr, CAL_X_MIN, CAL_X_MAX, 0, SCREEN_H - 1);
-#else
-  *tx = (uint16_t)map((long)xr, CAL_X_MIN, CAL_X_MAX, 0, SCREEN_W - 1);
-  *ty = (uint16_t)map((long)yr, CAL_Y_MIN, CAL_Y_MAX, 0, SCREEN_H - 1);
-#endif
+  if (_gSwapXY) {
+    *tx = (uint16_t)map((long)yr, CAL_Y_MIN, CAL_Y_MAX, 0, SCREEN_W - 1);
+    *ty = (uint16_t)map((long)xr, CAL_X_MIN, CAL_X_MAX, 0, SCREEN_H - 1);
+  } else {
+    *tx = (uint16_t)map((long)xr, CAL_X_MIN, CAL_X_MAX, 0, SCREEN_W - 1);
+    *ty = (uint16_t)map((long)yr, CAL_Y_MIN, CAL_Y_MAX, 0, SCREEN_H - 1);
+  }
   return true;
 }
 
@@ -164,6 +173,9 @@ void NavigationImpl::begin() {
 }
 
 #endif
+
+void NavigationImpl::setRightHand(bool v)   { _gRightHand = v; }
+void NavigationImpl::setTouchSwapXY(bool v) { _gSwapXY = v; }
 
 // ─── Navigation update ────────────────────────────────────────────────────────
 
@@ -194,6 +206,11 @@ void NavigationImpl::update() {
 
   if (tx >= (uint16_t)SCREEN_W) tx = SCREEN_W - 1;
   if (ty >= (uint16_t)SCREEN_H) ty = SCREEN_H - 1;
+
+  if (_gRightHand) {
+    tx = (uint16_t)(SCREEN_W - 1) - tx;
+    ty = (uint16_t)(SCREEN_H - 1) - ty;
+  }
 
   Direction dir;
   if (tx < (uint16_t)BACK_END) {

@@ -26,9 +26,9 @@ static StorageSD  _sd;
 // board's createInstance() before initStorage() is called.
 //
 void Device::applyOrientation() {
-#ifdef DEVICE_HAS_HAND_ORIENT
-  bool right = Config.get(APP_CONFIG_HAND_ORIENT, APP_CONFIG_HAND_ORIENT_DEFAULT) == "right";
-  Lcd.setRotation(right ? (TFT_DEFAULT_ORIENTATION + 2) % 4 : TFT_DEFAULT_ORIENTATION);
+#ifdef DEVICE_HAS_SCREEN_ORIENT
+  bool right = Config.get(APP_CONFIG_SCREEN_ORIENT, APP_CONFIG_SCREEN_ORIENT_DEFAULT) == "flipped";
+  Lcd.setRotation(right ? (TFT_DEFAULT_ORIENTATION ^ 2) : TFT_DEFAULT_ORIENTATION);
   Nav->setRightHand(right);
 #endif
 }
