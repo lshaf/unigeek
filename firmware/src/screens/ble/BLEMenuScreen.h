@@ -11,12 +11,13 @@ public:
   void onBack() override;
 
 private:
-  ListItem _items[6] = {
+  ListItem _items[7] = {
     {"BLE Analyzer"},
     {"BLE Beacon Spam"},
     {"BLE Device Spam"},
     {"BLE Detector"},
     {"WhisperPair"},
     {"Chameleon Ultra"},
+    {"Claude Buddy"},
   };
 };

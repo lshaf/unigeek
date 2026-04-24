@@ -38,7 +38,7 @@ public:
   struct Catalog { const AchDef* defs; uint16_t count; };
 
   // Returns catalog pointer + count derived from sizeof — no manual counting needed
-  // Next available sequential ID: 220  (IDs 164–198 already used; 199 placed in domain 9; 200–209 in domain 1; 210–219 in domain 9)
+  // Next available sequential ID: 224  (IDs 164–198 already used; 199 placed in domain 9; 200–209 in domain 1; 210–223 in domain 9)
   static Catalog catalog() {
     static constexpr AchDef kAchs[] = {
       // ── WiFi Network (domain 0) ────────────────────────────────────────────
@@ -237,6 +237,10 @@ public:
       { 217, "pomodoro_first",            "Focus Mode",             9, 0, "Complete your first Pomodoro work session" },
       { 218, "pomodoro_5",                "Flow State",             9, 1, "Complete 5 Pomodoro work sessions" },
       { 219, "pomodoro_20",               "Deep Worker",            9, 2, "Complete 20 Pomodoro work sessions" },
+      { 220, "claude_buddy_open",         "Desk Buddy",             9, 0, "Open Claude Buddy for the first time" },
+      { 221, "claude_buddy_connected",    "Claude Linked",          9, 0, "Connect Claude Desktop to your device via BLE" },
+      { 222, "claude_buddy_approved",     "Permission Granted",     9, 1, "Approve a Claude permission prompt from your device" },
+      { 223, "claude_buddy_denied",       "Permission Denied",      9, 1, "Deny a Claude permission prompt from your device" },
       // ── Games (domain 10) ─────────────────────────────────────────────────
       { 164, "flappy_first_play",         "First Flight",          10, 0, "Play Flappy Bird for the first time" },
       { 165, "flappy_score_10",           "Skilled Flapper",       10, 1, "Score 10 points in Flappy Bird" },
