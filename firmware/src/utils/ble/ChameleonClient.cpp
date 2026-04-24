@@ -1,4 +1,4 @@
-#include "utils/chameleon/ChameleonClient.h"
+#include "utils/ble/ChameleonClient.h"
 #include <Arduino.h>
 #include <string.h>
 

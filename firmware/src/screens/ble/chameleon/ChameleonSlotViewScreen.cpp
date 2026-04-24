@@ -1,5 +1,5 @@
 #include "ChameleonSlotViewScreen.h"
-#include "utils/chameleon/ChameleonClient.h"
+#include "utils/ble/ChameleonClient.h"
 #include "ChameleonSlotEditScreen.h"
 #include "core/Device.h"
 #include "core/ScreenManager.h"

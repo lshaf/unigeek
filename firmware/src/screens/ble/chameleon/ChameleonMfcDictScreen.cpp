@@ -1,5 +1,5 @@
 #include "ChameleonMfcDictScreen.h"
-#include "utils/chameleon/ChameleonClient.h"
+#include "utils/ble/ChameleonClient.h"
 #include "ChameleonHFMenuScreen.h"
 #include "core/Device.h"
 #include "core/ScreenManager.h"

@@ -1,5 +1,5 @@
 #include "ChameleonMenuScreen.h"
-#include "utils/chameleon/ChameleonClient.h"
+#include "utils/ble/ChameleonClient.h"
 #include "ChameleonScanScreen.h"
 #include "ChameleonDeviceScreen.h"
 #include "ChameleonSlotsScreen.h"
