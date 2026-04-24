@@ -112,14 +112,14 @@ Multi-tool firmware for ESP32-based handheld devices. Built with PlatformIO + Ar
 - **Pomodoro Timer** — 25/5-minute focus timer; configurable work (15–60 min) and break (5–15 min) durations; press to pause/resume; speaker beep on phase transition; tracks session count and shows progress bar; keeps display on while running
 
 ### Games
-- **HEX Decoder** — Wordle-style game using hexadecimal characters (0–9, A–F)
+- **HEX Decoder** — Wordle-style game using hexadecimal characters (0–9, A–F) ([details](knowledge/hex-decoder.md))
   - Guess a 4-character hex code in the fewest attempts
   - Color-coded feedback: green = correct position, orange = wrong position, red = not in code
   - 4 difficulty levels: Easy (14 attempts, 3 min), Medium (7 attempts, 90 sec), Hard (unlimited, 3 min), Extreme (unlimited, 90 sec)
   - Tracks top 5 high scores per difficulty (ranked by turns then time)
   - Keyboard devices type directly; non-keyboard devices cycle characters with UP/DOWN and use the `<` erase option
 - **Flappy Bird** — Classic side-scrolling game with randomized pipes and scoring
-- **Wordle** — Classic word-guessing game in English and Indonesian
+- **Wordle** — Classic word-guessing game in English and Indonesian ([details](knowledge/wordle.md))
   - Guess a 5-letter word in up to 10 attempts
   - Color-coded feedback: green = correct position, orange = wrong position, red = not in word
   - 3 difficulty levels: Easy (10 attempts, colors + alphabet hint), Medium (7 attempts, colors), Hard (7 attempts, no colors)
