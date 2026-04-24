@@ -118,7 +118,7 @@ Multi-tool firmware for ESP32-based handheld devices. Built with PlatformIO + Ar
   - 4 difficulty levels: Easy (14 attempts, 3 min), Medium (7 attempts, 90 sec), Hard (unlimited, 3 min), Extreme (unlimited, 90 sec)
   - Tracks top 5 high scores per difficulty (ranked by turns then time)
   - Keyboard devices type directly; non-keyboard devices cycle characters with UP/DOWN and use the `<` erase option
-- **Flappy Bird** — Classic side-scrolling game with randomized pipes and scoring
+- **Flappy Bird** — Classic side-scrolling game with randomized pipes and scoring ([details](knowledge/flappy-bird.md))
 - **Wordle** — Classic word-guessing game in English and Indonesian ([details](knowledge/wordle.md))
   - Guess a 5-letter word in up to 10 attempts
   - Color-coded feedback: green = correct position, orange = wrong position, red = not in word
@@ -126,11 +126,11 @@ Multi-tool firmware for ESP32-based handheld devices. Built with PlatformIO + Ar
   - Choose between Common (curated) or Full word database
   - Available in English (EN) and Indonesian (ID)
   - Tracks top 5 high scores per difficulty (ranked by turns then time)
-- **Memory Sequence** — Simon Says-style memory game; repeat an ever-growing sequence of directions
+- **Memory Sequence** — Simon Says-style memory game; repeat an ever-growing sequence of directions ([details](knowledge/memory-sequence.md))
   - 4 difficulty levels: Easy, Medium, Hard, Extreme
   - Tracks high scores per difficulty; earn bonus achievements for extreme wins and new high scores
   - Set a new high score after 5 extreme wins to unlock the Extreme Master achievement
-- **Number Guess** — Classic higher/lower number guessing game
+- **Number Guess** — Classic higher/lower number guessing game ([details](knowledge/number-guess.md))
   - 4 difficulty levels: Easy (1–99, unlimited), Medium (1–999, unlimited), Hard (1–9999, unlimited), Extreme (1–9999, 10 attempts)
   - Tracks top 5 high scores per difficulty (ranked by fewest guesses then time)
   - Bonus achievements for lucky guesses, surviving Extreme, and guessing in one try
@@ -333,6 +333,8 @@ This project was built with inspiration and reference from:
 
 ## TODO
 
+- claw in esp32
+- pn532 i2c, spi
 - LoRa
 - ST25 nfc implementation for lora https://github.com/m5stack/M5Unit-NFC
 - sticks3 ir receive not functional (RMT/ES8311 conflict); transmit works
