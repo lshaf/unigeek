@@ -10,6 +10,7 @@
 
 #include "core/Device.h"
 #include "core/ExtSpiClass.h"
+#include "core/PinConfigManager.h"
 #include "Navigation.h"
 #include "Display.h"
 #include "Power.h"
@@ -30,6 +31,11 @@ static ExtSpiClass    sdSpi(HSPI);
 void Device::applyNavMode() {}
 
 void Device::boardHook() {}
+
+void Device::onPinConfigApply() {
+  String mode = PinConfig.get(PIN_CONFIG_CORES3_GROVE_5V, PIN_CONFIG_CORES3_GROVE_5V_DEFAULT);
+  aw.setBus5V(mode != "input");
+}
 
 Device* Device::createInstance() {
   if (psramFound()) heap_caps_malloc_extmem_enable(0);

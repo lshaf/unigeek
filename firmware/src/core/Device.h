@@ -63,8 +63,9 @@ public:
     Nav->begin();
   }
 
-  virtual void applyNavMode();    // board override: switch nav based on APP_CONFIG_NAV_MODE
-  void applyOrientation();        // apply hand orientation: rotate screen + flip UP/DOWN
+  virtual void applyNavMode();        // board override: switch nav based on APP_CONFIG_NAV_MODE
+  virtual void onPinConfigApply() {}  // board override: react to PinConfig changes at runtime
+  void applyOrientation();            // apply hand orientation: rotate screen + flip UP/DOWN
 
   IDisplay& Lcd;
   IPower& Power;

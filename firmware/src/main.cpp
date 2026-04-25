@@ -22,6 +22,7 @@ void _bootSplash() {
   // ── Pre-draw init (config needed for theme colour) ────────────────────────
   Config.load(Uni.Storage);
   PinConfig.load(Uni.Storage);
+  Uni.onPinConfigApply();
 #ifdef DEVICE_CYD
   if (Uni.Nav)
     Uni.Nav->setTouchSwapXY(Config.get(APP_CONFIG_TOUCH_SWAP_XY, APP_CONFIG_TOUCH_SWAP_XY_DEFAULT) == "1");

@@ -82,6 +82,9 @@ static const uint8_t SCK  = SPI_SCK_PIN;
 #define TFT_DEFAULT_ORIENTATION 0
 #endif
 
+// ─── Display Backend ─────────────────────────────────────────
+#define DISPLAY_BACKEND_M5GFX         // use M5GFX (M5Unified) instead of TFT_eSPI
+
 // ─── Firmware Feature Flags ───────────────────────────────────
 #define DEVICE_HAS_SOUND              // AW88298 I2S speaker
 #define DEVICE_HAS_VOLUME_CONTROL     // I2S amp supports setVolume()

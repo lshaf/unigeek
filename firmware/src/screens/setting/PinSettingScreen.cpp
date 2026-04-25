@@ -5,6 +5,8 @@
 #include "core/AchievementManager.h"
 #include "screens/setting/SettingScreen.h"
 #include "ui/actions/InputNumberAction.h"
+#include "ui/actions/InputSelectOption.h"
+
 
 void PinSettingScreen::onInit() {
   _itemCount = 0;
@@ -50,6 +52,26 @@ void PinSettingScreen::onInit() {
   _map[_itemCount] = PIN_NRF24_CSN;
   _itemCount++;
 
+  // PN532 (HSU/UART) — always shown; menu hides itself when TX < 0
+  _items[_itemCount] = {"PN532 TX Pin", ""};
+  _map[_itemCount] = PIN_PN532_TX;
+  _itemCount++;
+
+  _items[_itemCount] = {"PN532 RX Pin", ""};
+  _map[_itemCount] = PIN_PN532_RX;
+  _itemCount++;
+
+  _items[_itemCount] = {"PN532 Baud Rate", ""};
+  _map[_itemCount] = PIN_PN532_BAUD;
+  _itemCount++;
+
+#if defined(DEVICE_M5_CORES3)
+  // Bare CoreS3 only — Grove Port A 5V direction (input/output)
+  _items[_itemCount] = {"Grove A 5V", ""};
+  _map[_itemCount] = PIN_CORES3_GROVE_5V;
+  _itemCount++;
+#endif
+
   setItems(_items, _itemCount);
   _refresh();
 }
@@ -64,6 +86,10 @@ void PinSettingScreen::_refresh() {
   _cc1101Gdo0Sub = PinConfig.get(PIN_CONFIG_CC1101_GDO0, PIN_CONFIG_CC1101_GDO0_DEFAULT);
   _nrf24CeSub = PinConfig.get(PIN_CONFIG_NRF24_CE, PIN_CONFIG_NRF24_CE_DEFAULT);
   _nrf24CsnSub = PinConfig.get(PIN_CONFIG_NRF24_CSN, PIN_CONFIG_NRF24_CSN_DEFAULT);
+  _pn532TxSub = PinConfig.get(PIN_CONFIG_PN532_TX, PIN_CONFIG_PN532_TX_DEFAULT);
+  _pn532RxSub = PinConfig.get(PIN_CONFIG_PN532_RX, PIN_CONFIG_PN532_RX_DEFAULT);
+  _pn532BaudSub = PinConfig.get(PIN_CONFIG_PN532_BAUD, PIN_CONFIG_PN532_BAUD_DEFAULT);
+  _grove5VSub = PinConfig.get(PIN_CONFIG_CORES3_GROVE_5V, PIN_CONFIG_CORES3_GROVE_5V_DEFAULT);
 
   for (uint8_t i = 0; i < _itemCount; i++) {
     switch (_map[i]) {
@@ -76,6 +102,10 @@ void PinSettingScreen::_refresh() {
       case PIN_CC1101_GDO0: _items[i].sublabel = _cc1101Gdo0Sub.c_str(); break;
       case PIN_NRF24_CE:    _items[i].sublabel = _nrf24CeSub.c_str(); break;
       case PIN_NRF24_CSN:   _items[i].sublabel = _nrf24CsnSub.c_str(); break;
+      case PIN_PN532_TX:    _items[i].sublabel = _pn532TxSub.c_str(); break;
+      case PIN_PN532_RX:    _items[i].sublabel = _pn532RxSub.c_str(); break;
+      case PIN_PN532_BAUD:  _items[i].sublabel = _pn532BaudSub.c_str(); break;
+      case PIN_CORES3_GROVE_5V: _items[i].sublabel = _grove5VSub.c_str(); break;
     }
   }
 
@@ -164,6 +194,47 @@ void PinSettingScreen::onItemSelected(uint8_t index) {
       if (!InputNumberAction::wasCancelled()) {
         PinConfig.set(PIN_CONFIG_NRF24_CSN, String(val));
         PinConfig.save(Uni.Storage);
+      }
+      break;
+    }
+    case PIN_PN532_TX: {
+      int cur = PinConfig.getInt(PIN_CONFIG_PN532_TX, PIN_CONFIG_PN532_TX_DEFAULT);
+      int val = InputNumberAction::popup("PN532 TX Pin", -1, 48, cur);
+      if (!InputNumberAction::wasCancelled()) {
+        PinConfig.set(PIN_CONFIG_PN532_TX, String(val));
+        PinConfig.save(Uni.Storage);
+      }
+      break;
+    }
+    case PIN_PN532_RX: {
+      int cur = PinConfig.getInt(PIN_CONFIG_PN532_RX, PIN_CONFIG_PN532_RX_DEFAULT);
+      int val = InputNumberAction::popup("PN532 RX Pin", -1, 48, cur);
+      if (!InputNumberAction::wasCancelled()) {
+        PinConfig.set(PIN_CONFIG_PN532_RX, String(val));
+        PinConfig.save(Uni.Storage);
+      }
+      break;
+    }
+    case PIN_PN532_BAUD: {
+      int cur = PinConfig.getInt(PIN_CONFIG_PN532_BAUD, PIN_CONFIG_PN532_BAUD_DEFAULT);
+      int val = InputNumberAction::popup("PN532 Baud Rate", 9600, 921600, cur);
+      if (!InputNumberAction::wasCancelled()) {
+        PinConfig.set(PIN_CONFIG_PN532_BAUD, String(val));
+        PinConfig.save(Uni.Storage);
+      }
+      break;
+    }
+    case PIN_CORES3_GROVE_5V: {
+      static const InputSelectAction::Option opts[] = {
+        { "Power Out", "output" },
+        { "Power In",  "input"  },
+      };
+      String cur = PinConfig.get(PIN_CONFIG_CORES3_GROVE_5V, PIN_CONFIG_CORES3_GROVE_5V_DEFAULT);
+      const char* sel = InputSelectAction::popup("Grove A 5V", opts, 2, cur.c_str());
+      if (sel) {
+        PinConfig.set(PIN_CONFIG_CORES3_GROVE_5V, String(sel));
+        PinConfig.save(Uni.Storage);
+        Uni.onPinConfigApply();
       }
       break;
     }
