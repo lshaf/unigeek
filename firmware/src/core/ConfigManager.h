@@ -40,10 +40,12 @@
 #define APP_CONFIG_SHOW_OVERLAY_DEFAULT         "1"
 #define APP_CONFIG_SCREEN_ORIENT                "screen_orient"
 #define APP_CONFIG_SCREEN_ORIENT_DEFAULT        "normal"
+#define APP_CONFIG_TOUCH_GUIDE_SHOWN            "touch_guide_shown"
+#define APP_CONFIG_TOUCH_GUIDE_SHOWN_DEFAULT    "0"
 #define APP_CONFIG_TOUCH_SWAP_XY                "cyd_touch_swap_xy"
 #define APP_CONFIG_TOUCH_SWAP_XY_DEFAULT        "0"
 #define APP_CONFIG_TOUCH_CALIBRATED             "cyd_touch_calibrated"
-#define APP_CONFIG_TOUCH_CALIBRATED_DEFAULT     ""
+#define APP_CONFIG_TOUCH_CALIBRATED_DEFAULT     "0"
 
 class ConfigManager
 {

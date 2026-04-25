@@ -23,10 +23,13 @@ void CYDTouchCalScreen::onInit() {
 void CYDTouchCalScreen::onUpdate() {
   if (_done) {
     if (millis() - _doneAt > 700) {
-      if (Config.get("touch_guide_shown", "0") == "0")
+      if (_fromSettings) {
+        Screen.goBack();
+      } else if (Config.get(APP_CONFIG_TOUCH_GUIDE_SHOWN, APP_CONFIG_TOUCH_GUIDE_SHOWN_DEFAULT) == "0") {
         Screen.setScreen(new TouchGuideScreen(false));
-      else
+      } else {
         Screen.setScreen(new CharacterScreen());
+      }
     }
     return;
   }

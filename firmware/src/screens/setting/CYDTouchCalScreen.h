@@ -11,6 +11,7 @@
 class CYDTouchCalScreen : public BaseScreen
 {
 public:
+  explicit CYDTouchCalScreen(bool fromSettings = false) : _fromSettings(fromSettings) {}
   const char* title() override { return nullptr; }
   bool isFullScreen() override { return true; }
   void onInit()   override;
@@ -18,6 +19,7 @@ public:
   void onRender() override;
 
 private:
+  bool     _fromSettings = false;
   bool     _done    = false;
   uint32_t _doneAt  = 0;
 };

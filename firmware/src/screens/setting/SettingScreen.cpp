@@ -18,6 +18,9 @@
 #ifdef DEVICE_HAS_TOUCH_NAV
 #include "screens/setting/TouchGuideScreen.h"
 #endif
+#ifdef DEVICE_CYD
+#include "screens/setting/CYDTouchCalScreen.h"
+#endif
 #ifdef DEVICE_HAS_SOUND
 #include "screens/setting/SpeakerTestScreen.h"
 #endif
@@ -217,6 +220,13 @@ void SettingScreen::onItemSelected(uint8_t index) {
       Config.set(APP_CONFIG_SHOW_OVERLAY, cur ? "0" : "1");
       Config.save(Uni.Storage);
       _refresh();
+      break;
+    }
+#endif
+
+#ifdef DEVICE_CYD
+    case SETT_TOUCH_CAL: {
+      Screen.push(new CYDTouchCalScreen(true));
       break;
     }
 #endif

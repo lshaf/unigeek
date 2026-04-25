@@ -5,6 +5,7 @@
         },
         "core": "esp32",
         "extra_flags": [
+            "-DDEVICE_CYD",
             "-DDEVICE_CYD_3248S035",
             "-DARDUINO_RUNNING_CORE=1",
             "-DARDUINO_EVENT_RUNNING_CORE=1"

@@ -93,11 +93,12 @@ void setup() {
 #endif
   _bootSplash();
 #ifdef DEVICE_CYD
-  if (Config.get(APP_CONFIG_TOUCH_CALIBRATED, APP_CONFIG_TOUCH_CALIBRATED_DEFAULT).length() == 0)
+  if (Config.get(APP_CONFIG_TOUCH_CALIBRATED, APP_CONFIG_TOUCH_CALIBRATED_DEFAULT) == "0")
     Screen.setScreen(new CYDTouchCalScreen());
+  else
 #endif
 #ifdef DEVICE_HAS_TOUCH_NAV
-  if (Config.get("touch_guide_shown", "0") == "0")
+  if (Config.get(APP_CONFIG_TOUCH_GUIDE_SHOWN, APP_CONFIG_TOUCH_GUIDE_SHOWN_DEFAULT) == "0")
     Screen.setScreen(new TouchGuideScreen(false));
   else
 #endif

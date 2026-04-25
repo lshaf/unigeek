@@ -45,6 +45,9 @@ private:
     SETT_TOUCH_GUIDE,
     SETT_OVERLAY,
 #endif
+#ifdef DEVICE_CYD
+    SETT_TOUCH_CAL,
+#endif
     SETT_WEB_PASSWORD,
     SETT_PIN_SETTING,
     SETT_DEVICE_STATUS,
@@ -104,6 +107,9 @@ private:
 #ifdef DEVICE_HAS_TOUCH_NAV
     {"Touch Guide"},
     {"Navigation Overlay", ""},
+#endif
+#ifdef DEVICE_CYD
+    {"Touch Calibration"},
 #endif
     {"Web Password",     ""},
     {"Pin Setting"},
