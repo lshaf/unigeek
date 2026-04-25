@@ -97,6 +97,10 @@ static const uint8_t SCL = GROVE_SCL;
 #define UART1_TX  43
 #define UART1_RX  44
 
+// PN532 in HSU mode shares the external 12-pin socket
+#define PN532_TX  UART1_TX
+#define PN532_RX  UART1_RX
+
 // ─── Custom free pin (external 12-pin socket) ─────────────
 #define CUSTOM_PIN  9
 

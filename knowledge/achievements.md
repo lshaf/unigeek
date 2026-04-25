@@ -185,6 +185,9 @@ If no title has been set, it shows `[RANK] No Title` by default.
 | Full Dump | NFC | Gold | 600 |
 | Nested Attacker | NFC | Gold | 600 |
 | Dark Art | NFC | Platinum | 1000 |
+| HSU Handshake | NFC | Bronze | 100 |
+| Magic Spotter | NFC | Silver | 300 |
+| Card Ghost | NFC | Silver | 300 |
 | Signal Catcher | IR | Bronze | 100 |
 | Remote Saved | IR | Silver | 300 |
 | Remote Keeper | IR | Gold | 600 |

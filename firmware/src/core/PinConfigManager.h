@@ -95,6 +95,30 @@
   #define PIN_CONFIG_GPS_BAUD_DEFAULT "9600"
 #endif
 
+// ─── PN532 (HSU/UART) pin config ────────────────────────────────────────────
+#define PIN_CONFIG_PN532_TX         "pn532_tx"
+#define PIN_CONFIG_PN532_RX         "pn532_rx"
+#define PIN_CONFIG_PN532_BAUD       "pn532_baud"
+
+#ifdef PN532_TX
+  #define PIN_CONFIG_PN532_TX_DEFAULT   String(PN532_TX)
+#else
+  #define PIN_CONFIG_PN532_TX_DEFAULT   "-1"
+#endif
+
+#ifdef PN532_RX
+  #define PIN_CONFIG_PN532_RX_DEFAULT   String(PN532_RX)
+#else
+  #define PIN_CONFIG_PN532_RX_DEFAULT   "-1"
+#endif
+
+#define PIN_CONFIG_PN532_BAUD_DEFAULT "115200"
+
+// ─── M5 CoreS3 (bare) Grove Port A 5V direction ─────────────────────────────
+// Values: "output" (default — AXP2101 → Grove 5V) or "input" (Grove 5V → AXP2101 charge)
+#define PIN_CONFIG_CORES3_GROVE_5V         "cores3_grove_5v"
+#define PIN_CONFIG_CORES3_GROVE_5V_DEFAULT "output"
+
 class PinConfigManager
 {
 public:

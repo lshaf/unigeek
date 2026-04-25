@@ -144,6 +144,13 @@ Multi-tool firmware for ESP32-based handheld devices. Built with PlatformIO + Ar
   - **Dictionary Attack** — Try additional keys from custom dictionary files
   - **Static Nested Attack** — Recover keys on cards with static nonce using a known key
   - **Darkside Attack** — Recover the first key when no keys are known
+- **NFC (PN532 UART)** — PN532 / PN532Killer over HSU; ISO14443A, ISO15693, EM4100, MIFARE, magic cards ([details](knowledge/nfc-pn532.md))
+  - **Scan ISO14443A / ISO15693 / EM4100 (LF)** — Read UID + ATQA/SAK / DSFID / LF UID
+  - **MIFARE Classic** — Authenticate, dump memory, view discovered keys, run dictionary attack
+  - **MIFARE Ultralight** — Read all pages, write a single 4-byte page
+  - **Magic Card** — Detect Gen1a, set/lock Gen3 UID
+  - **Firmware Info** — Show IC, version, and PN532Killer detection
+  - Shares `HardwareSerial(2)` with GPS; pins user-configurable in **Modules > Pin Setting** (`pn532_tx`, `pn532_rx`, `pn532_baud`); menu hidden until pins are set. PN532 dev boards must be in HSU mode.
 - **GPS** — GPS module support with wardriving, works on all boards via external GPS ([details](knowledge/gps-wardriving.md))
   - **Live View** — Real-time satellite count, coordinates, altitude, speed, and heading
   - **Scan Mode** — Choose WiFi + BLE (default), WiFi Only, or BLE Only for wardriving
@@ -260,7 +267,7 @@ Files are stored under `/unigeek/` on either SD card or LittleFS (fallback):
 /unigeek/utility/totp/             TOTP account key files (<name>.key)
 /unigeek/utility/uart/             UART session log files (<name>.log)
 /unigeek/nfc/dictionaries/         MIFARE Classic key dictionary files
-/unigeek/nfc/dumps/                Card dumps (.bin) from MFRC522 / Chameleon Ultra
+/unigeek/nfc/dumps/                Card dumps (.bin) from MFRC522 / PN532 / Chameleon Ultra
 /unigeek/nfc/keys/                 Recovered sector keys (<uid>.txt)
 /unigeek/nfc/mfkey32/              MFKey32 detection log exports
 /unigeek/achievements.bin          achievement state (binary)
@@ -290,7 +297,7 @@ firmware/
     │   ├── wifi/
     │   ├── ble/
     │   ├── keyboard/
-    │   ├── module/      NFC (MFRC522), GPS
+    │   ├── module/      NFC (MFRC522, PN532 UART), GPS
     │   ├── utility/
     │   ├── game/
     │   └── setting/
@@ -326,6 +333,8 @@ This project was built with inspiration and reference from:
   - WhisperPair (CVE-2025-36911): Fast Pair KBP vulnerability tester (ECDH + AES-128-ECB handshake exploit)
 - [ChameleonUltraGUI](https://github.com/GameTec-live/ChameleonUltraGUI) by GameTec-live
   - BLE UART protocol, frame structure (SOF + LRC + header + data + CRC), and command reference for ChameleonUltra integration
+- [pn532-python](https://github.com/whywilson/pn532-python) by Manuel Fernando Galindo
+  - PN532 / PN532Killer HSU wire protocol, ACK/NACK framing, and command codes (InListPassiveTarget, InDataExchange, magic Gen1a/Gen3) used by the PN532 UART module
 - [claude-desktop-buddy](https://github.com/anthropics/claude-desktop-buddy) by Anthropic
   - Claude Buddy: BLE desk pet that connects to Claude for macOS/Windows via Nordic UART Service, showing session status, approval prompts, token counts, and animated ASCII/GIF characters
 - [LilyGoLib](https://github.com/Xinyuan-LilyGO/LilyGoLib) — Hardware reference for LilyGO T-Lora Pager

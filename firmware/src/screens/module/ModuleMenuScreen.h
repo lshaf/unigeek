@@ -12,8 +12,9 @@ public:
   void onItemSelected(uint8_t index) override;
 
 private:
-  ListItem _items[6] = {
+  ListItem _items[7] = {
     {"MFRC522 I2C"},
+    {"PN532 UART"},
     {"GPS"},
     {"IR Remote"},
     {"Sub-GHz"},

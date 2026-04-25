@@ -59,6 +59,23 @@ Never call `Keyboard->update()` inside NavigationImpl.
     ../M5Unified     M5Stack hardware reference — speaker, display, power, board configs
     ../LilyGoLib     LilyGO T-Lora Pager hardware reference
     ../bruce         Bruce firmware — Smoochiee, T-Embed CC1101, Marauder v7 board reference
+    ../pn532-python  PN532/PN532Killer CLI — wire protocol & command codes
+                     reference for src/utils/nfc/pn532/ (HSU framing, ACK/NACK,
+                     InListPassiveTarget, InDataExchange, magic Gen1a/Gen3 cmds).
+                     Thanks to its authors and to libnfc, Proxmark3, Chameleon
+                     Ultra for the underlying research.
+
+## PN532 (HSU mode)
+
+The PN532 module talks to UART2 (`HardwareSerial(2)`), shared with the GPS
+module — only one screen owns the bus at a time. PN532 dev boards must have
+their DIP/jumpers switched to **HSU** mode (not I2C/SPI). Default baud is
+115200 8N1.
+
+Pins are user-configurable via Modules → Pin Setting (`pn532_tx`, `pn532_rx`,
+`pn532_baud`). On T-Lora Pager the defaults map to the external 12-pin socket
+(TX=43, RX=44 = `UART1_TX/RX`); on other boards both default to -1, which
+hides the "PN532 UART" entry until the user sets them.
 
 ---
 
