@@ -20,6 +20,7 @@
 static DisplayImpl    display;
 static NavigationImpl navigation;
 static PowerImpl      power;
+static ExtSpiClass    sdSpi(VSPI);  // SD card on VSPI (SCK=18, MISO=19, MOSI=23, CS=5)
 
 void Device::applyNavMode() {}
 void Device::boardHook() {}
@@ -33,8 +34,11 @@ Device* Device::createInstance() {
   pinMode(SD_CS, OUTPUT);
   digitalWrite(SD_CS, HIGH);
 
+  // Pre-init the VSPI SD bus so initStorage() uses correct pins.
+  sdSpi.begin(SPI_SCK_PIN, SPI_MISO_PIN, SPI_MOSI_PIN, -1);
+
   // ExI2C available for Grove port (SDA=21, SCL=22)
-  auto* dev = new Device(display, power, &navigation);
+  auto* dev = new Device(display, power, &navigation, nullptr, &sdSpi);
   dev->ExI2C = &Wire;
   return dev;
 }
