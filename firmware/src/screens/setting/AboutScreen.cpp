@@ -22,6 +22,8 @@ void AboutScreen::onInit()
   _rows[i++] = { "pr3y",           "Bruce" };
   _rows[i++] = { "Flipper-XFW",    "Flipper-IRDB" };
   _rows[i++] = { "pivotchip",      "FrostedFastPair" };
+  _rows[i++] = { "GameTec-live",    "ChameleonUltraGUI" };
+  _rows[i++] = { "Anthropic",       "claude-desktop-buddy" };
   _rows[i++] = { "Xinyuan-LilyGO", "LilyGoLib" };
   _rows[i++] = { "m5stack",        "M5Unified" };
 

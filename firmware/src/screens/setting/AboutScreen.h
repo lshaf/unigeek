@@ -13,7 +13,7 @@ protected:
   void onBack() override;
 
 private:
-  static constexpr uint8_t MAX_ROWS = 14;
+  static constexpr uint8_t MAX_ROWS = 15;
   Row     _rows[MAX_ROWS] = {};
   uint8_t _rowCount = 0;
 };

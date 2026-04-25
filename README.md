@@ -326,6 +326,8 @@ This project was built with inspiration and reference from:
   - WhisperPair (CVE-2025-36911): Fast Pair KBP vulnerability tester (ECDH + AES-128-ECB handshake exploit)
 - [ChameleonUltraGUI](https://github.com/GameTec-live/ChameleonUltraGUI) by GameTec-live
   - BLE UART protocol, frame structure (SOF + LRC + header + data + CRC), and command reference for ChameleonUltra integration
+- [claude-desktop-buddy](https://github.com/anthropics/claude-desktop-buddy) by Anthropic
+  - Claude Buddy: BLE desk pet that connects to Claude for macOS/Windows via Nordic UART Service, showing session status, approval prompts, token counts, and animated ASCII/GIF characters
 - [LilyGoLib](https://github.com/Xinyuan-LilyGO/LilyGoLib) — Hardware reference for LilyGO T-Lora Pager
 - [M5Unified](https://github.com/m5stack/M5Unified) — Hardware reference for M5Stack devices (speaker, display, power)
 
