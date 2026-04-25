@@ -20,7 +20,7 @@
 static DisplayImpl    display;
 static NavigationImpl navigation;
 static PowerImpl      power;
-static ExtSpiClass    sdSpi(VSPI);  // SD card on VSPI (SCK=18, MISO=19, MOSI=23, CS=5)
+static ExtSpiClass    sdSpi(HSPI);
 
 void Device::applyNavMode() {}
 void Device::boardHook() {}
