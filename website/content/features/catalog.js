@@ -54,11 +54,12 @@ export const CATALOG = [
 
   // Modules
   { slug: "nfc-mifare",           title: "NFC (MFRC522)",       category: "module",   summary: "MIFARE Classic card reader and key recovery — scan, authenticate, dump memory, and run attacks",     hasDetail: true,  stable: true },
+  { slug: "nfc-pn532",            title: "NFC (PN532 UART)",    category: "module",   summary: "PN532 / PN532Killer over HSU — ISO14443A, ISO15693, EM4100, MIFARE Classic, Ultralight, and magic-card tools", hasDetail: true,  stable: true },
   { slug: "gps-wardriving",       title: "GPS & Wardriving",    category: "module",   summary: "Live GPS view, WiFi/BLE wardriving with Wigle CSV export, and Wigle upload integration",             hasDetail: true,  stable: true },
   { slug: "ir-remote",            title: "IR Remote",           category: "module",   summary: "Capture, replay, and manage IR signals — compatible with Flipper Zero and Bruce formats",            hasDetail: true,  stable: true },
   { slug: "sub-ghz",              title: "Sub-GHz (CC1101)",    category: "module",   summary: "Capture, replay, and jam Sub-GHz RF signals — compatible with Flipper Zero .sub format",            hasDetail: true,  stable: true },
   { slug: "nrf24",                title: "NRF24L01+",           category: "module",   summary: "2.4 GHz spectrum analyzer, multi-mode jammer, and MouseJack wireless keyboard injection",             hasDetail: true,  stable: true },
-  { slug: "pin-setting",          title: "Pin Setting",         category: "module",   summary: "Configure GPIO pins for external modules: GPS, I2C, CC1101, NRF24",                                   hasDetail: false, stable: true },
+  { slug: "pin-setting",          title: "Pin Setting",         category: "module",   summary: "Configure GPIO pins for GPS, I2C, CC1101, NRF24, PN532, and CoreS3 Grove 5V direction — defaults per board, with safety notes", hasDetail: true,  stable: true },
 
   // Utility
   { slug: "qrcode",               title: "QR Code",             category: "utility",  summary: "Generate and display a QR code from typed or file-loaded text; supports WiFi QR format",            hasDetail: false, stable: true },
@@ -80,7 +81,7 @@ export const CATALOG = [
 
   // Settings
   { slug: "setting-general",      title: "General Settings",    category: "setting",  summary: "Device name, display timeout, brightness, volume, navigation sound, theme color, WFM password",    hasDetail: false, stable: true },
-  { slug: "setting-pin",          title: "Pin Settings",        category: "setting",  summary: "Configure GPIO pins for external modules — shared with Modules menu",                               hasDetail: false, stable: true },
+  { slug: "setting-pin",          title: "Pin Settings",        category: "setting",  summary: "Configure GPIO pins for external modules — shared with Modules menu (see Pin Setting page for full details)", hasDetail: false, stable: true },
   { slug: "setting-nav-mode",     title: "Navigation Mode",     category: "setting",  summary: "Switch between Default and Encoder/Joystick navigation — M5StickC Plus 1.1 and 2 only",              hasDetail: false, stable: true },
   { slug: "setting-hand-orient",  title: "Hand Orientation",    category: "setting",  summary: "Toggle Left/Right hand orientation — M5StickC Plus 1.1, Plus 2, and StickC S3 only",                 hasDetail: false, stable: true },
   { slug: "setting-speaker-test", title: "Speaker Test",        category: "setting",  summary: "Play Win/Lose/Notification/Beep to verify speaker output — boards with speaker only",               hasDetail: false, stable: true },

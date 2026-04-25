@@ -5,7 +5,6 @@
 #include "core/AchievementManager.h"
 #include "screens/setting/SettingScreen.h"
 #include "ui/actions/InputNumberAction.h"
-#include "ui/actions/InputSelectOption.h"
 
 
 void PinSettingScreen::onInit() {
@@ -225,17 +224,10 @@ void PinSettingScreen::onItemSelected(uint8_t index) {
       break;
     }
     case PIN_CORES3_GROVE_5V: {
-      static const InputSelectAction::Option opts[] = {
-        { "Power Out", "output" },
-        { "Power In",  "input"  },
-      };
       String cur = PinConfig.get(PIN_CONFIG_CORES3_GROVE_5V, PIN_CONFIG_CORES3_GROVE_5V_DEFAULT);
-      const char* sel = InputSelectAction::popup("Grove A 5V", opts, 2, cur.c_str());
-      if (sel) {
-        PinConfig.set(PIN_CONFIG_CORES3_GROVE_5V, String(sel));
-        PinConfig.save(Uni.Storage);
-        Uni.onPinConfigApply();
-      }
+      PinConfig.set(PIN_CONFIG_CORES3_GROVE_5V, cur == "output" ? "input" : "output");
+      PinConfig.save(Uni.Storage);
+      Uni.onPinConfigApply();
       break;
     }
   }

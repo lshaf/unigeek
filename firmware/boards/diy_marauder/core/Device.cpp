@@ -8,7 +8,6 @@ static NavigationImpl navigation;
 static PowerImpl      power;
 static ExtSpiClass    sdSpi(HSPI);  // dedicated SD SPI bus (SCK=14, MISO=12, MOSI=13)
 
-void Device::applyNavMode() {}
 void Device::boardHook() {}
 
 Device* Device::createInstance() {

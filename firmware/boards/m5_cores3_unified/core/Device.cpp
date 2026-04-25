@@ -24,8 +24,6 @@ static NavigationImpl navigation;
 static PowerImpl      power;
 static SpeakerImpl    speaker;
 
-void Device::applyNavMode() {}
-
 void Device::boardHook() {
   M5.update();
 }

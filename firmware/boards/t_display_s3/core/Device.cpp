@@ -22,6 +22,4 @@ void Device::boardHook() {
     // Empty stub for boards with no specific loop logic
 }
 
-void Device::applyNavMode() {
-    // Empty stub
-}
+

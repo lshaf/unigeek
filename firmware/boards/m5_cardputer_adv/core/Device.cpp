@@ -12,7 +12,6 @@ static PowerImpl      power;
 static ExtSpiClass    sdSpi(FSPI);
 static SpeakerADV     speaker;
 
-void Device::applyNavMode() {}
 void Device::boardHook() {}
 
 Device* Device::createInstance() {

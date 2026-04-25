@@ -16,7 +16,6 @@ static PowerImpl          power;
 static ExtSpiClass        sharedSpi(HSPI);
 static SpeakerEmbedCC1101 speaker;
 
-void Device::applyNavMode() {}
 void Device::boardHook() {}
 
 Device* Device::createInstance() {

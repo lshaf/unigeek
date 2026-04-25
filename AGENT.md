@@ -111,6 +111,33 @@ release workflow / website unless the user explicitly asks. See `docs/WEBSITE.md
 
 ---
 
+## Knowledge Files
+
+User-facing feature docs live in `knowledge/<slug>.md`. Each file pairs with a row in `website/content/features/catalog.js` (`hasDetail: true`).
+
+**Structure (use only sections that apply):**
+
+    # <Display Name>            H1 + 1-paragraph intro naming the menu path
+    ## Setup                    wiring, pin-config keys, prerequisites
+    ## Main Menu / sub-menus    describe every entry the user sees
+    ## Storage                  /unigeek/... paths in a code block
+    ## Achievements             | Achievement | Tier | only — NO unlock descriptions
+    ## Credits                  when porting from a third-party project
+
+**Admonitions** use the custom marked-extension syntax — never raw blockquotes or emoji-prefixed warnings:
+
+    > [!note]      informational
+    > [!tip]       best-practice hint
+    > [!warn]      caution / legal
+    > [!danger]    physical damage or destructive operation
+
+**Adding a new feature screen with knowledge:**
+1. Create `knowledge/<slug>.md`
+2. Flip the matching `catalog.js` row to `hasDetail: true` (add a new row if none exists)
+3. Link from `README.md` if it appears in the Modules / Features list there
+
+---
+
 ## Storage Rules
 
     if (Uni.Storage && Uni.Storage->isAvailable()) {
@@ -169,7 +196,8 @@ update CLAUDE.md and AGENT.md immediately — do not wait for user to ask.
 
 Triggers: new board, new interface, new UI pattern, Device constructor change,
 ScreenManager change, new build flag, new library dependency, convention change,
-navigation change (any Navigation.h or Navigation.cpp edit).
+navigation change (any Navigation.h or Navigation.cpp edit), knowledge file
+added/removed (also update `website/content/features/catalog.js`).
 
 **Navigation changes specifically:** whenever any board's Navigation.h or Navigation.cpp
 is added or modified (new input, changed GPIO, new direction mapping, new threshold),

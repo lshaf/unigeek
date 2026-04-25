@@ -17,8 +17,6 @@ static NavigationImpl navigation;
 static PowerImpl      power;
 static SpeakerStickS3 speaker;
 
-void Device::applyNavMode() {}
-
 void Device::boardHook() {}
 
 Device* Device::createInstance() {

@@ -8,7 +8,6 @@ static NavigationImpl navigation;
 static PowerImpl      power;
 static ExtSpiClass    sdSpi(HSPI);  // shares display bus (SCK=18, MISO=8, MOSI=17)
 
-void Device::applyNavMode() {}
 void Device::boardHook() {}
 
 Device* Device::createInstance() {

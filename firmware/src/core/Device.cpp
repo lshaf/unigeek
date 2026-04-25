@@ -25,6 +25,9 @@ static StorageSD  _sd;
 // every SD operation. The pin is passed via Device::StorageDcPin, set by the
 // board's createInstance() before initStorage() is called.
 //
+void __attribute__((weak)) Device::applyNavMode() {}
+void __attribute__((weak)) Device::onPinConfigApply() {}
+
 void Device::applyOrientation() {
 #ifdef DEVICE_HAS_SCREEN_ORIENT
   bool right = Config.get(APP_CONFIG_SCREEN_ORIENT, APP_CONFIG_SCREEN_ORIENT_DEFAULT) == "flipped";

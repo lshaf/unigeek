@@ -28,8 +28,6 @@ static PowerImpl      power(&axp);
 static SpeakerCoreS3  speaker(&aw);
 static ExtSpiClass    sdSpi(HSPI);
 
-void Device::applyNavMode() {}
-
 void Device::boardHook() {}
 
 void Device::onPinConfigApply() {

@@ -239,6 +239,44 @@ Achievement rules:
 
 ---
 
+## Knowledge Files
+
+User-facing feature docs live in `knowledge/<slug>.md`. Each file pairs with a
+row in `website/content/features/catalog.js` (set `hasDetail: true`). The
+website's marked extension renders these into the public site.
+
+### File structure (use only the sections that apply)
+
+    # <Display Name>          H1 + 1-paragraph intro naming the menu path
+                              (e.g. "Accessed from **Modules > PN532 UART**.")
+    ## Setup                  wiring, pin-config keys, prerequisites
+    ## Main Menu / sub-menus  describe every entry the user actually sees
+    ## Storage                /unigeek/... paths in a code block
+    ## Achievements           table with `| Achievement | Tier |` only —
+                              NEVER include unlock descriptions or XP values
+    ## Credits                when porting from a third-party project
+
+### Admonitions (must use the marked-extension syntax)
+
+    > [!note]      informational
+    > [!tip]       best-practice hint
+    > [!warn]      caution / legal disclaimer
+    > [!danger]    physical damage or destructive operation
+
+Bare blockquotes (`>` alone) and emoji-prefixed warnings (`> ⚠️`) are NOT the
+project convention — convert any you see to one of the four admonition types.
+
+### Adding a new feature screen + knowledge file
+
+1. Create `knowledge/<slug>.md` (slug must match the `catalog.js` row)
+2. Flip the matching `catalog.js` row to `hasDetail: true`, or add a new row
+   if none exists (place near same-category siblings, not at the end)
+3. Link from `README.md` if it appears under "Features" / "Modules" there
+4. If the page introduces a new achievement, also update the achievements
+   tables in `knowledge/achievements.md` and the originating feature page
+
+---
+
 ## Board Navigation Reference
 
 See `docs/NAVIGATION.md` — per-board physical input→direction tables for all boards.
@@ -291,7 +329,8 @@ Never silently update CLAUDE.md or AGENT.md as a side effect of another task.
 
 Triggers: new board, new interface, new UI pattern, Device constructor change,
 ScreenManager change, new build flag, new library dependency, convention change,
-navigation change (any Navigation.h or Navigation.cpp edit → update Board Navigation Reference).
+navigation change (any Navigation.h or Navigation.cpp edit → update Board Navigation Reference),
+knowledge file added/removed (also flip the matching `website/content/features/catalog.js` row).
 
 ---
 

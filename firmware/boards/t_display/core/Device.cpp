@@ -7,7 +7,6 @@ static DisplayImpl    display;
 static NavigationImpl navigation;
 static PowerImpl      power;
 
-void Device::applyNavMode() {}
 void Device::boardHook() {}
 
 Device* Device::createInstance() {

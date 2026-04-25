@@ -18,7 +18,6 @@ static PowerImpl      power;
 static ExtSpiClass    sharedSpi(HSPI);
 static SpeakerLoRa    speaker;
 
-void Device::applyNavMode() {}
 void Device::boardHook() {}
 
 Device* Device::createInstance() {
