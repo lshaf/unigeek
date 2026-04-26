@@ -16,7 +16,7 @@ Place a card on the reader. Shows the card type, UID, and ISO standard. Press to
 
 ### MIFARE Classic
 
-Scans a card and tries common default keys on every sector (key A and key B). Once done, opens the MIFARE Classic submenu with the discovered keys.
+Scans a card and tests `FFFFFFFFFFFF` (the factory default key) on every sector × keytype. Fast first-entry probe — for deeper key checks run the **Dictionary Attack** below. Once done, opens the MIFARE Classic submenu with the discovered keys.
 
 ## MIFARE Classic Submenu
 
@@ -50,9 +50,20 @@ Two sample files are included: `default.txt` (12 keys) and `extended.txt` (36 ke
 
 Recovers keys on cards with a static (non-changing) nonce — common in older MIFARE Classic clones.
 
-- Requires at least one known key (from Authenticate or Dictionary Attack)
+- Requires at least one known key (from MIFARE Classic or Dictionary Attack)
 - First checks if the card has a static nonce — if not, shows an error
+- Per target: one cyan header line, silent recovery, one green `KEY ...` or red `no key` summary
 - Uses the known key to recover all missing keys
+
+### Nested Attack
+
+Recovers keys on cards with a weak PRNG (the standard MIFARE Classic case).
+
+- Requires at least one known key
+- Collects 3 nested-nonce samples per target via the full CRYPTO1 reader handshake
+- Enumerates 65 535 PRNG distances with parity disambiguation, then runs `lfsr_recovery32` on each surviving candidate and verifies on the card
+- Same chameleon-style render: cyan header per target, silent enumeration with status-bar ticks every 8 000 distances, single summary line on completion
+- Hardened cards (heavy nonce randomization) likely fail — there is no NTLevel probe on MFRC522, so a sweep that finishes with all `no key` is a strong hint the card is hardened
 
 ### Darkside Attack
 
@@ -64,10 +75,10 @@ Recovers the first key when no keys are known at all.
 
 ## Recommended Flow
 
-1. **MIFARE Classic** (main menu) — try default keys on all sectors
+1. **MIFARE Classic** (main menu) — probe the factory default key
 2. **Dictionary Attack** — try more keys from dictionary files
 3. **Darkside Attack** — if no keys found at all, recover the first key
-4. **Static Nested Attack** — use the known key to recover all others
+4. **Static Nested** (static-nonce cards) **or Nested Attack** (weak-PRNG cards) — use the first known key to recover all others
 5. **Dump Memory** — read all data with recovered keys
 
 ## Storage
@@ -86,4 +97,5 @@ Recovers the first key when no keys are known at all.
 | **Key Found** | Gold |
 | **Full Dump** | Gold |
 | **Nested Attacker** | Gold |
+| **Dynamic Nester** | Gold |
 | **Dark Art** | Platinum |

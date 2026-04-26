@@ -76,6 +76,7 @@ Multi-tool firmware for ESP32-based handheld devices. Built with PlatformIO + Ar
   - **Samsung** — Samsung Galaxy Watch pairing popup spam using Samsung manufacturer data with random watch model IDs
 - **BLE Detector** — Passive BLE scanner that detects Flipper Zero devices, credit card skimmers, Apple AirTags/FindMy trackers, BitChat app users, and BLE spam attacks ([details](knowledge/ble-detector.md))
 - **WhisperPair** — Tests Google Fast Pair devices for CVE-2025-36911; performs an ECDH key exchange and forged KBP handshake to detect unauthorized pairing vulnerability ([details](knowledge/whisperpair.md))
+- **Claude Buddy** — BLE desk pet that pairs with Claude Desktop on macOS / Windows over Nordic UART; shows session status, running tasks, and queued approval prompts; approve or deny tool calls directly from the device with animated buddy character ([details](knowledge/claude-buddy.md))
 - **Chameleon Ultra** — Bluetooth LE client for ChameleonUltra / ChameleonLite RFID emulator devices ([details](knowledge/chameleon-ultra.md))
   - **Scan & Connect** — BLE scan with signal strength; connect by address
   - **Device Info** — firmware version, battery %, chip ID, active slot, mode
@@ -83,8 +84,11 @@ Multi-tool firmware for ESP32-based handheld devices. Built with PlatformIO + Ar
   - **Slot Manager** — 8 emulator slots with per-slot edit: set active, HF type, LF type, enable/disable, nickname (HF + LF), load default data, write content (MF Classic .bin from SD or EM410X hex), view emulator content (HF blocks or LF UID), delete, save nicks
   - **HF Tools**
     - **Scan 14A** — read UID / ATQA / SAK / UID length / protocol, clone to active slot
-    - **MF Dict Attack** — key picker (built-in defaults or `.txt` files from `/unigeek/nfc/dictionaries/`); batch `mf1CheckKeysOnBlock` (2015) per sector trailer; progress bar then scrollable keys-found result; saves recovered keys to `/unigeek/nfc/keys/<uid>.txt`
-    - **MF Dump Memory** — auto-crack default keys then read every block; streams `.bin` dump to `/unigeek/nfc/dumps/<uid>.bin` (size auto-detected: Mini 320 B, 1K 1024 B, 2K 2048 B, 4K 4096 B)
+    - **MIFARE Classic** — first-entry default-key (FFFFFFFFFFFF) probe across every sector × keytype, then opens a submenu (Discovered Keys, Dump Memory, Dictionary Attack, Static Nested, Nested Attack)
+    - **Dict Attack** — key picker (built-in defaults or `.txt` files from `/unigeek/nfc/dictionaries/`); batch `mf1CheckKeysOnBlock` (2015) per sector trailer; saves recovered keys to `/unigeek/nfc/keys/<uid>.txt`
+    - **Static Nested** — firmware-side `mf1StaticNestedAcquire` (2003) + local `lfsr_recovery32` for cards with NTLevel = 1
+    - **Nested Attack** — firmware-side `mf1NestedAcquire` (2006) collecting 3 samples, then 65 535-distance enumeration with parity disambiguation; for cards with weak PRNG (NTLevel = 2)
+    - **Dump Memory** — read every block via `mf1ReadBlock` (2008) using discovered keys; streams `.bin` dump to `/unigeek/nfc/dumps/<uid>.bin` (size auto-detected: Mini 320 B, 1K 1024 B, 2K 2048 B, 4K 4096 B)
     - **Magic Detect** — probes for gen1a (0x40 + 0x43 handshake) and gen3 (30 00 readback) magic cards
     - **MFKey32 Log** — toggle detection-log capture, fetch record count, export `{uid, nt, nr, ar}` tuples to `/unigeek/nfc/mfkey32/log_<ms>.txt` for offline solver
   - **LF Tools**
@@ -106,7 +110,7 @@ Multi-tool firmware for ESP32-based handheld devices. Built with PlatformIO + Ar
 - **Barcode** — Generate and display a Code 128 barcode from typed or file-loaded text
 - **File Manager** — Browse, rename, copy, cut, paste, and delete files and folders on storage; directories sorted first then alphabetical; tap a file to view its contents; hold 1s to open context menu
 - **File Hex Viewer** — View any file as a scrollable hex dump with offset, hex byte columns, and ASCII representation
-- **Achievements** — View all achievements grouped by domain (13 domains, 220 entries, ≈ 92 000 EXP pool); shows tier (Bronze/Silver/Gold/Platinum), description, and unlock status; long-press an unlocked achievement to set it as your Agent Title ([details](knowledge/achievements.md))
+- **Achievements** — View all achievements grouped by domain (13 domains, 231 entries, ≈ 96 000 EXP pool); shows tier (Bronze/Silver/Gold/Platinum), description, and unlock status; long-press an unlocked achievement to set it as your Agent Title ([details](knowledge/achievements.md))
 - **TOTP Auth** — Time-based one-time password authenticator; add accounts by name and Base32 secret, view live 6- or 8-digit codes with a countdown progress bar, hold an account row to view or delete it; keeps display on while viewing a code ([details](knowledge/totp-auth.md))
 - **UART Terminal** — Serial terminal over configurable GPIO pins; set baud rate, RX and TX GPIOs, switch between string and hex send mode (UP/DOWN toggle), send commands via dialog, receive data in real time, and optionally save the session log to storage ([details](knowledge/uart-terminal.md))
 - **Pomodoro Timer** — 25/5-minute focus timer; configurable work (15–60 min) and break (5–15 min) durations; press to pause/resume; speaker beep on phase transition; tracks session count and shows progress bar; keeps display on while running
@@ -138,19 +142,24 @@ Multi-tool firmware for ESP32-based handheld devices. Built with PlatformIO + Ar
 ### Modules
 - **NFC (MFRC522)** — MIFARE Classic card reader and key recovery tool ([details](knowledge/nfc-mifare.md))
   - **Scan UID** — Detect and display card UID and type
-  - **Authenticate** — Test all sectors with common default keys
+  - **MIFARE Classic** — First-entry probe of FFFFFFFFFFFF on every sector × keytype, then opens the MIFARE Classic submenu
   - **Discovered Keys** — View all recovered keys per sector
   - **Dump Memory** — Read and display all card data using discovered keys
   - **Dictionary Attack** — Try additional keys from custom dictionary files
   - **Static Nested Attack** — Recover keys on cards with static nonce using a known key
+  - **Nested Attack** — Weak-PRNG nested attack with 3-sample collection, parity-disambiguated 65 535-distance enumeration, and on-card verification
   - **Darkside Attack** — Recover the first key when no keys are known
-- **NFC (PN532 UART)** — PN532 / PN532Killer over HSU; ISO14443A, ISO15693, EM4100, MIFARE, magic cards ([details](knowledge/nfc-pn532.md))
+- **NFC (PN532 UART)** — PN532 / PN532Killer over HSU; ISO14443A, ISO15693, EM4100, MIFARE, magic cards, NTAG emulation ([details](knowledge/nfc-pn532.md))
   - **Scan ISO14443A / ISO15693 / EM4100 (LF)** — Read UID + ATQA/SAK / DSFID / LF UID
   - **MIFARE Classic** — Authenticate, dump memory, view discovered keys, run dictionary attack
   - **MIFARE Ultralight** — Read all pages, write a single 4-byte page
   - **Magic Card** — Detect Gen1a, set/lock Gen3 UID
+  - **Emulate Card** — Emulate a fixed UID or a previously dumped MIFARE Classic / NTAG `.bin` from `/unigeek/nfc/dumps/`
   - **Firmware Info** — Show IC, version, and PN532Killer detection
   - Shares `HardwareSerial(2)` with GPS; pins user-configurable in **Modules > Pin Setting** (`pn532_tx`, `pn532_rx`, `pn532_baud`); menu hidden until pins are set. PN532 dev boards must be in HSU mode.
+- **NFC (PN532 I2C)** — PN532 over I2C with the same feature set as the UART variant; auto-detects external I2C first, then falls back to internal I2C ([details](knowledge/nfc-pn532-i2c.md))
+  - All PN532 UART features (scan, MIFARE Classic, Ultralight, magic, emulate) plus NTAG emulation
+  - Configure SDA/SCL pins via **Modules > Pin Setting** (external bus)
 - **GPS** — GPS module support with wardriving, works on all boards via external GPS ([details](knowledge/gps-wardriving.md))
   - **Live View** — Real-time satellite count, coordinates, altitude, speed, and heading
   - **Scan Mode** — Choose WiFi + BLE (default), WiFi Only, or BLE Only for wardriving
@@ -185,7 +194,7 @@ Full-screen profile accessible from the main menu. Displays:
 - **HP** — battery percentage; shows `+CHG` when charging
 - **BRAIN** — free heap as a percentage of total heap
 - **ACHIEVEMENT** — total unlocked achievements out of all available
-- Domain bars for each achievement domain showing per-domain completion (WiFi, Attacks, BT, HID, NFC, IR, RF, NRF24, GPS, Utility, Games, Settings, Chameleon — 13 domains, 220 achievements total, pool ≈ 92 000 EXP)
+- Domain bars for each achievement domain showing per-domain completion (WiFi, Attacks, BT, HID, NFC, IR, RF, NRF24, GPS, Utility, Games, Settings, Chameleon — 13 domains, 231 achievements total, pool ≈ 96 000 EXP)
 
 ### Settings
 - Device name
@@ -199,6 +208,7 @@ Full-screen profile accessible from the main menu. Displays:
 - Pin configuration (GPS TX/RX/baud, external I2C SDA/SCL, CC1101 CS/GDO0, NRF24 CE/CSN) — also accessible from Modules menu
 - Navigation mode — Default or Encoder (M5StickC Plus only)
 - Hand orientation — Left/Right toggle that rotates the display and swaps UP/DOWN (M5StickC Plus 1.1, Plus 2, StickC S3)
+- Touch calibration — three-point calibration that maps raw touch coordinates to display pixels; persisted across reboots (CYD touch boards only)
 - Speaker test — play Win, Lose, Notification, and Beep sounds to verify speaker output (boards with speaker)
 
 ---
@@ -352,4 +362,4 @@ This project was built with inspiration and reference from:
 - implement thermal camera
 - change keyboard to HID instead, mode will be USB and BLE, while BLE and USB only have Keyboard, Mouse and Jiggle Mouse, USB has 1 more option is Mass Storage.
 
-<!-- README last synced at commit: 63757a9 (Pomodoro, push/goBack stack, UART bg receive, Chameleon dump keys, input rework) -->
+<!-- README last synced at commit: b802b31 (PN532 UART/I2C modules, Claude Buddy, Chameleon + MFRC522 nested + static-nested attacks, touch calibration) -->

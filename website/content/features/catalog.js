@@ -44,7 +44,8 @@ export const CATALOG = [
   { slug: "ble-beacon-spam",      title: "BLE Beacon Spam",     category: "ble",      summary: "Broadcast iBeacon packets with randomized UUID, major/minor, and spoofed MAC on every cycle",        hasDetail: false, stable: true },
   { slug: "ble-device-spam",      title: "BLE Device Spam",     category: "ble",      summary: "Targeted BLE spam triggering pairing popups on Android (Fast Pair), iOS (Continuity), Samsung",     hasDetail: false, stable: true },
   { slug: "ble-analyzer",         title: "BLE Analyzer",        category: "ble",      summary: "Scan nearby BLE devices, display name, address, and signal strength",                                 hasDetail: false, stable: true },
-  { slug: "chameleon-ultra",      title: "Chameleon Ultra",     category: "ble",      summary: "BLE client for ChameleonUltra / ChameleonLite — 8-slot manager, MF dict, MFKey32, T5577 write",      hasDetail: true,  stable: true },
+  { slug: "chameleon-ultra",      title: "Chameleon Ultra",     category: "ble",      summary: "BLE client for ChameleonUltra / ChameleonLite — 8-slot manager, MF dict, static + weak-PRNG nested attacks, MFKey32, T5577 write", hasDetail: true,  stable: true },
+  { slug: "claude-buddy",         title: "Claude Buddy",        category: "ble",      summary: "BLE desk pet for Claude Desktop on macOS / Windows — shows session status, running tasks, and lets you approve permission prompts from the device", hasDetail: true,  stable: true },
 
   // Keyboard (HID)
   { slug: "ducky-script",         title: "Ducky Script",        category: "keyboard", summary: "Run script files from storage to automate keystrokes over BLE or USB HID",                           hasDetail: true,  stable: true },
@@ -53,7 +54,7 @@ export const CATALOG = [
   { slug: "keyboard-relay",       title: "Keyboard Relay",      category: "keyboard", summary: "Forward physical keypresses directly to the connected host in real time — keyboard devices only",    hasDetail: false, stable: true },
 
   // Modules
-  { slug: "nfc-mifare",           title: "NFC (MFRC522)",       category: "module",   summary: "MIFARE Classic card reader and key recovery — scan, authenticate, dump memory, and run attacks",     hasDetail: true,  stable: true },
+  { slug: "nfc-mifare",           title: "NFC (MFRC522)",       category: "module",   summary: "MIFARE Classic card reader and key recovery — default-key probe, dictionary, static-nested, weak-PRNG nested, and darkside attacks", hasDetail: true,  stable: true },
   { slug: "nfc-pn532",            title: "NFC (PN532 UART)",    category: "module",   summary: "PN532 / PN532Killer over HSU — ISO14443A, ISO15693, EM4100, MIFARE Classic, Ultralight, and magic-card tools", hasDetail: true,  stable: true },
   { slug: "nfc-pn532-i2c",       title: "NFC (PN532 I2C)",     category: "module",   summary: "PN532 over I2C — ISO14443A, ISO15693, EM4100, MIFARE Classic, Ultralight, and magic-card tools; auto-detects external or internal I2C bus", hasDetail: true,  stable: true },
   { slug: "gps-wardriving",       title: "GPS & Wardriving",    category: "module",   summary: "Live GPS view, WiFi/BLE wardriving with Wigle CSV export, and Wigle upload integration",             hasDetail: true,  stable: true },
@@ -68,7 +69,7 @@ export const CATALOG = [
   { slug: "file-manager",         title: "File Manager",        category: "utility",  summary: "Browse, rename, copy, cut, paste, and delete files on device storage",                               hasDetail: false, stable: true },
   { slug: "hex-viewer",           title: "File Hex Viewer",     category: "utility",  summary: "View any file as a scrollable hex dump with offset, hex byte columns, and ASCII representation",      hasDetail: false, stable: true },
   { slug: "i2c-detector",         title: "I2C Detector",        category: "utility",  summary: "Scan the I2C bus and list all responding device addresses",                                           hasDetail: false, stable: true },
-  { slug: "achievements",         title: "Achievements",        category: "utility",  summary: "217 achievements across 13 domains (~91 000 EXP pool); set any unlocked entry as your Agent Title", hasDetail: true,  stable: true },
+  { slug: "achievements",         title: "Achievements",        category: "utility",  summary: "231 achievements across 13 domains (~96 000 EXP pool); set any unlocked entry as your Agent Title", hasDetail: true,  stable: true },
   { slug: "totp-auth",            title: "TOTP Auth",           category: "utility",  summary: "Time-based OTP authenticator; add accounts by Base32 secret, view live 6/8-digit codes with countdown, hold to view or delete",  hasDetail: true,  stable: true },
   { slug: "uart-terminal",        title: "UART Terminal",       category: "utility",  summary: "Serial terminal over configurable GPIO pins; text/hex send modes, background receive, optional session log save",                hasDetail: true,  stable: true },
   { slug: "pomodoro",             title: "Pomodoro Timer",      category: "utility",  summary: "Focus/break timer with configurable work and break durations, progress bar, speaker notification, and session counter", hasDetail: false, stable: true },
@@ -85,6 +86,7 @@ export const CATALOG = [
   { slug: "setting-pin",          title: "Pin Settings",        category: "setting",  summary: "Configure GPIO pins for external modules — shared with Modules menu (see Pin Setting page for full details)", hasDetail: false, stable: true },
   { slug: "setting-nav-mode",     title: "Navigation Mode",     category: "setting",  summary: "Switch between Default and Encoder/Joystick navigation — M5StickC Plus 1.1 and 2 only",              hasDetail: false, stable: true },
   { slug: "setting-hand-orient",  title: "Hand Orientation",    category: "setting",  summary: "Toggle Left/Right hand orientation — M5StickC Plus 1.1, Plus 2, and StickC S3 only",                 hasDetail: false, stable: true },
+  { slug: "setting-touch-cal",    title: "Touch Calibration",   category: "setting",  summary: "Three-point touch calibration that maps raw coordinates to display pixels; persisted across reboots — CYD touch boards only", hasDetail: false, stable: true },
   { slug: "setting-speaker-test", title: "Speaker Test",        category: "setting",  summary: "Play Win/Lose/Notification/Beep to verify speaker output — boards with speaker only",               hasDetail: false, stable: true },
   { slug: "device-status",        title: "Device Status",       category: "setting",  summary: "View hardware status — CPU frequency, free RAM, PSRAM, and LittleFS/SD available storage",         hasDetail: false, stable: true },
 ];

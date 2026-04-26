@@ -90,6 +90,40 @@ Controls the emulator-side sniffing of reader authentication attempts:
 
 ---
 
+## MIFARE Classic Attacks
+
+The Chameleon Ultra has dedicated firmware commands for nested-attack nonce collection — the BLE client only orchestrates flow and runs the local crypto1 recovery. Sequence to fully recover a card with no known keys: **MIFARE Classic** (default key probe) → **Dictionary Attack** (extra keys from `.txt` files) → **Static Nested** or **Nested Attack** (uses the first known key to expand to all sectors) → **Dump Memory**.
+
+### MIFARE Classic (Default Key Probe)
+
+First entry to a fresh card: scans 14A, infers sector count from SAK, then runs `mf1CheckKey` (2007) on every sector × keytype against `FFFFFFFFFFFF` only. Keeps the initial visit fast — for deeper checks the user runs **Dictionary Attack**.
+
+### Dictionary Attack
+
+Source picker shows **"Built-in keys"** plus every `.txt` file under `/unigeek/nfc/dictionaries/`. For each missing sector × keytype, calls `mf1CheckKeysOnBlock` (2015) on the trailer in 32-key chunks; the firmware returns the matching 6-byte key directly. Recovered keys are saved to `/unigeek/nfc/keys/<uid>.txt`.
+
+### Static Nested
+
+For cards whose Nt is fixed across reads (NTLevel = 1). Requires at least one known key.
+
+1. Confirms NTLevel = 1 via `mf1NTLevel` (2002).
+2. For every missing sector × keytype calls `mf1StaticNestedAcquire` (2003), which returns `{uid, nt, ntEnc}` records. Computes `ks = ntEnc ^ staticNt`, runs `lfsr_recovery32` over (ks, staticNt ^ uid), soft-checks each candidate against the recovered keystream, then verifies the survivor with `mf1CheckKey` (2007).
+3. Logs one cyan header `──── target Sn X block=N ────` per target and one green/red summary line; the long enumeration runs silently with status-bar ticks.
+
+### Nested Attack
+
+For cards with a weak PRNG (NTLevel = 2). Requires at least one known key.
+
+1. Probes `mf1NTLevel` (2002) — warns if static (use Static Nested) or hardened (likely fail).
+2. For every missing sector × keytype calls `mf1NestedAcquire` (2006) up to 4 times, collecting at least 3 `{nt, ntEnc, par}` samples.
+3. Enumerates all 65 535 PRNG distances; the parity-disambiguating filter narrows candidates by ~12.5 % per sample. Each surviving distance feeds `lfsr_recovery32`, soft-checked against the remaining samples, then verified on the card.
+4. Same single-line summary format as static nested. Status bar ticks every 8 000 distances with `d=N m=N r=N`.
+
+> [!note]
+> Hardened cards (NTLevel = 3) randomize Nt strongly enough that weak-PRNG nested fundamentally cannot recover the key. The screen logs the level so you can see when this is the case.
+
+---
+
 ## LF Tools
 
 Each sub-screen follows the same flow: scan → show UID → `[Press]` for rescan, `[Hold]` opens a menu (Clone to slot · Write to T5577 · Scan again · Exit). BACK (when available) exits.
@@ -154,6 +188,8 @@ All Chameleon screens follow the house rules in `CLAUDE.md`: scan-result views u
 | **LF Tag Reader** | Silver |
 | **LF Stalker** | Silver |
 | **Frequency Hunter** | Gold |
+| **Fixed Nonce** | Gold |
+| **Nested Cipher** | Gold |
 | **Card Clone** | Gold |
 | **Copy Maker** | Gold |
 | **Identity Library** | Platinum |
@@ -180,5 +216,5 @@ All Chameleon screens follow the house rules in `CLAUDE.md`: scan-result views u
 ## Reference
 
 - Protocol source: [ChameleonUltraGUI](https://github.com/GameTec-live/ChameleonUltraGUI) — full command opcode catalogue and payload layouts used to build this client.
-- Client implementation: `firmware/src/utils/chameleon/ChameleonClient.{h,cpp}`
+- Client implementation: `firmware/src/utils/ble/ChameleonClient.{h,cpp}`
 - Screens: `firmware/src/screens/ble/chameleon/*`
