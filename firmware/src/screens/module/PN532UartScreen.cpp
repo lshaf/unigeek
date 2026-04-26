@@ -24,6 +24,7 @@ const char* PN532UartScreen::title() {
     case STATE_MAGIC_MENU:       return "Magic Card";
     case STATE_RAW_RESULT:       return "Result";
     case STATE_EMULATE:          return "Emulate Card";
+    case STATE_LOAD_DUMP:        return "Load & Emulate";
   }
   return _isKiller ? "PN532Killer" : "PN532";
 }
@@ -34,14 +35,50 @@ void PN532UartScreen::onInit() {
 }
 
 void PN532UartScreen::onUpdate() {
-  if (_state == STATE_INFO || _state == STATE_SCAN_RESULT ||
-      _state == STATE_MIFARE_DUMP || _state == STATE_MIFARE_KEYS ||
-      _state == STATE_RAW_RESULT) {
+  if (_state == STATE_SCAN_RESULT) {
+    // Hold to emulate (PN532Killer + 14A only)
+    if (!_holdFired && _isKiller && _lastScanType == 1 &&
+        Uni.Nav->isPressed() && Uni.Nav->heldDuration() >= 700) {
+      _holdFired = true;
+      Uni.Nav->suppressCurrentPress();
+      _doEmulate();
+      return;
+    }
+    if (_holdFired && !Uni.Nav->isPressed()) _holdFired = false;
+
     if (Uni.Nav->wasPressed()) {
       auto dir = Uni.Nav->readDirection();
       if (dir == INavigation::DIR_BACK) {
-        // return to most recent menu
-        if (_state == STATE_MIFARE_DUMP || _state == STATE_MIFARE_KEYS) _goMifare();
+        _goMain();
+      } else if (dir == INavigation::DIR_PRESS) {
+        if (_lastScanType == 1) _doScan14A();
+        else if (_lastScanType == 2) _doScan15();
+        else _doScanLF();
+      } else {
+        _scrollView.onNav(dir);
+      }
+    }
+    return;
+  }
+  if (_state == STATE_MIFARE_DUMP) {
+    if (Uni.Nav->wasPressed()) {
+      auto dir = Uni.Nav->readDirection();
+      if (dir == INavigation::DIR_BACK) {
+        _hasDump = false;
+        _goMifare();
+      } else if (dir == INavigation::DIR_PRESS && _hasDump) {
+        _doSaveDump();
+      } else {
+        _scrollView.onNav(dir);
+      }
+    }
+    return;
+  }
+  if (_state == STATE_INFO || _state == STATE_MIFARE_KEYS || _state == STATE_RAW_RESULT) {
+    if (Uni.Nav->wasPressed()) {
+      auto dir = Uni.Nav->readDirection();
+      if (dir == INavigation::DIR_BACK) {
+        if (_state == STATE_MIFARE_KEYS) _goMifare();
         else _goMain();
       } else {
         _scrollView.onNav(dir);
@@ -72,8 +109,9 @@ void PN532UartScreen::onItemSelected(uint8_t index) {
         case 3: _goMifare();          break;
         case 4: _goUltralight();      break;
         case 5: _goMagic();           break;
-        // case 6: _doEmulate();      // hidden until full APDU emulation is ready
         case 6: _showFirmwareInfo();  break;
+        case 7: _doEmulate();         break;  // PN532Killer only
+        case 8: _doLoadDump();        break;  // PN532Killer only
       }
       break;
     case STATE_MIFARE_MENU:
@@ -100,6 +138,9 @@ void PN532UartScreen::onItemSelected(uint8_t index) {
     case STATE_DICT_SELECT:
       _doDictionaryAttackWithFile(index);
       break;
+    case STATE_LOAD_DUMP:
+      _doLoadAndEmulate(index);
+      break;
     default: break;
   }
 }
@@ -117,6 +158,9 @@ void PN532UartScreen::onBack() {
       break;
     case STATE_DICT_SELECT:
       _goMifare();
+      break;
+    case STATE_LOAD_DUMP:
+      _goMain();
       break;
     default:
       _goMain();
@@ -179,7 +223,7 @@ void PN532UartScreen::_cleanup() {
 
 void PN532UartScreen::_goMain() {
   _state = STATE_MAIN_MENU;
-  setItems(_mainItems);
+  setItems(_mainItems, _isKiller ? 9 : 7);
   render();
 }
 
@@ -342,6 +386,9 @@ void PN532UartScreen::_doScan14A() {
   _pushRow("UID Len", buf);
   if (t.atsLen > 0) _pushRow("ATS", _hexBlock(t.ats, t.atsLen));
   _pushRow("Protocol", "ISO14443A");
+  _pushRow("[Press]", "Scan again");
+  if (_isKiller) _pushRow("[Hold]", "Emulate to slot 0");
+  _lastScanType = 1;
   _scrollView.setRows(_rows, _rowCount);
   render();
 }
@@ -369,6 +416,8 @@ void PN532UartScreen::_doScan15() {
   snprintf(buf, sizeof(buf), "%02X", t.dsfid);
   _pushRow("DSFID", buf);
   _pushRow("Protocol", "ISO15693");
+  _pushRow("[Press]", "Scan again");
+  _lastScanType = 2;
   _scrollView.setRows(_rows, _rowCount);
   render();
 }
@@ -393,6 +442,8 @@ void PN532UartScreen::_doScanLF() {
   _resetRows();
   _pushRow("UID",      _hexUid(t.uid, t.uidLen));
   _pushRow("Protocol", "EM4100 (LF)");
+  _pushRow("[Press]",  "Scan again");
+  _lastScanType = 3;
   _scrollView.setRows(_rows, _rowCount);
   render();
 }
@@ -459,9 +510,29 @@ void PN532UartScreen::_doDumpMemory() {
 
   _state = STATE_MIFARE_DUMP;
   _resetRows();
+  _hasDump = false;
   size_t totalBlocks = dims.second;
 
+  // Initialize dump image with defaults
+  memset(_dumpImg, 0x00, sizeof(_dumpImg));
+  static constexpr uint8_t kTrailer[16] = {
+    0xFF,0xFF,0xFF,0xFF,0xFF,0xFF, 0xFF,0x07,0x80,0x69, 0xFF,0xFF,0xFF,0xFF,0xFF,0xFF
+  };
+  for (int s = 0; s < 16; s++) memcpy(&_dumpImg[(s * 4 + 3) * 16], kTrailer, 16);
+
+  // Pre-fill block 0 from scan data
+  uint8_t uid4[4] = {0};
+  if (_card.uidLen == 7) memcpy(uid4, &_card.uid[3], 4);
+  else memcpy(uid4, _card.uid, 4);
+  _dumpImg[0] = uid4[0]; _dumpImg[1] = uid4[1]; _dumpImg[2] = uid4[2]; _dumpImg[3] = uid4[3];
+  _dumpImg[4] = uid4[0] ^ uid4[1] ^ uid4[2] ^ uid4[3];
+  _dumpImg[5] = _card.sak;
+  _dumpImg[6] = (_card.atqa >> 8) & 0xFF;
+  _dumpImg[7] = _card.atqa & 0xFF;
+
+  int readCount = 0;
   ProgressView::init();
+
   for (size_t blk = 0; blk < totalBlocks; blk++) {
     int sector = (blk < 128) ? (blk / 4) : ((blk - 128) / 16 + 32);
     int trailer = (sector < 32) ? (sector * 4 + 3) : (128 + (sector - 32) * 16 + 15);
@@ -476,7 +547,7 @@ void PN532UartScreen::_doDumpMemory() {
     bool useKeyB = !slotA && (bool)slotB;
     auto& slot = useKeyB ? slotB : slotA;
 
-    if (!slot) { _pushRow(label, "?? ?? ?? ?? ?? ?? ?? ??"); continue; }
+    if (!slot) { _pushRow(label, "-"); continue; }
 
     const uint8_t* authUid = _card.uidLen == 7 ? &_card.uid[3] : _card.uid;
     if (!_pn->mifareAuth((uint8_t)trailer, useKeyB, slot.value().data(), authUid)) {
@@ -484,16 +555,23 @@ void PN532UartScreen::_doDumpMemory() {
       PN532::Target14A re;
       if (_pn->listPassiveTarget14A(re, 200)) {
         if (!_pn->mifareAuth((uint8_t)trailer, useKeyB, slot.value().data(), authUid)) {
-          _pushRow(label, "auth fail");
-          continue;
+          _pushRow(label, "-"); continue;
         }
-      } else { _pushRow(label, "lost card"); continue; }
+      } else { _pushRow(label, "-"); continue; }
     }
 
     uint8_t data[16];
-    if (!_pn->mifareRead((uint8_t)blk, data)) { _pushRow(label, "read fail"); continue; }
-    _pushRow(label, _hexBlock(data, 16));
+    if (!_pn->mifareRead((uint8_t)blk, data)) { _pushRow(label, "-"); continue; }
+    _pushRow(label, _hexBlock(data + 13, 3));
+    readCount++;
+    if (blk < 64) memcpy(&_dumpImg[blk * 16], data, 16);
   }
+
+  char summary[32];
+  snprintf(summary, sizeof(summary), "%d/%d blocks", readCount, (int)totalBlocks);
+  _pushRow("Read", summary);
+  _pushRow("[Press]", "Save dump");
+  _hasDump = true;
 
   int n = Achievement.inc("nfc_dump_memory");
   if (n == 1) Achievement.unlock("nfc_dump_memory");
@@ -775,32 +853,162 @@ void PN532UartScreen::_doGen3LockUid() {
 }
 
 void PN532UartScreen::_doEmulate() {
-  if (!_hasCard) {
-    ShowStatusAction::show("Scan a card first");
+  _state = STATE_EMULATE;
+
+  if (!_hasCard && !_scanCardOrShow(5000)) { _goMain(); return; }
+
+  // Build a 1024-byte MFC1K image (64 blocks × 16 bytes)
+  uint8_t img[1024];
+  memset(img, 0x00, sizeof(img));
+
+  // Default sector trailers for all 16 sectors: FF key A / FF 07 80 69 / FF key B
+  static constexpr uint8_t kTrailer[16] = {
+    0xFF,0xFF,0xFF,0xFF,0xFF,0xFF, 0xFF,0x07,0x80,0x69, 0xFF,0xFF,0xFF,0xFF,0xFF,0xFF
+  };
+  for (int s = 0; s < 16; s++) memcpy(&img[(s * 4 + 3) * 16], kTrailer, 16);
+
+  // Block 0: UID (4 bytes) + BCC + SAK + ATQA[0] + ATQA[1] + padding
+  uint8_t uid4[4] = {0};
+  if (_card.uidLen == 7) {
+    memcpy(uid4, &_card.uid[3], 4);   // inner UID for double-size
+  } else {
+    memcpy(uid4, _card.uid, 4);
+  }
+  img[0] = uid4[0]; img[1] = uid4[1]; img[2] = uid4[2]; img[3] = uid4[3];
+  img[4] = uid4[0] ^ uid4[1] ^ uid4[2] ^ uid4[3];  // BCC
+  img[5] = _card.sak;
+  img[6] = (_card.atqa >> 8) & 0xFF;
+  img[7] = _card.atqa & 0xFF;
+
+  // Try to dump sectors where we already have keys
+  ProgressView::init();
+  auto dims = _mfDims(_card.sak);
+  size_t sectors = dims.first < 16 ? dims.first : 16;
+  if (sectors > 0) {
+    const uint8_t* authUid = _card.uidLen == 7 ? &_card.uid[3] : _card.uid;
+    for (size_t s = 0; s < sectors; s++) {
+      int trailer = s * 4 + 3;
+      auto& slotA = _mfKeys[s].first;
+      auto& slotB = _mfKeys[s].second;
+      bool useKeyB = !slotA && (bool)slotB;
+      auto& slot = useKeyB ? slotB : slotA;
+      if (!slot) continue;  // no key — leave default data
+
+      char msg[24]; snprintf(msg, sizeof(msg), "Dumping S%d...", (int)s);
+      ProgressView::progress(msg, (int)(10 + s * 50 / sectors));
+
+      if (!_pn->mifareAuth((uint8_t)trailer, useKeyB, slot.value().data(), authUid)) {
+        _pn->inRelease();
+        PN532::Target14A re; _pn->listPassiveTarget14A(re, 200);
+        continue;
+      }
+      for (int blk = s * 4; blk <= trailer; blk++) {
+        if (blk == 0) continue;   // keep our UID-derived block 0
+        uint8_t data[16];
+        if (_pn->mifareRead((uint8_t)blk, data)) memcpy(&img[blk * 16], data, 16);
+      }
+    }
+  }
+
+  ProgressView::progress("Uploading to slot 0...", 65);
+  bool uploadOk = _pn->killerUploadEmulatorData(PN532::KILLER_MFC1K, 0, img, sizeof(img));
+  if (!uploadOk) {
+    ShowStatusAction::show("Upload failed");
     _goMain();
     return;
   }
 
-  _state = STATE_EMULATE;
-
-  char msg[64];
-  snprintf(msg, sizeof(msg), "Emulating: %s", _hexUid(_card.uid, _card.uidLen).c_str());
-  ShowStatusAction::show(msg, 0);
-
-  while (true) {
-    Uni.update();
-    if (Uni.Nav->wasPressed()) {
-      if (Uni.Nav->readDirection() == INavigation::DIR_BACK) break;
-    }
-    if (_pn->tgInitAsTarget(_card.atqa, _card.sak, _card.uid, _card.uidLen, 300)) {
-      int n = Achievement.inc("pn532_emulate");
-      if (n == 1) Achievement.unlock("pn532_emulate");
-      ShowStatusAction::show("Card read by reader!", 0);
-      delay(800);
-      ShowStatusAction::show(msg, 0);
-    }
-    delay(10);
+  ProgressView::progress("Activating emulator...", 90);
+  bool modeOk = _pn->killerSetWorkMode(PN532::KILLER_EMULATOR, PN532::KILLER_MFC1K, 0);
+  if (!modeOk) {
+    ShowStatusAction::show("Mode switch failed");
+    _goMain();
+    return;
   }
 
+  int n = Achievement.inc("pn532_emulate");
+  if (n == 1) Achievement.unlock("pn532_emulate");
+
+  char done[48];
+  snprintf(done, sizeof(done), "Emulating %s", _hexUid(_card.uid, _card.uidLen).c_str());
+  ShowStatusAction::show(done);
+  _goMain();
+}
+
+void PN532UartScreen::_doSaveDump() {
+  if (!Uni.Storage || !Uni.Storage->isAvailable()) {
+    ShowStatusAction::show("Storage unavailable");
+    render();
+    return;
+  }
+  Uni.Storage->makeDir("/unigeek/nfc");
+  Uni.Storage->makeDir(_dumpPath);
+
+  String uid = _hexUid(_card.uid, _card.uidLen);
+  uid.replace(":", "");
+  String path = String(_dumpPath) + "/" + uid + ".bin";
+
+  fs::File f = Uni.Storage->open(path.c_str(), "w");
+  if (!f) {
+    ShowStatusAction::show("Save failed");
+    render();
+    return;
+  }
+  f.write(_dumpImg, sizeof(_dumpImg));
+  f.close();
+
+  char msg[48];
+  snprintf(msg, sizeof(msg), "Saved: %s.bin", uid.c_str());
+  ShowStatusAction::show(msg);
+  render();
+}
+
+void PN532UartScreen::_doLoadDump() {
+  _state = STATE_LOAD_DUMP;
+  _dumpFileCount = 0;
+  if (!Uni.Storage || !Uni.Storage->isAvailable()) {
+    ShowStatusAction::show("Storage unavailable"); _goMain(); return;
+  }
+  IStorage::DirEntry entries[MAX_DUMP_FILES];
+  uint8_t count = Uni.Storage->listDir(_dumpPath, entries, MAX_DUMP_FILES);
+  for (uint8_t i = 0; i < count && _dumpFileCount < MAX_DUMP_FILES; i++) {
+    if (!entries[i].isDir && entries[i].name.endsWith(".bin")) {
+      _dumpFileNames[_dumpFileCount] = entries[i].name;
+      _dumpItems[_dumpFileCount] = { _dumpFileNames[_dumpFileCount].c_str() };
+      _dumpFileCount++;
+    }
+  }
+  if (_dumpFileCount == 0) {
+    ShowStatusAction::show("No dump files"); _goMain(); return;
+  }
+  setItems(_dumpItems, _dumpFileCount);
+}
+
+void PN532UartScreen::_doLoadAndEmulate(uint8_t fileIndex) {
+  if (fileIndex >= _dumpFileCount) return;
+  String path = String(_dumpPath) + "/" + _dumpFileNames[fileIndex];
+
+  uint8_t img[1024];
+  memset(img, 0x00, sizeof(img));
+  fs::File f = Uni.Storage->open(path.c_str(), "r");
+  if (!f) { ShowStatusAction::show("Read failed"); _goMain(); return; }
+  f.read(img, sizeof(img));
+  f.close();
+
+  ProgressView::init();
+  ProgressView::progress("Uploading to slot 0...", 40);
+  bool uploadOk = _pn->killerUploadEmulatorData(PN532::KILLER_MFC1K, 0, img, sizeof(img));
+  if (!uploadOk) { ShowStatusAction::show("Upload failed"); _goMain(); return; }
+
+  ProgressView::progress("Activating emulator...", 85);
+  bool modeOk = _pn->killerSetWorkMode(PN532::KILLER_EMULATOR, PN532::KILLER_MFC1K, 0);
+  if (!modeOk) { ShowStatusAction::show("Mode switch failed"); _goMain(); return; }
+
+  int n = Achievement.inc("pn532_emulate");
+  if (n == 1) Achievement.unlock("pn532_emulate");
+
+  char msg[48];
+  snprintf(msg, sizeof(msg), "Emulating: %s", _dumpFileNames[fileIndex].c_str());
+  ShowStatusAction::show(msg);
   _goMain();
 }

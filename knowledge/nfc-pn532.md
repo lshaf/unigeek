@@ -34,7 +34,7 @@ Reads the 5-byte UID of a 125 kHz EM4100 tag (PN532Killer LF antenna required).
 Sub-menu for stored ISO14443A target:
 
 - **Authenticate** — Try every default key on every sector, key A and key B
-- **Dump Memory** — Read every block using discovered keys; missing keys show `??`
+- **Dump Memory** — Read every block using discovered keys; blocks with no key or read errors show `-`. A summary row at the bottom shows how many blocks were successfully read. Press to save the dump to `/unigeek/nfc/dumps/<UID>.bin` (raw binary, compatible with Chameleon Ultra and MFRC522 dumps).
 - **Discovered Keys** — Per-sector list of recovered keys
 - **Dictionary Attack** — Pick a `.txt` file from `/unigeek/nfc/dictionaries/` and try its keys on the still-unknown sectors
 
@@ -53,10 +53,17 @@ Sub-menu for stored ISO14443A target:
 
 ### Emulate Card
 
-Emulates the last scanned ISO14443A card in passive target mode using `TgInitAsTarget` (0x8C). The PN532 listens on the antenna and responds to reader SELECT/ANTICOL as if it were the stored card. When a reader selects the card, the screen briefly shows **Card read by reader!** before resuming. Press **Back** to exit emulation.
+**PN532Killer only.** Uploads the last scanned ISO14443A card into slot 0 of the PN532Killer and switches the device into emulator mode. The process:
+
+1. Scans the card (or uses the one already in memory from **Scan ISO14443A**)
+2. Builds a 1024-byte MIFARE Classic 1K image — block 0 is filled with the real UID/SAK/ATQA; if any sector keys were discovered via **MIFARE Classic → Authenticate**, those sectors are dumped and included; remaining sectors use default transport keys (`FFFFFFFFFFFF`)
+3. Uploads the image to slot 0 via `SetEmulatorData` (0x1E)
+4. Switches the PN532Killer to emulator mode via `SetWorkMode` (0xAC, mode=0x02)
+
+The device remains in emulator mode until power-cycled or the mode is changed.
 
 > [!note]
-> Only ISO14443A cards scanned via **Scan ISO14443A** can be emulated. 7-byte UIDs are truncated to 4 bytes on the PN532 side (NFCID1 = first 3 bytes; anticollision is PN532-managed). Full APDU-level emulation (MIFARE read/write responses) is not implemented.
+> Only MIFARE Classic 1K format is emulated regardless of the scanned card type. 7-byte UIDs are stored using the inner 4 bytes (bytes 3–6) for block 0 compatibility.
 
 ### Firmware Info
 
@@ -74,10 +81,15 @@ DCS = (0x100 - sum(D4 + CMD + params)) & 0xFF
 
 Response TFI is `D5`, response code is `CMD + 1`. ACK frame: `00 00 FF 00 FF 00`.
 
+### Load & Emulate
+
+**PN532Killer only.** Loads a previously saved `.bin` dump from `/unigeek/nfc/dumps/` (saved by this screen, MFRC522, or Chameleon Ultra) and uploads it directly to slot 0, then activates emulator mode — no card needs to be present. Useful for re-emulating a card captured in an earlier session.
+
 ## Storage
 
 ```
 /unigeek/nfc/dictionaries/     Key dictionary files (.txt) — shared with MFRC522
+/unigeek/nfc/dumps/            Saved card dumps (<UID>.bin) — raw binary, shared with MFRC522 and Chameleon Ultra
 ```
 
 ## Achievements
@@ -96,7 +108,8 @@ Response TFI is `D5`, response code is `CMD + 1`. ACK frame: `00 00 FF 00 FF 00`
 ## Known Limitations
 
 - **Static Nested** and **Darkside** attacks are MFRC522-only for now; both are wired against the MFRC522 driver and need a PN532 port via `InCommunicateThru`.
-- **Emulation** responds to reader SELECT/ANTICOL but does not handle APDU-level commands (no MIFARE read/write responses, no NDEF).
+- **Emulate Card** is PN532Killer-only; stock PN532 does not have writable emulator slots.
+- Emulation uploads MIFARE Classic 1K format regardless of the original card type — works for UID-based access control but not for systems that verify full card memory.
 
 ## Credits
 

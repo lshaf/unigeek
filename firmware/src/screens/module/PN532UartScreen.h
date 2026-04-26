@@ -35,6 +35,7 @@ private:
     STATE_MAGIC_MENU,
     STATE_RAW_RESULT,
     STATE_EMULATE,
+    STATE_LOAD_DUMP,
   };
 
   State_e _state = STATE_MAIN_MENU;
@@ -43,6 +44,8 @@ private:
   PN532*    _pn  = nullptr;
   bool      _ready = false;
   bool      _isKiller = false;
+  bool      _holdFired = false;
+  uint8_t   _lastScanType = 0;  // 1=14A  2=15693  3=LF
   uint8_t   _killerCode = 0;
   PN532::FirmwareInfo _fw;
 
@@ -63,15 +66,16 @@ private:
   uint16_t _rowCount = 0;
 
   // Menus
-  ListItem _mainItems[7] = {
+  ListItem _mainItems[9] = {
     {"Scan ISO14443A"},
     {"Scan ISO15693"},
     {"Scan EM4100 (LF)"},
     {"MIFARE Classic"},
     {"MIFARE Ultralight"},
     {"Magic Card"},
-    // {"Emulate Card"},  // hidden until full APDU emulation is ready
     {"Firmware Info"},
+    {"Emulate Card"},     // index 7 — only shown for PN532Killer (_goMain caps count)
+    {"Load & Emulate"},   // index 8 — only shown for PN532Killer
   };
 
   ListItem _mfItems[4] = {
@@ -99,6 +103,15 @@ private:
   String   _dictFileNames[MAX_DICT_FILES];
   uint8_t  _dictFileCount = 0;
 
+  // Dump image and load file picker
+  static constexpr const char* _dumpPath = "/unigeek/nfc/dumps";
+  static constexpr uint8_t MAX_DUMP_FILES = 16;
+  ListItem _dumpItems[MAX_DUMP_FILES];
+  String   _dumpFileNames[MAX_DUMP_FILES];
+  uint8_t  _dumpFileCount = 0;
+  uint8_t  _dumpImg[1024];
+  bool     _hasDump = false;
+
   // Lifecycle / nav helpers
   bool _initModule();
   void _cleanup();
@@ -123,6 +136,9 @@ private:
   void _doGen3SetUid();
   void _doGen3LockUid();
   void _doEmulate();
+  void _doSaveDump();
+  void _doLoadDump();
+  void _doLoadAndEmulate(uint8_t fileIndex);
 
   // Helpers
   String _hexUid(const uint8_t* uid, uint8_t len) const;

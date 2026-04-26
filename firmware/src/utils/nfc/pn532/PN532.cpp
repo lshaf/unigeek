@@ -32,9 +32,9 @@ bool PN532::isPN532Killer(uint8_t& killerCode) {
   size_t  respLen = 0;
   R r = _t.transceive(CMD_KILLER_DETECT, nullptr, 0,
                       resp, sizeof(resp), respLen, 200);
-  if (!_ok(r) || respLen < 1) return false;
-  killerCode = resp[0];
-  return respLen > 2;  // stock PN532 returns ERR_BAD_FRAME; killer returns a multi-byte payload
+  if (!_ok(r)) return false;
+  if (respLen >= 1) killerCode = resp[0];
+  return true;  // stock PN532 returns error frame → ERR_BAD_FRAME; killer returns any valid response
 }
 
 bool PN532::listPassiveTarget14A(Target14A& out, uint32_t timeoutMs) {
@@ -183,6 +183,43 @@ bool PN532::ultralightWrite4(uint8_t page, const uint8_t data[4]) {
   memcpy(&buf[3], data, 4);
   uint8_t resp[8]; size_t respLen = 0;
   return inDataExchange(buf, sizeof(buf), resp, sizeof(resp), respLen, 500);
+}
+
+bool PN532::killerSetWorkMode(KillerWorkMode mode, KillerTagType tagType, uint8_t slot) {
+  uint8_t params[3] = { (uint8_t)mode, (uint8_t)tagType, slot };
+  uint8_t resp[4]; size_t respLen = 0;
+  R r = _t.transceive(CMD_KILLER_SET_WORK_MODE, params, sizeof(params),
+                      resp, sizeof(resp), respLen, 500);
+  return _ok(r);
+}
+
+bool PN532::killerUploadEmulatorData(KillerTagType tagType, uint8_t slot,
+                                     const uint8_t* data, size_t dataLen) {
+  // One block (16 bytes) per call; index = block number (not byte offset)
+  size_t totalBlocks = dataLen / 16;
+  for (size_t blk = 0; blk < totalBlocks; blk++) {
+    uint8_t buf[4 + 16];
+    buf[0] = (uint8_t)tagType;
+    buf[1] = slot;
+    buf[2] = (uint8_t)((blk >> 8) & 0xFF);
+    buf[3] = (uint8_t)(blk & 0xFF);
+    memcpy(&buf[4], data + blk * 16, 16);
+    uint8_t resp[32]; size_t respLen = 0;
+    R r = _t.transceive(CMD_KILLER_SET_EMULATOR_DATA, buf, sizeof(buf),
+                        resp, sizeof(resp), respLen, 500);
+    if (!_ok(r)) return false;
+  }
+  // Commit: [type, slot, 0xFF, 0xFF, 16×0x00]
+  uint8_t done[20];
+  done[0] = (uint8_t)tagType;
+  done[1] = slot;
+  done[2] = 0xFF;
+  done[3] = 0xFF;
+  memset(&done[4], 0x00, 16);
+  uint8_t resp[32]; size_t respLen = 0;
+  R r = _t.transceive(CMD_KILLER_SET_EMULATOR_DATA, done, sizeof(done),
+                      resp, sizeof(resp), respLen, 500);
+  return _ok(r);
 }
 
 bool PN532::tgInitAsTarget(uint16_t atqa, uint8_t sak,

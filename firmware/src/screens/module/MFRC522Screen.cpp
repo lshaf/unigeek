@@ -418,8 +418,9 @@ void MFRC522Screen::_callMemoryReader() {
   _rows[_rowCount] = {_rowLabels[_rowCount].c_str(), _rowValues[_rowCount]};
   _rowCount++;
 
+  std::string uidHex = _uidToString(_currentCard.uidByte, _currentCard.size);
   _rowLabels[_rowCount] = "UID";
-  _rowValues[_rowCount] = _uidToString(_currentCard.uidByte, _currentCard.size).c_str();
+  _rowValues[_rowCount] = uidHex.c_str();
   _rows[_rowCount] = {_rowLabels[_rowCount].c_str(), _rowValues[_rowCount]};
   _rowCount++;
 
@@ -431,6 +432,16 @@ void MFRC522Screen::_callMemoryReader() {
   size_t totalBlocks = it->second.second;
   int lastValidatedSector = -1;
 
+  // Open binary dump file
+  fs::File dumpFile;
+  bool saveOk = false;
+  if (Uni.Storage && Uni.Storage->isAvailable()) {
+    Uni.Storage->makeDir("/unigeek/nfc");
+    Uni.Storage->makeDir("/unigeek/nfc/dumps");
+    String dumpPath = String("/unigeek/nfc/dumps/") + uidHex.c_str() + ".bin";
+    dumpFile = Uni.Storage->open(dumpPath.c_str(), "w");
+  }
+
   ProgressView::init();
   for (size_t block = 0; block < totalBlocks && _rowCount < MAX_ROWS - 1; block++) {
     int pct = (int)(block * 100 / totalBlocks);
@@ -439,6 +450,8 @@ void MFRC522Screen::_callMemoryReader() {
 
     int currentSector = (block < 128) ? (block / 4) : ((block - 128) / 16 + 32);
     String blockLabel = "Blk " + String((int)block);
+
+    byte blockData[18] = {};
 
     if (!_mf1AuthKeys[currentSector].first && !_mf1AuthKeys[currentSector].second) {
       _rowLabels[_rowCount] = blockLabel + "a";
@@ -451,6 +464,7 @@ void MFRC522Screen::_callMemoryReader() {
         _rows[_rowCount] = {_rowLabels[_rowCount].c_str(), _rowValues[_rowCount]};
         _rowCount++;
       }
+      if (dumpFile) dumpFile.write(blockData, 16);
       continue;
     }
 
@@ -491,11 +505,11 @@ void MFRC522Screen::_callMemoryReader() {
           _rows[_rowCount] = {_rowLabels[_rowCount].c_str(), _rowValues[_rowCount]};
           _rowCount++;
         }
+        if (dumpFile) dumpFile.write(blockData, 16);
         continue;
       }
     }
 
-    byte blockData[18];
     byte blockSize = sizeof(blockData);
     auto readStatus = static_cast<MFRC522_I2C::StatusCode>(
       _module->MIFARE_Read(block, blockData, &blockSize));
@@ -511,6 +525,7 @@ void MFRC522Screen::_callMemoryReader() {
         _rows[_rowCount] = {_rowLabels[_rowCount].c_str(), _rowValues[_rowCount]};
         _rowCount++;
       }
+      memset(blockData, 0, 16);
     } else {
       char buf[26];
       sprintf(buf, "%02X:%02X:%02X:%02X:%02X:%02X:%02X:%02X",
@@ -531,6 +546,18 @@ void MFRC522Screen::_callMemoryReader() {
         _rowCount++;
       }
     }
+    if (dumpFile) dumpFile.write(blockData, 16);
+  }
+
+  if (dumpFile) {
+    saveOk = true;
+    dumpFile.close();
+  }
+  if (_rowCount < MAX_ROWS) {
+    _rowLabels[_rowCount] = "Saved";
+    _rowValues[_rowCount] = saveOk ? (uidHex + ".bin").c_str() : "failed";
+    _rows[_rowCount] = {_rowLabels[_rowCount].c_str(), _rowValues[_rowCount]};
+    _rowCount++;
   }
 
   _scrollView.setRows(_rows, _rowCount);

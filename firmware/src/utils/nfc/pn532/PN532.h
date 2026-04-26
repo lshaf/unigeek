@@ -23,6 +23,21 @@ public:
     CMD_TG_GET_INITIATOR_COMMAND  = 0x88,
     CMD_TG_RESPONSE_TO_INITIATOR  = 0x90,
     CMD_KILLER_DETECT             = 0xAA,
+    CMD_KILLER_SET_WORK_MODE      = 0xAC,
+    CMD_KILLER_SET_EMULATOR_DATA  = 0x1E,
+  };
+
+  enum KillerWorkMode : uint8_t {
+    KILLER_READER   = 0x01,
+    KILLER_EMULATOR = 0x02,
+    KILLER_SNIFFER  = 0x03,
+  };
+
+  enum KillerTagType : uint8_t {
+    KILLER_MFC1K    = 0x01,
+    KILLER_NTAG     = 0x02,
+    KILLER_ISO15693 = 0x03,
+    KILLER_EM4100   = 0x04,
   };
 
   enum Bitrate : uint8_t {
@@ -106,10 +121,15 @@ public:
                          uint8_t* out, size_t outCap, size_t& outLen,
                          uint32_t timeoutMs = 500);
 
-  // Card emulation (passive target)
+  // Card emulation (passive target — stock PN532)
   bool tgInitAsTarget(uint16_t atqa, uint8_t sak,
                       const uint8_t* uid, uint8_t uidLen,
                       uint32_t timeoutMs = 5000);
+
+  // PN532Killer slot management
+  bool killerSetWorkMode(KillerWorkMode mode, KillerTagType tagType, uint8_t slot);
+  bool killerUploadEmulatorData(KillerTagType tagType, uint8_t slot,
+                                const uint8_t* data, size_t dataLen);
 
   // Magic card detection (Gen1a / Gen3)
   bool isGen1a();
