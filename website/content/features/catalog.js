@@ -75,11 +75,11 @@ export const CATALOG = [
   { slug: "pomodoro",             title: "Pomodoro Timer",      category: "utility",  summary: "Focus/break timer with configurable work and break durations, progress bar, speaker notification, and session counter", hasDetail: false, stable: true },
 
   // Games
-  { slug: "game-flappy",          title: "Flappy Bird",         category: "game",     summary: "Classic side-scrolling game with randomized pipes and scoring",                                       hasDetail: false, stable: true },
-  { slug: "game-wordle",          title: "Wordle",              category: "game",     summary: "Guess a 5-letter word — English and Indonesian; top 5 high scores per difficulty",                    hasDetail: false, stable: true },
-  { slug: "game-hex-decoder",     title: "HEX Decoder",         category: "game",     summary: "Wordle-style game using hex characters — top 5 high scores per difficulty",                          hasDetail: false, stable: true },
-  { slug: "game-memory",          title: "Memory Sequence",     category: "game",     summary: "Simon Says-style memory game across 4 difficulty levels with high score tracking",                  hasDetail: false, stable: true },
-  { slug: "game-number-guess",    title: "Number Guess",        category: "game",     summary: "Higher/lower guessing game — 4 difficulties (1-99 to 1-9999); top 5 high scores",                    hasDetail: false, stable: true },
+  { slug: "flappy-bird",          title: "Flappy Bird",         category: "game",     summary: "Classic side-scrolling game with randomized pipes and scoring",                                       hasDetail: true,  stable: true },
+  { slug: "wordle",               title: "Wordle",              category: "game",     summary: "Guess a 5-letter word — English and Indonesian; top 5 high scores per difficulty",                    hasDetail: true,  stable: true },
+  { slug: "hex-decoder",          title: "HEX Decoder",         category: "game",     summary: "Wordle-style game using hex characters — top 5 high scores per difficulty",                          hasDetail: true,  stable: true },
+  { slug: "memory-sequence",      title: "Memory Sequence",     category: "game",     summary: "Simon Says-style memory game across 4 difficulty levels with high score tracking",                  hasDetail: true,  stable: true },
+  { slug: "number-guess",         title: "Number Guess",        category: "game",     summary: "Higher/lower guessing game — 4 difficulties (1-99 to 1-9999); top 5 high scores",                    hasDetail: true,  stable: true },
 
   // Settings
   { slug: "setting-general",      title: "General Settings",    category: "setting",  summary: "Device name, display timeout, brightness, volume, navigation sound, theme color, WFM password",    hasDetail: false, stable: true },
