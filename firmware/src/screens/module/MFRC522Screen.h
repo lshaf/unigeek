@@ -5,6 +5,7 @@
 #include <unordered_map>
 #include "ui/templates/ListScreen.h"
 #include "ui/views/ScrollListView.h"
+#include "ui/views/LogView.h"
 #include "utils/nfc/NFCUtility.h"
 
 class MFRC522Screen : public ListScreen
@@ -28,6 +29,8 @@ private:
     STATE_SHOW_KEY,
     STATE_MEMORY_READER,
     STATE_DICT_SELECT,
+    STATE_NESTED,
+    STATE_STATIC_NESTED,
   };
 
   State_e _state = STATE_MAIN_MENU;
@@ -51,11 +54,12 @@ private:
   };
 
   // MIFARE Classic submenu
-  ListItem _mfItems[4] = {
+  ListItem _mfItems[5] = {
     {"Discovered Keys"},
     {"Dump Memory"},
     {"Dictionary Attack"},
     {"Static Nested"},
+    {"Nested Attack"},
   };
 
   // ScrollListView for keys/memory display
@@ -65,6 +69,18 @@ private:
   String _rowLabels[MAX_ROWS];
   String _rowValues[MAX_ROWS];
   uint16_t _rowCount = 0;
+
+  // Authenticate log view
+  LogView _authLog;
+  char _authStatus[48] = {};
+  int _authPct = 0;
+  static void _authStatusBarCb(Sprite& sp, int barY, int width, void* userData);
+
+  // Nested attack log view
+  LogView _nestedLog;
+  char _nestedStatus[48] = {};
+  int _nestedPct = 0;
+  static void _nestedStatusBarCb(Sprite& sp, int barY, int width, void* userData);
 
   void _initModule();
   void _cleanup();
@@ -77,6 +93,7 @@ private:
   void _callDictionaryAttack();
   void _callDictAttackWithFile(uint8_t fileIndex);
   void _callStaticNested();
+  void _callNestedAttack();
   void _callDarksideAttack();
   bool _resetCardState();
 

@@ -7,9 +7,11 @@
 #include "ui/actions/ShowStatusAction.h"
 #include "ui/views/ProgressView.h"
 #include "utils/nfc/StaticNestedAttack.h"
+#include "utils/nfc/NestedAttack.h"
 #include "utils/nfc/DarksideAttack.h"
 
 static constexpr uint8_t I2C_ADDRESS = 0x28;
+static MFRC522Screen* _nestedSelf = nullptr;
 
 const char* MFRC522Screen::title() {
   switch (_state) {
@@ -20,6 +22,8 @@ const char* MFRC522Screen::title() {
     case STATE_SHOW_KEY:      return "Discovered Keys";
     case STATE_MEMORY_READER: return "Memory Reader";
     case STATE_DICT_SELECT:   return "Dictionary Attack";
+    case STATE_NESTED:        return "Nested Attack";
+    case STATE_STATIC_NESTED: return "Static Nested";
   }
   return "M5 RFID 2";
 }
@@ -53,6 +57,24 @@ void MFRC522Screen::onUpdate() {
     return;
   }
 
+  if (_state == STATE_AUTHENTICATE || _state == STATE_NESTED || _state == STATE_STATIC_NESTED) {
+    if (Uni.Nav->wasPressed()) {
+      auto dir = Uni.Nav->readDirection();
+      if (dir == INavigation::DIR_BACK) {
+        _goMifareClassic();
+      } else {
+        auto& log = (_state == STATE_AUTHENTICATE) ? _authLog : _nestedLog;
+        if (dir == INavigation::DIR_UP)
+          log.scroll(1);
+        else if (dir == INavigation::DIR_DOWN)
+          log.scroll(-1);
+        log.draw(Uni.Lcd, bodyX(), bodyY(), bodyW(), bodyH(),
+                 (_state == STATE_AUTHENTICATE) ? _authStatusBarCb : _nestedStatusBarCb, this);
+      }
+    }
+    return;
+  }
+
   ListScreen::onUpdate();
 }
 
@@ -60,6 +82,14 @@ void MFRC522Screen::onRender() {
   if (_state == STATE_SCAN_UID) return;
   if (_state == STATE_SHOW_KEY || _state == STATE_MEMORY_READER) {
     _scrollView.render(bodyX(), bodyY(), bodyW(), bodyH());
+    return;
+  }
+  if (_state == STATE_AUTHENTICATE) {
+    _authLog.draw(Uni.Lcd, bodyX(), bodyY(), bodyW(), bodyH(), _authStatusBarCb, this);
+    return;
+  }
+  if (_state == STATE_NESTED || _state == STATE_STATIC_NESTED) {
+    _nestedLog.draw(Uni.Lcd, bodyX(), bodyY(), bodyW(), bodyH(), _nestedStatusBarCb, this);
     return;
   }
   ListScreen::onRender();
@@ -78,6 +108,7 @@ void MFRC522Screen::onItemSelected(uint8_t index) {
       case 1: _callMemoryReader();     break;
       case 2: _callDictionaryAttack(); break;
       case 3: _callStaticNested();     break;
+      case 4: _callNestedAttack();     break;
     }
   } else if (_state == STATE_DICT_SELECT) {
     _callDictAttackWithFile(index);
@@ -106,7 +137,7 @@ void MFRC522Screen::onBack() {
     _currentCard = {};
     _mf1AuthKeys.fill({});
     _goMainMenu();
-  } else if (_state == STATE_SHOW_KEY || _state == STATE_MEMORY_READER || _state == STATE_DICT_SELECT) {
+  } else if (_state == STATE_SHOW_KEY || _state == STATE_MEMORY_READER || _state == STATE_DICT_SELECT || _state == STATE_NESTED || _state == STATE_STATIC_NESTED) {
     _goMifareClassic();
   }
 }
@@ -183,7 +214,8 @@ void MFRC522Screen::_goMainMenu() {
 
 void MFRC522Screen::_goMifareClassic() {
   _state = STATE_MIFARE_CLASSIC;
-  setItems(_mfItems);
+  uint8_t count = (ESP.getPsramSize() > 0) ? 5 : 4;
+  setItems(_mfItems, count);
   render();
 }
 
@@ -305,6 +337,18 @@ bool MFRC522Screen::_resetCardState() {
   ) != MFRC522_I2C::STATUS_TIMEOUT;
 }
 
+void MFRC522Screen::_authStatusBarCb(Sprite& sp, int barY, int width, void* userData) {
+  auto* self = static_cast<MFRC522Screen*>(userData);
+  sp.setTextDatum(TL_DATUM);
+  sp.setTextColor(TFT_CYAN);
+  sp.drawString(self->_authStatus, 2, barY);
+  char pctBuf[8];
+  snprintf(pctBuf, sizeof(pctBuf), "%d%%", self->_authPct);
+  sp.setTextDatum(TR_DATUM);
+  sp.setTextColor(TFT_WHITE);
+  sp.drawString(pctBuf, width - 2, barY);
+}
+
 void MFRC522Screen::_callAuthenticate() {
   _state = STATE_AUTHENTICATE;
 
@@ -349,37 +393,47 @@ void MFRC522Screen::_callAuthenticate() {
   };
 
   _mf1AuthKeys.fill({});
+  _authLog.clear();
+  _authPct = 0;
+  strncpy(_authStatus, "Starting...", sizeof(_authStatus) - 1);
+  render();
 
-  ProgressView::init();
+  // Initial scan only tries the FFFFFFFFFFFF default. For deeper checks the
+  // user runs Dictionary Attack from the MIFARE Classic menu.
+  NFCUtility::MIFARE_Key defaultKey(0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF);
+  MFRC522_I2C::MIFARE_Key currentKey = {0xFF,0xFF,0xFF,0xFF,0xFF,0xFF};
+
   bool _keyFoundFired = false;
   for (size_t sector = 0; sector < totalSectors; sector++) {
     for (const auto& keyType : keyTypes) {
-      String progress = String((int)sector) + "/" + String((int)(totalSectors - 1));
-      String msg = "Auth sector " + progress;
-      msg += (keyType == MFRC522_I2C::PICC_CMD_MF_AUTH_KEY_A) ? " key A..." : " key B...";
-      int pct = (int)((sector * 2 + (keyType == MFRC522_I2C::PICC_CMD_MF_AUTH_KEY_B ? 1 : 0)) * 100 / (totalSectors * 2));
-      ProgressView::progress(msg.c_str(), pct);
+      bool isKeyA = (keyType == MFRC522_I2C::PICC_CMD_MF_AUTH_KEY_A);
+      _authPct = (int)((sector * 2 + (isKeyA ? 0 : 1)) * 100 / (totalSectors * 2));
 
-      for (const auto& key : NFCUtility::getDefaultKeys()) {
-        const auto kv = key.value();
-        MFRC522_I2C::MIFARE_Key currentKey = {kv[0], kv[1], kv[2], kv[3], kv[4], kv[5]};
-        int blockIndex = (sector < 32) ? (sector * 4 + 3) : (128 + (sector - 32) * 16 + 15);
-        auto response = static_cast<MFRC522_I2C::StatusCode>(
-          _module->PCD_Authenticate(keyType, blockIndex, &currentKey, &_currentCard));
+      int blockIndex = (sector < 32) ? (sector * 4 + 3) : (128 + (sector - 32) * 16 + 15);
 
-        if (response == MFRC522_I2C::STATUS_OK) {
-          if (keyType == MFRC522_I2C::PICC_CMD_MF_AUTH_KEY_A)
-            _mf1AuthKeys[sector].first = key;
-          else
-            _mf1AuthKeys[sector].second = key;
-          if (!_keyFoundFired) {
-            _keyFoundFired = true;
-            int n = Achievement.inc("nfc_key_found");
-            if (n == 1) Achievement.unlock("nfc_key_found");
-          }
-          break;
+      snprintf(_authStatus, sizeof(_authStatus), "S%d %c default",
+               (int)sector, isKeyA ? 'A' : 'B');
+      _authLog.draw(Uni.Lcd, bodyX(), bodyY(), bodyW(), bodyH(), _authStatusBarCb, this);
+
+      auto response = static_cast<MFRC522_I2C::StatusCode>(
+        _module->PCD_Authenticate(keyType, blockIndex, &currentKey, &_currentCard));
+
+      char logLine[48];
+      snprintf(logLine, sizeof(logLine), "S%d %c: %s",
+               (int)sector, isKeyA ? 'A' : 'B',
+               response == MFRC522_I2C::STATUS_OK ? "FFFFFFFFFFFF" : "not default");
+
+      if (response == MFRC522_I2C::STATUS_OK) {
+        if (isKeyA) _mf1AuthKeys[sector].first  = defaultKey;
+        else        _mf1AuthKeys[sector].second = defaultKey;
+        if (!_keyFoundFired) {
+          _keyFoundFired = true;
+          int n = Achievement.inc("nfc_key_found");
+          if (n == 1) Achievement.unlock("nfc_key_found");
         }
-
+        _authLog.addLine(logLine, TFT_GREEN);
+      } else {
+        _authLog.addLine(logLine, TFT_DARKGREY);
         int counter = 0;
         do {
           counter++;
@@ -391,6 +445,7 @@ void MFRC522Screen::_callAuthenticate() {
           }
         } while (!_resetCardState());
       }
+      _authLog.draw(Uni.Lcd, bodyX(), bodyY(), bodyW(), bodyH(), _authStatusBarCb, this);
     }
   }
 
@@ -789,76 +844,232 @@ void MFRC522Screen::_callStaticNested() {
     ? (exploitSector * 4 + 3)
     : (128 + (exploitSector - 32) * 16 + 15);
 
-  // Check if card has static nonce
-  ProgressView::init();
-  ProgressView::progress("Checking static nonce...", 5);
+  // Reuse the nested log surface so static-nested has the same chameleon-style
+  // header + silent progress + summary pattern as the nested attack.
+  _state = STATE_STATIC_NESTED;
+  _nestedLog.clear();
+  _nestedPct = 0;
+  strncpy(_nestedStatus, "Checking static nonce...", sizeof(_nestedStatus) - 1);
+  render();
+
+  _nestedSelf = this;
+  _nestedLog.draw(Uni.Lcd, bodyX(), bodyY(), bodyW(), bodyH(), _nestedStatusBarCb, this);
+
   if (!StaticNestedAttack::isStaticNonce(_module, uid, exploitCmd, exploitTrailer, exploitKey)) {
     _module->PCD_Init();
-    ShowStatusAction::show("Card does not have static nonce");
+    _nestedLog.addLine("Card does not have static nonce", TFT_RED);
+    _nestedLog.draw(Uni.Lcd, bodyX(), bodyY(), bodyW(), bodyH(), _nestedStatusBarCb, this);
+    delay(1500);
+    _nestedSelf = nullptr;
     _goMifareClassic();
     return;
   }
 
+  // Status-bar-only progress callback (matches chameleon nested pattern).
+  auto barProgress = [](const char* m, int pct) -> bool {
+    strncpy(_nestedSelf->_nestedStatus, m, sizeof(_nestedSelf->_nestedStatus) - 1);
+    _nestedSelf->_nestedStatus[sizeof(_nestedSelf->_nestedStatus) - 1] = 0;
+    _nestedSelf->_nestedPct = pct;
+    _nestedSelf->_nestedLog.draw(Uni.Lcd,
+      _nestedSelf->bodyX(), _nestedSelf->bodyY(),
+      _nestedSelf->bodyW(), _nestedSelf->bodyH(),
+      _nestedStatusBarCb, _nestedSelf);
+    return true;
+  };
+
   int recovered = 0;
 
   for (size_t s = 0; s < totalSectors; s++) {
-    if (_mf1AuthKeys[s].first && _mf1AuthKeys[s].second)
-      continue;
+    if (_mf1AuthKeys[s].first && _mf1AuthKeys[s].second) continue;
 
     int targetTrailer = (s < 32) ? ((int)s * 4 + 3) : (128 + ((int)s - 32) * 16 + 15);
 
-    // Attack missing key A
-    if (!_mf1AuthKeys[s].first) {
-      char msg[48];
-      snprintf(msg, sizeof(msg), "Static nested S%d A...", (int)s);
-      ProgressView::progress(msg, (int)(s * 100 / totalSectors));
+    for (int kt = 0; kt < 2; kt++) {
+      bool isA = (kt == 0);
+      bool already = isA ? (bool)_mf1AuthKeys[s].first : (bool)_mf1AuthKeys[s].second;
+      if (already) continue;
+
+      uint8_t targetCmd = isA ? MFRC522_I2C::PICC_CMD_MF_AUTH_KEY_A
+                              : MFRC522_I2C::PICC_CMD_MF_AUTH_KEY_B;
+      char tkc = isA ? 'A' : 'B';
+
+      _nestedPct = (int)(s * 100 / totalSectors);
+
+      char hdr[48];
+      snprintf(hdr, sizeof(hdr), "──── target S%d %c block=%d ────",
+               (int)s, tkc, targetTrailer);
+      _nestedLog.addLine(hdr, TFT_CYAN);
+      _nestedLog.draw(Uni.Lcd, bodyX(), bodyY(), bodyW(), bodyH(), _nestedStatusBarCb, this);
 
       auto result = StaticNestedAttack::crack(
         _module, uid, exploitCmd, exploitTrailer, exploitKey,
-        MFRC522_I2C::PICC_CMD_MF_AUTH_KEY_A, targetTrailer,
-        [](const char* m, int pct) -> bool {
-          ProgressView::progress(m, pct);
-          return true;
-        });
+        targetCmd, targetTrailer, barProgress);
 
       if (result.success) {
         uint8_t kb[6];
         uint64_t k = result.key;
         for (int i = 5; i >= 0; i--) { kb[i] = (uint8_t)(k & 0xFF); k >>= 8; }
-        _mf1AuthKeys[s].first = NFCUtility::MIFARE_Key(kb[0], kb[1], kb[2], kb[3], kb[4], kb[5]);
+        if (isA) _mf1AuthKeys[s].first  = NFCUtility::MIFARE_Key(kb[0], kb[1], kb[2], kb[3], kb[4], kb[5]);
+        else     _mf1AuthKeys[s].second = NFCUtility::MIFARE_Key(kb[0], kb[1], kb[2], kb[3], kb[4], kb[5]);
         recovered++;
+        char ok[48];
+        snprintf(ok, sizeof(ok), "S%d %c: KEY %02X%02X%02X%02X%02X%02X",
+                 (int)s, tkc, kb[0], kb[1], kb[2], kb[3], kb[4], kb[5]);
+        _nestedLog.addLine(ok, TFT_GREEN);
+      } else {
+        char fail[48];
+        snprintf(fail, sizeof(fail), "S%d %c: no key", (int)s, tkc);
+        _nestedLog.addLine(fail, TFT_RED);
       }
-    }
-
-    // Attack missing key B
-    if (!_mf1AuthKeys[s].second) {
-      char msg[48];
-      snprintf(msg, sizeof(msg), "Static nested S%d B...", (int)s);
-      ProgressView::progress(msg, (int)(s * 100 / totalSectors));
-
-      auto result = StaticNestedAttack::crack(
-        _module, uid, exploitCmd, exploitTrailer, exploitKey,
-        MFRC522_I2C::PICC_CMD_MF_AUTH_KEY_B, targetTrailer,
-        [](const char* m, int pct) -> bool {
-          ProgressView::progress(m, pct);
-          return true;
-        });
-
-      if (result.success) {
-        uint8_t kb[6];
-        uint64_t k = result.key;
-        for (int i = 5; i >= 0; i--) { kb[i] = (uint8_t)(k & 0xFF); k >>= 8; }
-        _mf1AuthKeys[s].second = NFCUtility::MIFARE_Key(kb[0], kb[1], kb[2], kb[3], kb[4], kb[5]);
-        recovered++;
-      }
+      _nestedLog.draw(Uni.Lcd, bodyX(), bodyY(), bodyW(), bodyH(), _nestedStatusBarCb, this);
     }
   }
 
+  _nestedSelf = nullptr;
   _module->PCD_Init();
 
   if (recovered > 0) {
     int n = Achievement.inc("nfc_static_nested");
     if (n == 1) Achievement.unlock("nfc_static_nested");
+  }
+  char msg[48];
+  snprintf(msg, sizeof(msg), "Recovered %d keys", recovered);
+  ShowStatusAction::show(msg);
+  _goMifareClassic();
+}
+
+void MFRC522Screen::_nestedStatusBarCb(Sprite& sp, int barY, int width, void* userData) {
+  auto* self = static_cast<MFRC522Screen*>(userData);
+  sp.setTextDatum(TL_DATUM);
+  sp.setTextColor(TFT_CYAN);
+  sp.drawString(self->_nestedStatus, 2, barY);
+  char pctBuf[8];
+  snprintf(pctBuf, sizeof(pctBuf), "%d%%", self->_nestedPct);
+  sp.setTextDatum(TR_DATUM);
+  sp.setTextColor(TFT_WHITE);
+  sp.drawString(pctBuf, width - 2, barY);
+}
+
+void MFRC522Screen::_callNestedAttack() {
+  auto piccType = static_cast<MFRC522_I2C::PICC_Type>(_module->PICC_GetType(_currentCard.sak));
+  auto it = _mf1CardDetails.find(piccType);
+  if (it == _mf1CardDetails.end()) {
+    ShowStatusAction::show("Unsupported tag");
+    render();
+    return;
+  }
+
+  size_t totalSectors = it->second.first;
+
+  int exploitSector = -1;
+  uint64_t exploitKey = 0;
+  uint8_t exploitCmd = MFRC522_I2C::PICC_CMD_MF_AUTH_KEY_A;
+  for (size_t s = 0; s < totalSectors; s++) {
+    if (_mf1AuthKeys[s].first) {
+      exploitSector = (int)s;
+      exploitCmd = MFRC522_I2C::PICC_CMD_MF_AUTH_KEY_A;
+      auto kv = _mf1AuthKeys[s].first.value();
+      for (int b = 0; b < 6; b++) exploitKey = (exploitKey << 8) | kv[b];
+      break;
+    }
+    if (_mf1AuthKeys[s].second) {
+      exploitSector = (int)s;
+      exploitCmd = MFRC522_I2C::PICC_CMD_MF_AUTH_KEY_B;
+      auto kv = _mf1AuthKeys[s].second.value();
+      for (int b = 0; b < 6; b++) exploitKey = (exploitKey << 8) | kv[b];
+      break;
+    }
+  }
+
+  if (exploitSector < 0) {
+    ShowStatusAction::show("Need at least one known key first!");
+    render();
+    return;
+  }
+
+  uint32_t uid = 0;
+  for (int i = 0; i < 4; i++) uid = (uid << 8) | _currentCard.uidByte[i];
+
+  int exploitTrailer = (exploitSector < 32)
+    ? (exploitSector * 4 + 3)
+    : (128 + (exploitSector - 32) * 16 + 15);
+
+  _state = STATE_NESTED;
+  _nestedLog.clear();
+  _nestedPct = 0;
+  strncpy(_nestedStatus, "Starting...", sizeof(_nestedStatus) - 1);
+  render();
+
+  _nestedSelf = this;
+  int recovered = 0;
+
+  // Status-bar-only progress: never adds log lines (matches chameleon nested
+  // pattern). The screen emits one header line before each target and one
+  // summary line after — the per-step diagnostics from NestedAttack are folded
+  // into the status bar, which redraws cheaply via the bar-only path.
+  auto barProgress = [](const char* m, int pct) -> bool {
+    strncpy(_nestedSelf->_nestedStatus, m, sizeof(_nestedSelf->_nestedStatus) - 1);
+    _nestedSelf->_nestedStatus[sizeof(_nestedSelf->_nestedStatus) - 1] = 0;
+    _nestedSelf->_nestedPct = pct;
+    _nestedSelf->_nestedLog.draw(Uni.Lcd,
+      _nestedSelf->bodyX(), _nestedSelf->bodyY(),
+      _nestedSelf->bodyW(), _nestedSelf->bodyH(),
+      _nestedStatusBarCb, _nestedSelf);
+    return true;
+  };
+
+  for (size_t s = 0; s < totalSectors; s++) {
+    if (_mf1AuthKeys[s].first && _mf1AuthKeys[s].second) continue;
+
+    int targetTrailer = (s < 32) ? ((int)s * 4 + 3) : (128 + ((int)s - 32) * 16 + 15);
+
+    for (int kt = 0; kt < 2; kt++) {
+      bool isA = (kt == 0);
+      bool already = isA ? (bool)_mf1AuthKeys[s].first : (bool)_mf1AuthKeys[s].second;
+      if (already) continue;
+
+      uint8_t targetCmd = isA ? MFRC522_I2C::PICC_CMD_MF_AUTH_KEY_A
+                              : MFRC522_I2C::PICC_CMD_MF_AUTH_KEY_B;
+      char tkc = isA ? 'A' : 'B';
+
+      _nestedPct = (int)(s * 100 / totalSectors);
+
+      char hdr[48];
+      snprintf(hdr, sizeof(hdr), "──── target S%d %c block=%d ────",
+               (int)s, tkc, targetTrailer);
+      _nestedLog.addLine(hdr, TFT_CYAN);
+      _nestedLog.draw(Uni.Lcd, bodyX(), bodyY(), bodyW(), bodyH(), _nestedStatusBarCb, this);
+
+      auto result = NestedAttack::crack(
+        _module, uid, exploitCmd, exploitTrailer, exploitKey,
+        targetCmd, targetTrailer, barProgress);
+
+      if (result.success) {
+        uint8_t kb[6];
+        uint64_t k = result.key;
+        for (int i = 5; i >= 0; i--) { kb[i] = (uint8_t)(k & 0xFF); k >>= 8; }
+        if (isA) _mf1AuthKeys[s].first  = NFCUtility::MIFARE_Key(kb[0], kb[1], kb[2], kb[3], kb[4], kb[5]);
+        else     _mf1AuthKeys[s].second = NFCUtility::MIFARE_Key(kb[0], kb[1], kb[2], kb[3], kb[4], kb[5]);
+        recovered++;
+        char ok[48];
+        snprintf(ok, sizeof(ok), "S%d %c: KEY %02X%02X%02X%02X%02X%02X",
+          (int)s, tkc, kb[0], kb[1], kb[2], kb[3], kb[4], kb[5]);
+        _nestedLog.addLine(ok, TFT_GREEN);
+      } else {
+        char fail[48];
+        snprintf(fail, sizeof(fail), "S%d %c: no key", (int)s, tkc);
+        _nestedLog.addLine(fail, TFT_RED);
+      }
+      _nestedLog.draw(Uni.Lcd, bodyX(), bodyY(), bodyW(), bodyH(), _nestedStatusBarCb, this);
+    }
+  }
+
+  _nestedSelf = nullptr;
+  _module->PCD_Init();
+
+  if (recovered > 0) {
+    int n = Achievement.inc("nfc_nested_attack");
+    if (n == 1) Achievement.unlock("nfc_nested_attack");
   }
   char msg[48];
   snprintf(msg, sizeof(msg), "Recovered %d keys", recovered);

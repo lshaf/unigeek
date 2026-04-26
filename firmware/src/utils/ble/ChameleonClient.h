@@ -45,6 +45,9 @@ public:
   static constexpr uint16_t CMD_SCAN_14A         = 2000;
   static constexpr uint16_t CMD_MF1_SUPPORT      = 2001;
   static constexpr uint16_t CMD_MF1_NT_LEVEL     = 2002;
+  static constexpr uint16_t CMD_MF1_STATIC_NESTED_ACQ = 2003;
+  static constexpr uint16_t CMD_MF1_NT_DISTANCE  = 2005;
+  static constexpr uint16_t CMD_MF1_NESTED_ACQ   = 2006;
   static constexpr uint16_t CMD_MF1_CHECK_KEY    = 2007;
   static constexpr uint16_t CMD_MF1_READ_BLOCK   = 2008;
   static constexpr uint16_t CMD_MF1_WRITE_BLOCK  = 2009;
@@ -146,7 +149,32 @@ public:
                        uint16_t* outLen    = nullptr);
   bool hf14ARaw(uint8_t options, uint16_t timeoutMs, uint16_t bitLen,
                 const uint8_t* data, uint16_t dataBytes,
-                uint8_t* respOut, uint16_t* respLen, uint16_t respBufSize);
+                uint8_t* respOut, uint16_t* respLen, uint16_t respBufSize,
+                uint16_t* outStatus = nullptr);
+
+  // Firmware-side nested-attack helpers (cmds 2003/2005/2006).
+  // The Chameleon Ultra firmware does the entire CRYPTO1 + nested-AUTH dance
+  // on-device and returns prepared (Nt, NtEnc, parity) samples that we feed
+  // into lfsr_recovery32. Far more reliable than raw bit-banging over BLE.
+  struct NestedSample { uint32_t nt; uint32_t ntEnc; uint8_t par; };
+
+  // PRNG distance between two consecutive auths to the same block. Required
+  // to predict the target Nt2 in nested attacks. uidOut/distOut may be null.
+  bool mf1NTDistance(uint8_t keyType, uint8_t block, const uint8_t key[6],
+                     uint32_t* uidOut, uint32_t* distOut);
+
+  // Weak-PRNG (NTLevel=2) nested-nonce acquisition. Fills `out` with up to
+  // `maxOut` 9-byte samples. `count` returns how many were stored.
+  bool mf1NestedAcquire(uint8_t keyType, uint8_t block, const uint8_t key[6],
+                        uint8_t targetKeyType, uint8_t targetBlock,
+                        NestedSample* out, int maxOut, int* count);
+
+  // Static-nonce (NTLevel=1) nested-nonce acquisition. Response format is
+  // {uid[4]} {nt[4], ntEnc[4]}*. Parity bits are not produced (set to 0).
+  bool mf1StaticNestedAcquire(uint8_t keyType, uint8_t block, const uint8_t key[6],
+                              uint8_t targetKeyType, uint8_t targetBlock,
+                              uint32_t* uidOut,
+                              NestedSample* out, int maxOut, int* count);
 
   // ── MFKey32 detection log ──
   bool mf1SetDetectEnable(bool on);

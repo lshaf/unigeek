@@ -5,7 +5,6 @@
 #include "core/ScreenManager.h"
 #include "core/AchievementManager.h"
 #include "core/ConfigManager.h"
-#include "ui/views/ProgressView.h"
 #include "ui/actions/ShowStatusAction.h"
 
 // Builtin default Mifare Classic key list (trimmed from upstream gMifareClassicKeysList)
@@ -69,6 +68,27 @@ void ChameleonMfcDictScreen::onBack() {
 void ChameleonMfcDictScreen::onUpdate() {
   if (_state == STATE_RUNNING) return;
 
+  if (_state == STATE_LOG_DONE) {
+    if (Uni.Nav->wasPressed()) {
+      auto dir = Uni.Nav->readDirection();
+      if (dir == INavigation::DIR_BACK) {
+        _state = STATE_SELECT;
+        _loadFilePicker();
+        render();
+        return;
+      }
+      if (dir == INavigation::DIR_PRESS) {
+        _state = STATE_RESULT;
+        render();
+        return;
+      }
+      if (dir == INavigation::DIR_UP)   _runLog.scroll(1);
+      if (dir == INavigation::DIR_DOWN) _runLog.scroll(-1);
+      _runLog.draw(Uni.Lcd, bodyX(), bodyY(), bodyW(), bodyH(), _runStatusBarCb, this);
+    }
+    return;
+  }
+
   if (_state == STATE_RESULT) {
     if (Uni.Nav->isPressed() && Uni.Nav->heldDuration() >= 1000) {
       Uni.Nav->suppressCurrentPress();
@@ -98,7 +118,10 @@ void ChameleonMfcDictScreen::onRender() {
     _scrollView.render(bodyX(), bodyY(), bodyW(), bodyH());
     return;
   }
-  if (_state == STATE_RUNNING) return;
+  if (_state == STATE_RUNNING || _state == STATE_LOG_DONE) {
+    _runLog.draw(Uni.Lcd, bodyX(), bodyY(), bodyW(), bodyH(), _runStatusBarCb, this);
+    return;
+  }
   ListScreen::onRender();
 }
 
@@ -174,25 +197,40 @@ bool ChameleonMfcDictScreen::_loadFileKeys(const char* path) {
   return _keyCount > 0;
 }
 
+void ChameleonMfcDictScreen::_runStatusBarCb(Sprite& sp, int barY, int width, void* userData) {
+  auto* self = static_cast<ChameleonMfcDictScreen*>(userData);
+  sp.setTextDatum(TL_DATUM);
+  sp.setTextColor(TFT_CYAN);
+  sp.drawString(self->_runStatus, 2, barY);
+  char pctBuf[8];
+  snprintf(pctBuf, sizeof(pctBuf), "%d%%", self->_runPct);
+  sp.setTextDatum(TR_DATUM);
+  sp.setTextColor(TFT_WHITE);
+  sp.drawString(pctBuf, width - 2, barY);
+}
+
 void ChameleonMfcDictScreen::_runAttack(const char* sourceLabel) {
-  _state      = STATE_RUNNING;
-  _running    = true;
-  _recovered  = 0;
+  _state     = STATE_RUNNING;
+  _running   = true;
+  _recovered = 0;
   for (int s = 0; s < 40; s++) { _foundA[s] = false; _foundB[s] = false; }
+
+  _runLog.clear();
+  _runPct = 0;
+  snprintf(_runStatus, sizeof(_runStatus), "Src: %s", sourceLabel);
+  _runLog.addLine(_runStatus, TFT_CYAN);
+  _runLog.draw(Uni.Lcd, bodyX(), bodyY(), bodyW(), bodyH(), _runStatusBarCb, this);
 
   auto& c = ChameleonClient::get();
   c.setMode(1);
 
-  ProgressView::init();
-  char msg[80];
-
-  snprintf(msg, sizeof(msg), "Src: %s\nScanning card...", sourceLabel);
-  ProgressView::progress(msg, 0);
+  _runLog.addLine("Scanning card...", TFT_YELLOW);
+  _runLog.draw(Uni.Lcd, bodyX(), bodyY(), bodyW(), bodyH(), _runStatusBarCb, this);
 
   uint8_t atqa[2] = {}, sak = 0;
   if (!c.scan14A(_uid, &_uidLen, atqa, &sak)) {
-    ProgressView::finish();
-    ShowStatusAction::show("No card detected", 1500);
+    _runLog.addLine("No card detected", TFT_RED);
+    _runLog.draw(Uni.Lcd, bodyX(), bodyY(), bodyW(), bodyH(), _runStatusBarCb, this);
     _state   = STATE_SELECT;
     _running = false;
     _loadFilePicker();
@@ -200,42 +238,69 @@ void ChameleonMfcDictScreen::_runAttack(const char* sourceLabel) {
     return;
   }
 
-  if (sak == 0x18)      _sectors = 40; // 4K
-  else if (sak == 0x01) _sectors = 5;  // Mini
-  else                  _sectors = 16; // 1K
+  if (sak == 0x18)      _sectors = 40;
+  else if (sak == 0x01) _sectors = 5;
+  else                  _sectors = 16;
+
+  char msg[64];
+  snprintf(msg, sizeof(msg), "SAK %02X  %d sectors  %u keys",
+           sak, (int)_sectors, (unsigned)_keyCount);
+  _runLog.addLine(msg, TFT_GREEN);
+  _runLog.draw(Uni.Lcd, bodyX(), bodyY(), bodyW(), bodyH(), _runStatusBarCb, this);
 
   int totalWork = _sectors * 2;
   int progress  = 0;
 
   for (uint8_t s = 0; s < _sectors; s++) {
-    uint8_t block = _trailerBlock(s);
+    uint8_t block      = _trailerBlock(s);
     for (int kt = 0; kt < 2; kt++) {
-      uint8_t keyType = (kt == 0) ? 0x60 : 0x61;
-      snprintf(msg, sizeof(msg),
-               "Src: %s\nSector %d key %c (%u keys)",
-               sourceLabel, s, kt == 0 ? 'A' : 'B', (unsigned)_keyCount);
-      int pct = (progress * 100) / totalWork;
-      ProgressView::progress(msg, pct);
+      uint8_t keyType   = (kt == 0) ? 0x60 : 0x61;
+      char    keyTypeCh = (kt == 0) ? 'A'  : 'B';
+
+      _runPct = (progress * 100) / totalWork;
 
       bool found = false;
-      for (uint16_t off = 0; off < _keyCount && !found; off += 32) {
-        uint16_t chunk = (_keyCount - off > 32) ? 32 : (_keyCount - off);
-        uint8_t flat[32 * 6];
-        memcpy(flat, _keys[off], chunk * 6);
+      for (uint16_t k = 0; k < _keyCount && !found; k++) {
+        snprintf(_runStatus, sizeof(_runStatus), "S%d %c %02X%02X%02X%02X%02X%02X",
+                 s, keyTypeCh,
+                 _keys[k][0], _keys[k][1], _keys[k][2],
+                 _keys[k][3], _keys[k][4], _keys[k][5]);
+        _runLog.draw(Uni.Lcd, bodyX(), bodyY(), bodyW(), bodyH(), _runStatusBarCb, this);
 
-        uint8_t matched[6];
-        if (!c.mf1CheckKeysOfBlock(block, keyType, flat, chunk, matched)) continue;
-        if (kt == 0) { memcpy(_keysA[s], matched, 6); _foundA[s] = true; }
-        else         { memcpy(_keysB[s], matched, 6); _foundB[s] = true; }
-        _recovered++;
-        found = true;
+        bool ok = c.mf1CheckKey(block, keyType, _keys[k]);
+
+        char line[48];
+        snprintf(line, sizeof(line), "S%d %c: %02X%02X%02X%02X%02X%02X",
+                 s, keyTypeCh,
+                 _keys[k][0], _keys[k][1], _keys[k][2],
+                 _keys[k][3], _keys[k][4], _keys[k][5]);
+        _runLog.addLine(line, ok ? TFT_GREEN : TFT_RED);
+        _runLog.draw(Uni.Lcd, bodyX(), bodyY(), bodyW(), bodyH(), _runStatusBarCb, this);
+
+        if (ok) {
+          if (kt == 0) { memcpy(_keysA[s], _keys[k], 6); _foundA[s] = true; }
+          else         { memcpy(_keysB[s], _keys[k], 6); _foundB[s] = true; }
+          _recovered++;
+          found = true;
+        }
       }
+
+      if (!found) {
+        char nf[32];
+        snprintf(nf, sizeof(nf), "  S%d %c: not found", s, keyTypeCh);
+        _runLog.addLine(nf, TFT_RED);
+        _runLog.draw(Uni.Lcd, bodyX(), bodyY(), bodyW(), bodyH(), _runStatusBarCb, this);
+      }
+
       progress++;
     }
   }
 
-  ProgressView::progress("Done", 100);
-  ProgressView::finish();
+  snprintf(msg, sizeof(msg), "Done: %d keys found", _recovered);
+  strncpy(_runStatus, msg, sizeof(_runStatus) - 1);
+  _runPct = 100;
+  _runLog.addLine(msg, _recovered > 0 ? TFT_GREEN : TFT_RED);
+  _runLog.draw(Uni.Lcd, bodyX(), bodyY(), bodyW(), bodyH(), _runStatusBarCb, this);
 
   if (_recovered > 0) {
     _saveKeys();
@@ -246,9 +311,8 @@ void ChameleonMfcDictScreen::_runAttack(const char* sourceLabel) {
   }
 
   _buildResultRows();
-  _state   = STATE_RESULT;
+  _state   = STATE_LOG_DONE;
   _running = false;
-  render();
 }
 
 void ChameleonMfcDictScreen::_buildResultRows() {

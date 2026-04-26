@@ -579,7 +579,8 @@ bool ChameleonClient::mf1GetBlockData(uint8_t startBlock, uint8_t count, uint8_t
 bool ChameleonClient::hf14ARaw(uint8_t options, uint16_t timeoutMs, uint16_t bitLen,
                                 const uint8_t* data, uint16_t dataBytes,
                                 uint8_t* respOut, uint16_t* respLen,
-                                uint16_t respBufSize) {
+                                uint16_t respBufSize,
+                                uint16_t* outStatus) {
   uint16_t payLen = 5 + dataBytes;
   uint8_t* p = (uint8_t*)malloc(payLen);
   if (!p) return false;
@@ -592,8 +593,84 @@ bool ChameleonClient::hf14ARaw(uint8_t options, uint16_t timeoutMs, uint16_t bit
   uint16_t st = 0;
   bool ok = sendCommand(CMD_HF14A_RAW, p, payLen, respOut, respLen, &st,
                         timeoutMs + 1500, respBufSize);
+  if (outStatus) *outStatus = st;
   free(p);
   return ok;
+}
+
+// ── Firmware nested-attack helpers ───────────────────────────────────────────
+
+bool ChameleonClient::mf1NTDistance(uint8_t keyType, uint8_t block,
+                                     const uint8_t key[6],
+                                     uint32_t* uidOut, uint32_t* distOut) {
+  uint8_t p[8] = { keyType, block,
+                   key[0], key[1], key[2], key[3], key[4], key[5] };
+  uint8_t buf[16] = {};
+  uint16_t len = 0, st = 0;
+  if (!sendCommand(CMD_MF1_NT_DISTANCE, p, 8, buf, &len, &st, 4000)) return false;
+  if (st != 0 || len < 8) return false;
+  if (uidOut)  *uidOut  = ((uint32_t)buf[0] << 24) | ((uint32_t)buf[1] << 16)
+                        | ((uint32_t)buf[2] <<  8) |  (uint32_t)buf[3];
+  if (distOut) *distOut = ((uint32_t)buf[4] << 24) | ((uint32_t)buf[5] << 16)
+                        | ((uint32_t)buf[6] <<  8) |  (uint32_t)buf[7];
+  return true;
+}
+
+bool ChameleonClient::mf1NestedAcquire(uint8_t keyType, uint8_t block,
+                                        const uint8_t key[6],
+                                        uint8_t targetKeyType, uint8_t targetBlock,
+                                        NestedSample* out, int maxOut, int* count) {
+  uint8_t p[10] = { keyType, block,
+                    key[0], key[1], key[2], key[3], key[4], key[5],
+                    targetKeyType, targetBlock };
+  // Firmware can return many 9-byte records; size buffer generously.
+  uint8_t buf[256] = {};
+  uint16_t len = 0, st = 0;
+  if (!sendCommand(CMD_MF1_NESTED_ACQ, p, 10, buf, &len, &st,
+                   30000, sizeof(buf))) return false;
+  if (st != 0) return false;
+  int n = 0;
+  for (uint16_t i = 0; i + 9 <= len && n < maxOut; i += 9) {
+    out[n].nt    = ((uint32_t)buf[i+0] << 24) | ((uint32_t)buf[i+1] << 16)
+                 | ((uint32_t)buf[i+2] <<  8) |  (uint32_t)buf[i+3];
+    out[n].ntEnc = ((uint32_t)buf[i+4] << 24) | ((uint32_t)buf[i+5] << 16)
+                 | ((uint32_t)buf[i+6] <<  8) |  (uint32_t)buf[i+7];
+    out[n].par   = buf[i+8];
+    n++;
+  }
+  if (count) *count = n;
+  return n > 0;
+}
+
+bool ChameleonClient::mf1StaticNestedAcquire(uint8_t keyType, uint8_t block,
+                                              const uint8_t key[6],
+                                              uint8_t targetKeyType,
+                                              uint8_t targetBlock,
+                                              uint32_t* uidOut,
+                                              NestedSample* out, int maxOut,
+                                              int* count) {
+  uint8_t p[10] = { keyType, block,
+                    key[0], key[1], key[2], key[3], key[4], key[5],
+                    targetKeyType, targetBlock };
+  // Static format: {uid[4]} {nt[4], ntEnc[4]}*  (no parity).
+  uint8_t buf[256] = {};
+  uint16_t len = 0, st = 0;
+  if (!sendCommand(CMD_MF1_STATIC_NESTED_ACQ, p, 10, buf, &len, &st,
+                   30000, sizeof(buf))) return false;
+  if (st != 0 || len < 4) return false;
+  if (uidOut) *uidOut = ((uint32_t)buf[0] << 24) | ((uint32_t)buf[1] << 16)
+                      | ((uint32_t)buf[2] <<  8) |  (uint32_t)buf[3];
+  int n = 0;
+  for (uint16_t i = 4; i + 8 <= len && n < maxOut; i += 8) {
+    out[n].nt    = ((uint32_t)buf[i+0] << 24) | ((uint32_t)buf[i+1] << 16)
+                 | ((uint32_t)buf[i+2] <<  8) |  (uint32_t)buf[i+3];
+    out[n].ntEnc = ((uint32_t)buf[i+4] << 24) | ((uint32_t)buf[i+5] << 16)
+                 | ((uint32_t)buf[i+6] <<  8) |  (uint32_t)buf[i+7];
+    out[n].par   = 0;
+    n++;
+  }
+  if (count) *count = n;
+  return n > 0;
 }
 
 // ── MFKey32 log ──────────────────────────────────────────────────────────────

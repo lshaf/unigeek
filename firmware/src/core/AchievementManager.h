@@ -38,7 +38,7 @@ public:
   struct Catalog { const AchDef* defs; uint16_t count; };
 
   // Returns catalog pointer + count derived from sizeof — no manual counting needed
-  // Next available sequential ID: 228  (IDs 164–198 already used; 199 placed in domain 9; 200–209 in domain 1; 210–223 in domain 9; 224–227 in domain 4)
+  // Next available sequential ID: 231  (IDs 164–198 already used; 199 placed in domain 9; 200–209 in domain 1; 210–223 in domain 9; 224–228 in domain 4; 229–230 in domain 12)
   static Catalog catalog() {
     static constexpr AchDef kAchs[] = {
       // ── WiFi Network (domain 0) ────────────────────────────────────────────
@@ -166,6 +166,8 @@ public:
       { 108, "chameleon_viking_scan",     "Viking Scout",           12, 1, "Scan a Viking tag via Chameleon" },
       { 109, "chameleon_t5577_write",     "Blank Re-writer",        12, 2, "Write an LF ID to a T5577 tag" },
       { 110, "chameleon_t5577_clean",     "Lockpick LF",            12, 2, "Clear a locked T5577 tag password" },
+      { 229, "chameleon_static_nested",  "Fixed Nonce",            12, 3, "Recover a key via Static Nested Attack on Chameleon" },
+      { 230, "chameleon_nested_attack",  "Nested Cipher",          12, 3, "Recover a key via Nested Attack on Chameleon" },
       // ── Keyboard (domain 3) ───────────────────────────────────────────────
       { 111, "kbd_ble_connected",         "Bluetooth Typist",       3, 0, "Connect as a Bluetooth HID keyboard" },
       { 112, "kbd_usb_connected",         "USB Typist",             3, 0, "Connect as a USB HID keyboard" },
@@ -180,6 +182,7 @@ public:
       { 120, "nfc_key_found",             "Key Found",              4, 2, "Crack a valid MIFARE sector key" },
       { 121, "nfc_dump_memory",           "Full Dump",              4, 2, "Dump a full NFC card memory" },
       { 122, "nfc_static_nested",         "Nested Attacker",        4, 2, "Perform a static nested attack" },
+      { 228, "nfc_nested_attack",         "Dynamic Nester",         4, 3, "Perform a nested attack on a normal PRNG card" },
       { 123, "nfc_darkside",              "Dark Art",               4, 3, "Execute a MIFARE Darkside attack" },
       { 224, "pn532_first_use",           "HSU Handshake",          4, 0, "Connect to a PN532 over UART" },
       { 225, "pn532_magic_detect",        "Magic Spotter",          4, 1, "Detect a magic card (Gen1a or Gen3)" },

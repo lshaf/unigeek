@@ -8,7 +8,14 @@ class LogView {
 public:
   using StatusBarCallback = void (*)(Sprite& sp, int barY, int width, void* userData);
 
-  void clear() { _count = 0; }
+  void clear() { _count = 0; _scrollY = 0; }
+  void resetScroll() { _scrollY = 0; }
+
+  void scroll(int delta) {
+    _scrollY += delta;
+    if (_scrollY < 0) _scrollY = 0;
+    if (_scrollY > _count) _scrollY = _count;
+  }
 
   void addLine(const char* msg, uint16_t color = TFT_WHITE) {
     if (_count < MAX_LINES) {
@@ -32,16 +39,19 @@ public:
   {
     static constexpr int lineH   = 10;
     static constexpr int statusH = 11;
+    _scrollY = 0;
     // +1 for the separator hline that sits between log area and status bar.
     int cbH      = statusCb ? statusH + 1 : 0;
     int logAreaH = h - cbH;
     if (logAreaH < 0) logAreaH = 0;
     int maxVisible = logAreaH / lineH;
-    int startIdx   = _count > maxVisible ? _count - maxVisible : 0;
+    int autoStart  = _count > maxVisible ? _count - maxVisible : 0;
+    int startIdx   = autoStart - _scrollY;
+    if (startIdx < 0) startIdx = 0;
 
     // Draw each visible log line in a per-row sprite to avoid fill→text flicker.
     int rendered = 0;
-    for (int i = startIdx; i < _count; i++) {
+    for (int i = startIdx; i < _count && rendered < maxVisible; i++) {
       int rowY = y + (i - startIdx) * lineH;
       Sprite sp(&lcd);
       sp.createSprite(w, lineH);
@@ -81,5 +91,6 @@ private:
   static constexpr int LINE_LEN  = 60;
   char _lines[MAX_LINES][LINE_LEN] = {};
   uint16_t _colors[MAX_LINES] = {};
-  int  _count = 0;
+  int _count   = 0;
+  int _scrollY = 0;  // lines scrolled up from auto-scroll position; 0 = follow latest
 };

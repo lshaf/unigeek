@@ -1,6 +1,7 @@
 #pragma once
 #include "ui/templates/ListScreen.h"
 #include "ui/views/ScrollListView.h"
+#include "ui/views/LogView.h"
 
 class ChameleonMfcDictScreen : public ListScreen {
 public:
@@ -14,7 +15,7 @@ public:
   void onBack()                      override;
 
 private:
-  enum State { STATE_SELECT, STATE_RUNNING, STATE_RESULT };
+  enum State { STATE_SELECT, STATE_RUNNING, STATE_LOG_DONE, STATE_RESULT };
 
   State    _state   = STATE_SELECT;
   bool     _running = false;
@@ -39,6 +40,12 @@ private:
   static constexpr uint16_t MAX_KEYS = 256;
   uint8_t  _keys[MAX_KEYS][6] = {};
   uint16_t _keyCount = 0;
+
+  // ── Run log view ──
+  LogView _runLog;
+  char    _runStatus[48] = {};
+  int     _runPct = 0;
+  static void _runStatusBarCb(Sprite& sp, int barY, int width, void* userData);
 
   // ── Result view ──
   ScrollListView      _scrollView;
