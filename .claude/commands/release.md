@@ -39,17 +39,46 @@ Create a new firmware release. Usage: `/release <version>` (e.g. `/release 1.3.0
    - Create annotated git tag on the new commit using a temp file: `git tag -a <version> -F /tmp/tag_msg_<version>.txt`
    - Push: `git push origin main && git push origin <version>`
 
-10. **Create announcement file** at `release-notes/<version>.md` in Discord-compatible markdown:
-    - No tables (use bullet lists)
-    - No `---` horizontal rules
-    - No clickable `[text](url)` links (write URLs inline)
-    - Use `>` block quotes for feature groupings
-    - Use `**bold**` for feature names
-    - Keep headers as `#` `##` (work in Discord forum posts)
-    - Include install link: https://unigeek.xid.run — browser installer, no tools required
-    - Include download link: https://github.com/lshaf/unigeek/releases
-    - Include SD card note: copy `sdcard/` to SD root or use built-in Download menu
-    - End with: *Built for security research and education. Use responsibly.*
+10. **Create announcement file** at `release-notes/<version>.md` — formatted for the **website parser** (`website/content/releases/index.js`, not Discord). Manual Discord posting is no longer in scope.
+
+    The parser splits the file by H2 sections and only buckets these heading names — anything else is silently dropped:
+
+    | Bucket  | Accepted H2 names |
+    |---------|-------------------|
+    | added   | `New Features`, `New Boards`, `Added` |
+    | changed | `Improvements`, `Changed`, `Enhancements` |
+    | fixed   | `Bug Fixes`, `Fixed`, `Fixes` |
+    | removed | `Removed`, `Deprecated`, `Breaking` |
+    | install | `Install`, `Download` |
+    | contributors | `Contributors` |
+
+    Inside each bucket, two item shapes parse correctly:
+
+    1. **Blockquote item** — preferred for New Features / New Boards (gets a card layout):
+       ```
+       > **Feature Name**
+       > One- or two-sentence description on the next line(s).
+       ```
+       Each `> **Bold**` line starts a new item; subsequent `>` continuation lines attach to the same item.
+
+    2. **Bullet item** — preferred for Improvements / Bug Fixes:
+       ```
+       - **Label** — short description
+       - free text without a label is also valid
+       ```
+
+    Required structure:
+    - First line: `# UniGeek <version>`
+    - Second line: `*YYYY-MM-DD*` (parser strips this; the date shown on the site comes from the git tag)
+    - Then a 1–2 sentence preamble paragraph (rendered as the section intro)
+    - Then the H2 sections in this order: New Features, Improvements, Bug Fixes, Install
+    - Final italic line: *Built for security research and education. Use responsibly.*
+
+    Style rules:
+    - **No tables, no horizontal rules** — the parser doesn't bucket arbitrary content; tables placed under a non-bucketed heading vanish.
+    - **No custom H2 sections** — "Known Issues", "Achievements", "Supported Boards" are dropped on render. Fold notable counts into the preamble or an Improvements bullet instead.
+    - **Plain URLs** are fine in the Install section (rendered as raw HTML); inline `[text](url)` works inside item descriptions.
+    - **Install section** must include the browser installer (https://unigeek.xid.run), the GitHub releases link, and the SD-card note (`sdcard/` to root, or in-firmware Download menu).
 
 11. **Tag message** (written to `/tmp/tag_msg_<version>.txt`):
     - First line: `Release <version>`
