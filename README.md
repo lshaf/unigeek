@@ -354,8 +354,6 @@ This project was built with inspiration and reference from:
 
 ## TODO
 
-- claw in esp32
-- pn532 i2c, spi
 - LoRa
 - ST25 nfc implementation for lora https://github.com/m5stack/M5Unit-NFC
 - sticks3 ir receive not functional (RMT/ES8311 conflict); transmit works
