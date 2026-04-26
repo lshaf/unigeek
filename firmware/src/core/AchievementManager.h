@@ -38,7 +38,7 @@ public:
   struct Catalog { const AchDef* defs; uint16_t count; };
 
   // Returns catalog pointer + count derived from sizeof — no manual counting needed
-  // Next available sequential ID: 227  (IDs 164–198 already used; 199 placed in domain 9; 200–209 in domain 1; 210–223 in domain 9; 224–226 in domain 4)
+  // Next available sequential ID: 228  (IDs 164–198 already used; 199 placed in domain 9; 200–209 in domain 1; 210–223 in domain 9; 224–227 in domain 4)
   static Catalog catalog() {
     static constexpr AchDef kAchs[] = {
       // ── WiFi Network (domain 0) ────────────────────────────────────────────
@@ -184,6 +184,7 @@ public:
       { 224, "pn532_first_use",           "HSU Handshake",          4, 0, "Connect to a PN532 over UART" },
       { 225, "pn532_magic_detect",        "Magic Spotter",          4, 1, "Detect a magic card (Gen1a or Gen3)" },
       { 226, "pn532_emulate",             "Card Ghost",             4, 1, "Emulate a scanned NFC card via PN532" },
+      { 227, "pn532_i2c_first_use",       "I2C Handshake",          4, 0, "Connect to a PN532 over I2C" },
       // ── IR (domain 5) ─────────────────────────────────────────────────────
       { 124, "ir_receive_first",          "Signal Catcher",         5, 0, "Capture an IR signal with the receiver" },
       { 125, "ir_signal_saved",           "Remote Saved",           5, 1, "Save a remote file to storage" },

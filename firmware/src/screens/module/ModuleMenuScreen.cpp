@@ -3,6 +3,7 @@
 #include "screens/MainMenuScreen.h"
 #include "screens/module/MFRC522Screen.h"
 #include "screens/module/PN532UartScreen.h"
+#include "screens/module/PN532I2cScreen.h"
 #include "screens/module/GPSScreen.h"
 #include "screens/module/IRScreen.h"
 #include "screens/module/SubGHzScreen.h"
@@ -19,12 +20,13 @@ void ModuleMenuScreen::onBack() {
 
 void ModuleMenuScreen::onItemSelected(uint8_t index) {
   switch (index) {
-    case 0: Screen.push(new MFRC522Screen()); break;
-    case 1: Screen.push(new PN532UartScreen()); break;
-    case 2: Screen.push(new GPSScreen()); break;
-    case 3: Screen.push(new IRScreen()); break;
-    case 4: Screen.push(new SubGHzScreen()); break;
-    case 5: Screen.push(new NRF24Screen()); break;
-    case 6: Screen.push(new PinSettingScreen()); break;
+    case 0: Screen.push(new MFRC522Screen());     break;
+    case 1: Screen.push(new PN532UartScreen());   break;
+    case 2: Screen.push(new PN532I2cScreen());    break;
+    case 3: Screen.push(new GPSScreen());         break;
+    case 4: Screen.push(new IRScreen());          break;
+    case 5: Screen.push(new SubGHzScreen());      break;
+    case 6: Screen.push(new NRF24Screen());       break;
+    case 7: Screen.push(new PinSettingScreen());  break;
   }
 }

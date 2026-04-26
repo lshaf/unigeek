@@ -55,6 +55,7 @@ export const CATALOG = [
   // Modules
   { slug: "nfc-mifare",           title: "NFC (MFRC522)",       category: "module",   summary: "MIFARE Classic card reader and key recovery — scan, authenticate, dump memory, and run attacks",     hasDetail: true,  stable: true },
   { slug: "nfc-pn532",            title: "NFC (PN532 UART)",    category: "module",   summary: "PN532 / PN532Killer over HSU — ISO14443A, ISO15693, EM4100, MIFARE Classic, Ultralight, and magic-card tools", hasDetail: true,  stable: true },
+  { slug: "nfc-pn532-i2c",       title: "NFC (PN532 I2C)",     category: "module",   summary: "PN532 over I2C — ISO14443A, ISO15693, EM4100, MIFARE Classic, Ultralight, and magic-card tools; auto-detects external or internal I2C bus", hasDetail: true,  stable: true },
   { slug: "gps-wardriving",       title: "GPS & Wardriving",    category: "module",   summary: "Live GPS view, WiFi/BLE wardriving with Wigle CSV export, and Wigle upload integration",             hasDetail: true,  stable: true },
   { slug: "ir-remote",            title: "IR Remote",           category: "module",   summary: "Capture, replay, and manage IR signals — compatible with Flipper Zero and Bruce formats",            hasDetail: true,  stable: true },
   { slug: "sub-ghz",              title: "Sub-GHz (CC1101)",    category: "module",   summary: "Capture, replay, and jam Sub-GHz RF signals — compatible with Flipper Zero .sub format",            hasDetail: true,  stable: true },

@@ -40,6 +40,7 @@ Device* Device::createInstance() {
 
   // Internal I2C: AXP2101 (0x34), AW9523B (0x58), FT6336U (0x38), AW88298 (0x36)
   Wire1.begin(INTERNAL_SDA, INTERNAL_SCL, 400000UL);
+  Wire.begin(GROVE_SDA, GROVE_SCL);
 
   // Power rails first — ALDO4 must be up before touch reset is deasserted
   axp.begin(Wire1);
@@ -63,6 +64,8 @@ Device* Device::createInstance() {
   sdSpi.begin(SPI_SCK_PIN, SPI_MISO_PIN, SPI_MOSI_PIN, -1);
 
   auto* dev = new Device(display, power, &navigation, nullptr, &sdSpi, &speaker);
+  dev->InI2C = &Wire1;
+  dev->ExI2C = &Wire;
   dev->StorageDcPin = SPI_MISO_PIN;
   return dev;
 }
