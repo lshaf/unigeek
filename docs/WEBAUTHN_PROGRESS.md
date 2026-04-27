@@ -213,8 +213,31 @@ and verifies the signature with it. Acceptable per spec.
   AES-256-CBC over the private key with HMAC-SHA-256 binding to the RP.
   **Deferred to Phase 5b/5c**: resident credentials (rk=true) and PIN.
 
+- **Phase 6** — `Ctap2::dispatch()` is the CTAPHID handler. Implements:
+    - `authenticatorGetInfo` (0x04) — returns FIDO_2_0/U2F_V2 versions, the
+      AAGUID, options `{rk: false, up: true, clientPin: false}`,
+      `maxMsgSize: 7609`, `transports: ["usb"]`.
+    - `authenticatorMakeCredential` (0x01) — parses clientDataHash, rp.id,
+      user.id, pubKeyCredParams. Verifies ES256 is offered. Generates a
+      P-256 keypair, wraps the private key into a 96-byte credential ID
+      bound to the rpIdHash, builds authData with the attestedCredentialData
+      and a COSE EC2 public key, and emits a packed self-attestation
+      response (`fmt: "packed"`, attStmt with `alg`+`sig`, no x5c).
+    - `authenticatorGetAssertion` (0x02) — parses rpId, clientDataHash,
+      allowList. For each allowList entry of length 96, attempts
+      `decodeCredentialId(rpIdHash)`; the first that authenticates wins.
+      Builds authData (UP flag, no AT), signs `SHA-256(authData ||
+      clientDataHash)`, returns credential descriptor + authData + sig.
+    - `authenticatorReset` (0x07) — wipes the master key + counter via
+      `CredentialStore::wipe()`. Requires user-presence callback.
+  - `setUserPresenceFn()` lets Phase 8 install a button-confirm screen.
+    With no callback installed, UP is auto-confirmed (debug-friendly but
+    insecure).
+  - **NOT YET IMPLEMENTED**: ClientPIN (returns
+    `CTAP2_ERR_UNSUPPORTED_OPTION`), GetNextAssertion, hmac-secret.
+
 ### In progress
-- **Phase 6** — CTAP2 authenticator API. Not yet started.
+- **Phase 7** — U2F / CTAP1 over CTAPHID_MSG. Not yet started.
 
 ### Next session pickup point
 1. Read this file top-to-bottom.
