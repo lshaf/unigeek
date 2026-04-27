@@ -197,8 +197,9 @@ and verifies the signature with it. Acceptable per spec.
 - _(none yet — this is the planning baseline)_
 
 ### In progress
-- **Phase 1** — folder + this PROGRESS.md created. Build flag and
-  USBFidoUtil skeleton not yet committed.
+- **Phase 1** — `firmware/src/utils/webauthn/` folder created and
+  `WebAuthnConfig.h` committed. Build flag and `USBFidoUtil` skeleton
+  not yet committed.
 
 ### Next session pickup point
 1. Read this file top-to-bottom.
@@ -242,8 +243,10 @@ and verifies the signature with it. Acceptable per spec.
 
 ## File map (planned)
 
+    docs/WEBAUTHN_PROGRESS.md     — this file (cross-session handoff)
+
     firmware/src/utils/webauthn/
-      PROGRESS.md                — this file
+      WebAuthnConfig.h           — shared constants (committed)
       USBFidoUtil.h/cpp          — Phase 1: USB HID FIDO interface
       Ctaphid.h/cpp              — Phase 2: transport framing
       Cbor.h/cpp                 — Phase 3: CBOR codec

@@ -3,7 +3,7 @@
 #include <stdint.h>
 
 // WebAuthn / FIDO2 configuration shared across the webauthn subsystem.
-// See PROGRESS.md (alongside this file) for the full implementation plan.
+// See docs/WEBAUTHN_PROGRESS.md for the full implementation plan.
 
 namespace webauthn {
 
