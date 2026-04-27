@@ -22,7 +22,6 @@ export const CATALOG = [
   { slug: "wifi-analyzer",        title: "WiFi Analyzer",       category: "wifi",     summary: "Scan and display nearby networks with signal strength and channel info",                               hasDetail: false, stable: true },
   { slug: "packet-monitor",       title: "Packet Monitor",      category: "wifi",     summary: "Visualize WiFi traffic by channel in real time",                                                       hasDetail: false, stable: true },
   { slug: "wifi-deauth",          title: "WiFi Deauther",       category: "wifi",     summary: "Disconnect clients from a target network by sending deauthentication frames",                         hasDetail: false, stable: true },
-  { slug: "wifi-deauth-detector", title: "Deauther Detector",   category: "wifi",     summary: "Monitor for deauthentication attacks on nearby networks",                                              hasDetail: false, stable: true },
   { slug: "wifi-watchdog",        title: "WiFi Watchdog",       category: "wifi",     summary: "Passive promiscuous monitor — deauth events, probe leaks, beacon flood detection, and evil twin detection across five views", hasDetail: true,  stable: true },
   { slug: "beacon-attack",        title: "Beacon Attack",       category: "wifi",     summary: "Flood the area with fake SSIDs — Spam mode (dictionary or random names) or Flood mode targeting a specific AP", hasDetail: true,  stable: true },
   { slug: "ciw-zeroclick",        title: "CIW Zeroclick",       category: "wifi",     summary: "Broadcast SSIDs with injection payloads to test how nearby devices handle untrusted network names",   hasDetail: false, stable: true },
@@ -66,8 +65,7 @@ export const CATALOG = [
   // Utility
   { slug: "qrcode",               title: "QR Code",             category: "utility",  summary: "Generate and display a QR code from typed or file-loaded text; supports WiFi QR format",            hasDetail: false, stable: true },
   { slug: "barcode",              title: "Barcode",             category: "utility",  summary: "Generate and display a Code 128 barcode from typed or file-loaded text",                             hasDetail: false, stable: true },
-  { slug: "file-manager",         title: "File Manager",        category: "utility",  summary: "Browse, rename, copy, cut, paste, and delete files on device storage",                               hasDetail: false, stable: true },
-  { slug: "hex-viewer",           title: "File Hex Viewer",     category: "utility",  summary: "View any file as a scrollable hex dump with offset, hex byte columns, and ASCII representation",      hasDetail: false, stable: true },
+  { slug: "file-manager",         title: "File Manager",        category: "utility",  summary: "Browse, view (text or hex), rename, copy, cut, paste, and delete files on device storage",            hasDetail: true,  stable: true },
   { slug: "i2c-detector",         title: "I2C Detector",        category: "utility",  summary: "Scan the I2C bus and list all responding device addresses",                                           hasDetail: false, stable: true },
   { slug: "achievements",         title: "Achievements",        category: "utility",  summary: "231 achievements across 13 domains (~96 000 EXP pool); set any unlocked entry as your Agent Title", hasDetail: true,  stable: true },
   { slug: "totp-auth",            title: "TOTP Auth",           category: "utility",  summary: "Time-based OTP authenticator; add accounts by Base32 secret, view live 6/8-digit codes with countdown, hold to view or delete",  hasDetail: true,  stable: true },
@@ -83,9 +81,9 @@ export const CATALOG = [
 
   // Settings
   { slug: "setting-general",      title: "General Settings",    category: "setting",  summary: "Device name, display timeout, brightness, volume, navigation sound, theme color, WFM password",    hasDetail: false, stable: true },
-  { slug: "setting-pin",          title: "Pin Settings",        category: "setting",  summary: "Configure GPIO pins for external modules — shared with Modules menu (see Pin Setting page for full details)", hasDetail: false, stable: true },
+  { slug: "setting-pin",          title: "Pin Settings",        category: "setting",  summary: "Configure GPIO pins for GPS, I2C, CC1101, NRF24, PN532, and CoreS3 Grove 5V direction — defaults per board, with safety notes", hasDetail: true,  stable: true },
   { slug: "setting-nav-mode",     title: "Navigation Mode",     category: "setting",  summary: "Switch between Default and Encoder/Joystick navigation — M5StickC Plus 1.1 and 2 only",              hasDetail: false, stable: true },
-  { slug: "setting-hand-orient",  title: "Hand Orientation",    category: "setting",  summary: "Toggle Left/Right hand orientation — M5StickC Plus 1.1, Plus 2, and StickC S3 only",                 hasDetail: false, stable: true },
+  { slug: "setting-hand-orient",  title: "Screen Orientation",  category: "setting",  summary: "Toggle Left/Right screen orientation — M5StickC Plus 1.1, Plus 2, and StickC S3 only",              hasDetail: false, stable: true },
   { slug: "setting-touch-cal",    title: "Touch Calibration",   category: "setting",  summary: "Three-point touch calibration that maps raw coordinates to display pixels; persisted across reboots — CYD touch boards only", hasDetail: false, stable: true },
   { slug: "setting-speaker-test", title: "Speaker Test",        category: "setting",  summary: "Play Win/Lose/Notification/Beep to verify speaker output — boards with speaker only",               hasDetail: false, stable: true },
   { slug: "device-status",        title: "Device Status",       category: "setting",  summary: "View hardware status — CPU frequency, free RAM, PSRAM, and LittleFS/SD available storage",         hasDetail: false, stable: true },
