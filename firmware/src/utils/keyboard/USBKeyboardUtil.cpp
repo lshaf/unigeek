@@ -3,12 +3,23 @@
 #ifdef DEVICE_HAS_USB_HID
 #include <USB.h>
 
+#ifdef DEVICE_HAS_WEBAUTHN
+#include "utils/webauthn/UsbProfile.h"
+#endif
+
 USBKeyboardUtil::USBKeyboardUtil()
 {
   static bool initialized = false;
   if (!initialized) {
     initialized = true;
-    _hid.addDevice(this, sizeof(kHIDReportDescriptor));
+    bool ok = true;
+#ifdef DEVICE_HAS_WEBAUTHN
+    // Mutually exclusive with the FIDO profile — see UsbProfile.h.
+    ok = webauthn::claimUsbProfile(webauthn::UsbProfile::COMPOSITE);
+#endif
+    if (ok) {
+      _hid.addDevice(this, sizeof(kHIDReportDescriptor));
+    }
     _delayMs = 3;
   }
 }

@@ -10,10 +10,6 @@
 #include "core/RtcManager.h"
 #include "core/RandomSeed.h"
 
-#ifdef DEVICE_HAS_WEBAUTHN
-#include "utils/webauthn/USBFidoUtil.h"
-#endif
-
 #include "screens/CharacterScreen.h"
 #ifdef DEVICE_HAS_TOUCH_NAV
 #include "screens/setting/TouchGuideScreen.h"
@@ -93,13 +89,6 @@ void setup() {
   Serial.begin(115200);
   Uni.begin();
   Uni.initStorage();
-#ifdef DEVICE_HAS_WEBAUTHN
-  // Register the FIDO HID descriptor in the composite HID interface before
-  // any USB keyboard / mouse instance can call USB.begin(). After USB
-  // enumeration completes, addDevice() is rejected — so this MUST happen
-  // before the first KeyboardScreen is pushed.
-  webauthn::fido();
-#endif
 #ifdef DEVICE_HAS_RTC
   RtcManager::syncSystemFromRtc();
 #endif

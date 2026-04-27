@@ -23,14 +23,16 @@ bool                     g_inited = false;
 // Entropy callback that pulls from esp_random() — much faster than the
 // default mbedTLS entropy collector and already cryptographically strong on
 // ESP32 hardware (SAR-ADC + RC noise + WiFi/BT activity).
-int esp_entropy_callback(void* /*ctx*/, unsigned char* out, size_t len)
+int esp_entropy_callback(void* /*ctx*/, unsigned char* out, size_t len, size_t* olen)
 {
-  while (len) {
+  size_t want = len;
+  while (want) {
     uint32_t r = esp_random();
-    size_t   n = len < 4 ? len : 4;
+    size_t   n = want < 4 ? want : 4;
     memcpy(out, &r, n);
-    out += n; len -= n;
+    out += n; want -= n;
   }
+  *olen = len;
   return 0;
 }
 }  // namespace
@@ -122,12 +124,11 @@ bool WebAuthnCrypto::ecdsaP256Keygen(uint8_t priv[32], uint8_t pub[65])
   bool ok = mbedtls_ecdsa_genkey(&ctx, MBEDTLS_ECP_DP_SECP256R1,
                                  mbedtls_ctr_drbg_random, &g_drbg) == 0;
   if (ok) {
-    ok = mbedtls_mpi_write_binary(&ctx.MBEDTLS_PRIVATE(d), priv, 32) == 0;
+    ok = mbedtls_mpi_write_binary(&ctx.d, priv, 32) == 0;
   }
   if (ok) {
     size_t plen = 0;
-    ok = mbedtls_ecp_point_write_binary(&ctx.MBEDTLS_PRIVATE(grp),
-                                        &ctx.MBEDTLS_PRIVATE(Q),
+    ok = mbedtls_ecp_point_write_binary(&ctx.grp, &ctx.Q,
                                         MBEDTLS_ECP_PF_UNCOMPRESSED,
                                         &plen, pub, 65) == 0
          && plen == 65;
@@ -167,13 +168,12 @@ bool WebAuthnCrypto::ecdsaP256SignDer(const uint8_t priv[32], const uint8_t hash
 {
   mbedtls_ecdsa_context ctx;
   mbedtls_ecdsa_init(&ctx);
-  bool ok = mbedtls_ecp_group_load(&ctx.MBEDTLS_PRIVATE(grp),
-                                   MBEDTLS_ECP_DP_SECP256R1) == 0
-         && mbedtls_mpi_read_binary(&ctx.MBEDTLS_PRIVATE(d), priv, 32) == 0;
+  bool ok = mbedtls_ecp_group_load(&ctx.grp, MBEDTLS_ECP_DP_SECP256R1) == 0
+         && mbedtls_mpi_read_binary(&ctx.d, priv, 32) == 0;
   if (ok) {
     *outLen = 0;
     ok = mbedtls_ecdsa_write_signature(&ctx, MBEDTLS_MD_SHA256,
-                                       hash, 32, outDer, 72, outLen,
+                                       hash, 32, outDer, outLen,
                                        mbedtls_ctr_drbg_random, &g_drbg) == 0;
   }
   mbedtls_ecdsa_free(&ctx);

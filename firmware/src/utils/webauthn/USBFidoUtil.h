@@ -34,7 +34,7 @@ public:
   using OnReportFn = void (*)(const uint8_t* buf64, void* user);
 
   USBFidoUtil();
-  ~USBFidoUtil() override = default;
+  ~USBFidoUtil() = default;
 
   void begin();
   void end();
@@ -56,9 +56,17 @@ public:
   // SendReport() call returns true.
   bool isConnected() const { return _everSent; }
 
+  // True iff this instance successfully registered its FIDO HID descriptor
+  // with the underlying TinyUSB stack. False means another USB profile
+  // (keyboard+mouse) won the race for the boot's HID interface — caller
+  // should show a "reboot to use WebAuthn" message.
+  bool isRegistered() const { return _registered; }
+
   // ── USBHIDDevice callbacks ──────────────────────────────────────────────
   uint16_t _onGetDescriptor(uint8_t* buffer) override;
   void     _onOutput(uint8_t report_id, const uint8_t* buffer, uint16_t len) override;
+  uint16_t _onGetFeature(uint8_t report_id, uint8_t* buffer, uint16_t len) override;
+  void     _onSetFeature(uint8_t report_id, const uint8_t* buffer, uint16_t len) override;
 
 private:
   static constexpr uint8_t kQueueDepth = 8;  // each entry is 64 B
@@ -71,10 +79,11 @@ private:
   volatile uint8_t   _qTail = 0;   // next read slot  (consumer)
 
   USBHID     _hid;
-  OnReportFn _cb       = nullptr;
-  void*      _cbUser   = nullptr;
-  bool       _started  = false;
-  bool       _everSent = false;
+  OnReportFn _cb         = nullptr;
+  void*      _cbUser     = nullptr;
+  bool       _started    = false;
+  bool       _everSent   = false;
+  bool       _registered = false;
 };
 
 // Singleton FIDO HID device. Construct early at boot (before USB.begin

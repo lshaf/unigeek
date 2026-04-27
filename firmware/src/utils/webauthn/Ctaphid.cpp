@@ -1,5 +1,6 @@
 #include "Ctaphid.h"
 #include "USBFidoUtil.h"
+#include "WebAuthnLog.h"
 
 #include <Arduino.h>
 #include <string.h>
@@ -35,6 +36,8 @@ void Ctaphid::onReport(const uint8_t* p)
   if (isInit) {
     uint8_t  cmd  = marker & 0x7F;
     uint16_t bcnt = ((uint16_t)p[5] << 8) | p[6];
+    WA_LOG("CTAPHID rx INIT cid=%08lx cmd=0x%02x bcnt=%u",
+           (unsigned long)cid, cmd, bcnt);
 
     // Special-case: CTAPHID_INIT may arrive on broadcast CID, and is allowed
     // to interrupt any ongoing transaction (per spec — used to recover
@@ -83,10 +86,12 @@ void Ctaphid::onReport(const uint8_t* p)
 
   // ── Continuation packet ───────────────────────────────────────────────
   if (_state != ST_ASSEMBLING || cid != _curCid) {
-    // Stray continuation — silently drop (spec: SHOULD NOT respond).
+    WA_LOG("CTAPHID rx CONT dropped: state=%d cid=%08lx curCid=%08lx",
+           (int)_state, (unsigned long)cid, (unsigned long)_curCid);
     return;
   }
   uint8_t seq = marker;  // already MSB=0
+  WA_LOG("CTAPHID rx CONT cid=%08lx seq=%u", (unsigned long)cid, seq);
   if (seq != _expSeq) {
     sendError(cid, ERR_INVALID_SEQ);
     _reset();
@@ -118,6 +123,8 @@ void Ctaphid::_handleAssembled()
   uint32_t cid = _curCid;
   uint8_t  cmd = _curCmd;
   uint16_t len = _gotLen;
+  WA_LOG("CTAPHID dispatch cid=%08lx cmd=0x%02x len=%u",
+         (unsigned long)cid, cmd, len);
 
   switch (cmd) {
     case CTAPHID_PING:   _sendPayload(cid, CTAPHID_PING, _buf, len); break;
@@ -186,6 +193,7 @@ void Ctaphid::_handleCancel()
 
 void Ctaphid::sendError(uint32_t cid, uint8_t code)
 {
+  WA_LOG("CTAPHID tx ERROR cid=%08lx code=0x%02x", (unsigned long)cid, code);
   uint8_t b = code;
   _sendPayload(cid, CTAPHID_ERROR, &b, 1);
 }
@@ -199,7 +207,9 @@ void Ctaphid::sendKeepalive(uint32_t cid, uint8_t status)
 void Ctaphid::_sendPayload(uint32_t cid, uint8_t cmd,
                            const uint8_t* data, uint16_t len)
 {
-  if (!_fido) return;
+  if (!_fido) { WA_LOG("CTAPHID tx aborted: no sender"); return; }
+  WA_LOG("CTAPHID tx cid=%08lx cmd=0x%02x len=%u",
+         (unsigned long)cid, cmd, len);
 
   uint8_t pkt[kHidReportSize];
   uint16_t off = 0;

@@ -9,6 +9,8 @@
 #include "utils/webauthn/CredentialStore.h"
 #include "utils/webauthn/WebAuthnCrypto.h"
 #include "utils/webauthn/WebAuthnConfig.h"
+#include "utils/webauthn/UsbProfile.h"
+#include "utils/webauthn/WebAuthnLog.h"
 
 namespace {
 constexpr uint32_t kPromptTimeoutMs = 30000;
@@ -31,6 +33,16 @@ void WebAuthnScreen::onInit()
   webauthn::WebAuthnCrypto::init();
   webauthn::CredentialStore::init();
 
+  // Construct the singleton — this attempts to claim the WEBAUTHN profile.
+  // If keyboard/mouse already grabbed USB this boot, registration fails
+  // and we render a "reboot to switch" message instead of starting up.
+  webauthn::fido();
+  if (webauthn::activeUsbProfile() != webauthn::UsbProfile::WEBAUTHN
+      || !webauthn::fido().isRegistered()) {
+    _profileMismatch = true;
+    return;
+  }
+
   webauthn::fido().begin();
   webauthn::fido().setOnReport(&WebAuthnScreen::_onReportThunk, this);
   _ctaphid.setSender(&webauthn::fido());
@@ -44,6 +56,16 @@ void WebAuthnScreen::onInit()
 
 void WebAuthnScreen::onUpdate()
 {
+  if (_profileMismatch) {
+    if (Uni.Nav->wasPressed()) {
+      auto dir = Uni.Nav->readDirection();
+      if (dir == INavigation::DIR_BACK || dir == INavigation::DIR_PRESS) {
+        Screen.goBack();
+      }
+    }
+    return;
+  }
+
   // Drain inbound USB reports → CTAPHID assembly → CTAP2 dispatch.
   webauthn::fido().poll();
   _ctaphid.tick((uint32_t)millis());
@@ -65,6 +87,25 @@ void WebAuthnScreen::onUpdate()
 void WebAuthnScreen::onRender()
 {
   auto& lcd = Uni.Lcd;
+
+  if (_profileMismatch) {
+    lcd.fillRect(bodyX(), bodyY(), bodyW(), bodyH(), TFT_BLACK);
+    lcd.setTextDatum(MC_DATUM);
+    lcd.setTextSize(2);
+    lcd.setTextColor(TFT_RED, TFT_BLACK);
+    lcd.drawString("USB busy", bodyX() + bodyW() / 2, bodyY() + bodyH() / 2 - 16);
+    lcd.setTextSize(1);
+    lcd.setTextColor(TFT_LIGHTGREY, TFT_BLACK);
+    lcd.drawString("Keyboard/Mouse already",
+                   bodyX() + bodyW() / 2, bodyY() + bodyH() / 2 + 4);
+    lcd.drawString("claimed USB this boot.",
+                   bodyX() + bodyW() / 2, bodyY() + bodyH() / 2 + 16);
+    lcd.setTextColor(TFT_YELLOW, TFT_BLACK);
+    lcd.drawString("Reboot, then open WebAuthn first.",
+                   bodyX() + bodyW() / 2, bodyY() + bodyH() / 2 + 32);
+    return;
+  }
+
   bool connected = webauthn::fido().isConnected();
 
   if (!_chromeDrawn) {
@@ -75,6 +116,7 @@ void WebAuthnScreen::onRender()
     lcd.drawString("BACK: Stop", bodyX() + bodyW() / 2, bodyY() + bodyH());
     _chromeDrawn   = true;
     _lastConnected = !connected;  // force first status paint
+    _logSerial     = (uint32_t)-1;
   }
 
   if (_state == ST_PROMPTING) {
@@ -95,33 +137,66 @@ void WebAuthnScreen::onRender()
     return;
   }
 
-  // ST_ACTIVE — only repaint when status changes
-  if (_lastConnected == connected) {
-    // Refresh transaction counter line every render call (cheap).
+  // ── Status banner (top of body) ──────────────────────────────────────
+  if (_lastConnected != connected) {
+    _lastConnected = connected;
     Sprite sp(&lcd);
-    sp.createSprite(bodyW(), 14);
+    sp.createSprite(bodyW(), 20);
+    sp.fillSprite(TFT_BLACK);
+    sp.setTextDatum(MC_DATUM);
+    sp.setTextSize(2);
+    sp.setTextColor(connected ? TFT_GREEN : TFT_RED, TFT_BLACK);
+    sp.drawString(connected ? "Active" : "Idle", bodyW() / 2, 10);
+    sp.pushSprite(bodyX(), bodyY() + 2);
+    sp.deleteSprite();
+  }
+
+  // ── Tx counter line ──────────────────────────────────────────────────
+  {
+    Sprite sp(&lcd);
+    sp.createSprite(bodyW(), 12);
     sp.fillSprite(TFT_BLACK);
     sp.setTextDatum(MC_DATUM);
     sp.setTextSize(1);
     sp.setTextColor(TFT_DARKGREY, TFT_BLACK);
     char buf[32];
     snprintf(buf, sizeof(buf), "Tx: %lu", (unsigned long)_txCount);
-    sp.drawString(buf, bodyW() / 2, 7);
-    sp.pushSprite(bodyX(), bodyY() + (bodyH() / 2) + 14);
+    sp.drawString(buf, bodyW() / 2, 6);
+    sp.pushSprite(bodyX(), bodyY() + 24);
     sp.deleteSprite();
-    return;
   }
-  _lastConnected = connected;
+
+  // ── Log ring viewer (bottom of body) ─────────────────────────────────
+  // Repainted only when something new was logged; sized to fill below the
+  // status banner and tx counter.
+#if WEBAUTHN_DEBUG
+  auto& ring = webauthn_log::ring();
+  if (_logSerial == ring.serial) return;
+  _logSerial = ring.serial;
+
+  const int logTop  = bodyY() + 40;
+  const int logH    = (bodyY() + bodyH() - 12) - logTop;  // leave footer space
+  if (logH <= 0) return;
 
   Sprite sp(&lcd);
-  sp.createSprite(bodyW(), 28);
+  sp.createSprite(bodyW(), logH);
   sp.fillSprite(TFT_BLACK);
-  sp.setTextDatum(MC_DATUM);
-  sp.setTextSize(2);
-  sp.setTextColor(connected ? TFT_GREEN : TFT_RED, TFT_BLACK);
-  sp.drawString(connected ? "Active" : "Idle", bodyW() / 2, 14);
-  sp.pushSprite(bodyX(), bodyY() + (bodyH() / 2) - 14);
+  sp.setTextSize(1);
+  sp.setTextDatum(TL_DATUM);
+  sp.setTextColor(TFT_GREEN, TFT_BLACK);
+
+  uint8_t lineH = sp.fontHeight() + 1;
+  uint8_t maxLines = (uint8_t)(logH / lineH);
+  uint8_t shown = ring.count < maxLines ? ring.count : maxLines;
+  // Walk back `shown` slots from head, oldest first.
+  uint8_t start = (uint8_t)((ring.head + webauthn_log::kLines - shown) % webauthn_log::kLines);
+  for (uint8_t i = 0; i < shown; i++) {
+    uint8_t idx = (uint8_t)((start + i) % webauthn_log::kLines);
+    sp.drawString(ring.lines[idx], 0, i * lineH);
+  }
+  sp.pushSprite(bodyX(), logTop);
   sp.deleteSprite();
+#endif
 }
 
 bool WebAuthnScreen::_onUserPresence(const char* rpId, void* user)

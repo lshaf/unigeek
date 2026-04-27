@@ -1,5 +1,7 @@
 #pragma once
 
+#include <Arduino.h>  // pulls pins_arduino.h so DEVICE_HAS_WEBAUTHN is defined
+
 #ifdef DEVICE_HAS_WEBAUTHN
 
 #include "ui/templates/BaseScreen.h"
@@ -28,9 +30,11 @@ private:
   webauthn::Ctaphid     _ctaphid;
 
   State        _state            = ST_ACTIVE;
+  bool         _profileMismatch  = false;   // USB taken by kbd/mouse this boot
   bool         _chromeDrawn      = false;
   bool         _lastConnected    = false;   // tracks first paint
   uint32_t     _txCount          = 0;       // dispatched transactions
+  uint32_t     _logSerial        = 0;       // last log-ring serial drawn
   const char*  _promptRpId       = nullptr;
   uint32_t     _promptStartMs    = 0;
 

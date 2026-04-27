@@ -2,6 +2,9 @@
 
 #ifdef DEVICE_HAS_WEBAUTHN
 
+#include "UsbProfile.h"
+#include "WebAuthnLog.h"
+
 #include <USB.h>
 #include <string.h>
 
@@ -32,7 +35,7 @@ static const uint8_t kFidoReportDescriptor[] = {
 
   0xC0,                    // End Collection
 };
-static_assert(sizeof(kFidoReportDescriptor) == 34,
+static_assert(sizeof(kFidoReportDescriptor) == 36,
               "FIDO HID descriptor size drift — update USBHID addDevice() len");
 
 USBFidoUtil::USBFidoUtil()
@@ -40,16 +43,52 @@ USBFidoUtil::USBFidoUtil()
   static bool initialized = false;
   if (!initialized) {
     initialized = true;
-    _hid.addDevice(this, sizeof(kFidoReportDescriptor));
+    // Composite HID with both kbd/mouse and FIDO is rejected by Windows
+    // webauthn.dll. Take exclusive ownership of the USB HID profile here.
+    if (claimUsbProfile(UsbProfile::WEBAUTHN)) {
+      _registered = _hid.addDevice(this, sizeof(kFidoReportDescriptor));
+      WA_LOG("USBFidoUtil ctor: claim=ok addDevice=%d desc_len=%u",
+             (int)_registered, (unsigned)sizeof(kFidoReportDescriptor));
+    } else {
+      WA_LOG("USBFidoUtil ctor: claim FAILED — composite kbd/mouse already won the boot");
+    }
   }
 }
+
+namespace {
+void usbEventThunk(void*, esp_event_base_t base, int32_t event_id, void* event_data)
+{
+  if (base == ARDUINO_USB_EVENTS) {
+    const char* name = "?";
+    switch (event_id) {
+      case ARDUINO_USB_STARTED_EVENT:    name = "STARTED";    break;
+      case ARDUINO_USB_STOPPED_EVENT:    name = "STOPPED";    break;
+      case ARDUINO_USB_SUSPEND_EVENT:    name = "SUSPEND";    break;
+      case ARDUINO_USB_RESUME_EVENT:     name = "RESUME";     break;
+    }
+    WA_LOG("USB event: %s (%ld)", name, (long)event_id);
+  } else if (base == ARDUINO_USB_HID_EVENTS) {
+    const char* name = "?";
+    switch (event_id) {
+      case ARDUINO_USB_HID_SET_PROTOCOL_EVENT: name = "HID_SET_PROTOCOL"; break;
+      case ARDUINO_USB_HID_SET_IDLE_EVENT:     name = "HID_SET_IDLE";     break;
+    }
+    WA_LOG("USB HID event: %s (%ld)", name, (long)event_id);
+  }
+  (void)event_data;
+}
+}  // namespace
 
 void USBFidoUtil::begin()
 {
   if (_started) return;
+  WA_LOG("USBFidoUtil::begin (registered=%d)", (int)_registered);
+  USB.onEvent(usbEventThunk);
+  _hid.onEvent(usbEventThunk);
   USB.begin();      // idempotent — also called by USBKeyboardUtil
   _hid.begin();     // idempotent
   _started = true;
+  WA_LOG("USBFidoUtil::begin done");
 }
 
 void USBFidoUtil::end()
@@ -79,25 +118,48 @@ bool USBFidoUtil::sendReport(const uint8_t* buf64)
   if (!_started) return false;
   uint8_t padded[kHidReportSize];
   memcpy(padded, buf64, kHidReportSize);
+  waLogHex("FIDO TX", padded, kHidReportSize, 16);
   bool ok = _hid.SendReport(FIDO_REPORT_ID, padded, sizeof(padded));
   if (ok) _everSent = true;
+  if (!ok) WA_LOG("FIDO TX FAILED");
   return ok;
 }
 
 uint16_t USBFidoUtil::_onGetDescriptor(uint8_t* buffer)
 {
+  WA_LOG("FIDO _onGetDescriptor (host reading report descriptor)");
   memcpy(buffer, kFidoReportDescriptor, sizeof(kFidoReportDescriptor));
   return sizeof(kFidoReportDescriptor);
 }
 
+uint16_t USBFidoUtil::_onGetFeature(uint8_t report_id, uint8_t*, uint16_t len)
+{
+  WA_LOG("FIDO _onGetFeature id=%u len=%u", report_id, len);
+  return 0;
+}
+
+void USBFidoUtil::_onSetFeature(uint8_t report_id, const uint8_t*, uint16_t len)
+{
+  WA_LOG("FIDO _onSetFeature id=%u len=%u", report_id, len);
+}
+
 void USBFidoUtil::_onOutput(uint8_t report_id, const uint8_t* buffer, uint16_t len)
 {
-  if (report_id != FIDO_REPORT_ID) return;
-  if (len != kHidReportSize)       return;  // FIDO frames are always 64 B
+  if (report_id != FIDO_REPORT_ID) {
+    WA_LOG("FIDO RX dropped: report_id=%u (want %u)", report_id, FIDO_REPORT_ID);
+    return;
+  }
+  if (len != kHidReportSize) {
+    WA_LOG("FIDO RX dropped: len=%u (want %u)", len, (unsigned)kHidReportSize);
+    return;
+  }
 
   // Single-producer (USB ISR). Drop on overflow rather than block the ISR.
   uint8_t next = (uint8_t)((_qHead + 1) % kQueueDepth);
-  if (next == _qTail) return;  // full → drop oldest is safer? we drop newest
+  if (next == _qTail) {
+    WA_LOG("FIDO RX dropped: queue full");
+    return;
+  }
   memcpy(_queue[_qHead].buf, buffer, kHidReportSize);
   _qHead = next;
 }

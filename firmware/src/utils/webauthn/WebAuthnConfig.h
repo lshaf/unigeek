@@ -8,16 +8,12 @@
 namespace webauthn {
 
 // ── AAGUID ────────────────────────────────────────────────────────────────
-// Identifies the authenticator model to relying parties. MUST be picked once
-// and never changed across firmware versions, otherwise registered passkeys
-// will be invalidated on the RP side.
-//
-// TODO(phase 6): generate a random 16-byte UUID and replace the placeholder.
-// Until then, leave as zero (CTAP2 spec allows zero AAGUID for non-attesting
-// authenticators).
+// Identifies the authenticator model (UniGeek) to relying parties. Picked
+// once, never change — registered passkeys carry it and rotating breaks
+// them. Random UUIDv4: e96b5d29-4318-4c6e-8f8f-a4a5e2b3c1d0.
 static constexpr uint8_t kAAGUID[16] = {
-  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0xe9, 0x6b, 0x5d, 0x29, 0x43, 0x18, 0x4c, 0x6e,
+  0x8f, 0x8f, 0xa4, 0xa5, 0xe2, 0xb3, 0xc1, 0xd0,
 };
 
 // ── CTAPHID ───────────────────────────────────────────────────────────────

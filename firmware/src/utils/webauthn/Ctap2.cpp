@@ -4,6 +4,7 @@
 #include "WebAuthnCrypto.h"
 #include "CredentialStore.h"
 #include "U2f.h"
+#include "WebAuthnLog.h"
 
 #include <string.h>
 
@@ -118,24 +119,31 @@ uint16_t Ctap2::_handleGetInfo(const uint8_t*, uint16_t,
   out[0] = CTAP2_OK;
   CborWriter w(out + 1, outMax - 1);
 
-  w.beginMap(5);
+  // Map keys must be in canonical (ascending) order:
+  //   1 versions, 3 aaguid, 4 options, 5 maxMsgSize, 9 transports, 10 algorithms
+  w.beginMap(6);
 
-  // 0x01 versions
+  // 0x01 versions — advertise CTAP 2.1 since we emit 2.1-only keys
+  // (transports 0x09, algorithms 0x0A). U2F_V2 is for CTAP1/AUTHENTICATE
+  // backward compat.
   w.putUint(0x01);
-  w.beginArray(2);
+  w.beginArray(3);
     w.putText("FIDO_2_0");
+    w.putText("FIDO_2_1");
     w.putText("U2F_V2");
 
   // 0x03 aaguid
   w.putUint(0x03);
   w.putBytes(kAAGUID, sizeof(kAAGUID));
 
-  // 0x04 options
+  // 0x04 options. Per CTAP2 spec:
+  //   rk default = false → omit, since we don't support resident keys yet.
+  //   clientPin: presence-with-false would advertise PIN *support*, which we
+  //     don't have. Omitting the key signals "not supported".
+  //   up default = true → still emit explicitly so hosts don't have to assume.
   w.putUint(0x04);
-  w.beginMap(3);
-    w.putText("rk");        w.putBool(false);  // resident keys deferred (Phase 5b)
+  w.beginMap(1);
     w.putText("up");        w.putBool(true);
-    w.putText("clientPin"); w.putBool(false);  // PIN deferred (Phase 5c)
 
   // 0x05 maxMsgSize
   w.putUint(0x05);
@@ -146,7 +154,16 @@ uint16_t Ctap2::_handleGetInfo(const uint8_t*, uint16_t,
   w.beginArray(1);
     w.putText("usb");
 
-  if (!w.ok()) return statusOnly(out, CTAP2_ERR_OTHER);
+  // 0x0A algorithms — CTAP 2.1 wants this even for ES256-only authenticators.
+  // Each entry: { "alg": -7, "type": "public-key" }. Map keys ("alg" before
+  // "type") are in canonical text-string order: same length (3 < 4), so lex.
+  w.putUint(0x0A);
+  w.beginArray(1);
+    w.beginMap(2);
+      w.putText("alg");  w.putInt(COSE_ES256);
+      w.putText("type"); w.putText("public-key");
+
+  if (!w.ok()) return statusOnly(out, CTAP2_ERR_PROCESSING);
   return (uint16_t)(1 + w.size());
 }
 
@@ -263,26 +280,26 @@ uint16_t Ctap2::_handleMakeCredential(const uint8_t* req, uint16_t reqLen,
   // ── Build authData ─────────────────────────────────────────────────
   uint8_t cose[128];
   size_t  coseLen = writeCoseKey(pub, cose, sizeof(cose));
-  if (!coseLen) return statusOnly(out, CTAP2_ERR_OTHER);
+  if (!coseLen) return statusOnly(out, CTAP2_ERR_PROCESSING);
 
   uint8_t attCred[16 + 2 + sizeof(credId) + 128];
   size_t  attCredLen = writeAttCredData(attCred, sizeof(attCred),
                                         credId, sizeof(credId),
                                         cose, coseLen);
-  if (!attCredLen) return statusOnly(out, CTAP2_ERR_OTHER);
+  if (!attCredLen) return statusOnly(out, CTAP2_ERR_PROCESSING);
 
   uint32_t counter = CredentialStore::bumpCounter();
   uint8_t  authData[256];
   size_t   authLen = writeAuthData(authData, sizeof(authData), rpIdHash,
                                    FLAG_UP | FLAG_AT, counter,
                                    attCred, attCredLen);
-  if (!authLen) return statusOnly(out, CTAP2_ERR_OTHER);
+  if (!authLen) return statusOnly(out, CTAP2_ERR_PROCESSING);
 
   // ── Self-attestation signature ─────────────────────────────────────
   // sig = ECDSA(privKey, SHA-256(authData || clientDataHash))
   uint8_t sigInput[256 + 32];
   size_t  sigInputLen = authLen + 32;
-  if (sigInputLen > sizeof(sigInput)) return statusOnly(out, CTAP2_ERR_OTHER);
+  if (sigInputLen > sizeof(sigInput)) return statusOnly(out, CTAP2_ERR_PROCESSING);
   memcpy(sigInput, authData, authLen);
   memcpy(sigInput + authLen, clientDataHash, 32);
 
@@ -303,7 +320,7 @@ uint16_t Ctap2::_handleMakeCredential(const uint8_t* req, uint16_t reqLen,
         w.putText("alg"); w.putInt(COSE_ES256);
         w.putText("sig"); w.putBytes(sigDer, sigLen);
 
-  if (!w.ok()) return statusOnly(out, CTAP2_ERR_OTHER);
+  if (!w.ok()) return statusOnly(out, CTAP2_ERR_PROCESSING);
   return (uint16_t)(1 + w.size());
 }
 
@@ -401,7 +418,7 @@ uint16_t Ctap2::_handleGetAssertion(const uint8_t* req, uint16_t reqLen,
   uint8_t  authData[64];
   size_t   authLen = writeAuthData(authData, sizeof(authData), rpIdHash,
                                    FLAG_UP, counter, nullptr, 0);
-  if (!authLen) return statusOnly(out, CTAP2_ERR_OTHER);
+  if (!authLen) return statusOnly(out, CTAP2_ERR_PROCESSING);
 
   // sig = ECDSA(privKey, SHA-256(authData || clientDataHash))
   uint8_t sigInput[64 + 32];
@@ -425,7 +442,7 @@ uint16_t Ctap2::_handleGetAssertion(const uint8_t* req, uint16_t reqLen,
     w.putUint(0x02);  w.putBytes(authData, authLen);
     w.putUint(0x03);  w.putBytes(sigDer, sigLen);
 
-  if (!w.ok()) return statusOnly(out, CTAP2_ERR_OTHER);
+  if (!w.ok()) return statusOnly(out, CTAP2_ERR_PROCESSING);
   return (uint16_t)(1 + w.size());
 }
 
@@ -458,9 +475,14 @@ uint16_t Ctap2::dispatch(uint8_t cmd,
   // format. The response is raw APDU data with a status word, so we
   // signal that to the caller by leaving the response untouched as bytes.
   if (cmd == CTAPHID_MSG) {
-    return U2f::handleApdu(req, reqLen, resp, respMax);
+    WA_LOG("CTAP2 dispatch MSG (U2F) reqLen=%u", reqLen);
+    waLogHex("U2F req", req, reqLen, 16);
+    uint16_t r = U2f::handleApdu(req, reqLen, resp, respMax);
+    waLogHex("U2F resp", resp, r, 16);
+    return r;
   }
   if (cmd != CTAPHID_CBOR) {
+    WA_LOG("CTAP2 dispatch unknown ctaphid cmd=0x%02x", cmd);
     return statusOnly(resp, CTAP2_ERR_INVALID_OPTION);
   }
   if (reqLen < 1) return statusOnly(resp, CTAP2_ERR_INVALID_CBOR);
@@ -468,16 +490,21 @@ uint16_t Ctap2::dispatch(uint8_t cmd,
   uint8_t  ctapCmd = req[0];
   const uint8_t* p = req + 1;
   uint16_t pLen    = (uint16_t)(reqLen - 1);
+  WA_LOG("CTAP2 cmd=0x%02x payloadLen=%u", ctapCmd, pLen);
 
+  uint16_t r;
   switch (ctapCmd) {
-    case CTAP2_GET_INFO:           return _handleGetInfo(p, pLen, resp, respMax);
-    case CTAP2_MAKE_CREDENTIAL:    return _handleMakeCredential(p, pLen, resp, respMax);
-    case CTAP2_GET_ASSERTION:      return _handleGetAssertion(p, pLen, resp, respMax);
-    case CTAP2_RESET:              return _handleReset(resp, respMax);
-    case CTAP2_CLIENT_PIN:         return statusOnly(resp, CTAP2_ERR_UNSUPPORTED_OPTION);
-    case CTAP2_GET_NEXT_ASSERTION: return statusOnly(resp, CTAP2_ERR_NO_OPERATION_PENDING);
-    default:                       return statusOnly(resp, CTAP2_ERR_INVALID_OPTION);
+    case CTAP2_GET_INFO:           r = _handleGetInfo(p, pLen, resp, respMax);          break;
+    case CTAP2_MAKE_CREDENTIAL:    r = _handleMakeCredential(p, pLen, resp, respMax);   break;
+    case CTAP2_GET_ASSERTION:      r = _handleGetAssertion(p, pLen, resp, respMax);     break;
+    case CTAP2_RESET:              r = _handleReset(resp, respMax);                     break;
+    case CTAP2_CLIENT_PIN:         r = statusOnly(resp, CTAP2_ERR_UNSUPPORTED_OPTION);  break;
+    case CTAP2_GET_NEXT_ASSERTION: r = statusOnly(resp, CTAP2_ERR_NO_OPERATION_PENDING); break;
+    default:                       r = statusOnly(resp, CTAP2_ERR_INVALID_OPTION);      break;
   }
+  WA_LOG("CTAP2 cmd=0x%02x status=0x%02x respLen=%u", ctapCmd, resp[0], r);
+  if (r > 1) waLogHex("CTAP2 resp body", resp + 1, r - 1, 32);
+  return r;
 }
 
 }  // namespace webauthn
