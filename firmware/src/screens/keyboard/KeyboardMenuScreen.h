@@ -4,7 +4,7 @@
 
 class KeyboardMenuScreen : public ListScreen {
 public:
-  const char* title() override { return "Keyboard"; }
+  const char* title() override { return "HID"; }
 
   void onInit()             override;
   void onItemSelected(uint8_t index) override;
@@ -12,18 +12,13 @@ public:
 
 private:
 #ifdef DEVICE_HAS_USB_HID
-  bool _usbMode = true;
-
-  String   _modeSub;
   ListItem _items[2] = {
-    {"Mode",  nullptr},
-    {"Start", nullptr},
+    {"USB MouseKeyboard"},
+    {"BLE MouseKeyboard"},
   };
-
-  void _refreshMode();
 #else
   ListItem _items[1] = {
-    {"Start"},
+    {"BLE MouseKeyboard"},
   };
 #endif
 };

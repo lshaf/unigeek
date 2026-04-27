@@ -18,7 +18,7 @@
 void MainMenuScreen::onInit() {
   _items[0] = {"Wifi", Icons::drawWifi};
   _items[1] = {"Bluetooth", Icons::drawBluetooth};
-  _items[2] = {"Keyboard", Icons::drawKeyboard};
+  _items[2] = {"HID", Icons::drawKeyboard};
   _items[3] = {"Modules", Icons::drawModule};
   _items[4] = {"Utility", Icons::drawUtility};
   _items[5] = {"Games", Icons::drawGame};

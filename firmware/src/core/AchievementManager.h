@@ -168,7 +168,7 @@ public:
       { 110, "chameleon_t5577_clean",     "Lockpick LF",            12, 2, "Clear a locked T5577 tag password" },
       { 229, "chameleon_static_nested",  "Fixed Nonce",            12, 3, "Recover a key via Static Nested Attack on Chameleon" },
       { 230, "chameleon_nested_attack",  "Nested Cipher",          12, 3, "Recover a key via Nested Attack on Chameleon" },
-      // ── Keyboard (domain 3) ───────────────────────────────────────────────
+      // ── HID (domain 3) ────────────────────────────────────────────────────
       { 111, "kbd_ble_connected",         "Bluetooth Typist",       3, 0, "Connect as a Bluetooth HID keyboard" },
       { 112, "kbd_usb_connected",         "USB Typist",             3, 0, "Connect as a USB HID keyboard" },
       { 113, "kbd_relay_first",           "Pass-Through",           3, 0, "Use keyboard relay pass-through mode" },
@@ -303,7 +303,7 @@ public:
   // Returns domain display name
   static const char* domainName(uint8_t domain) {
     static constexpr const char* kNames[] = {
-      "WiFi Network", "WiFi Attacks", "Bluetooth",    "Keyboard",
+      "WiFi Network", "WiFi Attacks", "Bluetooth",    "HID",
       "NFC",          "IR",           "Sub-GHz",      "NRF24 2.4GHz",
       "GPS",          "Utility",      "Games",        "Settings",
       "Chameleon",
