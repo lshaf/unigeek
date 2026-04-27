@@ -1,6 +1,7 @@
 #include "BLEKeyboardUtil.h"
 
 static constexpr uint8_t kKeyboardId = 0x01;
+static constexpr uint8_t kMouseId    = 0x02;
 
 BLEKeyboardUtil::BLEKeyboardUtil(const char* deviceName, const char* manufacturer, uint8_t batteryLevel)
   : _deviceName(deviceName)
@@ -30,6 +31,7 @@ void BLEKeyboardUtil::begin()
     _inputKbd  = _hid->inputReport(kKeyboardId);
     _outputKbd = _hid->outputReport(kKeyboardId);
     _outputKbd->setCallbacks(this);
+    _inputMouse = _hid->inputReport(kMouseId);
 
     _hid->setBatteryLevel(_batteryLevel);
     _hid->manufacturer(_manufacturer);
@@ -61,6 +63,14 @@ void BLEKeyboardUtil::sendReport(KeyReport* keys)
   if (_connected && _inputKbd) {
     _inputKbd->setValue(reinterpret_cast<uint8_t*>(keys), sizeof(KeyReport));
     _inputKbd->notify();
+  }
+}
+
+void BLEKeyboardUtil::sendMouseReport(MouseReport* m)
+{
+  if (_connected && _inputMouse) {
+    _inputMouse->setValue(reinterpret_cast<uint8_t*>(m), sizeof(MouseReport));
+    _inputMouse->notify();
   }
 }
 

@@ -129,6 +129,22 @@ void HIDKeyboardUtil::releaseAll()
   sendReport(&_keyReport);
 }
 
+void HIDKeyboardUtil::mouseMove(int8_t dx, int8_t dy, int8_t wheel)
+{
+  MouseReport r{};
+  r.x = dx; r.y = dy; r.wheel = wheel;
+  sendMouseReport(&r);
+}
+
+void HIDKeyboardUtil::mouseClick(uint8_t buttons)
+{
+  MouseReport down{}; down.buttons = buttons;
+  sendMouseReport(&down);
+  delay(_delayMs);
+  MouseReport up{};
+  sendMouseReport(&up);
+}
+
 void HIDKeyboardUtil::reportModifier(KeyReport* report, uint8_t k)
 {
   if (k >= HID_OFFSET) {

@@ -16,6 +16,7 @@ public:
   void begin()                        override;
   void end()                          override;
   void sendReport(KeyReport* keys)    override;
+  void sendMouseReport(MouseReport* m) override;
   bool isConnected()                  override;
   void setBatteryLevel(uint8_t level) override;
   void resetPair()                    override;
@@ -35,5 +36,6 @@ private:
   NimBLEHIDDevice*      _hid        = nullptr;
   NimBLECharacteristic* _inputKbd   = nullptr;
   NimBLECharacteristic* _outputKbd  = nullptr;
+  NimBLECharacteristic* _inputMouse = nullptr;
   NimBLEAdvertising*    _adv        = nullptr;
 };

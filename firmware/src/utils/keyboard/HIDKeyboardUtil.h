@@ -49,8 +49,16 @@ typedef struct {
   uint8_t keys[6];
 } KeyReport;
 
-// Standard HID keyboard report descriptor (no TinyUSB dependency)
+typedef struct {
+  uint8_t buttons;
+  int8_t  x;
+  int8_t  y;
+  int8_t  wheel;
+} MouseReport;
+
+// Combined HID descriptor: keyboard (Report ID 1) + mouse (Report ID 2).
 static const uint8_t kHIDReportDescriptor[] = {
+  // ── Keyboard (Report ID 1) ────────────────────────────────────────────
   0x05, 0x01,  // Usage Page (Generic Desktop)
   0x09, 0x06,  // Usage (Keyboard)
   0xA1, 0x01,  // Collection (Application)
@@ -84,6 +92,36 @@ static const uint8_t kHIDReportDescriptor[] = {
   0x29, 0x65,  //   Usage Maximum (Application)
   0x81, 0x00,  //   Input (Data, Array, Abs) — keys
   0xC0,        // End Collection
+
+  // ── Mouse (Report ID 2) ───────────────────────────────────────────────
+  0x05, 0x01,  // Usage Page (Generic Desktop)
+  0x09, 0x02,  // Usage (Mouse)
+  0xA1, 0x01,  // Collection (Application)
+  0x85, 0x02,  //   Report ID (2)
+  0x09, 0x01,  //   Usage (Pointer)
+  0xA1, 0x00,  //   Collection (Physical)
+  0x05, 0x09,  //     Usage Page (Button)
+  0x19, 0x01,  //     Usage Minimum (1)
+  0x29, 0x03,  //     Usage Maximum (3)
+  0x15, 0x00,  //     Logical Minimum (0)
+  0x25, 0x01,  //     Logical Maximum (1)
+  0x95, 0x03,  //     Report Count (3)
+  0x75, 0x01,  //     Report Size (1)
+  0x81, 0x02,  //     Input (Data, Var, Abs) — buttons
+  0x95, 0x01,  //     Report Count (1)
+  0x75, 0x05,  //     Report Size (5)
+  0x81, 0x03,  //     Input (Const) — button padding
+  0x05, 0x01,  //     Usage Page (Generic Desktop)
+  0x09, 0x30,  //     Usage (X)
+  0x09, 0x31,  //     Usage (Y)
+  0x09, 0x38,  //     Usage (Wheel)
+  0x15, 0x81,  //     Logical Minimum (-127)
+  0x25, 0x7F,  //     Logical Maximum (127)
+  0x75, 0x08,  //     Report Size (8)
+  0x95, 0x03,  //     Report Count (3)
+  0x81, 0x06,  //     Input (Data, Var, Rel)
+  0xC0,        //   End Collection
+  0xC0,        // End Collection
 };
 
 class HIDKeyboardUtil : public Print {
@@ -99,12 +137,13 @@ protected:
 public:
   ~HIDKeyboardUtil() override = default;
 
-  virtual void begin()                      = 0;
-  virtual void end()                        = 0;
-  virtual void sendReport(KeyReport* keys)  = 0;
-  virtual bool isConnected()                { return true; }
-  virtual void setBatteryLevel(uint8_t)     {}
-  virtual void resetPair()                  {}
+  virtual void begin()                          = 0;
+  virtual void end()                            = 0;
+  virtual void sendReport(KeyReport* keys)      = 0;
+  virtual void sendMouseReport(MouseReport* m)  {}
+  virtual bool isConnected()                    { return true; }
+  virtual void setBatteryLevel(uint8_t)         {}
+  virtual void resetPair()                      {}
 
   void setDelayMs(uint32_t ms)              { _delayMs = ms; }
 
@@ -114,4 +153,7 @@ public:
   size_t press(uint8_t k);
   size_t release(uint8_t k);
   void   releaseAll();
+
+  void mouseMove(int8_t dx, int8_t dy, int8_t wheel = 0);
+  void mouseClick(uint8_t buttons);
 };

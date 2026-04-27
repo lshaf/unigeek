@@ -29,6 +29,11 @@ void USBKeyboardUtil::sendReport(KeyReport* keys)
   _hid.SendReport(1, keys, sizeof(KeyReport));
 }
 
+void USBKeyboardUtil::sendMouseReport(MouseReport* m)
+{
+  _hid.SendReport(2, m, sizeof(MouseReport));
+}
+
 uint16_t USBKeyboardUtil::_onGetDescriptor(uint8_t* buffer)
 {
   memcpy(buffer, kHIDReportDescriptor, sizeof(kHIDReportDescriptor));

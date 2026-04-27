@@ -10,9 +10,10 @@ class USBKeyboardUtil final : public USBHIDDevice, public HIDKeyboardUtil {
 public:
   USBKeyboardUtil();
 
-  void begin()                     override;
-  void end()                       override;
-  void sendReport(KeyReport* keys) override;
+  void begin()                            override;
+  void end()                              override;
+  void sendReport(KeyReport* keys)        override;
+  void sendMouseReport(MouseReport* m)    override;
 
   // USBHIDDevice callbacks
   uint16_t _onGetDescriptor(uint8_t* buffer) override;
