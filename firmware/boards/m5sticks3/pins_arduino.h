@@ -1,12 +1,14 @@
 //
 // M5StickS3 — ESP32-S3, 8MB flash, ST7789 135×240, ES8311 I2S codec.
-// M5PM1 (PY32) power IC at I2C 0x6E. LittleFS only (no SD card).
+// M5PM1 (PY32) power IC at I2C 0x6E. SD/CC1101/NRF24/PN532 share FSPI bus.
 //
 
 #pragma once
 #include <stdint.h>
 
-// ─── SPI Bus (SD card) ────────────────────────────────────
+// ─── Peripheral SPI Bus (FSPI — TFT uses its own HSPI bus) ─
+// Shared by SD card, CC1101, NRF24L01+, PN532 — exposed on the
+// bottom HAT connector. CS pins below; only one device active at a time.
 #define SPI_SCK_PIN   5
 #define SPI_MISO_PIN  4
 #define SPI_MOSI_PIN  6
@@ -19,6 +21,17 @@ static const uint8_t SCK  = SPI_SCK_PIN;
 
 // ─── SD Card ──────────────────────────────────────────────
 #define SD_CS  7
+
+// ─── CC1101 Sub-GHz ──────────────────────────────────────
+#define CC1101_CS_PIN    2
+#define CC1101_GDO0_PIN  3
+
+// ─── NRF24L01+ ───────────────────────────────────────────
+#define NRF24_CE_PIN    1
+#define NRF24_CSN_PIN   8
+
+// ─── PN532 NFC ───────────────────────────────────────────
+#define PN532_CS_PIN   43
 
 // ─── I2C (Grove) ─────────────────────────────────────────
 #define GROVE_SDA  9
