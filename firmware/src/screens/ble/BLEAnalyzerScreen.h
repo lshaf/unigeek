@@ -1,14 +1,20 @@
 #pragma once
 
 #include "ui/templates/ListScreen.h"
+#include "ui/views/TextScrollView.h"
 #include <NimBLEDevice.h>
 
 class BLEAnalyzerScreen : public ListScreen {
 public:
-  const char* title() override { return "BLE Analyzer"; }
+  const char* title() override
+  {
+    return _state == STATE_DETAIL ? _detailTitle.c_str() : "BLE Analyzer";
+  }
 
   ~BLEAnalyzerScreen() override;
   void onInit() override;
+  void onUpdate() override;
+  void onRender() override;
   void onItemSelected(uint8_t index) override;
   void onBack() override;
 
@@ -17,13 +23,11 @@ private:
     STATE_SCAN,
     STATE_LIST,
     STATE_INFO,
-    STATE_SERVICE_UUID,
-    STATE_SERVICE_DATA,
-    STATE_MANUFACTURE_DATA,
+    STATE_DETAIL,
   } _state = STATE_SCAN;
 
   static constexpr uint8_t kMaxDevices = 40;
-  static constexpr uint8_t kMaxDetail  = 16;
+  static constexpr uint8_t kInfoRows   = 16;
 
   NimBLEScan*       _bleScan           = nullptr;
   NimBLEScanResults _scanResults;
@@ -35,17 +39,16 @@ private:
   ListItem _devItems[kMaxDevices];
   uint8_t  _devCount = 0;
 
-  // Info view (9 fixed rows)
-  String   _infoVal[9];
-  ListItem _infoItems[9];
+  // Info view (16 fixed rows)
+  String   _infoVal[kInfoRows];
+  ListItem _infoItems[kInfoRows];
 
-  // Detail view (UUIDs / data)
-  String   _detailLabel[kMaxDetail];
-  ListItem _detailItems[kMaxDetail];
-  uint8_t  _detailCount = 0;
+  // Detail view — wrapped scrolling text for clickable info-row drill-downs.
+  TextScrollView _textView;
+  String         _detailTitle;
 
   void _startScan();
   void _showList();
   void _showInfo();
-  void _showDetail(State state);
+  void _showDetail(const char* titleText, const String& content);
 };
