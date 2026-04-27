@@ -4,7 +4,7 @@
 export const CATEGORIES = [
   { id: "wifi",     label: "WiFi",     desc: "Attacks, scanners, captive portals" },
   { id: "ble",      label: "BLE",      desc: "Bluetooth Low Energy scanning and spam" },
-  { id: "keyboard", label: "Keyboard", desc: "HID over USB and BLE" },
+  { id: "keyboard", label: "HID",      desc: "Keyboard, mouse, and DuckyScript over USB and BLE" },
   { id: "module",   label: "Modules",  desc: "NFC, IR, Sub-GHz, NRF24, GPS" },
   { id: "utility",  label: "Utility",  desc: "QR, barcode, file manager, TOTP, UART terminal, achievements" },
   { id: "game",     label: "Games",    desc: "Lightweight on-device games" },
@@ -46,11 +46,12 @@ export const CATALOG = [
   { slug: "chameleon-ultra",      title: "Chameleon Ultra",     category: "ble",      summary: "BLE client for ChameleonUltra / ChameleonLite — 8-slot manager, MF dict, static + weak-PRNG nested attacks, MFKey32, T5577 write", hasDetail: true,  stable: true },
   { slug: "claude-buddy",         title: "Claude Buddy",        category: "ble",      summary: "BLE desk pet for Claude Desktop on macOS / Windows — shows session status, running tasks, and lets you approve permission prompts from the device", hasDetail: true,  stable: true },
 
-  // Keyboard (HID)
+  // HID
   { slug: "ducky-script",         title: "Ducky Script",        category: "keyboard", summary: "Run script files from storage to automate keystrokes over BLE or USB HID",                           hasDetail: true,  stable: true },
   { slug: "ble-keyboard",         title: "BLE Keyboard",        category: "keyboard", summary: "Act as a wireless Bluetooth HID keyboard — works on all devices",                                     hasDetail: false, stable: true },
   { slug: "usb-keyboard",         title: "USB Keyboard",        category: "keyboard", summary: "Act as a wired USB HID keyboard — ESP32-S3 devices only",                                            hasDetail: false, stable: true },
   { slug: "keyboard-relay",       title: "Keyboard Relay",      category: "keyboard", summary: "Forward physical keypresses directly to the connected host in real time — keyboard devices only",    hasDetail: false, stable: true },
+  { slug: "mouse-jiggle",         title: "Mouse Jiggle",        category: "keyboard", summary: "Send small periodic mouse movements over BLE or USB HID to keep the host awake",                     hasDetail: true,  stable: true },
 
   // Modules
   { slug: "nfc-mifare",           title: "NFC (MFRC522)",       category: "module",   summary: "MIFARE Classic card reader and key recovery — default-key probe, dictionary, static-nested, weak-PRNG nested, and darkside attacks", hasDetail: true,  stable: true },

@@ -5,7 +5,7 @@ Ducky Script is a simple scripting language for automating keyboard input. UniGe
 ## How to Use
 
 1. Place script files in `/unigeek/keyboard/duckyscript/` on the device storage (SD or LittleFS)
-2. Go to **Keyboard > BLE Keyboard** or **Keyboard > USB Keyboard**
+2. Go to **HID > USB MouseKeyboard** or **HID > BLE MouseKeyboard**
 3. Pair/connect to the target host
 4. Select **Ducky Script** and choose a script file to run
 5. Lines are executed top-to-bottom, one per frame; blank lines are skipped

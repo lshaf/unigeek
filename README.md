@@ -98,11 +98,12 @@ Multi-tool firmware for ESP32-based handheld devices. Built with PlatformIO + Ar
     - **T5577 Password Cleaner** — brute-force a curated list of common passwords (default, zeros, HID factory, DoorKing, …) to restore a locked T5577 tag to default password
   - Sample MF dumps ship on the SD card under `/unigeek/nfc/dumps/` (`sample_1k_*.bin`, `sample_mini_*.bin`, `sample_ntag215_*.bin`) for testing without a real card
 
-### Keyboard (HID)
-- **BLE Keyboard** — Act as a wireless Bluetooth HID keyboard (all devices)
-- **USB Keyboard** — Act as a wired USB HID keyboard (ESP32-S3 devices only)
+### HID
+- **BLE HID** — Act as a wireless Bluetooth HID device (keyboard + mouse, all devices)
+- **USB HID** — Act as a wired USB HID device (keyboard + mouse, ESP32-S3 devices only)
 - **Keyboard Relay** — Forward physical keypresses directly to the connected host in real time (keyboard devices only)
 - **Ducky Script** — Run script files from storage to automate keystrokes ([details](knowledge/ducky-script.md))
+- **Mouse Jiggle** — Send periodic small mouse movements over BLE or USB to keep the host awake
 
 ### Utility
 - **I2C Detector** — Scan I2C bus and list all responding device addresses
@@ -354,10 +355,11 @@ This project was built with inspiration and reference from:
 
 ## TODO
 
+- change keyboard to HID instead, mode will be USB and BLE, while BLE and USB only have Keyboard, Mouse and Jiggle Mouse, USB has 1 more option is Mass Storage.
+- webauthn for esp32s3 only (via USB HID)
 - LoRa
 - ST25 nfc implementation for lora https://github.com/m5stack/M5Unit-NFC
 - sticks3 ir receive not functional (RMT/ES8311 conflict); transmit works
 - implement thermal camera
-- change keyboard to HID instead, mode will be USB and BLE, while BLE and USB only have Keyboard, Mouse and Jiggle Mouse, USB has 1 more option is Mass Storage.
 
 <!-- README last synced at commit: b802b31 (PN532 UART/I2C modules, Claude Buddy, Chameleon + MFRC522 nested + static-nested attacks, touch calibration) -->

@@ -21,7 +21,7 @@ Unlocking an achievement shows a toast notification at the bottom of the screen 
 
 ## Ranks
 
-Total possible EXP across all achievements: **84 900** (200 entries: 63 × Bronze, 60 × Silver, 41 × Gold, 36 × Platinum).
+Total possible EXP across all achievements: **85 000** (201 entries: 64 × Bronze, 60 × Silver, 41 × Gold, 36 × Platinum).
 
 | Rank | EXP Required | % of Total |
 |------|-------------|-----------|
@@ -75,7 +75,7 @@ If no title has been set, it shows `[RANK] No Title` by default.
 | 0 | WiFi Network | 20 |
 | 1 | WiFi Attacks | 43 |
 | 2 | Bluetooth | 16 |
-| 3 | Keyboard / HID | 6 |
+| 3 | HID | 7 |
 | 4 | NFC | 7 |
 | 5 | IR | 8 |
 | 6 | Sub-GHz | 7 |
@@ -85,7 +85,7 @@ If no title has been set, it shows `[RANK] No Title` by default.
 | 10 | Games | 31 |
 | 11 | Settings | 4 |
 | 12 | Chameleon | 32 |
-| | **Total** | **200** |
+| | **Total** | **201** |
 
 ---
 
@@ -172,12 +172,13 @@ If no title has been set, it shows `[RANK] No Title` by default.
 | Whisper Scout | Bluetooth | Bronze | 100 |
 | Broken Pairing | Bluetooth | Gold | 600 |
 | Vulnerability Hunter | Bluetooth | Gold | 600 |
-| Bluetooth Typist | Keyboard | Bronze | 100 |
-| USB Typist | Keyboard | Bronze | 100 |
-| Pass-Through | Keyboard | Bronze | 100 |
-| Script Kiddie | Keyboard | Silver | 300 |
-| Macro Maestro | Keyboard | Gold | 600 |
-| Automation God | Keyboard | Platinum | 1000 |
+| Bluetooth Typist | HID | Bronze | 100 |
+| USB Typist | HID | Bronze | 100 |
+| Pass-Through | HID | Bronze | 100 |
+| Script Kiddie | HID | Silver | 300 |
+| Macro Maestro | HID | Gold | 600 |
+| Automation God | HID | Platinum | 1000 |
+| Wiggle Wiggle | HID | Bronze | 100 |
 | Card Detected | NFC | Bronze | 100 |
 | Card Collector | NFC | Silver | 300 |
 | Dictionary Diver | NFC | Silver | 300 |
