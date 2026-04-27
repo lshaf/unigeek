@@ -28,7 +28,7 @@ Multi-tool firmware for ESP32-based handheld devices. Built with PlatformIO + Ar
 
 ### Known issues
 
-- **M5Stick S3** — CC1101, NRF24, and internal IR untested.
+- **M5Stick S3** — IR receive not functional (RMT conflict with ES8311 speaker); IR transmit works normally.
 
 ---
 

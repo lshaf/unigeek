@@ -66,7 +66,7 @@ export const BOARDS = [
     bootloader: "Auto via native USB",
     storage: "LittleFS only",
     bootNotes: "Native USB — no UART chip. If bricked, hold BOOT while plugging USB to force download mode.",
-    knownIssues: ["CC1101 and NRF24 untested", "IR receive not functional — RMT conflict with ES8311 speaker; IR transmit works normally"],
+    knownIssues: ["IR receive not functional — RMT conflict with ES8311 speaker; IR transmit works normally"],
     nav: [
       ["Buttons", [
         { input: "BTN_A — front button", action: "Select" },
