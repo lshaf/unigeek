@@ -135,6 +135,5 @@ static const uint8_t SCL = GROVE_SCL;
 #define DEVICE_HAS_SOUND          // speaker attached — enables audio paths and sound settings
 #define DEVICE_HAS_VOLUME_CONTROL // I2S amp supports setVolume() — shows Volume slider in Settings
 #define DEVICE_HAS_USB_HID        // ESP32-S3 native USB OTG — enables USB HID keyboard
-#define DEVICE_HAS_WEBAUTHN       // FIDO2/WebAuthn over USB HID
 #define DEVICE_HAS_GPS            // built-in MIA-M10Q GPS module
 #define APP_MENU_POWER_OFF        // show Power Off in main menu (hardware power cut via BQ25896)

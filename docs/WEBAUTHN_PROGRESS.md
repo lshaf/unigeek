@@ -264,9 +264,26 @@ and verifies the signature with it. Acceptable per spec.
   in the composite USB HID descriptor before any keyboard/mouse instance
   triggers `USB.begin()`.
 
-### Known follow-ups (not blockers)
-- **AAGUID** still zero — some relying parties refuse zero-AAGUID. Pick a
-  random UUID and hardcode it in `WebAuthnConfig.h`.
+### Known follow-ups
+- **Windows composite HID issue (BLOCKER on Edge / Windows Hello)**:
+  Windows webauthn.dll rejects FIDO authenticators that share a HID
+  interface with other top-level collections (e.g. our keyboard+mouse).
+  Symptom on Edge: `Unknown device state code 1, 9, 0x80070057`
+  (E_INVALIDARG from WebAuthn API) — the device enumerates and responds
+  to CTAPHID_INIT, but the WebAuthn-layer call refuses to proceed.
+  Linux/Chrome and macOS/Safari accept the composite descriptor fine.
+  **Fix path**: bypass arduino-esp32 `USBHID` for FIDO and register a
+  *second* HID interface directly via TinyUSB. Requires either:
+    1. Patching `framework-arduinoespressif32@2.0.17`'s `tusb_config.h`
+       to set `CFG_TUD_HID = 2`, or
+    2. Building a custom USB descriptor in our setup() and using
+       `tud_hid_n_*` API directly, leaving the existing keyboard+mouse
+       on interface 0 and FIDO on a fresh interface 1.
+  Solo Keys, Yubico, and Google Titan all use a dedicated FIDO HID
+  interface; the composite approach was a Phase 1 expedient that is
+  now confirmed insufficient for Windows.
+- ~~AAGUID still zero~~ — fixed: random UUID
+  `e96b5d29-4318-4c6e-8f8f-a4a5e2b3c1d0` hardcoded in WebAuthnConfig.h.
 - **Resident credentials (rk=true)** — `getInfo` advertises `rk:false`. To
   enable, add a credentials.bin store and walk it during GetAssertion when
   the host omits allowList.
@@ -280,15 +297,80 @@ and verifies the signature with it. Acceptable per spec.
   next session should run `pio run -e t_display_s3` (or any other S3 env)
   and resolve compile errors before declaring complete.
 
-### Next session pickup point
-1. Read this file top-to-bottom.
-2. Resolve the **Phase 1 open question** about TinyUSB direct vs
-   arduino-esp32 USBHID — check the actual TinyUSB headers shipped in
-   `framework-arduinoespressif32@2.0.17` to confirm `tud_hid_n_*` is exposed.
-3. Add `DEVICE_HAS_WEBAUTHN=1` to S3 boards' `extra_flags` in
-   `firmware/boards/_devices/*.json` (only the S3 boards).
-4. Write `USBFidoUtil.h/cpp` skeleton implementing Phase 1.
-5. Update **Done / In progress** sections of this file.
+## Status as of last session — PARKED
+
+Compiles cleanly on m5_cores3. All code is in tree but **disabled
+on every board** by removing `#define DEVICE_HAS_WEBAUTHN` from each
+`pins_arduino.h`. To re-enable: add `#define DEVICE_HAS_WEBAUTHN`
+back next to `#define DEVICE_HAS_USB_HID` in the relevant board
+header.
+
+### Real-world test result (m5_cores3 + Edge on Windows 11)
+- Edge: `Unknown device state code 1, 9, 0x80070057` (E_INVALIDARG)
+- USB OTG fires `STOPPED` event immediately after `USB.begin()`
+- `_onGetDescriptor` on the FIDO HID device **never fires** → Windows
+  never reads our descriptor → device never enumerates as a HID device
+  on the host
+- Verified the same regardless of getInfo content tweaks (AAGUID,
+  algorithms, transports), USB profile arbitration (composite vs
+  WebAuthn-only), and unplug/replug.
+
+### Diagnosed root cause
+ESP32-S3 has TWO USB peripherals on the **same** D+/D- pins, muxed by
+the PHY: USB Serial/JTAG (used by `HWCDC` for `Serial` when
+`ARDUINO_USB_MODE=1`) and USB OTG (used by TinyUSB for HID).
+With our existing `ARDUINO_USB_MODE=1` config, USB Serial/JTAG owns
+the PHY at boot. `USB.begin()` tries to switch the PHY to OTG and
+the handover fails on m5_cores3 specifically.
+
+`ARDUINO_USB_MODE=0` (TinyUSB CDC only) was tested — the device then
+fails to enumerate at all on m5_cores3, which suggests AXP2101 USB
+OTG VBUS routing needs to be configured before `USB.begin()`. The
+M5Unified `m5_cores3_unified` build presumably handles this; the
+bare `m5_cores3` Device.cpp does not.
+
+### Next-session candidate paths (ranked)
+1. **Test on a different S3 board** (t_display_s3 / t_lora_pager /
+   m5sticks3 / m5_cardputer). Re-add `DEVICE_HAS_WEBAUTHN` to ONE
+   board's pins_arduino.h, build, flash, and try Edge. If FIDO works
+   there, the protocol code is fine and only m5_cores3 needs the
+   board-specific USB OTG bring-up. This is the cheapest test.
+
+2. **Fix CoreS3 USB OTG init.** Read M5Unified or M5Stack's CoreS3
+   reference to find the AXP2101 register sequence that enables
+   USB OTG VBUS / DP-DM routing. Apply it in
+   `firmware/boards/m5_cores3/core/Device.cpp::createInstance()`
+   before USB starts. Then switch `ARDUINO_USB_MODE=0`.
+
+3. **Pivot to BLE FIDO transport** (URU Card model). Add a
+   `BleFidoUtil` that exposes the FIDO BLE GATT service (UUID
+   0xFFFD with characteristics F1D0FFF1/2/3) and feeds frames into
+   the existing `Ctap2::dispatch`. Reuses every layer above
+   transport. Loses Safari support (Safari doesn't do BLE FIDO),
+   wins on every other browser and avoids the USB headache
+   entirely. New code ~250 lines.
+
+4. **Patch the platform package** to expose two HID interfaces
+   (`CFG_TUD_HID = 2`) — invasive, version-locked, not preferred.
+
+### Done so far (all merged on `main`)
+- All 9 phases of the protocol stack: USB FIDO HID descriptor +
+  CTAPHID transport + CBOR codec + crypto facade + credential store
+  + CTAP2 (GetInfo / MakeCredential / GetAssertion / Reset) +
+  U2F (AUTHENTICATE / VERSION) + WebAuthnScreen UI + menu wiring +
+  knowledge/webauthn.md + catalog row.
+- USB profile arbiter (`webauthn::UsbProfile`): keyboard+mouse
+  vs FIDO-only mutually exclusive per boot.
+- On-screen log ring (`WebAuthnLog.h`) that mirrors `Serial` —
+  covers the case where USB re-enumeration kills the host's COM
+  port mapping.
+- Random AAGUID `e96b5d29-4318-4c6e-8f8f-a4a5e2b3c1d0`.
+- Real-world spec-correctness fixes informed by Ledger's
+  `app-security-key` and URU Card references:
+    * Removed `clientPin: false` from options (was advertising PIN
+      support we don't have)
+    * Added `algorithms` (CTAP 2.1)
+    * Bumped `versions` to include `FIDO_2_1`
 
 ### Open questions / decisions to confirm with user
 - **AAGUID** — need to generate one. Suggest: pick a random 16-byte UUID

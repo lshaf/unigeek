@@ -84,5 +84,4 @@ static const uint8_t SCL = GROVE_SCL;
 #define DEVICE_HAS_SOUND          // NS4168 I2S speaker
 #define DEVICE_HAS_VOLUME_CONTROL // I2S amp supports setVolume()
 #define DEVICE_HAS_USB_HID        // ESP32-S3 native USB OTG
-#define DEVICE_HAS_WEBAUTHN       // FIDO2/WebAuthn over USB HID
 #define APP_MENU_POWER_OFF        // BQ25896 can power off the device

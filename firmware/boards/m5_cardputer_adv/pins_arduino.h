@@ -96,7 +96,6 @@ static const uint8_t SCL = 15;
 #define DEVICE_HAS_SOUND          // speaker attached — enables audio paths and sound settings
 #define DEVICE_HAS_VOLUME_CONTROL // I2S amp + ES8311 codec support setVolume() — shows Volume slider in Settings
 #define DEVICE_HAS_USB_HID        // ESP32-S3 native USB OTG — enables USB HID keyboard
-#define DEVICE_HAS_WEBAUTHN       // FIDO2/WebAuthn over USB HID
 #define APP_MENU_POWER_OFF        // show Power Off in main menu (hardware power cut via GPIO 4 + deep sleep)
 // Device has dedicated up/down/left/right navigation in addition to select.
 // Enables row-based grid navigation in MainMenuScreen (UP/DOWN move between
