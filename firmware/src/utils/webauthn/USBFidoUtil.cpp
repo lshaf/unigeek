@@ -102,6 +102,12 @@ void USBFidoUtil::_onOutput(uint8_t report_id, const uint8_t* buffer, uint16_t l
   _qHead = next;
 }
 
+USBFidoUtil& fido()
+{
+  static USBFidoUtil inst;
+  return inst;
+}
+
 }  // namespace webauthn
 
 #endif  // DEVICE_HAS_WEBAUTHN

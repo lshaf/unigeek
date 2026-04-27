@@ -246,8 +246,39 @@ and verifies the signature with it. Acceptable per spec.
   CTAP2 MakeCredential when both are advertised, so this affects only
   legacy U2F-only sites.
 
-### In progress
-- **Phase 8** — User presence + PIN UI. Not yet started.
+- **Phase 8** — `WebAuthnScreen` (firmware/src/screens/webauthn/) initialises
+  the FIDO singleton + crypto + credential store, wires the CTAPHID handler
+  to `Ctap2::dispatch`, and installs itself as the user-presence callback.
+  When `MakeCredential` / `GetAssertion` calls back, the screen renders a
+  **Confirm: <rpId>** prompt and blocks the dispatch thread until **PRESS**
+  (allow), **BACK** (deny), or 30 s timeout — sending CTAPHID_KEEPALIVE
+  every 100 ms with status `0x02 UPNEEDED` so the host doesn't time out.
+  Achievements: `webauthn_first_use` (Bronze) on screen open, and
+  `webauthn_first_passkey` (Silver) on first authorized op.
+  PIN UI deferred to Phase 5c.
+
+- **Phase 9** — Menu wiring (HID > **WebAuthn (USB)** entry on S3 boards),
+  knowledge/webauthn.md, catalog row, README HID section, achievements.md
+  totals updated. Single FIDO HID descriptor is registered at boot via
+  `webauthn::fido()` from main.cpp setup() so the FIDO collection appears
+  in the composite USB HID descriptor before any keyboard/mouse instance
+  triggers `USB.begin()`.
+
+### Known follow-ups (not blockers)
+- **AAGUID** still zero — some relying parties refuse zero-AAGUID. Pick a
+  random UUID and hardcode it in `WebAuthnConfig.h`.
+- **Resident credentials (rk=true)** — `getInfo` advertises `rk:false`. To
+  enable, add a credentials.bin store and walk it during GetAssertion when
+  the host omits allowList.
+- **Client PIN** — `getInfo` advertises `clientPin:false`. PIN flow per
+  Phase 5c plan: HMAC(masterKey, pin) stored at `/unigeek/webauthn/pin.bin`,
+  retry counter, optional PIN-derived master-key wrapping for at-rest
+  encryption.
+- **U2F REGISTER** — currently `SW_INS_NOT_SUPPORTED`. Add when an X.509
+  attestation cert builder lands.
+- **Build verification** — none of the new code has been compiled. The
+  next session should run `pio run -e t_display_s3` (or any other S3 env)
+  and resolve compile errors before declaring complete.
 
 ### Next session pickup point
 1. Read this file top-to-bottom.

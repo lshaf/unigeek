@@ -104,6 +104,7 @@ Multi-tool firmware for ESP32-based handheld devices. Built with PlatformIO + Ar
 - **Keyboard Relay** — Forward physical keypresses directly to the connected host in real time (keyboard devices only)
 - **Ducky Script** — Run script files from storage to automate keystrokes ([details](knowledge/ducky-script.md))
 - **Mouse Jiggle** — Send periodic small mouse movements over BLE or USB to keep the host awake
+- **WebAuthn** — Act as a USB FIDO2 / WebAuthn passkey for browser sign-in (CTAP2 + legacy U2F authenticate, ESP32-S3 only) ([details](knowledge/webauthn.md))
 
 ### Utility
 - **I2C Detector** — Scan I2C bus and list all responding device addresses
@@ -355,8 +356,6 @@ This project was built with inspiration and reference from:
 
 ## TODO
 
-- change keyboard to HID instead, mode will be USB and BLE, while BLE and USB only have Keyboard, Mouse and Jiggle Mouse, USB has 1 more option is Mass Storage.
-- webauthn for esp32s3 only (via USB HID)
 - LoRa
 - ST25 nfc implementation for lora https://github.com/m5stack/M5Unit-NFC
 - sticks3 ir receive not functional (RMT/ES8311 conflict); transmit works

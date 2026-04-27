@@ -77,6 +77,12 @@ private:
   bool       _everSent = false;
 };
 
+// Singleton FIDO HID device. Construct early at boot (before USB.begin
+// runs for the first time, i.e. before any USBKeyboardUtil::begin()) so
+// that the FIDO descriptor is part of the composite HID interface for
+// the lifetime of the session. Subsequent calls return the same instance.
+USBFidoUtil& fido();
+
 }  // namespace webauthn
 
 #endif  // DEVICE_HAS_WEBAUTHN

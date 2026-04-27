@@ -11,7 +11,13 @@ public:
   void onBack()             override;
 
 private:
-#ifdef DEVICE_HAS_USB_HID
+#ifdef DEVICE_HAS_WEBAUTHN
+  ListItem _items[3] = {
+    {"USB MouseKeyboard"},
+    {"BLE MouseKeyboard"},
+    {"WebAuthn (USB)"},
+  };
+#elif defined(DEVICE_HAS_USB_HID)
   ListItem _items[2] = {
     {"USB MouseKeyboard"},
     {"BLE MouseKeyboard"},

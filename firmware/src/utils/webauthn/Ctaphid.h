@@ -45,6 +45,11 @@ public:
   // Drives timeouts. Call every loop iteration with millis().
   void tick(uint32_t nowMs);
 
+  // Channel ID of the currently dispatching transaction. Valid only inside
+  // the upper-layer handler — used to emit keepalives during user-presence
+  // waits without plumbing the CID through the handler signature.
+  uint32_t currentCid() const { return _curCid; }
+
   // Send a CTAPHID frame on a specific channel (used by upper layers).
   void sendError(uint32_t cid, uint8_t code);
   void sendKeepalive(uint32_t cid, uint8_t status);

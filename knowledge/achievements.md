@@ -21,7 +21,7 @@ Unlocking an achievement shows a toast notification at the bottom of the screen 
 
 ## Ranks
 
-Total possible EXP across all achievements: **85 000** (201 entries: 64 × Bronze, 60 × Silver, 41 × Gold, 36 × Platinum).
+Total possible EXP across all achievements: **85 400** (203 entries: 65 × Bronze, 61 × Silver, 41 × Gold, 36 × Platinum).
 
 | Rank | EXP Required | % of Total |
 |------|-------------|-----------|
@@ -75,7 +75,7 @@ If no title has been set, it shows `[RANK] No Title` by default.
 | 0 | WiFi Network | 20 |
 | 1 | WiFi Attacks | 43 |
 | 2 | Bluetooth | 16 |
-| 3 | HID | 7 |
+| 3 | HID | 9 |
 | 4 | NFC | 7 |
 | 5 | IR | 8 |
 | 6 | Sub-GHz | 7 |
@@ -85,7 +85,7 @@ If no title has been set, it shows `[RANK] No Title` by default.
 | 10 | Games | 31 |
 | 11 | Settings | 4 |
 | 12 | Chameleon | 32 |
-| | **Total** | **201** |
+| | **Total** | **203** |
 
 ---
 
@@ -179,6 +179,8 @@ If no title has been set, it shows `[RANK] No Title` by default.
 | Macro Maestro | HID | Gold | 600 |
 | Automation God | HID | Platinum | 1000 |
 | Wiggle Wiggle | HID | Bronze | 100 |
+| Key in Hand | HID | Bronze | 100 |
+| Passkey Pioneer | HID | Silver | 300 |
 | Card Detected | NFC | Bronze | 100 |
 | Card Collector | NFC | Silver | 300 |
 | Dictionary Diver | NFC | Silver | 300 |

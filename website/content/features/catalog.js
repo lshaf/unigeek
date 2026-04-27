@@ -52,6 +52,7 @@ export const CATALOG = [
   { slug: "usb-keyboard",         title: "USB Keyboard",        category: "keyboard", summary: "Act as a wired USB HID keyboard — ESP32-S3 devices only",                                            hasDetail: false, stable: true },
   { slug: "keyboard-relay",       title: "Keyboard Relay",      category: "keyboard", summary: "Forward physical keypresses directly to the connected host in real time — keyboard devices only",    hasDetail: false, stable: true },
   { slug: "mouse-jiggle",         title: "Mouse Jiggle",        category: "keyboard", summary: "Send small periodic mouse movements over BLE or USB HID to keep the host awake",                     hasDetail: true,  stable: true },
+  { slug: "webauthn",             title: "WebAuthn",            category: "keyboard", summary: "Act as a USB FIDO2 / WebAuthn passkey — browser-compatible CTAP2 + legacy U2F (ESP32-S3 only)",      hasDetail: true,  stable: false },
 
   // Modules
   { slug: "nfc-mifare",           title: "NFC (MFRC522)",       category: "module",   summary: "MIFARE Classic card reader and key recovery — default-key probe, dictionary, static-nested, weak-PRNG nested, and darkside attacks", hasDetail: true,  stable: true },
