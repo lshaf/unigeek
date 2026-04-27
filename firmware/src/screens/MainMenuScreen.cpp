@@ -6,7 +6,7 @@
 #include "core/ScreenManager.h"
 #include "screens/wifi/WifiMenuScreen.h"
 #include "screens/ble/BLEMenuScreen.h"
-#include "screens/keyboard/KeyboardMenuScreen.h"
+#include "screens/hid/KeyboardMenuScreen.h"
 #include "screens/game/GameMenuScreen.h"
 #include "screens/module/ModuleMenuScreen.h"
 #include "screens/utility/UtilityMenuScreen.h"

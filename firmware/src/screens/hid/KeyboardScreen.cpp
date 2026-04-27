@@ -2,7 +2,7 @@
 #include "core/Device.h"
 #include "core/ScreenManager.h"
 #include "core/AchievementManager.h"
-#include "screens/keyboard/KeyboardMenuScreen.h"
+#include "screens/hid/KeyboardMenuScreen.h"
 #include "ui/actions/ShowStatusAction.h"
 #include "ui/components/StatusBar.h"
 #ifdef DEVICE_HAS_USB_HID

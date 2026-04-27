@@ -246,7 +246,7 @@ and verifies the signature with it. Acceptable per spec.
   CTAP2 MakeCredential when both are advertised, so this affects only
   legacy U2F-only sites.
 
-- **Phase 8** — `WebAuthnScreen` (firmware/src/screens/webauthn/) initialises
+- **Phase 8** — `WebAuthnScreen` (firmware/src/screens/hid/) initialises
   the FIDO singleton + crypto + credential store, wires the CTAPHID handler
   to `Ctap2::dispatch`, and installs itself as the user-presence callback.
   When `MakeCredential` / `GetAssertion` calls back, the screen renders a
@@ -335,10 +335,12 @@ and verifies the signature with it. Acceptable per spec.
       U2f.h/cpp                  — Phase 7: CTAP1 compat
       WebAuthnConfig.h           — AAGUID, capability flags, sizes
 
-    firmware/src/screens/webauthn/
+    firmware/src/screens/hid/
+      KeyboardMenuScreen.h/cpp   — HID menu (USB / BLE / WebAuthn picker)
+      KeyboardScreen.h/cpp       — keyboard relay + DuckyScript + Mouse Jiggle
       WebAuthnScreen.h/cpp       — Phase 8: user presence prompt
-      WebAuthnPinScreen.h/cpp    — Phase 8: PIN setup/entry
-      WebAuthnResetScreen.h/cpp  — Phase 8: reset confirmation
+      WebAuthnPinScreen.h/cpp    — Phase 8: PIN setup/entry  (deferred)
+      WebAuthnResetScreen.h/cpp  — Phase 8: reset confirmation (deferred)
 
     knowledge/webauthn.md         — Phase 9: user-facing docs
 

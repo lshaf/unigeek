@@ -308,7 +308,7 @@ firmware/
     ├── screens/         all UI screens organized by category
     │   ├── wifi/
     │   ├── ble/
-    │   ├── keyboard/
+    │   ├── hid/        keyboard / DuckyScript / Mouse Jiggle / WebAuthn screens
     │   ├── module/      NFC (MFRC522, PN532 UART), GPS
     │   ├── utility/
     │   ├── game/

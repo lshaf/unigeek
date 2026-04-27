@@ -1,9 +1,9 @@
 #include "KeyboardMenuScreen.h"
 #include "core/ScreenManager.h"
 #include "screens/MainMenuScreen.h"
-#include "screens/keyboard/KeyboardScreen.h"
+#include "screens/hid/KeyboardScreen.h"
 #ifdef DEVICE_HAS_WEBAUTHN
-#include "screens/webauthn/WebAuthnScreen.h"
+#include "screens/hid/WebAuthnScreen.h"
 #endif
 
 void KeyboardMenuScreen::onInit()
