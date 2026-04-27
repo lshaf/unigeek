@@ -11,6 +11,7 @@
 #define LCD_BL_CH 7
 
 #define DEVICE_HAS_USB_HID
+#define DEVICE_HAS_WEBAUTHN
 
 // Define standard SPI pins to avoid SD.h compilation errors, even if unused
 #define SS 10

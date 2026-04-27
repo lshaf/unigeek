@@ -47,21 +47,19 @@ IDs in the **Status** section.
 - `USBFidoUtil` class: registers a HID interface with FIDO Usage Page
   (`0xF1D0` / `0x01`), 64-byte input + output reports
 - Polling/callback API so CTAPHID can sit on top
-- **Open question**: arduino-esp32 `USBHID` is a singleton that concatenates
-  all registered devices into a single HID interface with mixed Report IDs.
-  FIDO HID does NOT use Report IDs. Mixing report-IDs with no-report-IDs
-  in one interface is forbidden. We have three options:
-    1. Drop into TinyUSB directly (`tusb_hid_n_*`) and configure two
-       separate HID interfaces in the composite descriptor — cleanest, but
-       requires bypassing arduino-esp32 USBHID.
-    2. Add Report ID 0xF1 to the FIDO descriptor (some hosts tolerate this,
-       Chrome historically does not).
-    3. Make WebAuthn mutually exclusive with keyboard/mouse — only one HID
-       persona at a time, swap descriptors between modes (requires USB
-       re-enumeration).
-  → Recommendation: **option 1**. Plan to add `tusb_config.h` overrides
-  (`CFG_TUD_HID = 2`) and use `tud_hid_n_report` for the FIDO interface.
-  Keyboard+mouse stay on interface 0, FIDO on interface 1.
+- **Decision (resolved)**: `framework-arduinoespressif32@2.0.17` ships
+  `CFG_TUD_HID = 1` (single HID interface) and the USBHID wrapper routes
+  reports to `USBHIDDevice` instances by Report ID. Two-interface mode
+  would require patching the platform's `tusb_config.h` and a custom
+  TinyUSB descriptor — too invasive.
+  → **Going composite**: FIDO is a third top-level collection on the
+  existing HID interface, using **Report ID 3**. Browsers' FIDO HID
+  transports identify the device by parsing the report descriptor for
+  the FIDO Usage Page (`0xF1D0`/`0x01`), so a Report-ID prefix is
+  invisible to them — they handle the prefix in the HID driver layer.
+  - kbd  = Report ID 1  (existing)
+  - mouse= Report ID 2  (existing)
+  - fido = Report ID 3  (new)
 
 ### Phase 2 — CTAPHID transport  *[task #6]*
 
@@ -194,12 +192,29 @@ and verifies the signature with it. Acceptable per spec.
 ## Cross-session State
 
 ### Done
-- _(none yet — this is the planning baseline)_
+- **Phase 1** — `DEVICE_HAS_WEBAUTHN` flag added to all S3 board
+  pins_arduino.h files. `USBFidoUtil` registers a third HID collection
+  (Report ID 3, Usage Page 0xF1D0, 64 B IN/OUT) on the existing composite
+  HID interface alongside keyboard+mouse.
+- **Phase 2** — `Ctaphid` parses 64-byte FIDO HID frames into full CTAPHID
+  messages (init + continuation), handles INIT/PING/WINK/CANCEL natively,
+  dispatches CBOR/MSG to a registered handler, sends ERRORs and KEEPALIVEs.
+  100 ms inter-packet timeout.
+- **Phase 3** — `Cbor` reader/writer covering CTAP2's subset of RFC 8949
+  (uint, negint, byte/text strings, array, map, simple). Writer emits
+  shortest-form integers; caller is responsible for ordering map keys.
+- **Phase 4** — `WebAuthnCrypto` wraps mbedTLS for SHA-256, HMAC-SHA-256,
+  HKDF-SHA-256, AES-256-CBC, ECDSA P-256 keygen / sign-DER / pubkey
+  derivation. Process-wide CTR-DRBG seeded from `esp_random()`.
+- **Phase 5** — `CredentialStore` lazy-loads or generates the master key
+  at `/unigeek/webauthn/master.bin`, persists a global signature counter
+  at `/unigeek/webauthn/counter.bin`, and encodes/decodes 96-byte
+  credential IDs as `nonce(16) || rpIdHash(32) || ct(32) || tag(16)` —
+  AES-256-CBC over the private key with HMAC-SHA-256 binding to the RP.
+  **Deferred to Phase 5b/5c**: resident credentials (rk=true) and PIN.
 
 ### In progress
-- **Phase 1** — `firmware/src/utils/webauthn/` folder created and
-  `WebAuthnConfig.h` committed. Build flag and `USBFidoUtil` skeleton
-  not yet committed.
+- **Phase 6** — CTAP2 authenticator API. Not yet started.
 
 ### Next session pickup point
 1. Read this file top-to-bottom.
