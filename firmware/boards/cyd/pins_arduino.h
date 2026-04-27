@@ -68,6 +68,15 @@ static const uint8_t SCL = GROVE_SCL;
 // ─── IR Transmitter ──────────────────────────────────────
 #define IR_TX_PIN  22
 
+// ─── CC1101 Sub-GHz (Grove port, shares VSPI with SD) ────
+// GDO0=22 shared with IR_TX — radios and IR are not active simultaneously.
+#define CC1101_CS_PIN    27
+#define CC1101_GDO0_PIN  22
+
+// ─── NRF24L01+ (shares Grove port + VSPI with SD/CC1101) ─
+#define NRF24_CSN_PIN    27
+#define NRF24_CE_PIN     22
+
 // ─── TFT_eSPI config ──────────────────────────────────────
 #define DISABLE_ALL_LIBRARY_WARNINGS 1
 #define USER_SETUP_LOADED 1

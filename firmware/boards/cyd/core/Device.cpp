@@ -20,7 +20,7 @@
 static DisplayImpl    display;
 static NavigationImpl navigation;
 static PowerImpl      power;
-static ExtSpiClass    sdSpi(HSPI);
+static ExtSpiClass    sdSpi(VSPI);
 
 void Device::applyNavMode() {}
 void Device::boardHook() {}
@@ -30,11 +30,16 @@ Device* Device::createInstance() {
   pinMode(LCD_BL, OUTPUT);
   digitalWrite(LCD_BL, HIGH);
 
-  // Pull SD CS high so it stays idle while TFT_eSPI inits the HSPI display.
-  pinMode(SD_CS, OUTPUT);
-  digitalWrite(SD_CS, HIGH);
+  // Deselect every SPI peripheral before bringing up the bus — multiple
+  // CS lines floating low at boot would corrupt the first transaction.
+  // CC1101 / NRF24 share the Grove port and the VSPI bus with the SD card.
+  const uint8_t spi_cs_pins[] = { SD_CS, CC1101_CS_PIN, NRF24_CSN_PIN };
+  for (auto pin : spi_cs_pins) {
+    pinMode(pin, OUTPUT);
+    digitalWrite(pin, HIGH);
+  }
 
-  // Pre-init the VSPI SD bus so initStorage() uses correct pins.
+  // Pre-init the VSPI bus so initStorage() and CC1101Util use correct pins.
   sdSpi.begin(SPI_SCK_PIN, SPI_MISO_PIN, SPI_MOSI_PIN, -1);
 
   // ExI2C available for Grove port (SDA=21, SCL=22)
