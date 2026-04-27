@@ -3,6 +3,7 @@
 #include "WebAuthnConfig.h"
 #include "WebAuthnCrypto.h"
 #include "CredentialStore.h"
+#include "U2f.h"
 
 #include <string.h>
 
@@ -453,9 +454,13 @@ uint16_t Ctap2::dispatch(uint8_t cmd,
                          uint8_t* resp, uint16_t respMax,
                          uint8_t* /*respCmd*/, void*)
 {
-  // CTAPHID_CBOR payload starts with the CTAP2 command byte.
+  // CTAPHID_MSG carries a U2F APDU — different protocol and response
+  // format. The response is raw APDU data with a status word, so we
+  // signal that to the caller by leaving the response untouched as bytes.
+  if (cmd == CTAPHID_MSG) {
+    return U2f::handleApdu(req, reqLen, resp, respMax);
+  }
   if (cmd != CTAPHID_CBOR) {
-    // CTAPHID_MSG (U2F) lands here too; Phase 7 will route it.
     return statusOnly(resp, CTAP2_ERR_INVALID_OPTION);
   }
   if (reqLen < 1) return statusOnly(resp, CTAP2_ERR_INVALID_CBOR);

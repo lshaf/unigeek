@@ -236,8 +236,18 @@ and verifies the signature with it. Acceptable per spec.
   - **NOT YET IMPLEMENTED**: ClientPIN (returns
     `CTAP2_ERR_UNSUPPORTED_OPTION`), GetNextAssertion, hmac-secret.
 
+- **Phase 7** — `U2f::handleApdu()` handles legacy CTAP1 APDUs over
+  CTAPHID_MSG. Implemented `INS 0x02 AUTHENTICATE` (signs over
+  application||UP||counter||challenge using the credential decoded from
+  the keyHandle, which is the same 96-byte CTAP2 credentialId) and
+  `INS 0x03 VERSION` ("U2F_V2"). `INS 0x01 REGISTER` returns
+  `SW_INS_NOT_SUPPORTED` — implementing it cleanly requires a self-signed
+  X.509 attestation certificate (deferred). All modern browsers prefer
+  CTAP2 MakeCredential when both are advertised, so this affects only
+  legacy U2F-only sites.
+
 ### In progress
-- **Phase 7** — U2F / CTAP1 over CTAPHID_MSG. Not yet started.
+- **Phase 8** — User presence + PIN UI. Not yet started.
 
 ### Next session pickup point
 1. Read this file top-to-bottom.
