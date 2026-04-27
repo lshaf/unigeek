@@ -59,6 +59,8 @@ void KeyboardScreen::onUpdate()
       if (dir == INavigation::DIR_BACK || dir == INavigation::DIR_PRESS)
         _goMenu();
     }
+  } else if (_state == STATE_MOUSE_JIGGLE) {
+    _handleMouseJiggle();
   } else {
     ListScreen::onUpdate();
   }
@@ -70,6 +72,8 @@ void KeyboardScreen::onRender()
     _renderConnected();
   } else if (_state == STATE_RUNNING_SCRIPT) {
     _renderScript();
+  } else if (_state == STATE_MOUSE_JIGGLE) {
+    _renderMouseJiggle();
   } else {
     ListScreen::onRender();
   }
@@ -81,7 +85,7 @@ void KeyboardScreen::onItemSelected(uint8_t index)
 
   if (_state == STATE_MENU) {
     // Resolve which item was actually selected
-    // Items are: [0]=Keyboard (if HAS_KEYBOARD), then DuckyScript, then Reset Pair (BLE)
+    // Items are: [Keyboard (HAS_KEYBOARD)?], Ducky Script, Mouse Jiggle, [Reset Pair (BLE)?]
     uint8_t idx = 0;
 #ifdef DEVICE_HAS_KEYBOARD
     if (index == idx++) {
@@ -100,6 +104,11 @@ void KeyboardScreen::onItemSelected(uint8_t index)
     if (index == idx++) {
       // Ducky Script
       _showFiles(kDuckyBase);
+      return;
+    }
+    if (index == idx++) {
+      // Mouse Jiggle
+      _goMouseJiggle();
       return;
     }
     if (_mode == MODE_BLE && index == idx) {
@@ -147,6 +156,7 @@ void KeyboardScreen::_goMenu()
   _menuCount  = 0;
   _connectedChromeDrawn = false;
   _scriptChromeDrawn    = false;
+  _jiggleChromeDrawn    = false;
   StatusBar::bleConnected() = false;
   Uni.Nav->setSuppressKeys(false);
 
@@ -154,6 +164,7 @@ void KeyboardScreen::_goMenu()
   _menuItems[_menuCount++] = {"Keyboard", nullptr};
 #endif
   _menuItems[_menuCount++] = {"Ducky Script", nullptr};
+  _menuItems[_menuCount++] = {"Mouse Jiggle", nullptr};
   if (_mode == MODE_BLE)
     _menuItems[_menuCount++] = {"Reset Pair", nullptr};
 
@@ -379,4 +390,93 @@ void KeyboardScreen::_refreshBatteryLevel()
   _lastBatMs = now;
   int level = Uni.Power.getBatteryPercentage();
   if (level >= 0) _keyboard->setBatteryLevel((uint8_t)level);
+}
+
+// ── Mouse Jiggle ────────────────────────────────────────────────────────────
+
+void KeyboardScreen::_goMouseJiggle()
+{
+  int n = Achievement.inc("hid_mouse_jiggle");
+  if (n == 1) Achievement.unlock("hid_mouse_jiggle");
+
+  _state             = STATE_MOUSE_JIGGLE;
+  _jiggleChromeDrawn = false;
+  _jiggleStartMs     = millis();
+  _jiggleNextMs      = _jiggleStartMs + kJiggleIntervalMs;
+  _jiggleCount       = 0;
+  _jiggleDirRight    = true;
+  _jiggleLastPaintMs = 0;
+  render();
+}
+
+void KeyboardScreen::_handleMouseJiggle()
+{
+  if (Uni.Nav->wasPressed()) {
+    auto dir = Uni.Nav->readDirection();
+    if (dir == INavigation::DIR_BACK || dir == INavigation::DIR_PRESS) {
+      _goMenu();
+      return;
+    }
+  }
+
+  uint32_t now = millis();
+  if (now >= _jiggleNextMs) {
+    if (_keyboard->isConnected() || _mode == MODE_USB) {
+      int8_t dx = _jiggleDirRight ? 3 : -3;
+      _keyboard->mouseMove(dx, 0);
+      _jiggleDirRight = !_jiggleDirRight;
+      _jiggleCount++;
+    }
+    _jiggleNextMs = now + kJiggleIntervalMs;
+    render();
+  } else if (now - _jiggleLastPaintMs >= 1000) {
+    render();
+  }
+
+  _refreshBatteryLevel();
+}
+
+void KeyboardScreen::_renderMouseJiggle()
+{
+  auto& lcd = Uni.Lcd;
+  bool connected = _keyboard->isConnected() || _mode == MODE_USB;
+
+  if (!_jiggleChromeDrawn) {
+    lcd.fillRect(bodyX(), bodyY(), bodyW(), bodyH(), TFT_BLACK);
+    lcd.setTextSize(1);
+    lcd.setTextColor(TFT_DARKGREY, TFT_BLACK);
+    lcd.setTextDatum(BC_DATUM);
+    lcd.drawString("BACK / ENTER: Stop", bodyX() + bodyW() / 2, bodyY() + bodyH());
+    _jiggleChromeDrawn = true;
+  }
+
+  uint32_t now       = millis();
+  _jiggleLastPaintMs = now;
+
+  const int spH = 64;
+  int pushY = bodyY() + (bodyH() - spH) / 2 - 6;
+  Sprite sp(&lcd);
+  sp.createSprite(bodyW(), spH);
+  sp.fillSprite(TFT_BLACK);
+  sp.setTextDatum(MC_DATUM);
+
+  sp.setTextSize(2);
+  sp.setTextColor(connected ? TFT_GREEN : TFT_RED, TFT_BLACK);
+  sp.drawString(connected ? "Jiggling" : "Waiting...", bodyW() / 2, 10);
+
+  uint32_t secsToNext = _jiggleNextMs > now ? (_jiggleNextMs - now) / 1000 : 0;
+  uint32_t elapsedSec = (now - _jiggleStartMs) / 1000;
+
+  char line[32];
+  sp.setTextSize(1);
+  sp.setTextColor(TFT_LIGHTGREY, TFT_BLACK);
+  snprintf(line, sizeof(line), "Moves: %lu  Next: %lus",
+           (unsigned long)_jiggleCount, (unsigned long)secsToNext);
+  sp.drawString(line, bodyW() / 2, 36);
+  snprintf(line, sizeof(line), "Elapsed: %02lu:%02lu",
+           (unsigned long)(elapsedSec / 60), (unsigned long)(elapsedSec % 60));
+  sp.drawString(line, bodyW() / 2, 52);
+
+  sp.pushSprite(bodyX(), pushY);
+  sp.deleteSprite();
 }

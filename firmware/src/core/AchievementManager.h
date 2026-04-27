@@ -38,7 +38,7 @@ public:
   struct Catalog { const AchDef* defs; uint16_t count; };
 
   // Returns catalog pointer + count derived from sizeof — no manual counting needed
-  // Next available sequential ID: 231  (IDs 164–198 already used; 199 placed in domain 9; 200–209 in domain 1; 210–223 in domain 9; 224–228 in domain 4; 229–230 in domain 12)
+  // Next available sequential ID: 232  (IDs 164–198 already used; 199 placed in domain 9; 200–209 in domain 1; 210–223 in domain 9; 224–228 in domain 4; 229–230 in domain 12; 231 in domain 3)
   static Catalog catalog() {
     static constexpr AchDef kAchs[] = {
       // ── WiFi Network (domain 0) ────────────────────────────────────────────
@@ -175,6 +175,7 @@ public:
       { 114, "kbd_ducky_first",           "Script Kiddie",          3, 1, "Run a DuckyScript payload" },
       { 115, "kbd_ducky_5",               "Macro Maestro",          3, 2, "Execute 5 DuckyScript payloads" },
       { 116, "kbd_ducky_10",              "Automation God",         3, 3, "Execute 10 DuckyScript payloads" },
+      { 231, "hid_mouse_jiggle",          "Wiggle Wiggle",          3, 0, "Run HID mouse jiggle for the first time" },
       // ── NFC (domain 4) ────────────────────────────────────────────────────
       { 117, "nfc_uid_first",             "Card Detected",          4, 0, "Read an NFC card UID" },
       { 118, "nfc_uid_10",                "Card Collector",         4, 1, "Read 10 different NFC card UIDs" },

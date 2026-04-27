@@ -26,6 +26,7 @@ private:
     STATE_KEYBOARD,
     STATE_SELECT_FILE,
     STATE_RUNNING_SCRIPT,
+    STATE_MOUSE_JIGGLE,
   } _state = STATE_MENU;
 
   int               _mode;
@@ -48,9 +49,18 @@ private:
   static constexpr const char* kDuckyBase = "/unigeek/keyboard/duckyscript";
 
   // Menu (built dynamically)
-  static constexpr uint8_t kMaxMenu = 4;
+  static constexpr uint8_t kMaxMenu = 5;
   ListItem _menuItems[kMaxMenu];
   uint8_t  _menuCount = 0;
+
+  // Mouse Jiggle
+  static constexpr uint32_t kJiggleIntervalMs = 30000;
+  bool      _jiggleChromeDrawn = false;
+  uint32_t  _jiggleStartMs     = 0;
+  uint32_t  _jiggleNextMs      = 0;
+  uint32_t  _jiggleCount       = 0;
+  bool      _jiggleDirRight    = true;
+  uint32_t  _jiggleLastPaintMs = 0;
 
   // Script output
   struct ScriptLine { String text; bool ok; };
@@ -60,12 +70,15 @@ private:
 
   void _goMenu();
   void _goConnected();
+  void _goMouseJiggle();
   void _showFiles(const String& path);
   void _runDuckyScript(const String& path);
   void _addScriptLine(const String& text, bool ok);
 
   void _renderConnected();
   void _renderScript();
+  void _renderMouseJiggle();
   void _handleKeyboardRelay();
+  void _handleMouseJiggle();
   void _refreshBatteryLevel();
 };
