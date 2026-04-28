@@ -34,8 +34,9 @@ static const uint8_t SCK  = SPI_SCK_PIN;
 #define PN532_CS_PIN   43
 
 // ─── I2C (Grove) ─────────────────────────────────────────
-#define GROVE_SDA  9
-#define GROVE_SCL  10
+#define GROVE_SDA       9
+#define GROVE_SCL       10
+#define GROVE_5V_OUTPUT true   // true = Grove 5V rail sources power; false = input (charging)
 
 static const uint8_t SDA = GROVE_SDA;
 static const uint8_t SCL = GROVE_SCL;

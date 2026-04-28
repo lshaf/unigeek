@@ -29,6 +29,9 @@ Device* Device::createInstance() {
   // Disable I2C idle sleep so PMIC stays responsive (matches M5GFX init)
   pm1.setI2cSleepTime(0);
 
+  // Configure Grove 5V rail (output = source 5V, input = accept 5V charging)
+  power.setExtOutput(GROVE_5V_OUTPUT);
+
   // Enable M5PM1 GPIO2 HIGH to power the LCD (L3B LDO enable)
   pm1.gpioSet(M5PM1_GPIO_NUM_2, M5PM1_GPIO_MODE_OUTPUT, 1,
               M5PM1_GPIO_PULL_NONE, M5PM1_GPIO_DRIVE_PUSHPULL);

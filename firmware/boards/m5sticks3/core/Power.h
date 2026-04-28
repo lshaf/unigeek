@@ -34,4 +34,8 @@ public:
     delay(120);
     pm1.shutdown();
   }
+
+  void setExtOutput(bool enable) override {
+    pm1.setBoostEnable(enable);
+  }
 };
