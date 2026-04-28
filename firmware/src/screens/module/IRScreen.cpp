@@ -46,7 +46,7 @@ void IRScreen::_showMenu() {
   _state = STATE_MENU;
   _ir.end();
   #if defined(DEVICE_M5STICK_S3)
-  Uni.Power->setExtOutput(false);
+  Uni.Power.setExtOutput(false);
   _irAmpEnable(true);
   #endif
   strncpy(_titleBuf, "IR Remote", sizeof(_titleBuf));
@@ -112,7 +112,7 @@ void IRScreen::onBack() {
   if (_state == STATE_MENU) {
     _ir.end();
     #if defined(DEVICE_M5STICK_S3)
-    Uni.Power->setExtOutput(GROVE_5V_OUTPUT);
+    Uni.Power.setExtOutput(GROVE_5V_OUTPUT);
     #endif
     Screen.goBack();
   } else if (_state == STATE_RECEIVING) {
@@ -169,7 +169,7 @@ void IRScreen::onItemSelected(uint8_t index) {
         }
         #if defined(DEVICE_M5STICK_S3)
         if (_rxPin == IR_RX_PIN || _txPin == IR_TX_PIN) {
-          Uni.Power->setExtOutput(true);
+          Uni.Power.setExtOutput(true);
           if (_rxPin == IR_RX_PIN) {
             _irAmpEnable(false);
             ShowStatusAction::show("Starting...", 2000);
@@ -190,7 +190,7 @@ void IRScreen::onItemSelected(uint8_t index) {
           return;
         }
         #if defined(DEVICE_M5STICK_S3)
-        if (_txPin == IR_TX_PIN) Uni.Power->setExtOutput(true);
+        if (_txPin == IR_TX_PIN) Uni.Power.setExtOutput(true);
         #endif
         _ir.beginTx(_txPin);
         Uni.Storage->makeDir(kRootPath);
@@ -213,7 +213,7 @@ void IRScreen::onItemSelected(uint8_t index) {
         render();
 
         #if defined(DEVICE_M5STICK_S3)
-        if (_txPin == IR_TX_PIN) Uni.Power->setExtOutput(true);
+        if (_txPin == IR_TX_PIN) Uni.Power.setExtOutput(true);
         #endif
         _ir.beginTx(_txPin);
         _tvbCancelled = false;
@@ -379,7 +379,7 @@ void IRScreen::_onRecvItemAction(uint8_t index) {
       ShowStatusAction::show("Set TX pin first");
     } else {
       #if defined(DEVICE_M5STICK_S3)
-      if (_txPin == IR_TX_PIN) Uni.Power->setExtOutput(true);
+      if (_txPin == IR_TX_PIN) Uni.Power.setExtOutput(true);
       #endif
       _ir.beginTx(_txPin);
       ShowStatusAction::show("Sending...", 0);
