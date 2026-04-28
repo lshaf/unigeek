@@ -22,6 +22,8 @@ private:
   bool          _wifiModeUpgraded = false;
   char          _currentSsid[33] = {};
   uint8_t       _attackerMac[6]  = {};
+  volatile bool          _isPaired     = false;
+  volatile unsigned long _lastPeerMsg  = 0;
   unsigned long _apDeployTime    = 0;
   unsigned long _helloTimer      = 0;
   unsigned long _lastDraw        = 0;

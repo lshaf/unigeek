@@ -49,9 +49,10 @@ private:
   unsigned long _apStartTime = 0;
 
   // Stats
-  int           _capturedCount = 0;
-  int           _eapolCaptured = 0;
-  unsigned long _lastDraw      = 0;
+  int           _capturedCount   = 0;
+  int           _eapolCaptured   = 0;
+  unsigned long _lastDraw        = 0;
+  unsigned long _heartbeatTimer  = 0;
 
   // Probe sniffer + EAPOL ring buffer
   static WifiKarmaEapolScreen* _instance;
@@ -131,4 +132,5 @@ private:
   void _sendDeploy(const char* ssid, const char* pass);
   void _sendTeardown();
   void _sendDone();
+  void _sendHeartbeat();
 };

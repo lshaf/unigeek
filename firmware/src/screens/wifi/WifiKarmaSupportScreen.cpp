@@ -75,7 +75,10 @@ void WifiKarmaSupportScreen::onUpdate()
         break;
       case CMD_DONE:
         _stopAP();
+        _isPaired     = false;
+        _lastPeerMsg  = 0;
         _supportState = STATE_WAITING_CONNECTION;
+        _chromeDrawn  = false;
         _sendHello();
         _helloTimer = millis();
         break;
@@ -85,7 +88,19 @@ void WifiKarmaSupportScreen::onUpdate()
 
   unsigned long now = millis();
 
-  if (now - _helloTimer > 2000) {
+  // Paired device went silent — unpair after 5s so anyone can pair again
+  if (_isPaired && _lastPeerMsg > 0 && now - _lastPeerMsg > 5000) {
+    _stopAP();
+    _isPaired     = false;
+    _lastPeerMsg  = 0;
+    _supportState = STATE_WAITING_CONNECTION;
+    _chromeDrawn  = false;
+    _sendHello();
+    _helloTimer = now;
+  }
+
+  // Hello broadcasts only while waiting for a new connection
+  if (_supportState == STATE_WAITING_CONNECTION && now - _helloTimer > 2000) {
     _sendHello();
     _helloTimer = now;
   }
@@ -177,9 +192,16 @@ void WifiKarmaSupportScreen::_onRecv(const uint8_t* mac, const uint8_t* data, in
   const KarmaMsg* msg = reinterpret_cast<const KarmaMsg*>(data);
   if (memcmp(msg->magic, KARMA_ESPNOW_MAGIC, 4) != 0) return;
 
+  // When paired, only accept commands from the paired device
+  if (_isPaired && memcmp(mac, _attackerMac, 6) != 0) return;
+
   switch (msg->cmd) {
     case KARMA_DEPLOY:
-      memcpy(_attackerMac, mac, 6);
+      if (!_isPaired) {
+        memcpy(_attackerMac, mac, 6);
+        _isPaired = true;
+      }
+      _lastPeerMsg = millis();
       memcpy(_pendingMac, mac, 6);
       strncpy(_currentSsid, msg->ssid, 32);
       _currentSsid[32] = '\0';
@@ -188,10 +210,15 @@ void WifiKarmaSupportScreen::_onRecv(const uint8_t* mac, const uint8_t* data, in
       _pendingCmd = CMD_DEPLOY;
       break;
     case KARMA_TEARDOWN:
-      _pendingCmd = CMD_TEARDOWN;
+      _lastPeerMsg = millis();
+      _pendingCmd  = CMD_TEARDOWN;
       break;
     case KARMA_DONE:
-      _pendingCmd = CMD_DONE;
+      _lastPeerMsg = millis();
+      _pendingCmd  = CMD_DONE;
+      break;
+    case KARMA_HEARTBEAT:
+      _lastPeerMsg = millis();
       break;
     default: break;
   }

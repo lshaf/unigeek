@@ -257,6 +257,12 @@ void WifiKarmaEapolScreen::onUpdate()
     }
   }
 
+  // ── Heartbeat to support device ───────────────────────────────────────────
+  if (_hasSupportDevice && now - _heartbeatTimer > 2000) {
+    _sendHeartbeat();
+    _heartbeatTimer = now;
+  }
+
   // ── Redraw ────────────────────────────────────────────────────────────────
   if (now - _lastDraw > 500) {
     render();
@@ -461,6 +467,7 @@ void WifiKarmaEapolScreen::_startAttack()
   _apActive       = false;
   _waitingForAck  = false;
   _lastDraw       = 0;
+  _heartbeatTimer = 0;
   _pcapStarted       = false;
   _eapolHasM1        = false;
   _beaconSaved       = false;
@@ -905,6 +912,16 @@ void WifiKarmaEapolScreen::_sendDone()
   KarmaMsg msg = {};
   memcpy(msg.magic, KARMA_ESPNOW_MAGIC, 4);
   msg.cmd = KARMA_DONE;
+  esp_now_send(_supportMac, reinterpret_cast<uint8_t*>(&msg), sizeof(msg));
+}
+
+void WifiKarmaEapolScreen::_sendHeartbeat()
+{
+  if (!_hasSupportDevice) return;
+  if (!esp_now_is_peer_exist(_supportMac)) return;
+  KarmaMsg msg = {};
+  memcpy(msg.magic, KARMA_ESPNOW_MAGIC, 4);
+  msg.cmd = KARMA_HEARTBEAT;
   esp_now_send(_supportMac, reinterpret_cast<uint8_t*>(&msg), sizeof(msg));
 }
 
