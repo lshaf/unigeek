@@ -52,7 +52,8 @@ private:
   int           _capturedCount   = 0;
   int           _eapolCaptured   = 0;
   unsigned long _lastDraw        = 0;
-  unsigned long _heartbeatTimer  = 0;
+  unsigned long          _heartbeatTimer   = 0;
+  volatile unsigned long _lastSupportMsg   = 0;
 
   // Probe sniffer + EAPOL ring buffer
   static WifiKarmaEapolScreen* _instance;

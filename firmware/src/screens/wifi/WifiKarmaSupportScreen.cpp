@@ -59,6 +59,12 @@ void WifiKarmaSupportScreen::onUpdate()
     }
   }
 
+  // ── Heartbeat pong (deferred from recv callback) ─────────────────────────
+  if (_pendingHeartbeatAck) {
+    _pendingHeartbeatAck = false;
+    _sendPong();
+  }
+
   // ── Pending command (deferred from recv callback — no WiFi ops in callback) ─
   if (_pendingCmd != CMD_NONE) {
     PendingCmd cmd = (PendingCmd)_pendingCmd;
@@ -218,7 +224,8 @@ void WifiKarmaSupportScreen::_onRecv(const uint8_t* mac, const uint8_t* data, in
       _pendingCmd  = CMD_DONE;
       break;
     case KARMA_HEARTBEAT:
-      _lastPeerMsg = millis();
+      _lastPeerMsg         = millis();
+      _pendingHeartbeatAck = true;
       break;
     default: break;
   }
@@ -247,6 +254,22 @@ void WifiKarmaSupportScreen::_sendAck(const uint8_t* mac, bool ok)
   msg.success = ok ? 1 : 0;
   esp_wifi_get_mac(WIFI_IF_AP, msg.bssid);
   esp_now_send(mac, reinterpret_cast<uint8_t*>(&msg), sizeof(msg));
+}
+
+void WifiKarmaSupportScreen::_sendPong()
+{
+  if (!_isPaired) return;
+  if (!esp_now_is_peer_exist(_attackerMac)) {
+    esp_now_peer_info_t peer = {};
+    memcpy(peer.peer_addr, _attackerMac, 6);
+    peer.channel = 1;
+    peer.encrypt = false;
+    esp_now_add_peer(&peer);
+  }
+  KarmaMsg msg = {};
+  memcpy(msg.magic, KARMA_ESPNOW_MAGIC, 4);
+  msg.cmd = KARMA_HEARTBEAT;
+  esp_now_send(_attackerMac, reinterpret_cast<uint8_t*>(&msg), sizeof(msg));
 }
 
 // ── AP management ────────────────────────────────────────────────────────────

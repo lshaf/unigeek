@@ -31,7 +31,8 @@ private:
 
   // Pending command (set in recv callback, executed in onUpdate — no WiFi ops in callback)
   enum PendingCmd : uint8_t { CMD_NONE = 0, CMD_DEPLOY, CMD_TEARDOWN, CMD_DONE };
-  volatile PendingCmd _pendingCmd = CMD_NONE;
+  volatile PendingCmd _pendingCmd          = CMD_NONE;
+  volatile bool       _pendingHeartbeatAck = false;
   char          _pendingPass[64] = {};
   uint8_t       _pendingMac[6]   = {};
 
@@ -42,6 +43,7 @@ private:
   void        _onRecv(const uint8_t* mac, const uint8_t* data, int len);
   void        _sendHello();
   void        _sendAck(const uint8_t* mac, bool ok);
+  void        _sendPong();
   void        _deployAP(const char* ssid, const char* pass);
   void        _stopAP();
 };

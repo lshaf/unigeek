@@ -263,6 +263,17 @@ void WifiKarmaEapolScreen::onUpdate()
     _heartbeatTimer = now;
   }
 
+  // ── Support device gone — stop attack and reset selection ─────────────────
+  if (_hasSupportDevice && !_waitingForAck && now - _lastSupportMsg > 5000) {
+    _log.addLine("[!] Support lost — stopping", TFT_RED);
+    _stopAttack();
+    _hasSupportDevice = false;
+    _lastSupportMsg   = 0;
+    memset(_supportMac, 0, 6);
+    _showMenu();
+    return;
+  }
+
   // ── Redraw ────────────────────────────────────────────────────────────────
   if (now - _lastDraw > 500) {
     render();
@@ -464,10 +475,11 @@ void WifiKarmaEapolScreen::_startAttack()
   _blacklistCount = 0;
   _capturedCount  = 0;
   _eapolCaptured  = 0;
-  _apActive       = false;
-  _waitingForAck  = false;
-  _lastDraw       = 0;
-  _heartbeatTimer = 0;
+  _apActive        = false;
+  _waitingForAck   = false;
+  _lastDraw        = 0;
+  _heartbeatTimer  = 0;
+  _lastSupportMsg  = millis();
   _pcapStarted       = false;
   _eapolHasM1        = false;
   _beaconSaved       = false;
@@ -953,12 +965,16 @@ void WifiKarmaEapolScreen::_handleEspNow(const uint8_t* mac, const uint8_t* data
       }
       break;
     case KARMA_ACK:
+      _lastSupportMsg = millis();
       if (_waitingForAck && msg->success) {
         portENTER_CRITICAL_ISR(&_espNowLock);
         memcpy(_ackBssid, msg->bssid, 6);
         _ackReceived = true;
         portEXIT_CRITICAL_ISR(&_espNowLock);
       }
+      break;
+    case KARMA_HEARTBEAT:
+      _lastSupportMsg = millis();
       break;
     default: break;
   }
