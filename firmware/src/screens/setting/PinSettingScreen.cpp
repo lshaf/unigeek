@@ -64,10 +64,9 @@ void PinSettingScreen::onInit() {
   _map[_itemCount] = PIN_PN532_BAUD;
   _itemCount++;
 
-#if defined(DEVICE_M5_CORES3)
-  // Bare CoreS3 only — Grove Port A 5V direction (input/output)
-  _items[_itemCount] = {"Grove A 5V", ""};
-  _map[_itemCount] = PIN_CORES3_GROVE_5V;
+#ifdef GROVE_5V_OUTPUT
+  _items[_itemCount] = {"Grove 5V", ""};
+  _map[_itemCount] = PIN_GROVE_5V;
   _itemCount++;
 #endif
 
@@ -88,7 +87,7 @@ void PinSettingScreen::_refresh() {
   _pn532TxSub = PinConfig.get(PIN_CONFIG_PN532_TX, PIN_CONFIG_PN532_TX_DEFAULT);
   _pn532RxSub = PinConfig.get(PIN_CONFIG_PN532_RX, PIN_CONFIG_PN532_RX_DEFAULT);
   _pn532BaudSub = PinConfig.get(PIN_CONFIG_PN532_BAUD, PIN_CONFIG_PN532_BAUD_DEFAULT);
-  _grove5VSub = PinConfig.get(PIN_CONFIG_CORES3_GROVE_5V, PIN_CONFIG_CORES3_GROVE_5V_DEFAULT);
+  _grove5VSub = PinConfig.get(PIN_CONFIG_GROVE_5V, PIN_CONFIG_GROVE_5V_DEFAULT);
 
   for (uint8_t i = 0; i < _itemCount; i++) {
     switch (_map[i]) {
@@ -104,7 +103,7 @@ void PinSettingScreen::_refresh() {
       case PIN_PN532_TX:    _items[i].sublabel = _pn532TxSub.c_str(); break;
       case PIN_PN532_RX:    _items[i].sublabel = _pn532RxSub.c_str(); break;
       case PIN_PN532_BAUD:  _items[i].sublabel = _pn532BaudSub.c_str(); break;
-      case PIN_CORES3_GROVE_5V: _items[i].sublabel = _grove5VSub.c_str(); break;
+      case PIN_GROVE_5V: _items[i].sublabel = _grove5VSub.c_str(); break;
     }
   }
 
@@ -223,9 +222,9 @@ void PinSettingScreen::onItemSelected(uint8_t index) {
       }
       break;
     }
-    case PIN_CORES3_GROVE_5V: {
-      String cur = PinConfig.get(PIN_CONFIG_CORES3_GROVE_5V, PIN_CONFIG_CORES3_GROVE_5V_DEFAULT);
-      PinConfig.set(PIN_CONFIG_CORES3_GROVE_5V, cur == "output" ? "input" : "output");
+    case PIN_GROVE_5V: {
+      String cur = PinConfig.get(PIN_CONFIG_GROVE_5V, PIN_CONFIG_GROVE_5V_DEFAULT);
+      PinConfig.set(PIN_CONFIG_GROVE_5V, cur == "output" ? "input" : "output");
       PinConfig.save(Uni.Storage);
       Uni.onPinConfigApply();
       break;

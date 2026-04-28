@@ -114,10 +114,11 @@
 
 #define PIN_CONFIG_PN532_BAUD_DEFAULT "115200"
 
-// ─── M5 CoreS3 (bare) Grove Port A 5V direction ─────────────────────────────
-// Values: "output" (default — AXP2101 → Grove 5V) or "input" (Grove 5V → AXP2101 charge)
-#define PIN_CONFIG_CORES3_GROVE_5V         "cores3_grove_5v"
-#define PIN_CONFIG_CORES3_GROVE_5V_DEFAULT "output"
+// ─── Grove Port 5V direction ─────────────────────────────────────────────────
+// Values: "output" (default — PMIC sources 5V to Grove) or "input" (Grove 5V charges battery)
+// Boards expose this when GROVE_5V_OUTPUT is defined in pins_arduino.h.
+#define PIN_CONFIG_GROVE_5V         "grove_5v"
+#define PIN_CONFIG_GROVE_5V_DEFAULT "output"
 
 class PinConfigManager
 {

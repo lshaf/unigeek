@@ -76,6 +76,9 @@ static const uint8_t SCK  = SPI_SCK_PIN;
 #define SPI_FREQUENCY        10000000
 #define SPI_READ_FREQUENCY   10000000
 
+// ─── Grove 5V direction ───────────────────────────────────────
+#define GROVE_5V_OUTPUT true          // true = Grove 5V sources power (default)
+
 // ─── Firmware Feature Flags ───────────────────────────────────
 #define DEVICE_HAS_SOUND              // AW88298 I2S speaker
 #define DEVICE_HAS_VOLUME_CONTROL     // I2S amp supports setVolume()

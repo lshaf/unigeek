@@ -10,8 +10,9 @@
 class PowerImpl : public IPower
 {
 public:
-  void    begin()                override {}
-  uint8_t getBatteryPercentage() override { return (uint8_t)M5.Power.getBatteryLevel(); }
-  void    powerOff()             override { M5.Power.powerOff(); }
-  bool    isCharging()           override { return M5.Power.isCharging(); }
+  void    begin()                       override {}
+  uint8_t getBatteryPercentage()        override { return (uint8_t)M5.Power.getBatteryLevel(); }
+  void    powerOff()                    override { M5.Power.powerOff(); }
+  bool    isCharging()                  override { return M5.Power.isCharging(); }
+  void    setExtOutput(bool enable)     override { M5.Power.setExtOutput(enable); }
 };

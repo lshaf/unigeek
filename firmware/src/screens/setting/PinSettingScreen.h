@@ -31,7 +31,7 @@ private:
                  PIN_CC1101_CS, PIN_CC1101_GDO0,
                  PIN_NRF24_CE, PIN_NRF24_CSN,
                  PIN_PN532_TX, PIN_PN532_RX, PIN_PN532_BAUD,
-                 PIN_CORES3_GROVE_5V };
+                 PIN_GROVE_5V };
   PinType _map[MAX_ITEMS];
 
   String _gpsTxSub;

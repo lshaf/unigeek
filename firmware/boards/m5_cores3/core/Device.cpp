@@ -31,7 +31,7 @@ static ExtSpiClass    sdSpi(HSPI);
 void Device::boardHook() {}
 
 void Device::onPinConfigApply() {
-  String mode = PinConfig.get(PIN_CONFIG_CORES3_GROVE_5V, PIN_CONFIG_CORES3_GROVE_5V_DEFAULT);
+  String mode = PinConfig.get(PIN_CONFIG_GROVE_5V, PIN_CONFIG_GROVE_5V_DEFAULT);
   aw.setBus5V(mode != "input");
 }
 

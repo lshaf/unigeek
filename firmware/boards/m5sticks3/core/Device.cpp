@@ -3,6 +3,7 @@
 //
 
 #include "core/Device.h"
+#include "core/PinConfigManager.h"
 #include "Navigation.h"
 #include "Display.h"
 #include "Power.h"    // pulls in <M5PM1.h>
@@ -21,6 +22,11 @@ static ExtSpiClass    sharedSpi(FSPI);
 
 void Device::boardHook() {}
 
+void Device::onPinConfigApply() {
+  String mode = PinConfig.get(PIN_CONFIG_STICKS3_GROVE_5V, PIN_CONFIG_STICKS3_GROVE_5V_DEFAULT);
+  power.setExtOutput(mode != "input");
+}
+
 Device* Device::createInstance() {
   delay(1500);  // wait for USB CDC to connect
 
@@ -28,9 +34,6 @@ Device* Device::createInstance() {
 
   // Disable I2C idle sleep so PMIC stays responsive (matches M5GFX init)
   pm1.setI2cSleepTime(0);
-
-  // Configure Grove 5V rail (output = source 5V, input = accept 5V charging)
-  power.setExtOutput(GROVE_5V_OUTPUT);
 
   // Enable M5PM1 GPIO2 HIGH to power the LCD (L3B LDO enable)
   pm1.gpioSet(M5PM1_GPIO_NUM_2, M5PM1_GPIO_MODE_OUTPUT, 1,
