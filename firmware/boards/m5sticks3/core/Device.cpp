@@ -23,7 +23,7 @@ static ExtSpiClass    sharedSpi(FSPI);
 void Device::boardHook() {}
 
 void Device::onPinConfigApply() {
-  String mode = PinConfig.get(PIN_CONFIG_STICKS3_GROVE_5V, PIN_CONFIG_STICKS3_GROVE_5V_DEFAULT);
+  String mode = PinConfig.get(PIN_CONFIG_GROVE_5V, PIN_CONFIG_GROVE_5V_DEFAULT);
   power.setExtOutput(mode != "input");
 }
 
