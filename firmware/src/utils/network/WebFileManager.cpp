@@ -1,5 +1,6 @@
 #include "utils/network/WebFileManager.h"
 #include "utils/network/FastWpaCrack.h"
+#include "utils/network/WasmCrack.h"
 #include <WiFi.h>
 #include <ESPmDNS.h>
 #include "core/Device.h"
@@ -370,6 +371,10 @@ void WebFileManager::_prepareServer() {
 
   _server.onNotFound([](AsyncWebServerRequest* request) {
     request->send(404, "text/plain", "404");
+  });
+
+  _server.on("/crack.wasm", HTTP_GET, [](AsyncWebServerRequest* request) {
+    request->send_P(200, "application/wasm", WASM_CRACK, WASM_CRACK_LEN);
   });
 
   _server.on("/theme.css", HTTP_GET, [this](AsyncWebServerRequest* request) {
