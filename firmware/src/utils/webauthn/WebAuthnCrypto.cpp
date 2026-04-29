@@ -1,5 +1,9 @@
 #include "WebAuthnCrypto.h"
 
+#include <Arduino.h>
+
+#ifdef DEVICE_HAS_WEBAUTHN
+
 #include <string.h>
 #include <esp_system.h>
 
@@ -181,3 +185,5 @@ bool WebAuthnCrypto::ecdsaP256SignDer(const uint8_t priv[32], const uint8_t hash
 }
 
 }  // namespace webauthn
+
+#endif  // DEVICE_HAS_WEBAUTHN

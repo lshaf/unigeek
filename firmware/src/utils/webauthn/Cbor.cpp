@@ -1,5 +1,9 @@
 #include "Cbor.h"
 
+#include <Arduino.h>
+
+#ifdef DEVICE_HAS_WEBAUTHN
+
 #include <string.h>
 
 namespace webauthn {
@@ -262,3 +266,5 @@ bool CborReader::skip()
 }
 
 }  // namespace webauthn
+
+#endif  // DEVICE_HAS_WEBAUTHN

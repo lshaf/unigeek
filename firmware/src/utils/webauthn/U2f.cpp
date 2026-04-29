@@ -1,4 +1,9 @@
 #include "U2f.h"
+
+#include <Arduino.h>
+
+#ifdef DEVICE_HAS_WEBAUTHN
+
 #include "WebAuthnCrypto.h"
 #include "CredentialStore.h"
 
@@ -142,3 +147,5 @@ uint16_t U2f::handleApdu(const uint8_t* apdu, uint16_t apduLen,
 }
 
 }  // namespace webauthn
+
+#endif  // DEVICE_HAS_WEBAUTHN

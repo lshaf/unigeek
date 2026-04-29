@@ -1,5 +1,9 @@
 #include "UsbProfile.h"
 
+#include <Arduino.h>
+
+#ifdef DEVICE_HAS_WEBAUTHN
+
 namespace webauthn {
 
 namespace {
@@ -18,3 +22,5 @@ bool claimUsbProfile(UsbProfile p)
 }
 
 }  // namespace webauthn
+
+#endif  // DEVICE_HAS_WEBAUTHN

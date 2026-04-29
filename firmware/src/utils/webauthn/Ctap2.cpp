@@ -1,4 +1,9 @@
 #include "Ctap2.h"
+
+#include <Arduino.h>
+
+#ifdef DEVICE_HAS_WEBAUTHN
+
 #include "Cbor.h"
 #include "WebAuthnConfig.h"
 #include "WebAuthnCrypto.h"
@@ -508,3 +513,5 @@ uint16_t Ctap2::dispatch(uint8_t cmd,
 }
 
 }  // namespace webauthn
+
+#endif  // DEVICE_HAS_WEBAUTHN

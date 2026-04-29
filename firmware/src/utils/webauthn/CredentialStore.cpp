@@ -1,4 +1,9 @@
 #include "CredentialStore.h"
+
+#include <Arduino.h>
+
+#ifdef DEVICE_HAS_WEBAUTHN
+
 #include "WebAuthnCrypto.h"
 
 #include "core/Device.h"
@@ -179,3 +184,5 @@ bool CredentialStore::wipe()
 }
 
 }  // namespace webauthn
+
+#endif  // DEVICE_HAS_WEBAUTHN

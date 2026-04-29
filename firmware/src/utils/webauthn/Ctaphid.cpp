@@ -1,8 +1,12 @@
 #include "Ctaphid.h"
+
+#include <Arduino.h>
+
+#ifdef DEVICE_HAS_WEBAUTHN
+
 #include "USBFidoUtil.h"
 #include "WebAuthnLog.h"
 
-#include <Arduino.h>
 #include <string.h>
 
 namespace webauthn {
@@ -250,3 +254,5 @@ void Ctaphid::_reset()
 }
 
 }  // namespace webauthn
+
+#endif  // DEVICE_HAS_WEBAUTHN
