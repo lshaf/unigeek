@@ -35,3 +35,21 @@ bool fast_wpa2_try_password(const char *pw, uint8_t pw_len,
                             const uint8_t *prf_data,
                             const uint8_t *eapol, uint16_t eapol_len,
                             const uint8_t *mic);
+
+// WPA2 handshake extracted from a PCAP file
+struct CrackHandshake {
+  char     ssid[33]     = {};
+  uint8_t  ssid_len     = 0;
+  uint8_t  ap[6]        = {};
+  uint8_t  sta[6]       = {};
+  uint8_t  anonce[32]   = {};
+  uint8_t  snonce[32]   = {};
+  uint8_t  mic[16]      = {};
+  uint8_t  eapol[300]   = {};
+  uint16_t eapol_len    = 0;
+  uint8_t  prf_data[76] = {};
+};
+
+// Parse a WPA2 handshake from a PCAP file via Uni.Storage.
+// reason (optional): 1=open failed, 2=bad magic, 3=no M1, 4=no M2, 5=no SSID
+bool fast_pcap_parse(const char *path, CrackHandshake &hs, int *reason = nullptr);

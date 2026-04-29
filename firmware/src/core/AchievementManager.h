@@ -38,7 +38,7 @@ public:
   struct Catalog { const AchDef* defs; uint16_t count; };
 
   // Returns catalog pointer + count derived from sizeof — no manual counting needed
-  // Next available sequential ID: 234  (IDs 164–198 already used; 199 placed in domain 9; 200–209 in domain 1; 210–223 in domain 9; 224–228 in domain 4; 229–230 in domain 12; 231–233 in domain 3)
+  // Next available sequential ID: 235  (IDs 164–198 already used; 199 placed in domain 9; 200–209 in domain 1; 210–223 in domain 9; 224–228 in domain 4; 229–230 in domain 12; 231–233 in domain 3; 234 in domain 1)
   static Catalog catalog() {
     static constexpr AchDef kAchs[] = {
       // ── WiFi Network (domain 0) ────────────────────────────────────────────
@@ -96,6 +96,7 @@ public:
       { 49, "wifi_brute_cracked_5",      "Serial Cracker",         1, 3, "Successfully crack 5 WiFi passwords" },
       { 50, "wifi_brute_cracked_20",     "Password Reaper",        1, 3, "Successfully crack 20 WiFi passwords" },
       { 51, "wifi_brute_cracked_50",     "Crypto Nemesis",         1, 3, "Successfully crack 50 WiFi passwords" },
+      { 234, "wifi_wfm_cracked",        "Web Cracker",            1, 3, "Save a cracked WiFi password via the web file manager" },
       { 52, "wifi_mitm_started",         "Man in the Middle",      1, 1, "Launch a MITM intercept attack" },
       { 53, "wifi_ciw_started",          "Zero-Day Tourist",       1, 1, "Launch the CIW exploit tool" },
       { 54, "wifi_ciw_device_connected", "Got One",                1, 2, "Get a device to connect via CIW" },

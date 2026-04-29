@@ -1,8 +1,10 @@
 #include "utils/network/WebFileManager.h"
+#include "utils/network/FastWpaCrack.h"
 #include <WiFi.h>
 #include <ESPmDNS.h>
 #include "core/Device.h"
 #include "core/ConfigManager.h"
+#include "core/AchievementManager.h"
 
 bool WebFileManager::begin() {
   wifi_mode_t mode = WiFi.getMode();
@@ -205,12 +207,12 @@ void WebFileManager::_prepareServer() {
       const String pw = request->hasParam("param", true)
         ? request->getParam("param", true)->value() : "";
       if (pw == password) {
-        const String token = String(random(0x7FFFFFFF), HEX);
+        const String token = String(esp_random(), HEX);
         _sessionCounter = (_sessionCounter + 1) % MAX_SESSIONS;
         _activeSessions[_sessionCounter] = token;
         AsyncWebServerResponse* resp =
           request->beginResponse(200, "text/plain", "Login successful");
-        resp->addHeader("Set-Cookie", "session=" + token + "; HttpOnly; Max-Age=3600");
+        resp->addHeader("Set-Cookie", "session=" + token + "; HttpOnly; Max-Age=86400");
         request->send(resp);
       } else {
         request->send(403, "text/plain", "forbidden");
@@ -270,19 +272,15 @@ void WebFileManager::_prepareServer() {
         ? request->getParam("path", true)->value() : "";
       if (path == "") { request->send(400, "text/plain", "No file specified."); return; }
       if (!Uni.Storage->exists(path.c_str())) { request->send(404, "text/plain", "File not found."); return; }
-      fs::File f = Uni.Storage->open(path.c_str(), FILE_READ);
-      String resp = "";
-      while (f.available()) resp += char(f.read());
-      f.close();
-      request->send(200, "text/plain", resp);
+      request->send(Uni.Storage->getFS(), path, "text/plain");
 
     } else if (command == "echo") {
       const String path = request->hasParam("path", true)
         ? request->getParam("path", true)->value() : "";
       const String content = request->hasParam("content", true)
         ? request->getParam("content", true)->value() : "";
-      if (path == "" || content == "") {
-        request->send(400, "text/plain", "File or content not specified.");
+      if (path == "") {
+        request->send(400, "text/plain", "No file specified.");
         return;
       }
       fs::File f = Uni.Storage->open(path.c_str(), FILE_WRITE);
@@ -290,6 +288,80 @@ void WebFileManager::_prepareServer() {
       f.print(content);
       f.close();
       request->send(200, "text/plain", "Content written.");
+
+    } else if (command == "pw") {
+      const String param = request->hasParam("param", true)
+        ? request->getParam("param", true)->value() : "";
+      static const char* pwDir = "/unigeek/utility/passwords";
+
+      if (param == "list") {
+        fs::File dir = Uni.Storage->open(pwDir, FILE_READ);
+        if (!dir || !dir.isDirectory()) {
+          request->send(200, "text/plain", "");
+          return;
+        }
+        String resp = "";
+        while (true) {
+          fs::File f = dir.openNextFile();
+          if (!f) break;
+          if (!f.isDirectory()) {
+            resp += String(f.name()) + ":" + String(f.size()) + "\n";
+          }
+          f.close();
+        }
+        dir.close();
+        request->send(200, "text/plain", resp);
+
+      } else if (param == "get") {
+        const String name = request->hasParam("name", true)
+          ? request->getParam("name", true)->value() : "";
+        if (name.isEmpty()) { request->send(400, "text/plain", "No name specified."); return; }
+        String filePath = String(pwDir) + "/" + name;
+        if (!Uni.Storage->exists(filePath.c_str())) {
+          request->send(404, "text/plain", "Not found.");
+          return;
+        }
+        request->send(Uni.Storage->getFS(), filePath, "text/plain");
+
+      } else {
+        request->send(400, "text/plain", "param must be list or get");
+      }
+
+    } else if (command == "saveCrack") {
+      const String pcapPath = request->hasParam("pcap", true)
+        ? request->getParam("pcap", true)->value() : "";
+      const String pw = request->hasParam("pw", true)
+        ? request->getParam("pw", true)->value() : "";
+      if (pcapPath.isEmpty() || pw.isEmpty()) {
+        request->send(400, "text/plain", "pcap and pw required.");
+        return;
+      }
+      CrackHandshake hs;
+      if (!fast_pcap_parse(pcapPath.c_str(), hs)) {
+        request->send(400, "text/plain", "invalid pcap");
+        return;
+      }
+      bool valid = fast_wpa2_try_password(pw.c_str(), (uint8_t)pw.length(),
+                                          hs.ssid, hs.ssid_len,
+                                          hs.prf_data, hs.eapol,
+                                          hs.eapol_len, hs.mic);
+      if (!valid) {
+        request->send(403, "text/plain", "password does not match");
+        return;
+      }
+      char bssid[13];
+      snprintf(bssid, sizeof(bssid), "%02X%02X%02X%02X%02X%02X",
+               hs.ap[0], hs.ap[1], hs.ap[2], hs.ap[3], hs.ap[4], hs.ap[5]);
+      static const char* crackedDir = "/unigeek/wifi/passwords";
+      char savePath[96];
+      snprintf(savePath, sizeof(savePath), "%s/%.12s_%.32s.pass", crackedDir, bssid, hs.ssid);
+      Uni.Storage->makeDir(crackedDir);
+      fs::File f = Uni.Storage->open(savePath, FILE_WRITE);
+      if (!f) { request->send(500, "text/plain", "write failed"); return; }
+      f.print(pw);
+      f.close();
+      if (Achievement.inc("wifi_wfm_cracked") == 1) Achievement.unlock("wifi_wfm_cracked");
+      request->send(200, "text/plain", "saved");
 
     } else {
       request->send(404, "text/plain", "command not found");

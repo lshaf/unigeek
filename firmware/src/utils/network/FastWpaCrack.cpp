@@ -1,4 +1,5 @@
 #include "utils/network/FastWpaCrack.h"
+#include "core/Device.h"
 #include <cstring>
 
 // ==========================================================================
@@ -239,4 +240,122 @@ bool fast_wpa2_try_password(const char *pw, uint8_t pw_len,
   fast_hmac_precompute(ptk, 16, mic_pre);
   fast_hmac_sha1_pre(mic_pre, eapol, eapol_len, calc_mic);
   return memcmp(calc_mic, mic, 16) == 0;
+}
+
+// ── PCAP parsing ──────────────────────────────────────────────────────────
+
+static const uint8_t kPcapEapolSnap[8] = {0xAA,0xAA,0x03,0x00,0x00,0x00,0x88,0x8E};
+
+static bool _pcapRead32(fs::File& f, uint32_t& v) {
+  uint8_t b[4];
+  if (f.read(b, 4) != 4) return false;
+  v = (uint32_t)b[0]|((uint32_t)b[1]<<8)|((uint32_t)b[2]<<16)|((uint32_t)b[3]<<24);
+  return true;
+}
+
+static int _pcapFindSnap(const uint8_t* frm, uint16_t len) {
+  for (uint16_t i = 0; i + 8 <= len; i++) {
+    bool ok = true;
+    for (int k = 0; k < 8; k++) if (frm[i+k] != kPcapEapolSnap[k]) { ok=false; break; }
+    if (ok) return (int)i;
+  }
+  return -1;
+}
+
+bool fast_pcap_parse(const char* path, CrackHandshake& hs, int* reason) {
+  memset(&hs, 0, sizeof(hs));
+  fs::File f = Uni.Storage->open(path, FILE_READ);
+  if (!f) { if (reason) *reason = 1; return false; }
+
+  uint8_t gh[24]; uint32_t linktype = 105;
+  if (f.read(gh, 24) != 24) { f.close(); if (reason) *reason = 2; return false; }
+  if (gh[0]==0xD4&&gh[1]==0xC3&&gh[2]==0xB2&&gh[3]==0xA1)
+    linktype = (uint32_t)gh[20]|((uint32_t)gh[21]<<8)|((uint32_t)gh[22]<<16)|((uint32_t)gh[23]<<24);
+  else f.seek(0);
+
+  bool gotAnonce=false, gotM2=false;
+  uint8_t lAnonce[32]={}, lAp[6]={}, lSta[6]={};
+  bool pendM2=false;
+  uint8_t pSta[6]={}, pAp[6]={}, pSnonce[32]={}, pMic[16]={};
+  uint8_t pEapol[300]={}; uint16_t pEapolLen=0;
+  uint8_t rec[512];
+
+  while (f.available() > 16) {
+    uint32_t ts,tu,incl,orig;
+    if (!_pcapRead32(f,ts)||!_pcapRead32(f,tu)||!_pcapRead32(f,incl)||!_pcapRead32(f,orig)) break;
+    if (!incl || incl > sizeof(rec)) { f.seek(f.position()+incl); continue; }
+    if (f.read(rec, incl) != (int)incl) break;
+    uint16_t off = 0;
+    if (linktype==127) {
+      if (incl < 4) continue;
+      off = (uint16_t)rec[2]|((uint16_t)rec[3]<<8);
+      if (off >= incl) continue;
+    }
+    const uint8_t* frm = rec+off; uint16_t flen = (uint16_t)(incl-off);
+    uint16_t fc = (uint16_t)frm[0]|((uint16_t)frm[1]<<8);
+    uint8_t fcTyp = (fc&0x000C)>>2, fcSub = (fc&0x00F0)>>4;
+
+    if (fcTyp==0&&fcSub==8&&flen>=36&&hs.ssid[0]=='\0') {
+      uint16_t pos = 36;
+      while (pos+2<=flen) {
+        uint8_t id=frm[pos], elen=frm[pos+1];
+        if (pos+2+elen>flen) break;
+        if (id==0&&elen>0&&elen<=32) { memcpy(hs.ssid,frm+pos+2,elen); hs.ssid[elen]='\0'; hs.ssid_len=elen; break; }
+        pos += 2+elen;
+      }
+      continue;
+    }
+    if (fcTyp != 2) continue;
+
+    int snap = _pcapFindSnap(frm, flen);
+    if (snap < 0 || (uint16_t)(snap+9) >= flen) continue;
+    const uint8_t* eapol = frm+snap+8;
+    if (eapol[1] != 0x03) continue;
+    uint16_t eapLen = ((uint16_t)eapol[2]<<8)|eapol[3];
+    uint16_t total = 4+eapLen, avail = flen-(uint16_t)(snap+8);
+    if (total<97||avail<97) continue;
+    if (total>avail) total=avail;
+    if (total>300) continue;
+    const uint8_t* key = eapol+4;
+    uint16_t ki = ((uint16_t)key[1]<<8)|key[2];
+    bool ack=ki&0x0080, mic=ki&0x0100, inst=ki&0x0040;
+
+    if (ack&&(!mic||inst)) {
+      memcpy(lAp,frm+10,6); memcpy(lSta,frm+4,6); memcpy(lAnonce,key+13,32); gotAnonce=true;
+      if (pendM2&&memcmp(pSta,lSta,6)==0&&memcmp(pAp,lAp,6)==0) {
+        memcpy(hs.ap,lAp,6); memcpy(hs.sta,lSta,6);
+        memcpy(hs.anonce,lAnonce,32); memcpy(hs.snonce,pSnonce,32);
+        memcpy(hs.mic,pMic,16);
+        if (pEapolLen<=sizeof(hs.eapol)) { memcpy(hs.eapol,pEapol,pEapolLen); memset(hs.eapol+81,0,16); hs.eapol_len=pEapolLen; }
+        gotM2=true;
+      }
+    } else if (!ack&&mic&&!inst) {
+      bool nz=true; for (int z=0;z<32&&nz;z++) nz=(key[13+z]==0); if (nz) continue;
+      if (gotAnonce&&memcmp(frm+10,lSta,6)==0&&memcmp(frm+4,lAp,6)==0) {
+        memcpy(hs.ap,lAp,6); memcpy(hs.sta,lSta,6);
+        memcpy(hs.anonce,lAnonce,32); memcpy(hs.snonce,key+13,32);
+        memcpy(hs.mic,eapol+81,16);
+        if (total<=sizeof(hs.eapol)) { memcpy(hs.eapol,eapol,total); memset(hs.eapol+81,0,16); hs.eapol_len=total; }
+        gotM2=true;
+      } else {
+        pendM2=true; memcpy(pSta,frm+10,6); memcpy(pAp,frm+4,6);
+        memcpy(pSnonce,key+13,32); memcpy(pMic,eapol+81,16);
+        if (total<=sizeof(pEapol)) { memcpy(pEapol,eapol,total); memset(pEapol+81,0,16); pEapolLen=total; }
+      }
+    }
+  }
+  f.close();
+
+  if (!gotM2) { if (reason) *reason = gotAnonce ? 4 : 3; return false; }
+  if (hs.ssid[0]=='\0') {
+    const char* sl=strrchr(path,'/'), *us=strchr(sl?sl+1:path,'_'), *dt=strrchr(path,'.');
+    if (us&&dt&&dt>us+1) { int n=(int)(dt-us-1); if (n>32) n=32; memcpy(hs.ssid,us+1,n); hs.ssid[n]='\0'; hs.ssid_len=(uint8_t)n; }
+    if (hs.ssid[0]=='\0') { if (reason) *reason = 5; return false; }
+  }
+  uint8_t* p = hs.prf_data;
+  if (memcmp(hs.ap,hs.sta,6)<0) { memcpy(p,hs.ap,6);p+=6;memcpy(p,hs.sta,6);p+=6; }
+  else                           { memcpy(p,hs.sta,6);p+=6;memcpy(p,hs.ap,6);p+=6; }
+  if (memcmp(hs.anonce,hs.snonce,32)<0) { memcpy(p,hs.anonce,32);p+=32;memcpy(p,hs.snonce,32); }
+  else                                  { memcpy(p,hs.snonce,32);p+=32;memcpy(p,hs.anonce,32); }
+  return true;
 }
