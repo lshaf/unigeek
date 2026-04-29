@@ -32,6 +32,8 @@ static const uint8_t SCK  = SPI_SCK_PIN;
 
 // ─── PN532 NFC ───────────────────────────────────────────
 #define PN532_CS_PIN   43
+#define PN532_TX        1
+#define PN532_RX        0
 
 // ─── I2C (Grove) ─────────────────────────────────────────
 #define GROVE_SDA       9
