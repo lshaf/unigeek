@@ -71,7 +71,7 @@ private:
   static constexpr const char* BADUSB_REPO_BASE =
     "https://raw.githubusercontent.com/lshaf/badusb-collection/main";
   static constexpr const char* DUCKY_BASE =
-    "/unigeek/keyboard/duckyscript/downloads";
+    "/unigeek/hid/duckyscript/downloads";
   static constexpr const char* IR_DL_BASE =
     "/unigeek/ir/downloads";
 };

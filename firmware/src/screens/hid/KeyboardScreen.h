@@ -46,7 +46,7 @@ private:
   ListItem _fileItems[kMaxFiles];
   uint8_t  _fileCount  = 0;
   String   _curPath;
-  static constexpr const char* kDuckyBase = "/unigeek/keyboard/duckyscript";
+  static constexpr const char* kDuckyBase = "/unigeek/hid/duckyscript";
 
   // Menu (built dynamically)
   static constexpr uint8_t kMaxMenu = 5;

@@ -1,8 +1,8 @@
-unigeek/keyboard/duckyscript/hello_world.txt
-unigeek/keyboard/duckyscript/reverse_shell.txt
-unigeek/keyboard/duckyscript/wifi_password.txt
-unigeek/keyboard/duckyscript/rick_roll.txt
-unigeek/keyboard/duckyscript/disable_defender.txt
+unigeek/hid/duckyscript/hello_world.txt
+unigeek/hid/duckyscript/reverse_shell.txt
+unigeek/hid/duckyscript/wifi_password.txt
+unigeek/hid/duckyscript/rick_roll.txt
+unigeek/hid/duckyscript/disable_defender.txt
 unigeek/qrcode/rickroll.txt
 unigeek/qrcode/wifi_example.txt
 unigeek/qrcode/contact.txt

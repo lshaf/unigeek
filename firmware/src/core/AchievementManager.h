@@ -38,7 +38,7 @@ public:
   struct Catalog { const AchDef* defs; uint16_t count; };
 
   // Returns catalog pointer + count derived from sizeof — no manual counting needed
-  // Next available sequential ID: 235  (IDs 164–198 already used; 199 placed in domain 9; 200–209 in domain 1; 210–223 in domain 9; 224–228 in domain 4; 229–230 in domain 12; 231–233 in domain 3; 234 in domain 1)
+  // Next available sequential ID: 238  (IDs 164–198 already used; 199 placed in domain 9; 200–209 in domain 1; 210–223 in domain 9; 224–228 in domain 4; 229–230 in domain 12; 231–233 in domain 3; 234 in domain 1; 235–237 in domain 3)
   static Catalog catalog() {
     static constexpr AchDef kAchs[] = {
       // ── WiFi Network (domain 0) ────────────────────────────────────────────
@@ -179,6 +179,9 @@ public:
       { 231, "hid_mouse_jiggle",          "Wiggle Wiggle",          3, 0, "Run HID mouse jiggle for the first time" },
       { 232, "webauthn_first_use",        "Key in Hand",            3, 0, "Open the WebAuthn / FIDO2 screen for the first time" },
       { 233, "webauthn_first_passkey",    "Passkey Pioneer",        3, 1, "Authorize your first WebAuthn registration or login" },
+      { 235, "pwd_mgr_unlock",            "Vault Opener",           3, 0, "Unlock the Password Manager for the first time" },
+      { 236, "pwd_mgr_add",              "Secret Keeper",           3, 1, "Add a password entry to the Password Manager" },
+      { 237, "pwd_mgr_type",             "One-Touch Login",         3, 2, "Auto-type a stored password via HID" },
       // ── NFC (domain 4) ────────────────────────────────────────────────────
       { 117, "nfc_uid_first",             "Card Detected",          4, 0, "Read an NFC card UID" },
       { 118, "nfc_uid_10",                "Card Collector",         4, 1, "Read 10 different NFC card UIDs" },

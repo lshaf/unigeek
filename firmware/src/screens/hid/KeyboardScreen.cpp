@@ -3,6 +3,7 @@
 #include "core/ScreenManager.h"
 #include "core/AchievementManager.h"
 #include "screens/hid/KeyboardMenuScreen.h"
+#include "screens/hid/PasswordManagerScreen.h"
 #include "ui/actions/ShowStatusAction.h"
 #include "ui/components/StatusBar.h"
 #ifdef DEVICE_HAS_USB_HID
@@ -85,7 +86,7 @@ void KeyboardScreen::onItemSelected(uint8_t index)
 
   if (_state == STATE_MENU) {
     // Resolve which item was actually selected
-    // Items are: [Keyboard (HAS_KEYBOARD)?], Ducky Script, Mouse Jiggle, [Reset Pair (BLE)?]
+    // Items are: [Keyboard (HAS_KEYBOARD)?], Ducky Script, Mouse Jiggle, Password Manager, [Reset Pair (BLE)?]
     uint8_t idx = 0;
 #ifdef DEVICE_HAS_KEYBOARD
     if (index == idx++) {
@@ -109,6 +110,11 @@ void KeyboardScreen::onItemSelected(uint8_t index)
     if (index == idx++) {
       // Mouse Jiggle
       _goMouseJiggle();
+      return;
+    }
+    if (index == idx++) {
+      // Password Manager
+      Screen.push(new PasswordManagerScreen(_keyboard, _mode));
       return;
     }
     if (_mode == MODE_BLE && index == idx) {
@@ -165,6 +171,7 @@ void KeyboardScreen::_goMenu()
 #endif
   _menuItems[_menuCount++] = {"Ducky Script", nullptr};
   _menuItems[_menuCount++] = {"Mouse Jiggle", nullptr};
+  _menuItems[_menuCount++] = {"Password Manager", nullptr};
   if (_mode == MODE_BLE)
     _menuItems[_menuCount++] = {"Reset Pair", nullptr};
 
