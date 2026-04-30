@@ -46,7 +46,7 @@ Multi-tool firmware for ESP32-based handheld devices. Built with PlatformIO + Ar
     - **Web File Manager** — HTML/CSS/JS interface for browser-based file management (auto-checks for updates)
     - **Firmware Sample Files** — Portal templates (Google, Facebook, WiFi login), DuckyScript payloads (hello world, reverse shell, WiFi password grab, rickroll, disable defender), QR code samples, DNS spoofing config, and rockyou_mini password wordlist
     - **Infrared Files** — Browse and download IR remote files by category (TVs, ACs, Fans, Projectors, etc.) from [Flipper-IRDB](https://github.com/lshaf/Flipper-IRDB), saved to `/unigeek/ir/downloads/`
-    - **BadUSB Scripts** — Browse and download DuckyScript payloads from the badusb-collection by OS and category, saved to `/unigeek/keyboard/duckyscript/`
+    - **BadUSB Scripts** — Browse and download DuckyScript payloads from the badusb-collection by OS and category, saved to `/unigeek/hid/duckyscript/`
   - **MITM Attack** — Man-in-the-middle with DHCP starvation, deauth burst, rogue DHCP, DNS spoofing, and web file manager ([details](knowledge/network-mitm.md))
   - **CCTV Sniffer** — Discover network cameras, identify brands, test credentials, and stream live video ([details](knowledge/cctv-toolkit.md))
   - **Wigle** — Upload wardrive logs, view user stats, and manage Wigle API token ([details](knowledge/gps-wardriving.md))
@@ -104,6 +104,7 @@ Multi-tool firmware for ESP32-based handheld devices. Built with PlatformIO + Ar
 - **Keyboard Relay** — Forward physical keypresses directly to the connected host in real time (keyboard devices only)
 - **Ducky Script** — Run script files from storage to automate keystrokes ([details](knowledge/ducky-script.md))
 - **Mouse Jiggle** — Send periodic small mouse movements over BLE or USB to keep the host awake
+- **Password Manager** — Deterministic vault protected by a master password; entries store label, type, case, and length; passwords are generated from SHA256(master+label+params) so no plaintext is stored; view a generated password on-screen or auto-type it via HID with a single press ([details](knowledge/password-manager.md))
 - **WebAuthn** — Act as a USB FIDO2 / WebAuthn passkey for browser sign-in (CTAP2 + legacy U2F authenticate, ESP32-S3 only) ([details](knowledge/webauthn.md))
 
 ### Utility
@@ -112,7 +113,7 @@ Multi-tool firmware for ESP32-based handheld devices. Built with PlatformIO + Ar
 - **Barcode** — Generate and display a Code 128 barcode from typed or file-loaded text
 - **File Manager** — Browse, rename, copy, cut, paste, and delete files and folders on storage; directories sorted first then alphabetical; tap a file to view its contents; hold 1s to open context menu
 - **File Hex Viewer** — View any file as a scrollable hex dump with offset, hex byte columns, and ASCII representation
-- **Achievements** — View all achievements grouped by domain (13 domains, 235 entries, ≈ 97 500 EXP pool); shows tier (Bronze/Silver/Gold/Platinum), description, and unlock status; long-press an unlocked achievement to set it as your Agent Title ([details](knowledge/achievements.md))
+- **Achievements** — View all achievements grouped by domain (13 domains, 238 entries, ≈ 99 100 EXP pool); shows tier (Bronze/Silver/Gold/Platinum), description, and unlock status; long-press an unlocked achievement to set it as your Agent Title ([details](knowledge/achievements.md))
 - **TOTP Auth** — Time-based one-time password authenticator; add accounts by name and Base32 secret, view live 6- or 8-digit codes with a countdown progress bar, hold an account row to view or delete it; keeps display on while viewing a code ([details](knowledge/totp-auth.md))
 - **UART Terminal** — Serial terminal over configurable GPIO pins; set baud rate, RX and TX GPIOs, switch between string and hex send mode (UP/DOWN toggle), send commands via dialog, receive data in real time, and optionally save the session log to storage ([details](knowledge/uart-terminal.md))
 - **Pomodoro Timer** — 25/5-minute focus timer; configurable work (15–60 min) and break (5–15 min) durations; press to pause/resume; speaker beep on phase transition; tracks session count and shows progress bar; keeps display on while running
@@ -196,7 +197,7 @@ Full-screen profile accessible from the main menu. Displays:
 - **HP** — battery percentage; shows `+CHG` when charging
 - **BRAIN** — free heap as a percentage of total heap
 - **ACHIEVEMENT** — total unlocked achievements out of all available
-- Domain bars for each achievement domain showing per-domain completion (WiFi, Attacks, BT, HID, NFC, IR, RF, NRF24, GPS, Utility, Games, Settings, Chameleon — 13 domains, 235 achievements total, pool ≈ 97 500 EXP)
+- Domain bars for each achievement domain showing per-domain completion (WiFi, Attacks, BT, HID, NFC, IR, RF, NRF24, GPS, Utility, Games, Settings, Chameleon — 13 domains, 238 achievements total, pool ≈ 99 100 EXP)
 
 ### Settings
 - Device name
@@ -267,7 +268,8 @@ Files are stored under `/unigeek/` on either SD card or LittleFS (fallback):
 
 ```
 /unigeek/config                    device configuration
-/unigeek/keyboard/duckyscript/     Ducky Script files (.ds)
+/unigeek/hid/duckyscript/          Ducky Script files (.ds)
+/unigeek/hid/passwords/            Password Manager vault and master hash (binary)
 /unigeek/wifi/eapol/               WPA2 handshake captures (.pcap)
 /unigeek/wifi/captives/            Captured credentials from Evil Twin / Karma / Rogue DNS
 /unigeek/qrcode/                   QR code content files
@@ -361,4 +363,4 @@ This project was built with inspiration and reference from:
 - sticks3 ir receive not functional (RMT/ES8311 conflict); transmit works
 - implement thermal camera
 
-<!-- README last synced at commit: ed4f655 (BLE Analyzer detail view, Karma EAPOL heartbeat, Web File Manager saveCrack + crack.wasm, Mouse Jiggle, HID rename) -->
+<!-- README last synced at commit: c2e7c21 (Password Manager in HID, duckyscript path → hid/, achievement count 235→238) -->

@@ -21,7 +21,7 @@ Unlocking an achievement shows a toast notification at the bottom of the screen 
 
 ## Ranks
 
-Total possible EXP across all achievements: **85 400** (203 entries: 65 × Bronze, 61 × Silver, 41 × Gold, 36 × Platinum).
+Total possible EXP across all achievements: **99 100** (238 entries).
 
 | Rank | EXP Required | % of Total |
 |------|-------------|-----------|
@@ -73,19 +73,19 @@ If no title has been set, it shows `[RANK] No Title` by default.
 | # | Domain | Achievements |
 |---|--------|-------------:|
 | 0 | WiFi Network | 20 |
-| 1 | WiFi Attacks | 43 |
+| 1 | WiFi Attacks | 54 |
 | 2 | Bluetooth | 16 |
-| 3 | HID | 9 |
-| 4 | NFC | 7 |
+| 3 | HID | 12 |
+| 4 | NFC | 12 |
 | 5 | IR | 8 |
 | 6 | Sub-GHz | 7 |
 | 7 | NRF24 2.4 GHz | 4 |
 | 8 | GPS | 11 |
-| 9 | Utility | 11 |
+| 9 | Utility | 25 |
 | 10 | Games | 31 |
 | 11 | Settings | 4 |
-| 12 | Chameleon | 32 |
-| | **Total** | **203** |
+| 12 | Chameleon | 34 |
+| | **Total** | **238** |
 
 ---
 
@@ -181,6 +181,9 @@ If no title has been set, it shows `[RANK] No Title` by default.
 | Wiggle Wiggle | HID | Bronze | 100 |
 | Key in Hand | HID | Bronze | 100 |
 | Passkey Pioneer | HID | Silver | 300 |
+| Vault Opener | HID | Bronze | 100 |
+| Secret Keeper | HID | Silver | 300 |
+| One-Touch Login | HID | Gold | 600 |
 | Card Detected | NFC | Bronze | 100 |
 | Card Collector | NFC | Silver | 300 |
 | Dictionary Diver | NFC | Silver | 300 |

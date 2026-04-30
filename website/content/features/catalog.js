@@ -52,6 +52,7 @@ export const CATALOG = [
   { slug: "usb-keyboard",         title: "USB Keyboard",        category: "keyboard", summary: "Act as a wired USB HID keyboard — ESP32-S3 devices only",                                            hasDetail: false, stable: true },
   { slug: "keyboard-relay",       title: "Keyboard Relay",      category: "keyboard", summary: "Forward physical keypresses directly to the connected host in real time — keyboard devices only",    hasDetail: false, stable: true },
   { slug: "mouse-jiggle",         title: "Mouse Jiggle",        category: "keyboard", summary: "Send small periodic mouse movements over BLE or USB HID to keep the host awake",                     hasDetail: true,  stable: true },
+  { slug: "password-manager",     title: "Password Manager",    category: "keyboard", summary: "Deterministic vault — entries are generated from SHA256(master+label+params), never stored; auto-type via HID with one press", hasDetail: true,  stable: true },
   { slug: "webauthn",             title: "WebAuthn",            category: "keyboard", summary: "Act as a USB FIDO2 / WebAuthn passkey — browser-compatible CTAP2 + legacy U2F (ESP32-S3 only)",      hasDetail: true,  stable: false },
 
   // Modules
