@@ -25,5 +25,23 @@ The web file manager can also run in AP mode:
 
 - Browse, upload, download, rename, copy, move, and delete files
 - Create new folders
-- Password-protected access
+- Password-protected access (session cookie, 24 h lifetime)
 - Works on any device with a web browser (phone, tablet, laptop)
+
+## WPA Crack Integration
+
+The web interface can verify a WPA2 password against a captured PCAP handshake and save the result — no separate tool needed.
+
+- **`saveCrack`** — POST a PCAP path (already on device storage) and a candidate password; the server parses the handshake, runs PBKDF2-HMAC-SHA1 + PRF-512 + MIC verification, and saves a `.pass` file to `/unigeek/wifi/passwords/` only if the password is valid. Returns `403` for a wrong password.
+- **`crack.wasm`** — A WebAssembly PBKDF2+HMAC-SHA1 engine is served by the device at `/crack.wasm`. The browser loads it and can test passwords locally without any round-trips to the ESP32.
+- **Dictionary browser** — The `pw list` command lists wordlists from `/unigeek/utility/passwords/`; `pw get` streams a chosen wordlist to the browser. Combine with `crack.wasm` for fully in-browser dictionary attacks.
+
+> [!note]
+> PCAP files must already be on device storage (captured via **EAPOL Capture** or **Karma EAPOL**). The device performs the MIC check server-side; the browser never receives the raw handshake material.
+
+## Achievements
+
+| Achievement | Tier |
+|------------|------|
+| **Web Vault** | Bronze |
+| **Web Cracker** | Platinum |

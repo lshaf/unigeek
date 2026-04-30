@@ -89,11 +89,14 @@ Karma Support runs on the second device and acts as a remote-controlled AP host.
 | `KARMA_ACK` | Support → Attack | AP is up, includes BSSID |
 | `KARMA_TEARDOWN` | Attack → Support | Stop current AP |
 | `KARMA_DONE` | Attack → Support | Attack session ended; return to idle |
+| `KARMA_HEARTBEAT` | Attack → Support | Keepalive sent every ~2 s; support auto-resets to idle if 5 s elapses with no heartbeat |
 
 ### Notes
 
 - Both devices must be on the same channel (channel 1 by default)
 - The support device does not need to be within WiFi range of the target — only ESP-NOW range (~200 m line of sight)
+- After pairing, the support device is MAC-locked to the attack device — it will ignore commands from any other MAC address until it resets
+- If the attacker stops sending heartbeats (device powered off, rebooted, or session ended), the support device tears down its AP and returns to idle after 5 s
 - Press **BACK** or **SELECT** to stop
 
 ## Achievements

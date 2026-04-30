@@ -41,7 +41,7 @@ Multi-tool firmware for ESP32-based handheld devices. Built with PlatformIO + Ar
   - **World Clock** — Display current time synced via NTP across multiple time zones
   - **IP Scanner** — Scan the local network for active devices
   - **Port Scanner** — Scan open ports on a target IP address
-  - **Web File Manager** — Manage device files from a browser over WiFi ([details](knowledge/web-file-manager.md))
+  - **Web File Manager** — Manage device files from a browser over WiFi; verify and save WPA passwords against captured handshakes (`saveCrack`); browse and stream wordlists from device storage; browser-side PBKDF2 crack engine via embedded `crack.wasm` ([details](knowledge/web-file-manager.md))
   - **Download** — Download files from GitHub directly to device storage
     - **Web File Manager** — HTML/CSS/JS interface for browser-based file management (auto-checks for updates)
     - **Firmware Sample Files** — Portal templates (Google, Facebook, WiFi login), DuckyScript payloads (hello world, reverse shell, WiFi password grab, rickroll, disable defender), QR code samples, DNS spoofing config, and rockyou_mini password wordlist
@@ -53,8 +53,8 @@ Multi-tool firmware for ESP32-based handheld devices. Built with PlatformIO + Ar
 - **Access Point** — Create a custom WiFi hotspot with optional DNS spoofing, captive portal, web file manager, and WiFi QR code for easy sharing ([details](knowledge/access-point.md))
 - **Evil Twin** — Clone a target AP's SSID with a captive portal; optional deauth and real-time password verification ([details](knowledge/evil-twin.md))
 - **Karma Captive** — Detect nearby probe requests and respond with a fake open AP serving a phishing portal to capture credentials ([details](knowledge/karma-captive.md))
-- **Karma EAPOL** — Detect nearby probe requests and deploy fake WPA2 APs via a paired Karma Support device; captures M1+M2 EAPOL handshakes for offline cracking, advances automatically on capture ([details](knowledge/karma-eapol.md))
-- **Karma Support** — Companion screen for a second device; receives deploy commands over ESP-NOW and hosts the fake WPA2 AP on behalf of the attack device ([details](knowledge/karma-eapol.md))
+- **Karma EAPOL** — Detect nearby probe requests and deploy fake WPA2 APs via a paired Karma Support device; captures M1+M2 EAPOL handshakes for offline cracking, advances automatically on capture; KARMA_HEARTBEAT keepalive keeps the support device alive with 5 s auto-reset on silence ([details](knowledge/karma-eapol.md))
+- **Karma Support** — Companion screen for a second device; receives deploy commands over ESP-NOW and hosts the fake WPA2 AP on behalf of the attack device; MAC-locked to the paired attacker after first connect; auto-resets if no heartbeat received for 5 s ([details](knowledge/karma-eapol.md))
 - **Karma Detector** — Scan for rogue APs responding to probes by broadcasting fake probe requests across all channels and monitoring for unexpected responses
 - **WiFi Analyzer** — Scan and display nearby networks with signal strength and channel info
 - **Packet Monitor** — Visualize WiFi traffic by channel
@@ -68,7 +68,7 @@ Multi-tool firmware for ESP32-based handheld devices. Built with PlatformIO + Ar
 - **EAPOL Brute Force** — Crack WPA2 passwords offline from captured handshakes; folder navigation for PCAP and wordlist selection; includes built-in 110-password test wordlist ([details](knowledge/eapol.md))
 
 ### Bluetooth
-- **BLE Analyzer** — Scan nearby BLE devices, display name, address, and signal strength
+- **BLE Analyzer** — Scan nearby BLE devices; tap any result for a full info view (name, vendor ID, address, appearance, RSSI, TX power, estimated distance, adv type/flags, connectable, service UUIDs, manufacturer data, service data, URI, payload size); tap any populated field for a scrollable detail view ([details](knowledge/ble-analyzer.md))
 - **BLE Beacon Spam** — Broadcast iBeacon advertisement packets with randomized proximity UUID, major/minor values, and spoofed MAC address on every cycle
 - **BLE Device Spam** — Targeted BLE advertisement spam that triggers pairing/notification popups on nearby devices
   - **Android** — Google Fast Pair spam using random model IDs from the public Fast Pair device registry; triggers "New device found" popups on Android
@@ -112,7 +112,7 @@ Multi-tool firmware for ESP32-based handheld devices. Built with PlatformIO + Ar
 - **Barcode** — Generate and display a Code 128 barcode from typed or file-loaded text
 - **File Manager** — Browse, rename, copy, cut, paste, and delete files and folders on storage; directories sorted first then alphabetical; tap a file to view its contents; hold 1s to open context menu
 - **File Hex Viewer** — View any file as a scrollable hex dump with offset, hex byte columns, and ASCII representation
-- **Achievements** — View all achievements grouped by domain (13 domains, 231 entries, ≈ 96 000 EXP pool); shows tier (Bronze/Silver/Gold/Platinum), description, and unlock status; long-press an unlocked achievement to set it as your Agent Title ([details](knowledge/achievements.md))
+- **Achievements** — View all achievements grouped by domain (13 domains, 235 entries, ≈ 97 500 EXP pool); shows tier (Bronze/Silver/Gold/Platinum), description, and unlock status; long-press an unlocked achievement to set it as your Agent Title ([details](knowledge/achievements.md))
 - **TOTP Auth** — Time-based one-time password authenticator; add accounts by name and Base32 secret, view live 6- or 8-digit codes with a countdown progress bar, hold an account row to view or delete it; keeps display on while viewing a code ([details](knowledge/totp-auth.md))
 - **UART Terminal** — Serial terminal over configurable GPIO pins; set baud rate, RX and TX GPIOs, switch between string and hex send mode (UP/DOWN toggle), send commands via dialog, receive data in real time, and optionally save the session log to storage ([details](knowledge/uart-terminal.md))
 - **Pomodoro Timer** — 25/5-minute focus timer; configurable work (15–60 min) and break (5–15 min) durations; press to pause/resume; speaker beep on phase transition; tracks session count and shows progress bar; keeps display on while running
@@ -196,7 +196,7 @@ Full-screen profile accessible from the main menu. Displays:
 - **HP** — battery percentage; shows `+CHG` when charging
 - **BRAIN** — free heap as a percentage of total heap
 - **ACHIEVEMENT** — total unlocked achievements out of all available
-- Domain bars for each achievement domain showing per-domain completion (WiFi, Attacks, BT, HID, NFC, IR, RF, NRF24, GPS, Utility, Games, Settings, Chameleon — 13 domains, 231 achievements total, pool ≈ 96 000 EXP)
+- Domain bars for each achievement domain showing per-domain completion (WiFi, Attacks, BT, HID, NFC, IR, RF, NRF24, GPS, Utility, Games, Settings, Chameleon — 13 domains, 235 achievements total, pool ≈ 97 500 EXP)
 
 ### Settings
 - Device name
@@ -361,4 +361,4 @@ This project was built with inspiration and reference from:
 - sticks3 ir receive not functional (RMT/ES8311 conflict); transmit works
 - implement thermal camera
 
-<!-- README last synced at commit: b802b31 (PN532 UART/I2C modules, Claude Buddy, Chameleon + MFRC522 nested + static-nested attacks, touch calibration) -->
+<!-- README last synced at commit: ed4f655 (BLE Analyzer detail view, Karma EAPOL heartbeat, Web File Manager saveCrack + crack.wasm, Mouse Jiggle, HID rename) -->
