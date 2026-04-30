@@ -119,7 +119,7 @@ void AchievementScreen::_showDomain(uint8_t domain)
 
 // ── Shared item renderer ─────────────────────────────────────────────────────
 
-void AchievementScreen::_renderListItem(int16_t y, bool sel,
+void AchievementScreen::_renderListItem(int16_t y, bool sel, int16_t listW,
                                         const char* l1Left,  uint16_t l1LeftCol,
                                         const char* l1Right, uint16_t l1RightCol,
                                         const char* l2,      uint16_t l2Col)
@@ -130,16 +130,16 @@ void AchievementScreen::_renderListItem(int16_t y, bool sel,
   uint16_t       bg     = sel ? themeC : TFT_BLACK;
 
   Sprite sp(&lcd);
-  sp.createSprite(bodyW(), rowH);
+  sp.createSprite(listW, rowH);
   sp.fillSprite(TFT_BLACK);
   sp.setTextDatum(TL_DATUM);
 
   if (sel)
-    sp.fillRoundRect(0, 2, bodyW(), rowH - 4, 3, themeC);
+    sp.fillRoundRect(0, 2, listW, rowH - 4, 3, themeC);
 
   // Line 1: left label + right label (right-aligned)
   int16_t rightW = (int16_t)sp.textWidth(l1Right);
-  int16_t rightX = (int16_t)(bodyW() - 2 - rightW);
+  int16_t rightX = (int16_t)(listW - 2 - rightW);
 
   sp.setTextColor(l1LeftCol,  bg);
   sp.drawString(l1Left,  3,      4);
@@ -147,7 +147,7 @@ void AchievementScreen::_renderListItem(int16_t y, bool sel,
   sp.drawString(l1Right, rightX, 4);
 
   // Line 2: sub-label, truncated with ellipsis to full right boundary
-  const int16_t maxW = (int16_t)(bodyW() - 2);
+  const int16_t maxW = (int16_t)(listW - 2);
 
   char buf[64];
   strncpy(buf, l2, sizeof(buf) - 1);
@@ -167,6 +167,20 @@ void AchievementScreen::_renderListItem(int16_t y, bool sel,
   sp.deleteSprite();
 }
 
+void AchievementScreen::_drawScrollbar(uint8_t total, uint8_t scrollOff, uint8_t visible)
+{
+  static constexpr uint8_t SB_W = 3;
+  auto& lcd = Uni.Lcd;
+  int16_t sbX = bodyX() + bodyW() - SB_W;
+  int16_t sbY = bodyY();
+  int16_t sbH = bodyH();
+  lcd.fillRect(sbX, sbY, SB_W, sbH, 0x2104);
+  int16_t thumbH = sbH * (int16_t)visible / (int16_t)total;
+  if (thumbH < 8) thumbH = 8;
+  int16_t thumbY = sbY + ((int16_t)scrollOff * (sbH - thumbH)) / (int16_t)(total - visible);
+  lcd.fillRect(sbX, thumbY, SB_W, thumbH, Config.getThemeColor());
+}
+
 // ── Custom renderers ─────────────────────────────────────────────────────────
 
 void AchievementScreen::_renderDomainsView()
@@ -176,6 +190,8 @@ void AchievementScreen::_renderDomainsView()
   const uint8_t  visible = bodyH() / rowH;
   const uint8_t  total   = AchievementManager::kDomainCount;
   const uint16_t themeC  = Config.getThemeColor();
+  bool     hasScrollbar  = total > visible;
+  int16_t  listW         = hasScrollbar ? bodyW() - 4 : bodyW();
 
   // Bidirectional scroll clamp — persists between renders
   if (_selectedIndex < _domScrollOff)
@@ -194,7 +210,7 @@ void AchievementScreen::_renderDomainsView()
     char expBuf[12];
     snprintf(expBuf, sizeof(expBuf), "%u EXP", _domainExp[idx]);
 
-    _renderListItem(y, sel,
+    _renderListItem(y, sel, listW,
       AchievementManager::domainName(idx), TFT_WHITE,
       expBuf,                              sel ? TFT_WHITE : themeC,
       _domainSubs[idx],                    sel ? TFT_WHITE : TFT_DARKGREY);
@@ -205,6 +221,8 @@ void AchievementScreen::_renderDomainsView()
   int16_t usedH = (int16_t)(rendered * rowH);
   if (usedH < (int16_t)bodyH())
     lcd.fillRect(bodyX(), bodyY() + usedH, bodyW(), bodyH() - usedH, TFT_BLACK);
+
+  if (hasScrollbar) _drawScrollbar(total, _domScrollOff, visible);
 }
 
 void AchievementScreen::_renderDomainView()
@@ -215,6 +233,8 @@ void AchievementScreen::_renderDomainView()
 
   const uint8_t  rowH    = kRowHAch;
   const uint8_t  visible = bodyH() / rowH;
+  bool     hasScrollbar  = _achCount > visible;
+  int16_t  listW         = hasScrollbar ? bodyW() - 4 : bodyW();
 
   AchievementManager::Catalog cat = Achievement.catalog();
 
@@ -242,7 +262,7 @@ void AchievementScreen::_renderDomainView()
     const char* tierName = hidden ? "???" : kTierNames[cat.defs[ci].tier];
     const char* descSrc  = hidden ? "Unlock to reveal" : cat.defs[ci].desc;
 
-    _renderListItem(y, sel,
+    _renderListItem(y, sel, listW,
       cat.defs[ci].title, titleFg,
       tierName,      tierFg,
       descSrc,       descFg);
@@ -253,4 +273,6 @@ void AchievementScreen::_renderDomainView()
   int16_t usedH = (int16_t)(rendered * rowH);
   if (usedH < (int16_t)bodyH())
     lcd.fillRect(bodyX(), bodyY() + usedH, bodyW(), bodyH() - usedH, TFT_BLACK);
+
+  if (hasScrollbar) _drawScrollbar(_achCount, _achScrollOff, visible);
 }

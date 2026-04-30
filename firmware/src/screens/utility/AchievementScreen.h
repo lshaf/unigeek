@@ -37,8 +37,9 @@ private:
   void _showDomain(uint8_t domain);
   void _renderDomainsView();
   void _renderDomainView();
-  void _renderListItem(int16_t y, bool sel,
+  void _renderListItem(int16_t y, bool sel, int16_t listW,
                        const char* l1Left,  uint16_t l1LeftCol,
                        const char* l1Right, uint16_t l1RightCol,
                        const char* l2,      uint16_t l2Col);
+  void _drawScrollbar(uint8_t total, uint8_t scrollOff, uint8_t visible);
 };

@@ -2,6 +2,7 @@
 #include "core/Device.h"
 #include "core/ScreenManager.h"
 #include "core/AchievementManager.h"
+#include "core/ConfigManager.h"
 #include "screens/utility/FileManagerScreen.h"
 #include "ui/actions/ShowStatusAction.h"
 
@@ -159,8 +160,8 @@ void FileHexViewerScreen::_renderHex()
     uint16_t thumbY = (maxRow > 0)
                         ? (uint16_t)((uint32_t)(barH - thumbH) * currentRow / maxRow)
                         : 0;
-    lcd.fillRect(sbX, bodyY(), 2, barH, TFT_DARKGREY);
-    lcd.fillRect(sbX, bodyY() + thumbY, 2, thumbH, TFT_WHITE);
+    lcd.fillRect(sbX, bodyY(), 2, barH, 0x2104);
+    lcd.fillRect(sbX, bodyY() + thumbY, 2, thumbH, Config.getThemeColor());
   }
 }
 

@@ -2,6 +2,7 @@
 #include "core/Device.h"
 #include "core/ScreenManager.h"
 #include "core/AchievementManager.h"
+#include "core/ConfigManager.h"
 #include "screens/utility/FileManagerScreen.h"
 #include "ui/actions/ShowStatusAction.h"
 
@@ -155,8 +156,8 @@ void FileViewerScreen::_renderContent() {
     uint16_t barH = bodyH();
     uint16_t thumbH = max((uint16_t)4, (uint16_t)(barH * _visibleLines / _lineCount));
     uint16_t thumbY = (maxScroll > 0) ? (barH - thumbH) * _scrollOffset / maxScroll : 0;
-    lcd.fillRect(sbX, bodyY(), 2, barH, TFT_DARKGREY);
-    lcd.fillRect(sbX, bodyY() + thumbY, 2, thumbH, TFT_WHITE);
+    lcd.fillRect(sbX, bodyY(), 2, barH, 0x2104);
+    lcd.fillRect(sbX, bodyY() + thumbY, 2, thumbH, Config.getThemeColor());
   }
 }
 

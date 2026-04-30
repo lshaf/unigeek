@@ -5,6 +5,7 @@
 #pragma once
 #include "core/Device.h"
 #include "core/INavigation.h"
+#include "core/ConfigManager.h"
 
 class ScrollListView
 {
@@ -126,7 +127,7 @@ private:
       int sbY = (_h - sbH) * _offset / max(1, maxOffset);
       if (sbY < 0)              sbY = 0;
       if (sbY > _h - sbH)       sbY = _h - sbH;
-      lcd.fillRect(_x + _w - SCROLL_W, _y + sbY, SCROLL_W, sbH, TFT_LIGHTGREY);
+      lcd.fillRect(_x + _w - SCROLL_W, _y + sbY, SCROLL_W, sbH, Config.getThemeColor());
     }
   }
 };

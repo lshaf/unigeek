@@ -107,6 +107,8 @@ public:
     uint8_t fullyVisible = bodyH() / ITEM_H;
     int16_t leftover     = (int16_t)bodyH() - fullyVisible * (int16_t)ITEM_H;
     bool    hasPartial   = leftover >= 5;
+    bool    hasScrollbar = eff > fullyVisible;
+    int16_t listW        = hasScrollbar ? bodyW() - 4 : bodyW();
 
     auto& lcd = Uni.Lcd;
 
@@ -122,12 +124,12 @@ public:
       uint16_t fg       = selected ? TFT_WHITE : TFT_LIGHTGREY;
 
       Sprite sprite(&lcd);
-      sprite.createSprite(bodyW(), rowH);
+      sprite.createSprite(listW, rowH);
       sprite.fillSprite(TFT_BLACK);
       sprite.setTextDatum(TL_DATUM);
 
       if (selected)
-        sprite.fillRoundRect(0, 2 + dy, bodyW(), ITEM_H - 4, 3, bg);
+        sprite.fillRoundRect(0, 2 + dy, listW, ITEM_H - 4, 3, bg);
 
       sprite.setTextColor(fg, bg);
 
@@ -135,7 +137,7 @@ public:
       {
         sprite.drawString(item->label, 6, (ITEM_H / 2) - 4 + dy);
         sprite.setTextColor(selected ? TFT_CYAN : TFT_DARKGREY, bg);
-        int16_t subX = bodyW() - 6 - sprite.textWidth(item->sublabel);
+        int16_t subX = listW - 6 - sprite.textWidth(item->sublabel);
         sprite.drawString(item->sublabel, subX, (ITEM_H / 2) - 4 + dy);
       }
       else
@@ -184,6 +186,18 @@ public:
 
     if (usedH < (int16_t)bodyH())
       lcd.fillRect(bodyX(), bodyY() + usedH, bodyW(), bodyH() - usedH, TFT_BLACK);
+
+    if (hasScrollbar) {
+      static constexpr uint8_t SB_W = 3;
+      int16_t sbX = bodyX() + bodyW() - SB_W;
+      int16_t sbY = bodyY();
+      int16_t sbH = bodyH();
+      lcd.fillRect(sbX, sbY, SB_W, sbH, 0x2104);
+      int16_t thumbH = sbH * (int16_t)fullyVisible / (int16_t)eff;
+      if (thumbH < 8) thumbH = 8;
+      int16_t thumbY = sbY + ((int16_t)_scrollOffset * (sbH - thumbH)) / (int16_t)(eff - fullyVisible);
+      lcd.fillRect(sbX, thumbY, SB_W, thumbH, Config.getThemeColor());
+    }
   }
 
   virtual void onItemSelected(uint8_t index) = 0;

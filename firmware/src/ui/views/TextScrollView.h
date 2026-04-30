@@ -2,6 +2,7 @@
 
 #include "core/Device.h"
 #include "core/INavigation.h"
+#include "core/ConfigManager.h"
 
 // Word-wrapped, scrollable text region. Pure view — owner screen calls
 // setContent(), then render(x,y,w,h) on draw and onNav(dir) on input.
@@ -148,7 +149,7 @@ private:
       int sbY = (_h - sbH) * _scrollOffset / max(1, maxOffset);
       if (sbY < 0) sbY = 0;
       if (sbY > _h - sbH) sbY = _h - sbH;
-      lcd.fillRect(sbX, _y + sbY, kScrollW, sbH, TFT_LIGHTGREY);
+      lcd.fillRect(sbX, _y + sbY, kScrollW, sbH, Config.getThemeColor());
     }
   }
 };
