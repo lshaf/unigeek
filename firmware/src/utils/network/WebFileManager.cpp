@@ -374,7 +374,7 @@ void WebFileManager::_prepareServer() {
   });
 
   _server.on("/crack.wasm", HTTP_GET, [](AsyncWebServerRequest* request) {
-    request->send_P(200, "application/wasm", WASM_CRACK, WASM_CRACK_LEN);
+    request->send(200, "application/wasm", WASM_CRACK, WASM_CRACK_LEN);
   });
 
   _server.on("/theme.css", HTTP_GET, [this](AsyncWebServerRequest* request) {
