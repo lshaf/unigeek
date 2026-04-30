@@ -16,7 +16,7 @@ private:
   enum State { STATE_DOMAINS, STATE_DOMAIN } _state = STATE_DOMAINS;
   uint8_t _activeDomain = 0;
 
-  static constexpr uint8_t  kMaxPerDomain = 32;
+  static constexpr uint8_t  kMaxPerDomain = 64;
   static constexpr uint8_t kRowHAch = 25;  // 2-line achievement row height
   static constexpr uint8_t kRowHDom = 25;  // 2-line domain row height
 
