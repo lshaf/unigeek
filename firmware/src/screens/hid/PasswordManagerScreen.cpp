@@ -202,19 +202,16 @@ void PasswordManagerScreen::_tryUnlock()
 
 bool PasswordManagerScreen::_verifyMaster(const char* pw)
 {
-  String stored = Uni.Storage->readFile(kMaster);
-  stored.trim();
-  if (stored.length() != 64) return false;
+  fs::File f = Uni.Storage->open(kMaster, "r");
+  if (!f || f.size() != 32) { if (f) f.close(); return false; }
+
+  uint8_t stored[32];
+  if (f.read(stored, 32) != 32) { f.close(); return false; }
+  f.close();
 
   uint8_t hash[32];
   _sha256str(String(pw) + "|VERIFY", hash);
-
-  char hex[65];
-  for (int i = 0; i < 32; i++)
-    snprintf(hex + i * 2, 3, "%02x", hash[i]);
-  hex[64] = '\0';
-
-  return stored.equalsIgnoreCase(hex);
+  return memcmp(stored, hash, 32) == 0;
 }
 
 void PasswordManagerScreen::_setMaster(const char* pw)
@@ -222,12 +219,10 @@ void PasswordManagerScreen::_setMaster(const char* pw)
   uint8_t hash[32];
   _sha256str(String(pw) + "|VERIFY", hash);
 
-  char hex[65];
-  for (int i = 0; i < 32; i++)
-    snprintf(hex + i * 2, 3, "%02x", hash[i]);
-  hex[64] = '\0';
-
-  Uni.Storage->writeFile(kMaster, hex);
+  fs::File f = Uni.Storage->open(kMaster, "w");
+  if (!f) return;
+  f.write(hash, 32);
+  f.close();
 }
 
 // ── Vault ────────────────────────────────────────────────────────────────────
