@@ -3,7 +3,8 @@
 #include <stdint.h>
 
 // WebAuthn / FIDO2 configuration shared across the webauthn subsystem.
-// See docs/WEBAUTHN_PROGRESS.md for the full implementation plan.
+// Implementation plan + cross-session handoff:
+// Obsidian vault → project/unigeek/webauthn-progress.md
 
 namespace webauthn {
 
