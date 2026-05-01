@@ -108,7 +108,7 @@ export default function Flasher({ board, firmwareVersion, method, methodInfo }) 
         writeLine: (line) => logHtml(`  ${line}`),
         write: (data) => logHtml(`  <span class="dim">${data}</span>`),
       };
-      const loader = new ESPLoader({ transport, baudrate: 921600, terminal });
+      const loader = new ESPLoader({ transport, baudrate: board.flashBaud || 921600, terminal });
       await loader.main();
       await loader.flashId();
       const chipName = loader.chip?.CHIP_NAME || 'unknown';

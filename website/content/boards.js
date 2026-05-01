@@ -7,6 +7,7 @@ export const BOARDS = [
     bin: "/firmware/unigeek-m5stickcplus_11.bin",
     port: "USB-C",
     baud: 115200,
+    flashBaud: 115200,
     bootloader: "Auto (no buttons)",
     storage: "LittleFS only",
     bootNotes: "Auto-enters download mode. If flashing fails, hold Button A while plugging USB-C.",
