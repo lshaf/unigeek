@@ -12,7 +12,5 @@ website/.next
 # lsp
 .cache
 compile_commands.json
-# Added by code-review-graph
-.code-review-graph/
 .claude/settings.local.json
 .claude/worktrees
