@@ -121,6 +121,11 @@ static const uint8_t SCL = GROVE_SCL;
 #endif
 #define SPI_TOUCH_FREQUENCY  2500000
 
+// ─── GPS (UART0 — GPIO 1/3 are the only exposed UART pins) ──
+#define GPS_TX    1
+#define GPS_RX    3
+#define GPS_BAUD  9600
+
 // ─── Firmware Feature Flags ───────────────────────────────
 #define DEVICE_HAS_TOUCH_NAV
 #define DEVICE_HAS_SCREEN_ORIENT
