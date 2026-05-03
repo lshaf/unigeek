@@ -109,6 +109,12 @@ void WebFileManager::_prepareServer() {
       request->send(404, "text/plain", "File not found.");
       return;
     }
+    {
+      fs::File f = Uni.Storage->open(path.c_str(), FILE_READ);
+      size_t sz = f ? f.size() : 0;
+      if (f) f.close();
+      if (sz == 0) { request->send(200, _getContentType(path), ""); return; }
+    }
     request->send(Uni.Storage->getFS(), path, _getContentType(path), true);
   });
 
@@ -273,6 +279,12 @@ void WebFileManager::_prepareServer() {
         ? request->getParam("path", true)->value() : "";
       if (path == "") { request->send(400, "text/plain", "No file specified."); return; }
       if (!Uni.Storage->exists(path.c_str())) { request->send(404, "text/plain", "File not found."); return; }
+      {
+        fs::File f = Uni.Storage->open(path.c_str(), FILE_READ);
+        size_t sz = f ? f.size() : 0;
+        if (f) f.close();
+        if (sz == 0) { request->send(200, "text/plain", ""); return; }
+      }
       request->send(Uni.Storage->getFS(), path, "text/plain");
 
     } else if (command == "echo") {
