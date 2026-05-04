@@ -50,23 +50,37 @@
 #define LUA_INTFRM_T    long
 #define LUA_INTFRMLEN   "l"
 
-/* ── Stack / call limits (RAM-critical on no-PSRAM ESP32) ────────────── */
-#define LUAI_MAXSTACK    200
-#define LUAI_MAXCSTACK   200
-#define LUA_MAXCAPTURES  16
-#define LUAI_MAXVARS     200
-#define LUAI_MAXUPVALUES 60
+/* ── Stack / call / buffer limits ────────────────────────────────────── */
+#ifdef BOARD_HAS_PSRAM
+  /* PSRAM boards: relax limits — VM heap lives in PSRAM */
+  #define LUAI_MAXSTACK    800
+  #define LUAI_MAXCSTACK   800
+  #define LUA_MAXCAPTURES  32
+  #define LUAI_MAXVARS     400
+  #define LUAI_MAXUPVALUES 200
+  #define LUA_BUFFERSIZE   1024
+  #define LUAL_BUFFERSIZE  1024
+  #define LUA_MAXINPUT     1024
+  /* GC: less aggressive — more RAM to spare */
+  #define LUAI_GCPAUSE  200
+  #define LUAI_GCMUL    200
+#else
+  /* No PSRAM: keep everything tight */
+  #define LUAI_MAXSTACK    200
+  #define LUAI_MAXCSTACK   200
+  #define LUA_MAXCAPTURES  16
+  #define LUAI_MAXVARS     200
+  #define LUAI_MAXUPVALUES 60
+  #define LUA_BUFFERSIZE   256
+  #define LUAL_BUFFERSIZE  256
+  #define LUA_MAXINPUT     256
+  /* GC: run aggressively to reduce fragmentation */
+  #define LUAI_GCPAUSE  110
+  #define LUAI_GCMUL    150
+#endif
+
 #define LUAI_BITSINT     32
-
-/* ── GC: run more aggressively to reduce fragmentation ───────────────── */
-#define LUAI_GCPAUSE  110
-#define LUAI_GCMUL    150
-
-/* ── Buffers ──────────────────────────────────────────────────────────── */
-#define LUA_BUFFERSIZE       256
-#define LUAL_BUFFERSIZE      256
 #define LUAI_MAXNUMBER2STR   32
-#define LUA_MAXINPUT         256
 
 /* ── String quoting (used in lauxlib.c / lbaselib.c error messages) ──── */
 #define LUA_QL(x)   "'" x "'"

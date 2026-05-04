@@ -18,7 +18,13 @@ void* LuaEngine::_alloc(void*, void* ptr, size_t, size_t nsize) {
     heap_caps_free(ptr);
     return nullptr;
   }
-  return heap_caps_realloc(ptr, nsize, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+  uint32_t caps =
+#ifdef BOARD_HAS_PSRAM
+    MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT;
+#else
+    MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT;
+#endif
+  return heap_caps_realloc(ptr, nsize, caps);
 }
 
 // ── Count hook: fires every 1000 instructions to check exit flag ──────
