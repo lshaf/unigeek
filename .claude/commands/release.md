@@ -14,7 +14,7 @@ Create a new firmware release. Usage: `/release <version>` (e.g. `/release 1.3.0
 
 2. **Version check**: Compare the requested version against the latest tag. If the new version is lower than or equal to the latest tag, **warn the user and stop** — do not proceed until they confirm or provide a corrected version.
 
-3. **Build all environments**: Run `./build_all.sh` (macOS/Linux) or `build_all.bat` (Windows) to verify all board environments compile successfully. If any build fails, **stop and report the error** — do not proceed with the release.
+3. **Build all environments**: Run `./scripts/build_all.sh` (macOS/Linux) or `scripts/build_all.bat` (Windows) to verify all board environments compile successfully. If any build fails, **stop and report the error** — do not proceed with the release.
 
 4. **Build website**: Run `cd website && npm run build` to verify the website builds without errors. If the build fails, **stop and report the error** — do not proceed with the release. Also spot-check that any knowledge/*.md changes in this cycle render on the features pages (see **Knowledge file conventions** at the end of this file).
 
