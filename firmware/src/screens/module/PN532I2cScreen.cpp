@@ -591,22 +591,13 @@ void PN532I2cScreen::_doDictionaryPicker() {
   if (!_hasCard) { ShowStatusAction::show("Authenticate first"); _goMifare(); return; }
 
   _state = STATE_DICT_SELECT;
-  _dictFileCount = 0;
-  if (!Uni.Storage || !Uni.Storage->isAvailable()) {
-    ShowStatusAction::show("Storage not available"); _goMifare(); return;
+  uint8_t n = _browser.load(this, _dictPath, ".txt");
+  if (n == 0) {
+    ShowStatusAction::show("No dictionary files");
+    _goMifare();
+    return;
   }
-
-  IStorage::DirEntry entries[MAX_DICT_FILES];
-  uint8_t count = Uni.Storage->listDir(_dictPath, entries, MAX_DICT_FILES);
-  for (uint8_t i = 0; i < count && _dictFileCount < MAX_DICT_FILES; i++) {
-    if (!entries[i].isDir && entries[i].name.endsWith(".txt")) {
-      _dictFileNames[_dictFileCount] = entries[i].name;
-      _dictItems[_dictFileCount] = { _dictFileNames[_dictFileCount].c_str() };
-      _dictFileCount++;
-    }
-  }
-  if (_dictFileCount == 0) { ShowStatusAction::show("No dictionary files"); _goMifare(); return; }
-  setItems(_dictItems, _dictFileCount);
+  setItems(_browser.items(), n);
 }
 
 static bool _parseHexKeyI2c(const String& line, uint8_t out[6]) {
@@ -625,8 +616,8 @@ static bool _parseHexKeyI2c(const String& line, uint8_t out[6]) {
 }
 
 void PN532I2cScreen::_doDictionaryAttackWithFile(uint8_t fileIndex) {
-  if (fileIndex >= _dictFileCount) return;
-  String filePath = String(_dictPath) + "/" + _dictFileNames[fileIndex];
+  if (fileIndex >= _browser.count()) return;
+  String filePath = _browser.entry(fileIndex).path;
   String content = Uni.Storage->readFile(filePath.c_str());
   if (content.length() == 0) { ShowStatusAction::show("Empty file"); return; }
 

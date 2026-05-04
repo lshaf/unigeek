@@ -111,7 +111,7 @@ void SubGHzScreen::onUpdate() {
       _holdFired = true;
       _pendingHoldIdx = _selectedIndex;
       // Show popup immediately — don't wait for release
-      if (_pendingHoldIdx < _browseCount && !_browseIsDir[_pendingHoldIdx])
+      if (_pendingHoldIdx < _browser.count() && !_browser.entry(_pendingHoldIdx).isDir)
         _showBrowseOptions(_pendingHoldIdx);
       else
         render();
@@ -389,9 +389,9 @@ void SubGHzScreen::onItemSelected(uint8_t index) {
   }
 
   if (_state == STATE_SEND_BROWSE) {
-    if (index >= _browseCount) return;
-    if (_browseIsDir[index]) {
-      _loadBrowseDir(_browsePaths[index]);
+    if (index >= _browser.count()) return;
+    if (_browser.entry(index).isDir) {
+      _loadBrowseDir(_browser.entry(index).path);
       return;
     }
     _sendBrowseFile(index);
@@ -402,7 +402,8 @@ void SubGHzScreen::onItemSelected(uint8_t index) {
 // ── Browse helpers ────────────────────────────────────────────────────────
 
 void SubGHzScreen::_sendBrowseFile(uint8_t index) {
-  String content = Uni.Storage->readFile(_browsePaths[index].c_str());
+  const auto& e = _browser.entry(index);
+  String content = Uni.Storage->readFile(e.path.c_str());
   if (content.length() == 0) {
     ShowStatusAction::show("Failed to read file");
     render();
@@ -420,14 +421,14 @@ void SubGHzScreen::_sendBrowseFile(uint8_t index) {
     return;
   }
   ProgressView::init();
-  ProgressView::progress(("Sending " + _browseNames[index]).c_str(), 50);
+  ProgressView::progress(("Sending " + e.name).c_str(), 50);
   _rf.sendSignal(sig);
   _rf.end();
   {
     int n = Achievement.inc("rf_send_first");
     if (n == 1) Achievement.unlock("rf_send_first");
   }
-  ShowStatusAction::show(("Sent: " + _browseNames[index]).c_str(), 1000);
+  ShowStatusAction::show(("Sent: " + e.name).c_str(), 1000);
   render();
 }
 
@@ -444,14 +445,14 @@ void SubGHzScreen::_showBrowseOptions(uint8_t index) {
     _sendBrowseFile(index);
 
   } else if (strcmp(choice, "rename") == 0) {
-    String curName = _browseNames[index];
+    String curName = _browser.entry(index).name;
     if (curName.endsWith(".sub")) curName = curName.substring(0, curName.length() - 4);
     String newName = InputTextAction::popup("Rename", curName.c_str());
     if (newName.length() == 0) { render(); return; }
-    String content = Uni.Storage->readFile(_browsePaths[index].c_str());
+    String content = Uni.Storage->readFile(_browser.entry(index).path.c_str());
     String newPath = _makeUniquePath(newName);
     if (Uni.Storage->writeFile(newPath.c_str(), content.c_str())) {
-      Uni.Storage->deleteFile(_browsePaths[index].c_str());
+      Uni.Storage->deleteFile(_browser.entry(index).path.c_str());
       ShowStatusAction::show("Renamed", 1000);
       _loadBrowseDir(_browsePath);
     } else {
@@ -460,7 +461,7 @@ void SubGHzScreen::_showBrowseOptions(uint8_t index) {
     }
 
   } else if (strcmp(choice, "delete") == 0) {
-    if (Uni.Storage->deleteFile(_browsePaths[index].c_str())) {
+    if (Uni.Storage->deleteFile(_browser.entry(index).path.c_str())) {
       ShowStatusAction::show("Deleted", 1000);
       _loadBrowseDir(_browsePath);
     } else {
@@ -694,51 +695,17 @@ String SubGHzScreen::_makeUniquePath(const String& name) {
 }
 
 void SubGHzScreen::_loadBrowseDir(const String& path) {
-  _browsePath  = path;
-  _browseCount = 0;
+  _browsePath = path;
   _state = STATE_SEND_BROWSE;
 
   int lastSlash = path.lastIndexOf('/');
   String folderName = (lastSlash >= 0) ? path.substring(lastSlash + 1) : path;
   snprintf(_titleBuf, sizeof(_titleBuf), "RF: %s", folderName.c_str());
 
-  if (!Uni.Storage || !Uni.Storage->isAvailable()) {
-    setItems(_browseItems, 0);
-    return;
+  if (Uni.Storage && Uni.Storage->isAvailable()) {
+    Uni.Storage->makeDir(path.c_str());
   }
 
-  Uni.Storage->makeDir(path.c_str());
-
-  IStorage::DirEntry entries[kMaxBrowse];
-  uint8_t total = Uni.Storage->listDir(path.c_str(), entries, kMaxBrowse);
-
-  // Sort: dirs first, then alphabetical
-  for (uint8_t i = 0; i < total; i++) {
-    for (uint8_t j = i + 1; j < total; j++) {
-      bool swap = false;
-      if (entries[j].isDir && !entries[i].isDir) swap = true;
-      else if (entries[i].isDir == entries[j].isDir &&
-               strcasecmp(entries[j].name.c_str(), entries[i].name.c_str()) < 0) swap = true;
-      if (swap) {
-        IStorage::DirEntry tmp = entries[i];
-        entries[i] = entries[j];
-        entries[j] = tmp;
-      }
-    }
-  }
-
-  for (uint8_t i = 0; i < total && _browseCount < kMaxBrowse; i++) {
-    const String& name = entries[i].name;
-    bool isDir = entries[i].isDir;
-    if (!isDir && !name.endsWith(".sub")) continue;
-
-    _browseNames[_browseCount]  = name;
-    _browsePaths[_browseCount]  = path + "/" + name;
-    _browseIsDir[_browseCount]  = isDir;
-    _browseItems[_browseCount]  = {_browseNames[_browseCount].c_str(),
-                                   isDir ? ">" : nullptr};
-    _browseCount++;
-  }
-
-  setItems(_browseItems, _browseCount);
+  uint8_t n = _browser.load(this, path, ".sub");
+  setItems(_browser.items(), n);
 }

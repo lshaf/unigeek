@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ui/templates/ListScreen.h"
+#include "ui/views/BrowseFileView.h"
 
 class FileManagerScreen : public ListScreen
 {
@@ -23,18 +24,13 @@ private:
     ACT_COPY, ACT_CUT, ACT_PASTE, ACT_CANCEL_CLIP, ACT_CLOSE_MENU, ACT_EXIT,
   };
 
-  static constexpr uint8_t kMaxFiles     = 40;
   static constexpr uint8_t kMaxMenu      = 11;
   static constexpr uint8_t kMaxPathDepth = 8;
 
   // File browser
-  String   _curPath = "/";
-  String   _fileName[kMaxFiles];
-  String   _filePath[kMaxFiles];
-  bool     _fileIsDir[kMaxFiles];
-  ListItem _fileItems[kMaxFiles];
-  uint8_t  _fileCount  = 0;
-  uint8_t  _menuSelIdx = 0;
+  String         _curPath = "/";
+  BrowseFileView _browser;
+  uint8_t        _menuSelIdx = 0;
   bool     _holdFired  = false;
 
   // Navigation history (folder path + selected index, pushed on dir enter)

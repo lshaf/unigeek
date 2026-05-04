@@ -17,20 +17,20 @@ void RandomLinePickerScreen::onInit() {
     return;
   }
 
-  _drawLoading();
+  BrowseFileView::showLoading();
   _loadDir(kRootDir);
 }
 
 void RandomLinePickerScreen::onBack() {
-  _selectedCount = 0;
   if (_depth == 0) {
+    _selectedCount = 0;
     Screen.goBack();
     return;
   }
   _depth--;
   String parentPath  = _pathStack[_depth];
   uint8_t restoreIdx = _savedIdx[_depth];
-  _drawLoading();
+  BrowseFileView::showLoading();
   _loadDir(parentPath, restoreIdx);
 }
 
@@ -40,83 +40,44 @@ void RandomLinePickerScreen::onItemSelected(uint8_t index) {
     _startViewer();
     return;
   }
-  if (index >= _entryCount) return;
+  if (index >= _browser.count()) return;
 
-  if (_entries[index].isDir) {
+  const auto& e = _browser.entry(index);
+  if (e.isDir) {
     if (_depth < kMaxDepth) {
       _pathStack[_depth] = _curPath;
       _savedIdx[_depth]  = index;
       _depth++;
     }
-    _drawLoading();
-    _loadDir(_entries[index].fullPath);
+    _loadDir(e.path);
     return;
   }
 
   // Toggle file selection, keep cursor at this item
-  _toggleSelect(_entries[index].fullPath);
+  _toggleSelect(e.path);
   _buildItems(index);
 }
 
 // ── Private ──────────────────────────────────────────────────────────────────
 
-void RandomLinePickerScreen::_drawLoading() {
-  auto& lcd = Uni.Lcd;
-  int bx = bodyX(), by = bodyY(), bw = bodyW(), bh = bodyH();
-  Sprite sp(&lcd);
-  sp.createSprite(bw, bh);
-  sp.fillSprite(TFT_BLACK);
-  sp.setTextColor(TFT_DARKGREY, TFT_BLACK);
-  sp.setTextDatum(MC_DATUM);
-  sp.setTextSize(1);
-  sp.drawString("Loading...", bw / 2, bh / 2);
-  sp.pushSprite(bx, by);
-  sp.deleteSprite();
-}
-
 void RandomLinePickerScreen::_loadDir(const String& path, uint8_t restoreIdx) {
-  _curPath     = path;
-  _entryCount  = 0;
-
-  IStorage::DirEntry raw[kMaxFiles];
-  uint8_t count = Uni.Storage->listDir(path.c_str(), raw, kMaxFiles);
-
-  // Dirs first, then alphabetical ascending (case-insensitive)
-  for (uint8_t i = 1; i < count; i++) {
-    IStorage::DirEntry tmp = raw[i];
-    int j = i - 1;
-    while (j >= 0) {
-      bool swap = false;
-      if (tmp.isDir && !raw[j].isDir) swap = true;
-      else if (tmp.isDir == raw[j].isDir && strcasecmp(tmp.name.c_str(), raw[j].name.c_str()) < 0) swap = true;
-      if (!swap) break;
-      raw[j + 1] = raw[j];
-      j--;
-    }
-    raw[j + 1] = tmp;
-  }
-
-  String base = path;
-  for (uint8_t i = 0; i < count && _entryCount < kMaxFiles; i++) {
-    _entries[_entryCount].name     = raw[i].name;
-    _entries[_entryCount].fullPath = base + "/" + raw[i].name;
-    _entries[_entryCount].isDir    = raw[i].isDir;
-    _entryCount++;
-  }
-
+  _curPath = path;
+  _browser.load(this, path);
   _buildItems(restoreIdx);
 }
 
 void RandomLinePickerScreen::_buildItems(uint8_t restoreIdx) {
   _itemCount = 0;
+  uint8_t n = _browser.count();
 
-  for (uint8_t i = 0; i < _entryCount; i++) {
-    if (_entries[i].isDir) {
-      snprintf(_labelBuf[i], sizeof(_labelBuf[i]), "%s/", _entries[i].name.c_str());
+  for (uint8_t i = 0; i < n; i++) {
+    const auto& e = _browser.entry(i);
+    if (e.isDir) {
+      snprintf(_labelBuf[i], sizeof(_labelBuf[i]), "%s/", e.name.c_str());
       _listItems[_itemCount++] = { _labelBuf[i] };
     } else {
-      bool sel = _isSelected(_entries[i].fullPath);
-      _listItems[_itemCount++] = { _entries[i].name.c_str(), sel ? "*" : nullptr };
+      bool sel = _isSelected(e.path);
+      _listItems[_itemCount++] = { e.name.c_str(), sel ? "*" : nullptr };
     }
   }
 
@@ -159,5 +120,6 @@ void RandomLinePickerScreen::_startViewer() {
     render();
     return;
   }
+  ShowStatusAction::show("Loading...", 0);
   Screen.push(new RandomLineViewerScreen(_selected, _selectedCount));
 }

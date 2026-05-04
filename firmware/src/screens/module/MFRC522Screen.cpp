@@ -623,31 +623,13 @@ void MFRC522Screen::_callMemoryReader() {
 
 void MFRC522Screen::_callDictionaryAttack() {
   _state = STATE_DICT_SELECT;
-  _dictFileCount = 0;
-
-  if (!Uni.Storage || !Uni.Storage->isAvailable()) {
-    ShowStatusAction::show("Storage not available");
-    _goMifareClassic();
-    return;
-  }
-
-  IStorage::DirEntry entries[MAX_DICT_FILES];
-  uint8_t count = Uni.Storage->listDir(_dictPath, entries, MAX_DICT_FILES);
-  for (uint8_t i = 0; i < count && _dictFileCount < MAX_DICT_FILES; i++) {
-    if (!entries[i].isDir && entries[i].name.endsWith(".txt")) {
-      _dictFileNames[_dictFileCount] = entries[i].name;
-      _dictItems[_dictFileCount] = {_dictFileNames[_dictFileCount].c_str()};
-      _dictFileCount++;
-    }
-  }
-
-  if (_dictFileCount == 0) {
+  uint8_t n = _browser.load(this, _dictPath, ".txt");
+  if (n == 0) {
     ShowStatusAction::show("No dictionary files in nfc/dictionaries/");
     _goMifareClassic();
     return;
   }
-
-  setItems(_dictItems, _dictFileCount);
+  setItems(_browser.items(), n);
 }
 
 static bool _parseHexKey(const String& line, uint8_t* out) {
@@ -671,9 +653,9 @@ static bool _parseHexKey(const String& line, uint8_t* out) {
 }
 
 void MFRC522Screen::_callDictAttackWithFile(uint8_t fileIndex) {
-  if (fileIndex >= _dictFileCount) return;
+  if (fileIndex >= _browser.count()) return;
 
-  String filePath = String(_dictPath) + "/" + _dictFileNames[fileIndex];
+  String filePath = _browser.entry(fileIndex).path;
   String content = Uni.Storage->readFile(filePath.c_str());
   if (content.length() == 0) {
     ShowStatusAction::show("Empty dictionary file");

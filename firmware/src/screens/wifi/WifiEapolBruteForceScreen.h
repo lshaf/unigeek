@@ -72,11 +72,12 @@ private:
   // ── File browser ──────────────────────────────────────────────────────────
   static const char*   PCAP_DIR;
   static const char*   PASS_DIR;
+  static constexpr int kMaxFiles = 150;
 
-  String   _fileLabels[64];
-  String   _filePaths[64];
-  bool     _fileIsDir[64] = {};
-  ListItem _fileItems[64]  = {};
+  String   _fileLabels[kMaxFiles];
+  String   _filePaths[kMaxFiles];
+  bool     _fileIsDir[kMaxFiles] = {};
+  ListItem _fileItems[kMaxFiles]  = {};
   int      _fileCount = 0;
 
   String   _currentDir;   // current browsing directory

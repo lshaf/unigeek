@@ -1,5 +1,6 @@
 #pragma once
 #include "ui/templates/ListScreen.h"
+#include "ui/views/BrowseFileView.h"
 #include "ui/views/LogView.h"
 #include "ui/views/ScrollListView.h"
 
@@ -76,9 +77,8 @@ private:
 
   // Dict file picker
   static constexpr const char* _kDictDir = "/unigeek/nfc/dictionaries";
-  static constexpr uint8_t MAX_DICT_FILES = 12;
-  ListItem _dictItems[1 + MAX_DICT_FILES];
-  String   _dictFileNames[MAX_DICT_FILES];
+  BrowseFileView _browser;
+  ListItem _dictItems[1 + BrowseFileView::kCap];
   uint8_t  _dictFileCount = 0;
   static constexpr uint16_t MAX_DICT_KEYS = 256;
   uint8_t  _dictKeys[MAX_DICT_KEYS][6] = {};

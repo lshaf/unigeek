@@ -1,5 +1,6 @@
 #pragma once
 #include "ui/templates/ListScreen.h"
+#include "ui/views/BrowseFileView.h"
 #include "ui/views/ScrollListView.h"
 #include "ui/views/LogView.h"
 
@@ -21,10 +22,9 @@ private:
   bool     _running = false;
 
   // ── File picker ──
-  static constexpr uint8_t MAX_DICT_FILES = 12;
-  ListItem _items[1 + MAX_DICT_FILES];          // "Built-in" + file list
-  String   _fileNames[MAX_DICT_FILES];
-  uint8_t  _fileCount   = 0;
+  BrowseFileView _browser;
+  ListItem _items[1 + BrowseFileView::kCap];    // "Built-in" + file list
+  uint8_t  _fileCount = 0;
 
   // ── Attack state ──
   uint8_t  _uid[7]    = {};

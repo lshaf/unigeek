@@ -37,23 +37,11 @@ uint8_t ChameleonMfcDictScreen::_trailerBlock(uint8_t sector) {
 }
 
 void ChameleonMfcDictScreen::_loadFilePicker() {
-  _fileCount = 0;
-
   _items[0] = {"Built-in keys"};
-
-  if (Uni.Storage && Uni.Storage->isAvailable()) {
-    IStorage::DirEntry entries[MAX_DICT_FILES];
-    uint8_t total = Uni.Storage->listDir(kDictDir, entries, MAX_DICT_FILES);
-    for (uint8_t i = 0; i < total && _fileCount < MAX_DICT_FILES; i++) {
-      if (!entries[i].isDir && entries[i].name.endsWith(".txt")) {
-        _fileNames[_fileCount] = entries[i].name;
-        _items[1 + _fileCount] = { _fileNames[_fileCount].c_str() };
-        _fileCount++;
-      }
-    }
-  }
-
-  setItems(_items, 1 + _fileCount);
+  uint8_t n = _browser.load(this, kDictDir, ".txt");
+  for (uint8_t i = 0; i < n; i++) _items[1 + i] = _browser.items()[i];
+  _fileCount = n;
+  setItems(_items, 1 + n);
 }
 
 void ChameleonMfcDictScreen::onInit() {
@@ -134,14 +122,13 @@ void ChameleonMfcDictScreen::onItemSelected(uint8_t index) {
     snprintf(srcLabel, sizeof(srcLabel), "Built-in");
   } else {
     uint8_t fi = index - 1;
-    if (fi >= _fileCount) return;
-    String path = String(kDictDir) + "/" + _fileNames[fi];
-    if (!_loadFileKeys(path.c_str())) {
+    if (fi >= _browser.count()) return;
+    if (!_loadFileKeys(_browser.entry(fi).path.c_str())) {
       ShowStatusAction::show("Load keys failed", 1200);
       render();
       return;
     }
-    snprintf(srcLabel, sizeof(srcLabel), "%s", _fileNames[fi].c_str());
+    snprintf(srcLabel, sizeof(srcLabel), "%s", _browser.entry(fi).name.c_str());
   }
 
   if (_keyCount == 0) {

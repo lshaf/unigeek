@@ -2,6 +2,7 @@
 
 #include <array>
 #include "ui/templates/ListScreen.h"
+#include "ui/views/BrowseFileView.h"
 #include "ui/views/ScrollListView.h"
 #include "utils/nfc/NFCUtility.h"
 #include "utils/nfc/pn532/PN532HSU.h"
@@ -98,10 +99,7 @@ private:
 
   // Dictionary file picker
   static constexpr const char* _dictPath = "/unigeek/nfc/dictionaries";
-  static constexpr uint8_t MAX_DICT_FILES = 16;
-  ListItem _dictItems[MAX_DICT_FILES];
-  String   _dictFileNames[MAX_DICT_FILES];
-  uint8_t  _dictFileCount = 0;
+  BrowseFileView _browser;
 
   // Dump image and load file picker
   static constexpr const char* _dumpPath = "/unigeek/nfc/dumps";

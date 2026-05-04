@@ -3,6 +3,7 @@
 //
 
 #include "IRScreen.h"
+#include "ui/actions/ShowStatusAction.h"
 
 #if defined(DEVICE_M5STICK_S3)
 #include <M5PM1.h>
@@ -284,11 +285,11 @@ void IRScreen::onItemSelected(uint8_t index) {
   }
 
   if (_state == STATE_SEND_BROWSE) {
-    if (index < _browseCount) {
-      if (_browseIsDir[index]) {
-        _loadBrowseDir(_browsePaths[index]);
+    if (index < _browser.count()) {
+      if (_browser.entry(index).isDir) {
+        _loadBrowseDir(_browser.entry(index).path);
       } else {
-        _loadAndShowSignals(_browsePaths[index]);
+        _loadAndShowSignals(_browser.entry(index).path);
       }
     }
     return;
@@ -411,53 +412,21 @@ void IRScreen::_onRecvItemAction(uint8_t index) {
 void IRScreen::_loadBrowseDir(const String& path) {
   _state = STATE_SEND_BROWSE;
   _browsePath = path;
-  _browseCount = 0;
 
-  // Update title to show current folder name
   int lastSlash = path.lastIndexOf('/');
   String folderName = (lastSlash >= 0) ? path.substring(lastSlash + 1) : path;
   if (path == kRootPath) folderName = "IR Files";
   snprintf(_titleBuf, sizeof(_titleBuf), "%s", folderName.c_str());
 
-  IStorage::DirEntry entries[kMaxBrowse];
-  uint8_t count = Uni.Storage->listDir(path.c_str(), entries, kMaxBrowse);
+  uint8_t n = _browser.load(this, path, ".ir");
 
-  // Sort: directories first, then alphabetical
-  for (uint8_t i = 1; i < count; i++) {
-    IStorage::DirEntry tmp = entries[i];
-    int j = i - 1;
-    while (j >= 0) {
-      bool swap = false;
-      if (tmp.isDir && !entries[j].isDir) swap = true;
-      else if (tmp.isDir == entries[j].isDir &&
-               strcasecmp(tmp.name.c_str(), entries[j].name.c_str()) < 0) swap = true;
-      if (!swap) break;
-      entries[j + 1] = entries[j];
-      j--;
-    }
-    entries[j + 1] = tmp;
-  }
-
-  for (uint8_t i = 0; i < count && _browseCount < kMaxBrowse; i++) {
-    // Show .ir files and directories only
-    if (!entries[i].isDir && !entries[i].name.endsWith(".ir")) continue;
-    _browseNames[_browseCount] = entries[i].name;
-    _browsePaths[_browseCount] = path + "/" + entries[i].name;
-    _browseIsDir[_browseCount] = entries[i].isDir;
-    _browseItems[_browseCount] = {
-      _browseNames[_browseCount].c_str(),
-      entries[i].isDir ? "DIR" : nullptr
-    };
-    _browseCount++;
-  }
-
-  if (_browseCount == 0 && path == kRootPath) {
+  if (n == 0 && path == kRootPath) {
     ShowStatusAction::show("No IR files found in /unigeek/ir/");
     _showMenu();
     return;
   }
 
-  setItems(_browseItems, _browseCount);
+  setItems(_browser.items(), n);
 }
 
 void IRScreen::_loadAndShowSignals(const String& filePath) {

@@ -30,16 +30,16 @@ public:
     onRender();
   }
 
-protected:
-  // ─── Body area helpers ────────────────────────────────
+  // Body area helpers — public so views (e.g. BrowseFileView) can query them.
   uint16_t bodyX() { return StatusBar::WIDTH; }
   uint16_t bodyY() { return title() ? Header::HEIGHT : 0; }
   uint16_t bodyW() { return Uni.Lcd.width() - StatusBar::WIDTH - 4; }
   uint16_t bodyH() { return Uni.Lcd.height() - bodyY() - 4; }
 
+protected:
   // ─── Subclass overrides ───────────────────────────────
   virtual const char* title() { return nullptr; }  // nullptr = no header
-  virtual bool isFullScreen() { return false; }   // true = skip header + status bar
+  virtual bool isFullScreen() { return false; }    // true = skip header + status bar
 
   virtual void onInit()   {}
   virtual void onUpdate() {}

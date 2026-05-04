@@ -5,6 +5,7 @@
 #pragma once
 
 #include "ui/templates/ListScreen.h"
+#include "ui/views/BrowseFileView.h"
 #include "utils/rf/CC1101Util.h"
 
 class SubGHzScreen : public ListScreen {
@@ -73,14 +74,9 @@ private:
   bool     _rfDetectFired  = false;
 
   // Send — file browser
-  static constexpr uint8_t kMaxBrowse = 30;
   static constexpr const char* kRootPath = "/unigeek/rf";
   String _browsePath;
-  String _browseNames[kMaxBrowse];
-  String _browsePaths[kMaxBrowse];
-  bool   _browseIsDir[kMaxBrowse];
-  ListItem _browseItems[kMaxBrowse];
-  uint8_t _browseCount = 0;
+  BrowseFileView _browser;
   bool    _holdFired = false;
   uint8_t _pendingHoldIdx = 0;
   void _loadBrowseDir(const String& path);

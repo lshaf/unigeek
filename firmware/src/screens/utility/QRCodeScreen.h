@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ui/templates/ListScreen.h"
+#include "ui/views/BrowseFileView.h"
 
 class QRCodeScreen : public ListScreen
 {
@@ -20,13 +21,9 @@ private:
   bool   _inverted = false;
   String _currentPath;
 
-  static constexpr const char* _qrPath  = "/unigeek/qrcode";
-  static constexpr int         MAX_FILES = 40;
+  static constexpr const char* _qrPath = "/unigeek/qrcode";
 
-  struct FileEntry { char name[64]; bool isDir; };
-  FileEntry _fileEntries[MAX_FILES];
-  uint8_t   _fileCount = 0;
-  ListItem  _fileItems[MAX_FILES];
+  BrowseFileView _browser;
 
   ListItem _menuItems[3] = {
     {"Mode",     "Write"},

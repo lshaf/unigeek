@@ -57,13 +57,12 @@ void QRCodeScreen::onItemSelected(uint8_t index) {
         break;
     }
   } else if (_state == STATE_SELECT_FILE) {
-    if (index >= _fileCount) return;
-    String path = _currentPath + "/" + _fileEntries[index].name;
-    if (_fileEntries[index].isDir) {
-      _currentPath = path;
+    if (index >= _browser.count()) return;
+    if (_browser.entry(index).isDir) {
+      _currentPath = _browser.entry(index).path;
       _scanFiles(_currentPath);
     } else {
-      _generateFromFile(path);
+      _generateFromFile(_browser.entry(index).path);
     }
   }
 }
@@ -84,27 +83,15 @@ void QRCodeScreen::_generate() {
 
 void QRCodeScreen::_scanFiles(const String& path) {
   _state = STATE_SELECT_FILE;
-  _fileCount = 0;
-
-  IStorage::DirEntry entries[MAX_FILES];
-  uint8_t count = Uni.Storage->listDir(path.c_str(), entries, MAX_FILES);
-
-  if (count == 0) {
+  _currentPath = path;
+  uint8_t n = _browser.load(this, path, nullptr, "FILE");
+  if (n == 0) {
     ShowStatusAction::show("Cannot open directory", 1500);
     _state = STATE_MENU;
     render();
     return;
   }
-
-  for (uint8_t i = 0; i < count; i++) {
-    strncpy(_fileEntries[i].name, entries[i].name.c_str(), sizeof(_fileEntries[0].name) - 1);
-    _fileEntries[i].name[sizeof(_fileEntries[0].name) - 1] = '\0';
-    _fileEntries[i].isDir = entries[i].isDir;
-    _fileItems[i] = { _fileEntries[i].name, entries[i].isDir ? "DIR" : "FILE" };
-  }
-  _fileCount = count;
-
-  setItems(_fileItems, _fileCount);
+  setItems(_browser.items(), n);
 }
 
 void QRCodeScreen::_generateFromFile(const String& path) {

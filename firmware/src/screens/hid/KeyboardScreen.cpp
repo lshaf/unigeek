@@ -124,18 +124,16 @@ void KeyboardScreen::onItemSelected(uint8_t index)
       render();
     }
   } else if (_state == STATE_SELECT_FILE) {
-    if (index >= _fileCount) return;
-    String path = _filePath[index];
-    if (path.endsWith("/")) {
-      // Directory — navigate into it
-      _showFiles(path.substring(0, path.length() - 1));
+    if (index >= _browser.count()) return;
+    if (_browser.entry(index).isDir) {
+      _showFiles(_browser.entry(index).path);
     } else {
       if (!_keyboard->isConnected() && _mode == MODE_BLE) {
         ShowStatusAction::show("Not connected...", 1500);
         render();
         return;
       }
-      _runDuckyScript(path);
+      _runDuckyScript(_browser.entry(index).path);
     }
   }
 }
@@ -204,29 +202,17 @@ void KeyboardScreen::_showFiles(const String& path)
     return;
   }
 
-  _curPath   = path;
-  _fileCount = 0;
-  _state     = STATE_SELECT_FILE;
+  _curPath = path;
+  _state   = STATE_SELECT_FILE;
+  uint8_t n = _browser.load(this, path);
 
-  IStorage::DirEntry entries[kMaxFiles];
-  uint8_t count = Uni.Storage->listDir(path.c_str(), entries, kMaxFiles);
-
-  if (count == 0) {
+  if (n == 0) {
     ShowStatusAction::show("No files found", 1500);
     _goMenu();
     return;
   }
 
-  for (uint8_t i = 0; i < count; i++) {
-    _fileLabel[i] = entries[i].name;
-    _filePath[i]  = entries[i].isDir
-                      ? (path + "/" + entries[i].name + "/")
-                      : (path + "/" + entries[i].name);
-    _fileItems[i] = {_fileLabel[i].c_str(), entries[i].isDir ? "DIR" : nullptr};
-  }
-  _fileCount = count;
-
-  setItems(_fileItems, _fileCount);
+  setItems(_browser.items(), n);
 }
 
 void KeyboardScreen::_runDuckyScript(const String& path)

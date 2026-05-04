@@ -70,14 +70,14 @@ void FileManagerScreen::onBack()
 void FileManagerScreen::onItemSelected(uint8_t index)
 {
   if (_state == STATE_FILE) {
-    if (index < _fileCount) {
-      if (_fileIsDir[index]) {
+    if (index < _browser.count()) {
+      if (_browser.entry(index).isDir) {
         if (_pathDepth < kMaxPathDepth) {
           _pathHistory[_pathDepth++] = { _curPath, _selectedIndex };
         }
-        _loadDir(_filePath[index]);
+        _loadDir(_browser.entry(index).path);
       } else {
-        Screen.push(new FileViewerScreen(_filePath[index]));
+        Screen.push(new FileViewerScreen(_browser.entry(index).path));
       }
     }
   } else if (_state == STATE_MENU) {
@@ -89,39 +89,11 @@ void FileManagerScreen::onItemSelected(uint8_t index)
 
 void FileManagerScreen::_loadDir(const String& path, uint8_t restoreIdx)
 {
-  _state     = STATE_FILE;
-  _curPath   = path;
-  _fileCount = 0;
-
-  IStorage::DirEntry entries[kMaxFiles];
-  uint8_t count = Uni.Storage->listDir(path.c_str(), entries, kMaxFiles);
-
-  // Sort: directories first, then alphabetical ascending
-  for (uint8_t i = 1; i < count; i++) {
-    IStorage::DirEntry tmp = entries[i];
-    int j = i - 1;
-    while (j >= 0) {
-      bool swap = false;
-      if (tmp.isDir && !entries[j].isDir) swap = true;
-      else if (tmp.isDir == entries[j].isDir && strcasecmp(tmp.name.c_str(), entries[j].name.c_str()) < 0) swap = true;
-      if (!swap) break;
-      entries[j + 1] = entries[j];
-      j--;
-    }
-    entries[j + 1] = tmp;
-  }
-
-  String base = (path == "/") ? "" : path;
-  for (uint8_t i = 0; i < count; i++) {
-    _fileName[i]  = entries[i].name;
-    _filePath[i]  = base + "/" + entries[i].name;
-    _fileIsDir[i] = entries[i].isDir;
-    _fileItems[i] = {_fileName[i].c_str(), entries[i].isDir ? "DIR" : nullptr};
-  }
-  _fileCount = count;
-
+  _state   = STATE_FILE;
+  _curPath = path;
+  uint8_t n = _browser.load(this, path);
   _updateTitle();
-  setItems(_fileItems, _fileCount, restoreIdx);
+  setItems(_browser.items(), n, restoreIdx);
 }
 
 void FileManagerScreen::_openMenu(uint8_t fileIdx)
@@ -130,8 +102,8 @@ void FileManagerScreen::_openMenu(uint8_t fileIdx)
   _menuSelIdx = fileIdx;
   _menuCount  = 0;
 
-  bool hasTarget = (fileIdx < _fileCount);
-  bool isFile = hasTarget && !_fileIsDir[fileIdx];
+  bool hasTarget = (fileIdx < _browser.count());
+  bool isFile = hasTarget && !_browser.entry(fileIdx).isDir;
 
   auto addMenu = [&](MenuAction action, const char* label, const char* sublabel = nullptr,
                      bool reserveTailSlots = true) -> bool {
@@ -189,15 +161,15 @@ void FileManagerScreen::_handleMenuAction(uint8_t index)
   };
   bool isFolderAction = false;
   for (auto a : kFolderActions) { if (_menuActions[index] == a) { isFolderAction = true; break; } }
-  if (_menuSelIdx >= _fileCount && !isFolderAction) {
+  if (_menuSelIdx >= _browser.count() && !isFolderAction) {
     ShowStatusAction::show("Invalid selection", 1200);
     _loadDir(_curPath);
     return;
   }
 
   String base       = (_curPath == "/") ? "" : _curPath;
-  String targetPath = (_menuSelIdx < _fileCount) ? _filePath[_menuSelIdx] : "";
-  String targetName = (_menuSelIdx < _fileCount) ? _fileName[_menuSelIdx] : "";
+  String targetPath = (_menuSelIdx < _browser.count()) ? _browser.entry(_menuSelIdx).path : "";
+  String targetName = (_menuSelIdx < _browser.count()) ? _browser.entry(_menuSelIdx).name : "";
 
   switch (_menuActions[index]) {
 
@@ -239,7 +211,7 @@ void FileManagerScreen::_handleMenuAction(uint8_t index)
 
     case ACT_DELETE: {
       ShowStatusAction::show("Deleting...", 0);
-      bool ok = _fileIsDir[_menuSelIdx]
+      bool ok = _browser.entry(_menuSelIdx).isDir
                   ? _removeDir(targetPath)
                   : Uni.Storage->deleteFile(targetPath.c_str());
       if (!ok) ShowStatusAction::show("Delete failed", 1500);
@@ -309,8 +281,8 @@ void FileManagerScreen::_handleMenuAction(uint8_t index)
 
 bool FileManagerScreen::_removeDir(const String& path)
 {
-  IStorage::DirEntry entries[kMaxFiles];
-  uint8_t count = Uni.Storage->listDir(path.c_str(), entries, kMaxFiles);
+  IStorage::DirEntry entries[BrowseFileView::kCap];
+  uint8_t count = Uni.Storage->listDir(path.c_str(), entries, BrowseFileView::kCap);
 
   String base = (path == "/") ? "" : path;
   for (uint8_t i = 0; i < count; i++) {

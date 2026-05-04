@@ -1,5 +1,6 @@
 #include "WifiEapolBruteForceScreen.h"
 #include "core/Device.h"
+#include "ui/views/BrowseFileView.h"
 #include "core/ScreenManager.h"
 #include "screens/wifi/WifiMenuScreen.h"
 #include "ui/actions/ShowStatusAction.h"
@@ -272,16 +273,16 @@ bool WifiEapolBruteForceScreen::_listFiles(const char* ext) {
   _fileCount = 0;
   const char* dir = _currentDir.c_str();
   if (!Uni.Storage || !Uni.Storage->isAvailable()) return false;
+  BrowseFileView::showLoading();
 
-  static constexpr int kMaxEntries = 64;
-  IStorage::DirEntry entries[kMaxEntries];
-  uint8_t count = Uni.Storage->listDir(dir, entries, kMaxEntries);
+  IStorage::DirEntry entries[kMaxFiles];
+  uint8_t count = Uni.Storage->listDir(dir, entries, kMaxFiles);
 
   // Collect base names for both groups
   struct RawEntry { String base; bool isDir; };
-  RawEntry raw[kMaxEntries];
+  RawEntry raw[kMaxFiles];
   int rawCount = 0;
-  for (uint8_t i = 0; i < count && rawCount < kMaxEntries; i++) {
+  for (uint8_t i = 0; i < count && rawCount < kMaxFiles; i++) {
     String name = entries[i].name;
     int slash = name.lastIndexOf('/');
     raw[rawCount++] = { (slash >= 0) ? name.substring(slash + 1) : name, entries[i].isDir };
@@ -304,7 +305,7 @@ bool WifiEapolBruteForceScreen::_listFiles(const char* ext) {
 
   // Build file items from sorted list
   const bool isPcap = (ext && strcmp(ext, ".pcap") == 0);
-  for (int i = 0; i < rawCount && _fileCount < kMaxEntries; i++) {
+  for (int i = 0; i < rawCount && _fileCount < kMaxFiles; i++) {
     const RawEntry& e = raw[i];
     // A directory whose name ends with the target extension is a mislabeled file
     // (FAT32 can set the directory attribute on a regular file)
@@ -326,7 +327,7 @@ bool WifiEapolBruteForceScreen::_listFiles(const char* ext) {
   }
 
   // Built-in test wordlist only at the password root
-  if (ext == nullptr && strcmp(dir, PASS_DIR) == 0 && _fileCount < kMaxEntries) {
+  if (ext == nullptr && strcmp(dir, PASS_DIR) == 0 && _fileCount < kMaxFiles) {
     _fileIsDir[_fileCount]  = false;
     _fileLabels[_fileCount] = "Built In";
     _filePaths[_fileCount]  = "builtin";

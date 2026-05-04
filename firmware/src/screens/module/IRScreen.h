@@ -5,6 +5,7 @@
 #pragma once
 
 #include "ui/templates/ListScreen.h"
+#include "ui/views/BrowseFileView.h"
 #include "utils/ir/IRUtil.h"
 
 class IRScreen : public ListScreen
@@ -59,14 +60,9 @@ private:
   static String _signalSublabel(const IRUtil::Signal& sig);
 
   // Send — file browser
-  static constexpr uint8_t kMaxBrowse = 30;
   static constexpr const char* kRootPath = "/unigeek/ir";
   String _browsePath;
-  String _browseNames[kMaxBrowse];
-  String _browsePaths[kMaxBrowse];
-  bool _browseIsDir[kMaxBrowse];
-  ListItem _browseItems[kMaxBrowse];
-  uint8_t _browseCount = 0;
+  BrowseFileView _browser;
   void _loadBrowseDir(const String& path);
 
   // Send — signal list from loaded file

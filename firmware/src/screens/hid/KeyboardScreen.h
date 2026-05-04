@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ui/templates/ListScreen.h"
+#include "ui/views/BrowseFileView.h"
 #include "utils/keyboard/HIDKeyboardUtil.h"
 
 class KeyboardScreen : public ListScreen {
@@ -40,12 +41,8 @@ private:
   uint8_t _scriptLastRendered = 0;     // last _scriptLineCount drawn
 
   // File browser
-  static constexpr uint8_t kMaxFiles = 40;
-  String   _fileLabel[kMaxFiles];
-  String   _filePath[kMaxFiles];
-  ListItem _fileItems[kMaxFiles];
-  uint8_t  _fileCount  = 0;
-  String   _curPath;
+  BrowseFileView _browser;
+  String         _curPath;
   static constexpr const char* kDuckyBase = "/unigeek/hid/duckyscript";
 
   // Menu (built dynamically)
