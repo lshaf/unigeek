@@ -33,3 +33,6 @@ unigeek/nfc/dumps/sample_ntag215_04112233.bin
 unigeek/utility/random_line/quotes.txt
 unigeek/utility/random_line/facts.txt
 unigeek/utility/random_line/ideas.txt
+unigeek/lua/base.lua
+unigeek/lua/sample.lua
+unigeek/lua/dino.lua
