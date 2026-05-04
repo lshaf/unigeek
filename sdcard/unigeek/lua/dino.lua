@@ -76,7 +76,7 @@ local function _drawDino(dy, running)
   -- mouth / jaw line
   uni.lcd.rect(DX + DW - 4, iy + 2, 4, 2, C_DARK)
   -- legs (alternate when running, static when in air)
-  if not running or (leg // 4) % 2 == 0 then
+  if not running or math.floor(leg / 4) % 2 == 0 then
     uni.lcd.rect(DX + 2,  iy + DH,     4, 4, C_GREEN)
     uni.lcd.rect(DX + 8,  iy + DH + 1, 4, 3, C_GREEN)
   else
