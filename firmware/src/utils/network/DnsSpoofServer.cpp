@@ -203,110 +203,108 @@ bool DnsSpoofServer::_isCaptiveDomain(const char* domain)
          strcasecmp(domain, "detectportal.firefox.com") == 0;
 }
 
-// ── Web Server (Port 80) ───────────────────────────────────────────────────
+// ── Web Server (delegates to SharedWebServer on port 80) ──────────────────
 
 void DnsSpoofServer::_startWeb()
 {
-  _webServer = new AsyncWebServer(80);
+  auto& sw = Uni.Server;
 
-  // WPAD proxy auto-config — routes all HTTP through us
-  _webServer->on("/wpad.dat", HTTP_GET, [this](AsyncWebServerRequest* req) {
-    String pac = "function FindProxyForURL(url, host) {\n"
-                 "  return \"PROXY " + _apIP.toString() + ":80\";\n"
-                 "}\n";
-    req->send(200, "application/x-ns-proxy-autoconfig", pac);
-  });
+  // Register this instance as the DNS-spoof request handler.
+  sw.setDnsSpoofHandler([](AsyncWebServerRequest* req, void* ctx) {
+    static_cast<DnsSpoofServer*>(ctx)->_handleRequest(req);
+  }, this);
+  sw.enableDnsSpoof();
 
-  _webServer->onNotFound([this](AsyncWebServerRequest* req) {
-    if (!Uni.Storage) {
-      req->send(404, "text/plain", "Not Found");
-      return;
-    }
+  // WPAD proxy auto-config — tells browsers to route all HTTP through us.
+  if (AsyncWebServer* s = sw.server()) {
+    s->on("/wpad.dat", HTTP_GET, [this](AsyncWebServerRequest* req) {
+      String pac = "function FindProxyForURL(url, host) {\n"
+                   "  return \"PROXY " + _apIP.toString() + ":80\";\n"
+                   "}\n";
+      req->send(200, "application/x-ns-proxy-autoconfig", pac);
+    });
+  }
+}
 
-    // HTTPS CONNECT (method=32, url="host:port") — can't MITM, reject early
-    String rawUrl = req->url();
-    if (rawUrl.indexOf("://") < 0 && rawUrl.indexOf(':') > 0) {
-      req->send(502, "text/plain", "");
-      return;
-    }
+void DnsSpoofServer::_stopWeb()
+{
+  Uni.Server.disableDnsSpoof();
+}
 
-    String host = req->host();
-    int colon = host.indexOf(':');
-    if (colon > 0) host = host.substring(0, colon);
+void DnsSpoofServer::_handleRequest(AsyncWebServerRequest* req)
+{
+  if (!Uni.Storage) { req->send(503, "text/plain", ""); return; }
 
-    // Handle POST — save submitted data
-    if (req->method() == HTTP_POST) {
-      String data;
-      for (int i = 0; i < (int)req->params(); i++) {
-        const AsyncWebParameter* p = req->getParam(i);
-        if (p->isPost()) {
-          if (data.length() > 0) data += "&";
-          data += p->name() + "=" + p->value();
-        }
+  // HTTPS CONNECT tunnels (url="host:port", no "://") — can't MITM, reject.
+  String rawUrl = req->url();
+  if (rawUrl.indexOf("://") < 0 && rawUrl.indexOf(':') > 0) {
+    req->send(502, "text/plain", "");
+    return;
+  }
+
+  String host = req->host();
+  int colon = host.indexOf(':');
+  if (colon > 0) host = host.substring(0, colon);
+
+  // POST — save submitted data and call callback.
+  if (req->method() == HTTP_POST) {
+    String data;
+    for (int i = 0; i < (int)req->params(); i++) {
+      const AsyncWebParameter* p = req->getParam(i);
+      if (p->isPost()) {
+        if (data.length() > 0) data += "&";
+        data += p->name() + "=" + p->value();
       }
-
-      if (data.length() > 0) {
-        if (Uni.Storage && StorageUtil::hasSpace()) {
-          String cleanHost = host;
-          cleanHost.replace(".", "_");
-          String savePath = "/unigeek/wifi/captives/spoof_" + cleanHost + ".txt";
-          Uni.Storage->makeDir("/unigeek/wifi/captives");
-
-          String entry = req->client()->remoteIP().toString() + " | " + data + "\n";
-          fs::File f = Uni.Storage->open(savePath.c_str(), FILE_APPEND);
-          if (f) {
-            f.print(entry);
-            f.close();
-          }
-        } else if (_visitCb) {
-          _visitCb("", "[!] Storage full, skip save");
-        }
-
-        if (_postCb) {
-          _postCb(req->client()->remoteIP().toString().c_str(),
-                  host.c_str(), data.c_str());
-        }
+    }
+    if (data.length() > 0) {
+      if (StorageUtil::hasSpace()) {
+        String cleanHost = host;
+        cleanHost.replace(".", "_");
+        String savePath = "/unigeek/wifi/captives/spoof_" + cleanHost + ".txt";
+        Uni.Storage->makeDir("/unigeek/wifi/captives");
+        String entry = req->client()->remoteIP().toString() + " | " + data + "\n";
+        fs::File f = Uni.Storage->open(savePath.c_str(), FILE_APPEND);
+        if (f) { f.print(entry); f.close(); }
       }
-
-      req->redirect("/");
-      return;
-    }
-
-    // Log GET visit
-    if (_visitCb) {
-      _visitCb(req->client()->remoteIP().toString().c_str(), host.c_str());
-    }
-
-    // unigeek.local → redirect to Web File Manager on port 8080
-    if (_fileManagerEnabled && host.equalsIgnoreCase("unigeek.local")) {
-      String url = "http://" + _apIP.toString() + ":8080" + req->url();
-      req->redirect(url);
-      return;
-    }
-
-    // Connectivity checks
-    if (_isCaptiveDomain(host.c_str())) {
-      if (_captiveIntercept) {
-        if (_captivePath[0] != '\0') { _serveFromPath(_captivePath, req); }
-        else { req->send(200, "text/html", "<html><body>Sign in</body></html>"); }
-      } else {
-        req->send(204); // pass connectivity check
+      if (_postCb) {
+        _postCb(req->client()->remoteIP().toString().c_str(),
+                host.c_str(), data.c_str());
       }
-      return;
     }
+    req->redirect("/");
+    return;
+  }
 
-    // Configured domain or fallback
-    const char* p = _findPath(host.c_str());
-    if (p) {
-      _serveFromPath(p, req);
-    } else if (_captiveIntercept) {
-      _serveFromPath(_captivePath[0] != '\0' ? _captivePath : "/unigeek/web/portals/default", req);
-    } else {
-      req->send(204); // pass connectivity check for unconfigured domains
-    }
-  });
+  // Log GET visit.
+  if (_visitCb) {
+    _visitCb(req->client()->remoteIP().toString().c_str(), host.c_str());
+  }
 
-  _webServer->begin();
+  // 1. unigeek.local → File Manager
+  if (host.equalsIgnoreCase("unigeek.local")) {
+    if (Uni.Server.isFileManagerActive())
+      req->redirect("/fm/");
+    else
+      req->send(503, "text/plain", "Not available");
+    return;
+  }
+
+  // 2. Configured spoof domain → serve its portal
+  const char* p = _findPath(host.c_str());
+  if (p) {
+    _serveFromPath(p, req);
+    return;
+  }
+
+  // 3. OS captive-detection domains → captive portal (if configured) or 503
+  if (_isCaptiveDomain(host.c_str())) {
+    if (_captivePath[0] != '\0') _serveFromPath(_captivePath, req);
+    else req->send(503, "text/plain", "Not available");
+    return;
+  }
+
+  // 4. Everything else (unknown domain, raw IP) → 503
+  req->send(503, "text/plain", "Not available");
 }
 
 void DnsSpoofServer::_serveFromPath(const char* portalPath, AsyncWebServerRequest* req)
@@ -359,11 +357,3 @@ const char* DnsSpoofServer::_mimeType(const String& path)
   return "text/plain";
 }
 
-void DnsSpoofServer::_stopWeb()
-{
-  if (_webServer) {
-    _webServer->end();
-    delete _webServer;
-    _webServer = nullptr;
-  }
-}

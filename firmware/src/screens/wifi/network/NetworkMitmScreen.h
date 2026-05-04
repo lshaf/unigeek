@@ -5,7 +5,6 @@
 #include "utils/network/DhcpStarvation.h"
 #include "utils/network/RogueDhcpServer.h"
 #include "utils/network/DnsSpoofServer.h"
-#include "utils/network/WebFileManager.h"
 #include "utils/network/WifiAttackUtil.h"
 
 class NetworkMitmScreen : public ListScreen {
@@ -43,7 +42,6 @@ private:
   DhcpStarvation  _starv;
   RogueDhcpServer _rogueDhcp;
   DnsSpoofServer  _dnsSpoof;
-  WebFileManager  _fileManager;
 
   bool _starvRunning  = false;
   bool _deauthRunning = false;

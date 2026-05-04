@@ -3,7 +3,6 @@
 #include "ui/templates/ListScreen.h"
 #include "ui/views/LogView.h"
 #include "utils/network/DnsSpoofServer.h"
-#include "utils/network/WebFileManager.h"
 
 class WifiAPScreen : public ListScreen {
 public:
@@ -37,7 +36,6 @@ private:
   ListItem _menuItems[7];
 
   DnsSpoofServer _dnsSpoofServer;
-  WebFileManager _fileManager;
 
   // Log view
   LogView _log;

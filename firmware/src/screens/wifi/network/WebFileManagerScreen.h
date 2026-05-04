@@ -1,6 +1,5 @@
 #pragma once
 #include "ui/templates/ListScreen.h"
-#include "utils/network/WebFileManager.h"
 
 class WebFileManagerScreen : public ListScreen {
 public:
@@ -19,8 +18,6 @@ private:
   String _passwordSub;
   String _ipUrl;
   String _mdnsUrl;
-
-  WebFileManager _server;
 
   ListItem _menuItems[2];
 

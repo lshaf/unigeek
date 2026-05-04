@@ -68,7 +68,8 @@ void NetworkMitmScreen::onItemSelected(uint8_t index)
 
     case 4: { // File Manager
       if (!_fmEnabled) {
-        if (!Uni.Storage || !Uni.Storage->exists(WebFileManager::WEB_PATH)) {
+        String indexPath = String(SharedWebServer::FM_PATH) + "/index.htm";
+        if (!Uni.Storage || !Uni.Storage->exists(indexPath.c_str())) {
           ShowStatusAction::show("File manager not downloaded", 1500);
           render();
           break;
@@ -236,7 +237,6 @@ void NetworkMitmScreen::_start()
     _dnsSpoof.setCaptiveIntercept(false);
     _dnsSpoof.setVisitCallback(_onDnsVisit);
     _dnsSpoof.setPostCallback(_onDnsPost);
-    _dnsSpoof.setFileManagerEnabled(_fmEnabled);
     if (_dnsSpoof.begin(localIP)) {
       _log.addLine("[+] DNS Spoof active");
       for (int i = 0; i < _dnsSpoof.recordCount(); i++) {
@@ -256,12 +256,10 @@ void NetworkMitmScreen::_start()
 
   // 3. Start File Manager
   if (_fmEnabled) {
-    if (_fileManager.begin()) {
-      if (_dnsEnabled) {
-        _log.addLine("[+] File Manager: unigeek.local");
-      } else {
-        _log.addLine("[+] File Manager on :8080");
-      }
+    if (Uni.Server.enableFileManager()) {
+      char fmBuf[60];
+      snprintf(fmBuf, sizeof(fmBuf), "[+] File Manager: %s/fm/", localIP.toString().c_str());
+      _log.addLine(fmBuf);
     } else {
       _log.addLine("[!] File Manager failed", TFT_RED);
       _fmEnabled = false;
@@ -372,7 +370,7 @@ void NetworkMitmScreen::_stop()
     _dnsSpoof.end();
   }
   if (_fmEnabled) {
-    _fileManager.end();
+    Uni.Server.disableFileManager();
   }
 
   _instance       = nullptr;

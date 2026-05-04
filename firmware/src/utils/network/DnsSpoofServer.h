@@ -2,6 +2,7 @@
 
 #include <WiFiUdp.h>
 #include <ESPAsyncWebServer.h>
+#include "utils/network/SharedWebServer.h"
 
 class DnsSpoofServer {
 public:
@@ -23,7 +24,6 @@ public:
   void setVisitCallback(VisitCallback cb) { _visitCb = cb; }
   void setPostCallback(PostCallback cb)  { _postCb = cb; }
   void setCaptivePortalPath(const char* path) { strncpy(_captivePath, path, sizeof(_captivePath) - 1); }
-  void setFileManagerEnabled(bool en) { _fileManagerEnabled = en; }
   void setUpstreamDns(IPAddress dns) { _upstreamDns = dns; }
   void setCaptiveIntercept(bool en) { _captiveIntercept = en; }
 
@@ -36,7 +36,6 @@ private:
   VisitCallback _visitCb = nullptr;
   PostCallback  _postCb  = nullptr;
   char _captivePath[128] = {};
-  bool _fileManagerEnabled = false;
   bool _captiveIntercept = false;
   IPAddress _upstreamDns;
 
@@ -53,10 +52,10 @@ private:
   const char* _findPath(const char* domain);
   bool _isCaptiveDomain(const char* domain);
 
-  // Web server (port 80)
-  AsyncWebServer* _webServer = nullptr;
+  // HTTP handling — delegates to SharedWebServer
   void _startWeb();
   void _stopWeb();
+  void _handleRequest(AsyncWebServerRequest* req);
   void _serveFromPath(const char* portalPath, AsyncWebServerRequest* req);
   static const char* _mimeType(const String& path);
 };

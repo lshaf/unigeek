@@ -208,7 +208,7 @@ void WifiAPScreen::onItemSelected(uint8_t index)
     }
     case 5: { // File Manager toggle
       if (!_fileManagerEnabled) {
-        String indexPath = String(WebFileManager::WEB_PATH) + "/index.htm";
+        String indexPath = String(SharedWebServer::FM_PATH) + "/index.htm";
         if (!Uni.Storage || !Uni.Storage->exists(indexPath.c_str())) {
           ShowStatusAction::show("Web files not installed", 1500);
           render();
@@ -283,7 +283,6 @@ void WifiAPScreen::_startAP()
     if (_captiveEnabled) {
       _dnsSpoofServer.setCaptivePortalPath(_captivePath.c_str());
     }
-    _dnsSpoofServer.setFileManagerEnabled(_fileManagerEnabled);
     if (!_dnsSpoofServer.begin(WiFi.softAPIP())) {
       _dnsSpoofEnabled = false;
       _captiveEnabled = false;
@@ -292,7 +291,7 @@ void WifiAPScreen::_startAP()
 
   // Start File Manager if enabled
   if (_fileManagerEnabled) {
-    if (!_fileManager.begin()) {
+    if (!Uni.Server.enableFileManager()) {
       _fileManagerEnabled = false;
     }
   }
@@ -309,7 +308,7 @@ void WifiAPScreen::_stopAP()
     _dnsSpoofServer.end();
   }
   if (_fileManagerEnabled) {
-    _fileManager.end();
+    Uni.Server.disableFileManager();
   }
   WiFi.softAPdisconnect(true);
   WiFi.mode(WIFI_MODE_STA);

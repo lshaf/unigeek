@@ -38,17 +38,19 @@ private:
   Target _target;
   bool   _deauth       = false;
   bool   _checkPwd     = false;
+  bool   _fmEnabled    = false;
 
   class WifiAttackUtil* _attacker = nullptr;
   CaptivePortalServer _portal;
   LogView _log;
 
   // Menu items
-  ListItem _menuItems[5];
+  ListItem _menuItems[6];
   String   _networkSub;
   String   _deauthSub;
   String   _checkPwdSub;
   String   _portalSub;
+  String   _fmSub;
 
   // Scan items
   static constexpr int MAX_SCAN = 20;

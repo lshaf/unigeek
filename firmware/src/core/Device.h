@@ -11,6 +11,7 @@
 #include "IStorage.h"
 #include "ISpeaker.h"
 #include "ExtSpiClass.h"
+#include "utils/network/SharedWebServer.h"
 #include <Wire.h>
 
 #ifndef TFT_DEFAULT_ORIENTATION
@@ -70,6 +71,7 @@ public:
   IDisplay& Lcd;
   IPower& Power;
   INavigation* Nav;
+  SharedWebServer& Server;
   IStorage*   Storage    = nullptr;  // primary — set by initStorage()
   IStorage*   StorageSD  = nullptr;  // direct SD access — set by initStorage()
   IStorage*   StorageLFS = nullptr;  // direct LFS access — set by initStorage()
@@ -92,7 +94,7 @@ private:
         IKeyboard* keyboard = nullptr,
         ExtSpiClass* spi = nullptr,
         ISpeaker* sound = nullptr)
-     : Lcd(lcd), Power(power), Nav(nav),
+     : Lcd(lcd), Power(power), Nav(nav), Server(SharedWebServer::instance()),
        Keyboard(keyboard),
        Spi(spi),
        Speaker(sound) {}

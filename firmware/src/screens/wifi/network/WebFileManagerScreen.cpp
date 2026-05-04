@@ -6,7 +6,6 @@
 #include "screens/wifi/network/NetworkMenuScreen.h"
 #include "ui/actions/InputTextAction.h"
 #include "ui/actions/ShowStatusAction.h"
-#include <WiFi.h>
 
 void WebFileManagerScreen::onInit() {
   if (!Uni.Storage || !Uni.Storage->isAvailable()) {
@@ -43,12 +42,11 @@ void WebFileManagerScreen::onItemSelected(uint8_t index) {
   }
 }
 
-// ── private ────────────────────────────────────────────
+// ── Private ────────────────────────────────────────────────────────────────
 
 void WebFileManagerScreen::_showMenu() {
-  _state = STATE_MENU;
-
-  _passwordSub = Config.get(APP_CONFIG_WEB_PASSWORD, APP_CONFIG_WEB_PASSWORD_DEFAULT);
+  _state        = STATE_MENU;
+  _passwordSub  = Config.get(APP_CONFIG_WEB_PASSWORD, APP_CONFIG_WEB_PASSWORD_DEFAULT);
   _menuItems[0] = {"Password", _passwordSub.c_str()};
   _menuItems[1] = {"Start"};
   setItems(_menuItems, 2);
@@ -78,21 +76,22 @@ void WebFileManagerScreen::_drawRunning() {
 
 void WebFileManagerScreen::_start() {
   ShowStatusAction::show("Starting server...", 0);
-  if (!_server.begin()) {
-    ShowStatusAction::show(_server.getError().c_str());
+  auto& sw = Uni.Server;
+  if (!sw.enableFileManager()) {
+    ShowStatusAction::show(sw.lastError().c_str());
     _showMenu();
     return;
   }
-  _state = STATE_RUNNING;
+  _state   = STATE_RUNNING;
+  _ipUrl   = sw.fileManagerUrl();
+  _mdnsUrl = sw.fileManagerMdnsUrl();
   int nw = Achievement.inc("wifi_wfm_started");
   if (nw == 1) Achievement.unlock("wifi_wfm_started");
-  _ipUrl   = "http://" + WiFi.localIP().toString() + ":8080/";
-  _mdnsUrl = "http://unigeek.local:8080/";
   setItems(nullptr, 0);
   render();
 }
 
 void WebFileManagerScreen::_stop() {
-  _server.end();
+  Uni.Server.disableFileManager();
   _showMenu();
 }
