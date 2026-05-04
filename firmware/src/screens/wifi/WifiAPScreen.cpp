@@ -369,13 +369,10 @@ void WifiAPScreen::_showLog()
   }
 
   if (_fileManagerEnabled) {
-    if (_dnsSpoofEnabled) {
-      _log.addLine("[*] File Manager: unigeek.local");
-    } else {
-      char fmBuf[60];
-      snprintf(fmBuf, sizeof(fmBuf), "[*] File Manager: %s", WiFi.softAPIP().toString().c_str());
-      _log.addLine(fmBuf);
-    }
+    char fmBuf[60];
+    snprintf(fmBuf, sizeof(fmBuf), "[*] FM: unigeek.local / %s:8000",
+             WiFi.softAPIP().toString().c_str());
+    _log.addLine(fmBuf);
   }
 
   _log.addLine("");

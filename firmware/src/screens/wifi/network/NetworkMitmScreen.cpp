@@ -258,7 +258,7 @@ void NetworkMitmScreen::_start()
   if (_fmEnabled) {
     if (Uni.Server.enableFileManager()) {
       char fmBuf[60];
-      snprintf(fmBuf, sizeof(fmBuf), "[+] File Manager: %s/fm/", localIP.toString().c_str());
+      snprintf(fmBuf, sizeof(fmBuf), "[+] FM: unigeek.local / %s:8000", localIP.toString().c_str());
       _log.addLine(fmBuf);
     } else {
       _log.addLine("[!] File Manager failed", TFT_RED);
