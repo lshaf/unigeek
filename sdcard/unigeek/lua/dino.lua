@@ -197,15 +197,15 @@ while true do
     _drawCactus(obsX, obsH)
     _drawDino(dinoY, onGnd)
 
-    -- HUD: erase score area then redraw
-    lcd.rect(0, 0, W, 10, C_BLACK)
+    -- HUD: bg fills behind glyphs — no erase rect needed
     lcd.textSize(1)
-    lcd.textColor(C_WHITE)
-    lcd.print(0, 0, "Score:" .. score)
+    lcd.textColor(C_WHITE, C_BLACK)
+    lcd.print(0, 0, string.format("Score:%-5d", score))
     if hiScore > 0 then
-      lcd.textColor(C_GREY)
-      lcd.print(W - 52, 0, "Best:" .. hiScore)
+      lcd.textColor(C_GREY, C_BLACK)
+      lcd.print(W - 54, 0, string.format("Best:%-4d", hiScore))
     end
+    lcd.textColor(C_WHITE)
 
     prevDY = math.floor(dinoY)
     prevOX = math.floor(obsX)

@@ -40,11 +40,12 @@ while true do
   -- Draw ball at new position
   lcd.rect(math.floor(bx) - R, math.floor(by) - R, R*2, R*2, C_BALL)
 
-  -- Status line: erase only the text area, then redraw
-  lcd.rect(4, 3, 140, 9, C_BG)
+  -- Status line: bg fills behind each glyph — no erase rect needed.
+  -- Pad to fixed width so shorter strings overwrite previous longer ones.
   lcd.textSize(1)
+  lcd.textColor(C_TEXT, C_BG)
+  lcd.print(4, 3, string.format("%-22s", "heap:" .. uni.heap() .. "  btn:" .. btn))
   lcd.textColor(C_TEXT)
-  lcd.print(4, 3, "heap:" .. uni.heap() .. "  btn:" .. btn)
 
   uni.delay(16)
 end
