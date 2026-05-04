@@ -234,7 +234,7 @@ if _collision() then
   if score > hiScore then
     hiScore = score
     newHi   = true
-    uni.sd.write("/unigeek/lua/dino_hi.txt", tostring(hiScore))
+    uni.sd.write("/unigeek/games/lua_dino.txt", tostring(hiScore))
     uni.debug("new high score: " .. hiScore)
   end
   gstate = "over"
