@@ -6,6 +6,7 @@
 #include "screens/game/GameFlappyScreen.h"
 #include "screens/game/GameMemoryScreen.h"
 #include "screens/game/GameNumberGuessScreen.h"
+#include "screens/game/GameFishingScreen.h"
 
 void GameMenuScreen::onInit()
 {
@@ -26,5 +27,6 @@ void GameMenuScreen::onItemSelected(uint8_t index)
     case 3: Screen.push(new GameFlappyScreen()); break;
     case 4: Screen.push(new GameMemoryScreen()); break;
     case 5: Screen.push(new GameNumberGuessScreen()); break;
+    case 6: Screen.push(new GameFishingScreen()); break;
   }
 }

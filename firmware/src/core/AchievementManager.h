@@ -38,7 +38,7 @@ public:
   struct Catalog { const AchDef* defs; uint16_t count; };
 
   // Returns catalog pointer + count derived from sizeof — no manual counting needed
-  // Next available sequential ID: 238  (IDs 164–198 already used; 199 placed in domain 9; 200–209 in domain 1; 210–223 in domain 9; 224–228 in domain 4; 229–230 in domain 12; 231–233 in domain 3; 234 in domain 1; 235–237 in domain 3)
+  // Next available sequential ID: 244  (IDs 164–198 already used; 199 placed in domain 9; 200–209 in domain 1; 210–223 in domain 9; 224–228 in domain 4; 229–230 in domain 12; 231–233 in domain 3; 234 in domain 1; 235–237 in domain 3; 238–243 in domain 10)
   static Catalog catalog() {
     static constexpr AchDef kAchs[] = {
       // ── WiFi Network (domain 0) ────────────────────────────────────────────
@@ -287,6 +287,13 @@ public:
       { 192, "numguess_survive_extreme",  "Survivor",              10, 3, "Win Extreme within the 10-guess limit" },
       { 193, "numguess_seer",             "Seer",                  10, 3, "Win Number Guess on the first guess in any difficulty" },
       { 194, "numguess_luck_god",         "Luck God",              10, 3, "Win Number Guess on the first guess in Extreme" },
+      // ── Fishing (domain 10 continued) ────────────────────────────────────
+      { 238, "fishing_first_play",   "Gone Fishin'",    10, 0, "Go fishing for the first time" },
+      { 239, "fishing_first_catch",  "First Catch",     10, 0, "Catch your first fish" },
+      { 240, "fishing_catch_10",     "Fishing Streak",  10, 1, "Catch 10 fish total" },
+      { 241, "fishing_rare_catch",   "Rare Find",       10, 2, "Catch a rare fish" },
+      { 242, "fishing_legendary",    "Legendary Pull",  10, 3, "Catch a legendary fish" },
+      { 243, "fishing_perfect_reel", "Perfect Form",    10, 2, "Catch a fish with no missed presses" },
       // ── Settings (domain 11) ─────────────────────────────────────────────
       { 195, "settings_name_changed",     "Identity",              11, 0, "Change your device name in Settings" },
       { 196, "settings_color_changed",    "My Colors",             11, 0, "Change the UI theme color in Settings" },
