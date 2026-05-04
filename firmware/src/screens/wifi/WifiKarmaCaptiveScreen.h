@@ -2,6 +2,7 @@
 
 #include <esp_wifi.h>
 #include "ui/templates/ListScreen.h"
+#include "ui/views/BrowseFileView.h"
 #include "ui/views/LogView.h"
 #include "utils/network/CaptivePortalServer.h"
 
@@ -38,6 +39,7 @@ private:
 
   // Utilities
   CaptivePortalServer _portal;
+  BrowseFileView _browser;
   LogView _log;
 
   // Probe FIFO queue

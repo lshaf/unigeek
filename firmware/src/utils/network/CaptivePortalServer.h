@@ -4,52 +4,25 @@
 #include <WiFi.h>
 #include "core/Device.h"
 #include "core/IStorage.h"
-#include "ui/actions/InputSelectAction.h"
 #include "ui/actions/ShowStatusAction.h"
 #include "utils/StorageUtil.h"
 #include "utils/network/SharedWebServer.h"
 
 // Captive-portal helper used by EvilTwin, Karma, and AP screens.
-// Handles portal selection, HTML loading, DNS, credential capture.
-// HTTP serving is delegated to SharedWebServer (port 80).
+// Handles portal HTML loading, DNS, credential capture, and web serving.
+// Portal selection is the caller's responsibility; call setPortalFolder() before start().
 class CaptivePortalServer {
 public:
   using VisitCallback = SharedWebServer::VisitCb;
   using PostCallback  = SharedWebServer::PostCb;
 
+  static constexpr const char* PORTALS_DIR = "/unigeek/web/portals";
+  static constexpr int         MAX_PORTALS = 10;
+
   void setCallbacks(VisitCallback onVisit, PostCallback onPost, void* ctx) {
     _onVisit = onVisit;
     _onPost  = onPost;
     _ctx     = ctx;
-  }
-
-  // ── Portal Selection ─────────────────────────────────────────────────────
-
-  bool selectPortal() {
-    if (!Uni.Storage || !Uni.Storage->isAvailable()) {
-      ShowStatusAction::show("No storage available");
-      return false;
-    }
-    IStorage::DirEntry entries[MAX_PORTALS];
-    uint8_t count = Uni.Storage->listDir(PORTALS_DIR, entries, MAX_PORTALS);
-
-    InputSelectAction::Option opts[MAX_PORTALS];
-    int optCount = 0;
-    for (uint8_t i = 0; i < count && optCount < MAX_PORTALS; i++) {
-      if (!entries[i].isDir) continue;
-      _portalNamesBuf[optCount] = entries[i].name;
-      opts[optCount] = {_portalNamesBuf[optCount].c_str(),
-                        _portalNamesBuf[optCount].c_str()};
-      optCount++;
-    }
-    if (optCount == 0) {
-      ShowStatusAction::show("No portals found. WiFi > Network > Download > Firmware Sample Files");
-      return false;
-    }
-    const char* selected = InputSelectAction::popup("Captive Portal", opts, optCount);
-    if (!selected) return false;
-    _portalFolder = selected;
-    return true;
   }
 
   const String& portalFolder()                      const { return _portalFolder; }
@@ -127,14 +100,10 @@ public:
   }
 
 private:
-  static constexpr const char* PORTALS_DIR = "/unigeek/web/portals";
-  static constexpr int         MAX_PORTALS = 10;
-
   String _portalFolder;
   String _portalBasePath;
   String _portalHtml;
   String _successHtml;
-  String _portalNamesBuf[MAX_PORTALS];
 
   VisitCallback _onVisit = nullptr;
   PostCallback  _onPost  = nullptr;

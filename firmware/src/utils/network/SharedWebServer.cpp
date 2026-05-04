@@ -13,11 +13,13 @@ bool SharedWebServer::_ensureRunning() {
   _registerRoutes();
   MDNS.begin("unigeek");
   _server.begin();
+  _startFmServer();
   _running = true;
   return true;
 }
 
 void SharedWebServer::end() {
+  _stopFmServer();
   if (!_running) return;
   if (_fsUpload) _fsUpload.close();
   _server.reset();
@@ -48,7 +50,6 @@ void SharedWebServer::disableDnsSpoof() {
   _dnsSpoofActive = false;
   _dnsSpoofCb     = nullptr;
   _dnsSpoofCtx    = nullptr;
-  if (!_fmActive && !_captiveActive) end();
 }
 
 // ── File Manager ───────────────────────────────────────────────────────────
@@ -76,7 +77,6 @@ bool SharedWebServer::enableFileManager() {
 
 void SharedWebServer::disableFileManager() {
   _fmActive = false;
-  if (!_captiveActive && !_dnsSpoofActive) end();
 }
 
 String SharedWebServer::fileManagerUrl() const {
@@ -84,7 +84,7 @@ String SharedWebServer::fileManagerUrl() const {
   String ip = (mode == WIFI_MODE_AP || mode == WIFI_MODE_APSTA)
               ? WiFi.softAPIP().toString()
               : WiFi.localIP().toString();
-  return "http://" + ip + "/fm/";
+  return "http://" + ip + ":8000/";
 }
 
 // ── Captive Portal ─────────────────────────────────────────────────────────
@@ -117,7 +117,6 @@ bool SharedWebServer::enableCaptive(IPAddress apIP) {
 void SharedWebServer::disableCaptive() {
   _captiveActive = false;
   _dns.stop();
-  if (!_fmActive && !_dnsSpoofActive) end();
 }
 
 void SharedWebServer::resetCaptive() {
@@ -134,6 +133,104 @@ void SharedWebServer::processDns() {
   _dns.processNextRequest();
 }
 
+// ── FM server (port 8000) ──────────────────────────────────────────────────
+
+void SharedWebServer::_startFmServer() {
+  if (_fmServerRunning) return;
+
+  _fmServer.on("/", HTTP_POST, [this](AsyncWebServerRequest* req) {
+    if (req->hasParam("command", true)) _handleFmCommand(req);
+    else req->send(400, "text/plain", "Bad Request");
+  });
+
+  _fmServer.on("/download", HTTP_GET, [this](AsyncWebServerRequest* req) {
+    if (!_fmAuth(req)) { req->send(401, "text/plain", "not authenticated."); return; }
+    if (!req->hasArg("file")) { req->send(400, "text/plain", "No file specified."); return; }
+    const String path = req->arg("file");
+    if (!Uni.Storage->exists(path.c_str())) { req->send(404, "text/plain", "File not found."); return; }
+    {
+      fs::File f = Uni.Storage->open(path.c_str(), FILE_READ);
+      size_t sz = f ? f.size() : 0;
+      if (f) f.close();
+      if (sz == 0) { req->send(200, _mime(path), ""); return; }
+    }
+    req->send(Uni.Storage->getFS(), path, _mime(path), true);
+  });
+
+  _fmServer.on("/upload", HTTP_POST,
+    [this](AsyncWebServerRequest* req) {
+      if (!_fmAuth(req)) { req->send(401, "text/plain", "not authenticated."); return; }
+      if (!_uploadTempPath.isEmpty()) {
+        String folder = req->arg("folder");
+        if (!folder.isEmpty()) {
+          if (!folder.startsWith("/")) folder = "/" + folder;
+          if (!folder.endsWith("/"))   folder += "/";
+          const int sl = _uploadTempPath.lastIndexOf('/');
+          const String target = folder + _uploadTempPath.substring(sl + 1);
+          if (target != _uploadTempPath) {
+            Uni.Storage->makeDir(folder.substring(0, folder.length() - 1).c_str());
+            Uni.Storage->renameFile(_uploadTempPath.c_str(), target.c_str());
+          }
+        }
+        _uploadTempPath = "";
+      }
+      req->send(200, "text/plain", "ok.");
+    },
+    [this](AsyncWebServerRequest* req, String filename, size_t index,
+           uint8_t* data, size_t len, bool final) {
+      if (!_fmAuth(req)) { req->send(401, "text/plain", "not authenticated."); return; }
+      if (!index) {
+        String folder = req->arg("folder");
+        String path = "/";
+        if (!folder.isEmpty()) {
+          path = folder;
+          if (!path.startsWith("/")) path = "/" + path;
+          if (!path.endsWith("/"))   path += "/";
+          Uni.Storage->makeDir(path.substring(0, path.length() - 1).c_str());
+        }
+        _uploadTempPath = path + filename;
+        _fsUpload = Uni.Storage->open(_uploadTempPath.c_str(), FILE_WRITE);
+      }
+      if (len && _fsUpload) _fsUpload.write(data, len);
+      if (final && _fsUpload) _fsUpload.close();
+    }
+  );
+
+  _fmServer.on("/crack.wasm", HTTP_GET, [this](AsyncWebServerRequest* req) {
+    req->send(200, "application/wasm", WASM_CRACK, WASM_CRACK_LEN);
+  });
+
+  _fmServer.on("/theme.css", HTTP_GET, [this](AsyncWebServerRequest* req) {
+    const String css = ":root{--color:" + _colorHex(Config.getThemeColor()) + ";}";
+    req->send(200, "text/css", css);
+  });
+
+  _fmServer.on("*.html", HTTP_GET, [this](AsyncWebServerRequest* req) {
+    String url = req->url();
+    url = url.substring(0, url.length() - 5) + ".htm";
+    String filePath = String(FM_PATH) + url;
+    if (Uni.Storage && Uni.Storage->exists(filePath.c_str()))
+      req->send(Uni.Storage->getFS(), filePath, "text/html");
+    else
+      req->send(404, "text/plain", "Not Found");
+  });
+
+  if (Uni.Storage && Uni.Storage->isAvailable()) {
+    _fmServer.serveStatic("/", Uni.Storage->getFS(),
+                          (String(FM_PATH) + "/").c_str());
+  }
+
+  MDNS.addService("http", "tcp", 8000);
+  _fmServer.begin();
+  _fmServerRunning = true;
+}
+
+void SharedWebServer::_stopFmServer() {
+  if (!_fmServerRunning) return;
+  _fmServer.reset();
+  _fmServerRunning = false;
+}
+
 // ── Route Registration ─────────────────────────────────────────────────────
 
 void SharedWebServer::_registerRoutes() {
@@ -142,10 +239,14 @@ void SharedWebServer::_registerRoutes() {
 
   // ── GET / ─────────────────────────────────────────────────────────────────
   _server.on("/", HTTP_GET, [this](AsyncWebServerRequest* req) {
-    if (_dnsSpoofActive && _dnsSpoofCb) { _dnsSpoofCb(req, _dnsSpoofCtx); return; }
     String host = _extractHost(req);
     if (host.equalsIgnoreCase("unigeek.local")) {
-      _fmActive ? req->redirect("/fm/") : _sendUnavailable(req);
+      if (_fmActive && Uni.Storage && Uni.Storage->isAvailable()) {
+        String idx = String(FM_PATH) + "/index.htm";
+        req->send(Uni.Storage->getFS(), idx, "text/html");
+      } else { _sendUnavailable(req); }
+    } else if (_dnsSpoofActive && _dnsSpoofCb) {
+      _dnsSpoofCb(req, _dnsSpoofCtx);
     } else if (_isCaptiveDomain(host.c_str())) {
       if (_captiveActive) { _visitCount++; if (_onVisit) _onVisit(_ctx); _serveCaptive(req); }
       else _sendUnavailable(req);
@@ -155,13 +256,13 @@ void SharedWebServer::_registerRoutes() {
   });
 
   // ── POST / ────────────────────────────────────────────────────────────────
-  // FM API (command= param) is identified by param, not domain.
   _server.on("/", HTTP_POST, [this](AsyncWebServerRequest* req) {
-    if (req->hasParam("command", true) && _fmActive) { _handleFmCommand(req); return; }
-    if (_dnsSpoofActive && _dnsSpoofCb) { _dnsSpoofCb(req, _dnsSpoofCtx); return; }
     String host = _extractHost(req);
-    if (_isCaptiveDomain(host.c_str()) && _captiveActive) _capturePost(req);
-    else _sendUnavailable(req);
+    if (req->hasParam("command", true) && _fmActive &&
+        host.equalsIgnoreCase("unigeek.local")) { _handleFmCommand(req); return; }
+    if (_dnsSpoofActive && _dnsSpoofCb)                  { _dnsSpoofCb(req, _dnsSpoofCtx); return; }
+    if (_isCaptiveDomain(host.c_str()) && _captiveActive) { _capturePost(req); return; }
+    _sendUnavailable(req);
   });
 
   // ── Captive-detection path redirects ──────────────────────────────────────
@@ -178,7 +279,7 @@ void SharedWebServer::_registerRoutes() {
 
   // ── File download ──────────────────────────────────────────────────────────
   _server.on("/download", HTTP_GET, [this](AsyncWebServerRequest* req) {
-    if (!_fmActive) { _sendUnavailable(req); return; }
+    if (!_isFmHost(req) || !_fmActive) { req->send(404, "text/plain", "Not Found"); return; }
     if (!_fmAuth(req)) { req->send(401, "text/plain", "not authenticated."); return; }
     if (!req->hasArg("file")) { req->send(400, "text/plain", "No file specified."); return; }
     const String path = req->arg("file");
@@ -198,7 +299,7 @@ void SharedWebServer::_registerRoutes() {
   // ── File upload ────────────────────────────────────────────────────────────
   _server.on("/upload", HTTP_POST,
     [this](AsyncWebServerRequest* req) {
-      if (!_fmActive) { _sendUnavailable(req); return; }
+      if (!_isFmHost(req) || !_fmActive) { req->send(404, "text/plain", "Not Found"); return; }
       if (!_fmAuth(req)) { req->send(401, "text/plain", "not authenticated."); return; }
       if (!_uploadTempPath.isEmpty()) {
         String folder = req->arg("folder");
@@ -238,12 +339,12 @@ void SharedWebServer::_registerRoutes() {
 
   // ── FM: WebAssembly + theme CSS ────────────────────────────────────────────
   _server.on("/crack.wasm", HTTP_GET, [this](AsyncWebServerRequest* req) {
-    if (!_fmActive) { req->send(404); return; }
+    if (!_isFmHost(req) || !_fmActive) { req->send(404); return; }
     req->send(200, "application/wasm", WASM_CRACK, WASM_CRACK_LEN);
   });
 
   _server.on("/theme.css", HTTP_GET, [this](AsyncWebServerRequest* req) {
-    if (!_fmActive) { req->send(404); return; }
+    if (!_isFmHost(req) || !_fmActive) { req->send(404); return; }
     const String css = ":root{--color:" + _colorHex(Config.getThemeColor()) + ";}";
     req->send(200, "text/css", css);
   });
@@ -251,9 +352,8 @@ void SharedWebServer::_registerRoutes() {
   // ── FM: .html → .htm redirect ─────────────────────────────────────────────
   // Registered before serveStatic so it takes precedence.
   _server.on("*.html", HTTP_GET, [this](AsyncWebServerRequest* req) {
-    if (!_fmActive) { req->send(404); return; }
+    if (!_isFmHost(req) || !_fmActive) { req->send(404); return; }
     String url = req->url();
-    if (url.startsWith("/fm")) url = url.substring(3); // strip /fm prefix
     url = url.substring(0, url.length() - 5) + ".htm";
     String filePath = String(FM_PATH) + url;
     if (Uni.Storage->exists(filePath.c_str()))
@@ -262,25 +362,23 @@ void SharedWebServer::_registerRoutes() {
       req->send(404, "text/plain", "Not Found");
   });
 
-  // ── FM: static files at /fm/ ──────────────────────────────────────────────
-  if (Uni.Storage && Uni.Storage->isAvailable()) {
-    _server.serveStatic("/fm/", Uni.Storage->getFS(),
-                        (String(FM_PATH) + "/").c_str());
-  }
-
   // ── Catch-all ─────────────────────────────────────────────────────────────
   _server.onNotFound([this](AsyncWebServerRequest* req) {
     const String& path = req->url();
-
-    // /fm/* is always protected — never intercepted
-    if (path.startsWith("/fm")) { req->send(404, "text/plain", "404"); return; }
-
-    // DNS spoof delegates all routing
-    if (_dnsSpoofActive && _dnsSpoofCb) { _dnsSpoofCb(req, _dnsSpoofCtx); return; }
-
     String host = _extractHost(req);
+
     if (host.equalsIgnoreCase("unigeek.local")) {
-      _fmActive ? req->redirect("/fm/") : _sendUnavailable(req);
+      // Serve FM asset if it exists, otherwise 404
+      if (_fmActive && Uni.Storage && Uni.Storage->isAvailable()) {
+        String fmFile = String(FM_PATH) + path;
+        if (Uni.Storage->exists(fmFile.c_str())) {
+          req->send(Uni.Storage->getFS(), fmFile, _mime(path));
+          return;
+        }
+      }
+      req->send(404, "text/plain", "Not Found");
+    } else if (_dnsSpoofActive && _dnsSpoofCb) {
+      _dnsSpoofCb(req, _dnsSpoofCtx);
     } else if (_isCaptiveDomain(host.c_str())) {
       if (!_captiveActive) { _sendUnavailable(req); return; }
       // Serve portal asset if it exists, otherwise redirect to portal root
@@ -498,6 +596,10 @@ String SharedWebServer::_extractHost(AsyncWebServerRequest* req) {
   String host = req->host();
   int c = host.indexOf(':');
   return c > 0 ? host.substring(0, c) : host;
+}
+
+bool SharedWebServer::_isFmHost(AsyncWebServerRequest* req) {
+  return _extractHost(req).equalsIgnoreCase("unigeek.local");
 }
 
 bool SharedWebServer::_isCaptiveDomain(const char* domain) {

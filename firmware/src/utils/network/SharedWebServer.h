@@ -32,7 +32,7 @@ public:
   bool   isFileManagerActive() const { return _fmActive; }
   // Primary URL to show the user (uses STA IP, AP IP, or mDNS as available).
   String fileManagerUrl()      const;
-  String fileManagerMdnsUrl()  const { return "http://unigeek.local/fm/"; }
+  String fileManagerMdnsUrl()  const { return "http://unigeek.local/"; }
 
   // ─── Captive Portal ────────────────────────────────────────────────────────
   // Set portal content before calling enableCaptive().
@@ -80,11 +80,13 @@ private:
   static constexpr int         MAX_SESSIONS = 10;
 
   AsyncWebServer _server{80};
+  AsyncWebServer _fmServer{8000};
   DNSServer      _dns;
 
   bool   _running          = false;
   bool   _routesRegistered = false;
   bool   _fmActive         = false;
+  bool   _fmServerRunning  = false;
   bool   _captiveActive    = false;
   bool   _dnsSpoofActive   = false;
   String _lastError;
@@ -110,6 +112,8 @@ private:
 
   bool _ensureRunning();
   void _registerRoutes();
+  void _startFmServer();
+  void _stopFmServer();
   void _sendUnavailable(AsyncWebServerRequest* req);
 
   // FM helpers
@@ -121,6 +125,7 @@ private:
 
   // Routing helpers
   static String _extractHost(AsyncWebServerRequest* req);
+  static bool   _isFmHost(AsyncWebServerRequest* req);
   static bool   _isCaptiveDomain(const char* domain);
   void _serveCaptive(AsyncWebServerRequest* req);
   void _capturePost(AsyncWebServerRequest* req);

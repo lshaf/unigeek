@@ -93,12 +93,15 @@ void WifiEvilTwinScreen::onItemSelected(uint8_t index)
         break;
       case 3: { // Portal
         _state = STATE_SELECT_PORTAL;
-        if (_portal.selectPortal()) {
-          _showMenu();
-        } else {
+        uint8_t n = _browser.load(this, CaptivePortalServer::PORTALS_DIR,
+                                  BrowseFileView::Mode::DIRECTORY);
+        if (n == 0) {
+          ShowStatusAction::show("No portals found. WiFi > Network > Download > Firmware Sample Files");
           _state = STATE_MENU;
           render();
+          break;
         }
+        setItems(_browser.items(), n);
         break;
       }
       case 4: { // File Manager toggle
@@ -118,6 +121,9 @@ void WifiEvilTwinScreen::onItemSelected(uint8_t index)
       }
       case 5: _startAttack();   break;
     }
+  } else if (_state == STATE_SELECT_PORTAL && index < _browser.count()) {
+    _portal.setPortalFolder(_browser.entry(index).name);
+    _showMenu();
   } else if (_state == STATE_SELECT_WIFI && index < _scanCount) {
     _target.ssid    = WiFi.SSID(index);
     _target.channel = WiFi.channel(index);

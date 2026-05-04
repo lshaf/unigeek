@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ui/templates/ListScreen.h"
+#include "ui/views/BrowseFileView.h"
 #include "ui/views/LogView.h"
 #include "utils/network/CaptivePortalServer.h"
 
@@ -42,6 +43,7 @@ private:
 
   class WifiAttackUtil* _attacker = nullptr;
   CaptivePortalServer _portal;
+  BrowseFileView _browser;
   LogView _log;
 
   // Menu items

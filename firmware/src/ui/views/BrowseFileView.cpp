@@ -8,7 +8,7 @@ void BrowseFileView::showLoading()
 }
 
 uint8_t BrowseFileView::load(BaseScreen* host, const String& dir,
-                              const char* ext, const char* fileSublabel)
+                              Mode mode, const char* fileSublabel)
 {
   _count = 0;
   showLoading();
@@ -36,7 +36,8 @@ uint8_t BrowseFileView::load(BaseScreen* host, const String& dir,
 
   String base = (dir == "/") ? "" : dir;
   for (uint8_t i = 0; i < n && _count < kCap; i++) {
-    if (ext && !raw[i].isDir && !raw[i].name.endsWith(ext)) continue;
+    if (mode.kind == Mode::DIRECTORY && !raw[i].isDir) continue;
+    if (mode.ext && !raw[i].isDir && !raw[i].name.endsWith(mode.ext)) continue;
     _entries[_count].name  = raw[i].name;
     _entries[_count].path  = base + "/" + raw[i].name;
     _entries[_count].isDir = raw[i].isDir;

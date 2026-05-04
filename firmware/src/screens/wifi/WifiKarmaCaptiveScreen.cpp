@@ -54,6 +54,13 @@ void WifiKarmaCaptiveScreen::onInit()
 
 void WifiKarmaCaptiveScreen::onItemSelected(uint8_t index)
 {
+  if (_state == STATE_SELECT_PORTAL) {
+    if (index < _browser.count()) {
+      _portal.setPortalFolder(_browser.entry(index).name);
+      _showMenu();
+    }
+    return;
+  }
   if (_state != STATE_MENU) return;
   switch (index) {
     case 0: { // Save WiFi List
@@ -65,12 +72,15 @@ void WifiKarmaCaptiveScreen::onItemSelected(uint8_t index)
     }
     case 1: { // Captive Portal selection
       _state = STATE_SELECT_PORTAL;
-      if (_portal.selectPortal()) {
-        _showMenu();
-      } else {
+      uint8_t n = _browser.load(this, CaptivePortalServer::PORTALS_DIR,
+                                BrowseFileView::Mode::DIRECTORY);
+      if (n == 0) {
+        ShowStatusAction::show("No portals found. WiFi > Network > Download > Firmware Sample Files");
         _state = STATE_MENU;
         render();
+        break;
       }
+      setItems(_browser.items(), n);
       break;
     }
     case 2: { // Waiting Time
