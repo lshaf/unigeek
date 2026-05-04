@@ -1,0 +1,10 @@
+{
+  "name": "lua51",
+  "version": "5.1.5",
+  "description": "Lua 5.1.5 bare VM for ESP32 (no PSRAM, float numbers)",
+  "frameworks": ["arduino"],
+  "platforms": ["espressif32"],
+  "build": {
+    "srcFilter": ["+<*.c>", "-<lua.c>", "-<luac.c>", "-<print.c>"]
+  }
+}

@@ -1,88 +1,52 @@
--- sample.lua — demonstrates every available uni binding
--- Globals persist between frames. Locals reset each frame.
--- Back button always exits. exit() exits immediately from code.
+-- sample.lua — Bouncing ball demo, shows proper overdraw technique.
+-- Key rule: never call clear() inside an animation loop.
+-- Erase only what moved; draw the background once in the init block.
 
-frame = frame or 0
-frame = frame + 1
+if not _ready then
+  _ready = true
 
--- ── Colors ────────────────────────────────────────────────────────────
-local WHITE  = uni.lcd.color(255, 255, 255)
-local RED    = uni.lcd.color(255,  50,  50)
-local GREEN  = uni.lcd.color(  0, 220,   0)
-local BLUE   = uni.lcd.color( 80, 140, 255)
-local YELLOW = uni.lcd.color(255, 220,   0)
-local GREY   = uni.lcd.color( 80,  80,  80)
-local BLACK  = uni.lcd.color(  0,   0,   0)
+  W, H = uni.lcd.w(), uni.lcd.h()
 
-local W = uni.lcd.w()   -- body width
-local H = uni.lcd.h()   -- body height
+  C_BG   = uni.lcd.color( 10,  10,  30)
+  C_BALL = uni.lcd.color(255, 200,   0)
+  C_WALL = uni.lcd.color( 50,  80, 130)
+  C_TEXT = uni.lcd.color(160, 160, 160)
 
--- ── uni.lcd.clear() ──────────────────────────────────────────────────
-uni.lcd.clear()
+  bx, by = W / 2, H / 2
+  vx, vy = 2.4, 1.7
+  R = 10
 
--- ── uni.lcd.textSize(n) / textColor(c) / print(x,y,str) ──────────────
-uni.lcd.textSize(2)
-uni.lcd.textColor(WHITE)
-uni.lcd.print(0, 0, "UniGeek Lua")
+  -- Draw background and border once — these are static, never redrawn.
+  uni.lcd.rect(0, 0, W, H, C_BG)
+  uni.lcd.rect(0,     0,     W, 2, C_WALL)
+  uni.lcd.rect(0,     H - 2, W, 2, C_WALL)
+  uni.lcd.rect(0,     0,     2, H, C_WALL)
+  uni.lcd.rect(W - 2, 0,     2, H, C_WALL)
 
-uni.lcd.textSize(1)
-uni.lcd.textColor(GREY)
-uni.lcd.print(0, 20, "frame  " .. frame)
-uni.lcd.print(0, 30, "heap   " .. uni.heap())
-uni.lcd.print(0, 40, "millis " .. uni.millis())
-uni.lcd.print(0, 50, "lcd    " .. W .. "x" .. H)
+  uni.debug("sample.lua started — heap: " .. uni.heap())
+end
 
--- ── uni.lcd.rect(x, y, w, h, color) ──────────────────────────────────
-uni.lcd.rect(0,  65, 28, 20, RED)
-uni.lcd.rect(32, 65, 28, 20, GREEN)
-uni.lcd.rect(64, 65, 28, 20, BLUE)
-uni.lcd.rect(96, 65, 28, 20, YELLOW)
-
--- ── uni.lcd.line(x0, y0, x1, y1, color) ──────────────────────────────
--- Sweeping line using frame count
-local sweep = (frame * 3) % W
-uni.lcd.line(0, 95, sweep, 115, GREEN)
-uni.lcd.line(sweep, 95, W, 115, GREY)
-
--- ── uni.btn() ────────────────────────────────────────────────────────
--- Returns "up","down","left","right","ok","back","none"
--- Note: "back" also auto-exits the runner before reaching here.
-lastBtn = lastBtn or "none"
 local btn = uni.btn()
-if btn ~= "none" then lastBtn = btn end
+
+-- Erase ball at its old position (paint over with background color).
+-- This is the overdraw trick — no full clear, no flicker.
+uni.lcd.rect(math.floor(bx) - R - 1, math.floor(by) - R - 1, R*2+2, R*2+2, C_BG)
+
+-- Physics
+bx = bx + vx
+by = by + vy
+if bx - R < 2   then bx = R + 2;   vx = -vx; uni.beep(880, 12) end
+if bx + R > W-2 then bx = W - R - 2; vx = -vx; uni.beep(880, 12) end
+if by - R < 2   then by = R + 2;   vy = -vy; uni.beep(660, 12) end
+if by + R > H-2 then by = H - R - 2; vy = -vy; uni.beep(660, 12) end
+
+-- Draw ball at new position
+uni.lcd.rect(math.floor(bx) - R, math.floor(by) - R, R*2, R*2, C_BALL)
+
+-- Status line: erase the old text, draw new text
+uni.lcd.rect(3, 3, W - 6, 9, C_BG)
 uni.lcd.textSize(1)
-uni.lcd.textColor(YELLOW)
-uni.lcd.print(0, 125, "btn: " .. lastBtn)
+uni.lcd.textColor(C_TEXT)
+uni.lcd.print(4, 3, "heap:" .. uni.heap() .. "  btn:" .. btn)
 
--- ── uni.debug(str) → Serial only ─────────────────────────────────────
-if frame == 1 then
-  uni.debug("sample.lua started")
-end
-
--- ── uni.sd.exists / write / append / read ────────────────────────────
-local logPath = "/unigeek/lua/run.log"
-if frame == 1 then
-  uni.sd.write(logPath, "=== run started ===\n")
-end
-if frame % 60 == 0 then
-  uni.sd.append(logPath, "frame=" .. frame .. "\n")
-end
-
--- ── uni.sd.list(path) ────────────────────────────────────────────────
--- Returns array of {name=..., isDir=...}
-if frame == 1 then
-  local entries = uni.sd.list("/unigeek/lua")
-  uni.debug("lua dir has " .. #entries .. " entries")
-  for i, e in ipairs(entries) do
-    uni.debug((e.isDir and "[D] " or "[F] ") .. e.name)
-  end
-end
-
--- ── uni.beep(freq, ms) — no-op on boards without speaker ─────────────
-if frame == 1 then uni.beep(880, 30) end
-
--- ── exit() — stop the loop immediately ───────────────────────────────
--- if frame >= 300 then exit() end
-
--- ── uni.delay(ms) — interruptible; back button exits during delay ─────
-uni.delay(33)   -- ~30 fps
+uni.delay(16)

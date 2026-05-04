@@ -252,7 +252,8 @@ void DownloadScreen::_downloadSampleData() {
 
   // Download each file
   int downloaded = 0;
-  int failed = 0;
+  int skipped    = 0;
+  int failed     = 0;
   pos = 0;
   int idx = 0;
   while (pos < (int)manifest.length()) {
@@ -273,6 +274,11 @@ void DownloadScreen::_downloadSampleData() {
     String url  = String(REPO_BASE) + "/" + line;
     String path = "/" + line;
 
+    if (Uni.Storage->exists(path.c_str())) {
+      skipped++;
+      continue;
+    }
+
     if (_downloadFile(client, url.c_str(), path.c_str())) {
       downloaded++;
     } else {
@@ -286,8 +292,9 @@ void DownloadScreen::_downloadSampleData() {
     if (nd == 10) Achievement.unlock("wifi_download_10");
   }
 
-  String msg = String(downloaded) + " files downloaded";
-  if (failed > 0) msg += "\n" + String(failed) + " failed";
+  String msg = String(downloaded) + " downloaded";
+  if (skipped  > 0) msg += ", " + String(skipped)  + " skipped";
+  if (failed   > 0) msg += ", " + String(failed)    + " failed";
   ShowStatusAction::show(msg.c_str(), 2000);
   _showMenu();
 }

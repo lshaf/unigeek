@@ -107,8 +107,7 @@ public:
     uint8_t fullyVisible = bodyH() / ITEM_H;
     int16_t leftover     = (int16_t)bodyH() - fullyVisible * (int16_t)ITEM_H;
     bool    hasPartial   = leftover >= 5;
-    bool    hasScrollbar = eff > fullyVisible;
-    int16_t listW        = hasScrollbar ? bodyW() - 4 : bodyW();
+    int16_t listW        = bodyW() - 4;
 
     auto& lcd = Uni.Lcd;
 
@@ -187,16 +186,20 @@ public:
     if (usedH < (int16_t)bodyH())
       lcd.fillRect(bodyX(), bodyY() + usedH, bodyW(), bodyH() - usedH, TFT_BLACK);
 
-    if (hasScrollbar) {
+    {
       static constexpr uint8_t SB_W = 3;
       int16_t sbX = bodyX() + bodyW() - SB_W;
       int16_t sbY = bodyY();
       int16_t sbH = bodyH();
       lcd.fillRect(sbX, sbY, SB_W, sbH, 0x2104);
-      int16_t thumbH = sbH * (int16_t)fullyVisible / (int16_t)eff;
-      if (thumbH < 8) thumbH = 8;
-      int16_t thumbY = sbY + ((int16_t)_scrollOffset * (sbH - thumbH)) / (int16_t)(eff - fullyVisible);
-      lcd.fillRect(sbX, thumbY, SB_W, thumbH, Config.getThemeColor());
+      if (eff <= fullyVisible) {
+        lcd.fillRect(sbX, sbY, SB_W, sbH, Config.getThemeColor());
+      } else {
+        int16_t thumbH = sbH * (int16_t)fullyVisible / (int16_t)eff;
+        if (thumbH < 8) thumbH = 8;
+        int16_t thumbY = sbY + ((int16_t)_scrollOffset * (sbH - thumbH)) / (int16_t)(eff - fullyVisible);
+        lcd.fillRect(sbX, thumbY, SB_W, thumbH, Config.getThemeColor());
+      }
     }
   }
 
