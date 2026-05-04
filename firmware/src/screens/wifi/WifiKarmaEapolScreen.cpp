@@ -5,7 +5,7 @@
 #include "screens/wifi/WifiMenuScreen.h"
 #include "ui/actions/ShowStatusAction.h"
 #include "ui/actions/InputNumberAction.h"
-#include "ui/actions/InputSelectOption.h"
+#include "ui/actions/InputSelectAction.h"
 #include "utils/StorageUtil.h"
 #include "utils/network/KarmaEspNow.h"
 

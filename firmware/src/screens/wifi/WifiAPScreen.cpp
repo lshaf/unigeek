@@ -8,7 +8,7 @@
 #include "ui/actions/ShowStatusAction.h"
 #include "ui/actions/ShowQRCodeAction.h"
 #include "ui/components/QRCodeRenderer.h"
-#include "ui/actions/InputSelectOption.h"
+#include "ui/actions/InputSelectAction.h"
 #include "utils/StorageUtil.h"
 #include <WiFi.h>
 

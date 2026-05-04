@@ -6,7 +6,7 @@
 #include "screens/module/ModuleMenuScreen.h"
 #include "ui/actions/InputNumberAction.h"
 #include "ui/actions/InputTextAction.h"
-#include "ui/actions/InputSelectOption.h"
+#include "ui/actions/InputSelectAction.h"
 #include "ui/actions/ShowStatusAction.h"
 #include "ui/views/ProgressView.h"
 

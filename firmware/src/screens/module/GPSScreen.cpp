@@ -14,7 +14,7 @@
 #include "screens/module/ModuleMenuScreen.h"
 #include "ui/actions/ShowStatusAction.h"
 #include "ui/actions/InputTextAction.h"
-#include "ui/actions/InputSelectOption.h"
+#include "ui/actions/InputSelectAction.h"
 #include "utils/network/WifiUtility.h"
 #include <sys/time.h>
 #ifdef DEVICE_HAS_RTC

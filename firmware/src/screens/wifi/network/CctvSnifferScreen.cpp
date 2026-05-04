@@ -3,7 +3,7 @@
 #include "core/ScreenManager.h"
 #include "screens/wifi/network/NetworkMenuScreen.h"
 #include "ui/actions/InputTextAction.h"
-#include "ui/actions/InputSelectOption.h"
+#include "ui/actions/InputSelectAction.h"
 #include "ui/actions/ShowStatusAction.h"
 #include "ui/views/ProgressView.h"
 #include "utils/network/IpScanUtil.h"

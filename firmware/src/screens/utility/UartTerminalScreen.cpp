@@ -5,7 +5,7 @@
 #include "core/AchievementManager.h"
 #include "core/PinConfigManager.h"
 #include "screens/utility/UtilityMenuScreen.h"
-#include "ui/actions/InputSelectOption.h"
+#include "ui/actions/InputSelectAction.h"
 #include "ui/actions/InputTextAction.h"
 #include "ui/actions/InputNumberAction.h"
 #include "ui/actions/ShowStatusAction.h"

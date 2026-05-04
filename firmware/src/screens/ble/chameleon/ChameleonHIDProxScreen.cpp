@@ -5,7 +5,7 @@
 #include "core/ScreenManager.h"
 #include "core/AchievementManager.h"
 #include "core/ConfigManager.h"
-#include "ui/actions/InputSelectOption.h"
+#include "ui/actions/InputSelectAction.h"
 
 void ChameleonHIDProxScreen::_draw() {
   _needsDraw = false;

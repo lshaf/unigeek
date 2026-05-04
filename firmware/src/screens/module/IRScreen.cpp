@@ -26,7 +26,7 @@ static void _irAmpEnable(bool on) {
 #include "ui/actions/InputTextAction.h"
 #include "ui/views/ProgressView.h"
 #include "ui/actions/InputNumberAction.h"
-#include "ui/actions/InputSelectOption.h"
+#include "ui/actions/InputSelectAction.h"
 
 IRScreen* IRScreen::_activeInstance = nullptr;
 

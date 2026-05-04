@@ -8,7 +8,7 @@
 #include "screens/hid/KeyboardMenuScreen.h"
 #include "screens/hid/KeyboardScreen.h"
 #include "ui/actions/InputTextAction.h"
-#include "ui/actions/InputSelectOption.h"
+#include "ui/actions/InputSelectAction.h"
 #include "ui/actions/InputNumberAction.h"
 #include "ui/actions/ShowStatusAction.h"
 #include <mbedtls/sha256.h>

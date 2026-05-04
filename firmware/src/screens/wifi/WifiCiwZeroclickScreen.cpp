@@ -3,7 +3,7 @@
 #include "core/ScreenManager.h"
 #include "core/AchievementManager.h"
 #include "screens/wifi/WifiMenuScreen.h"
-#include "ui/actions/InputSelectOption.h"
+#include "ui/actions/InputSelectAction.h"
 #include "ui/actions/ShowStatusAction.h"
 #include <esp_wifi.h>
 

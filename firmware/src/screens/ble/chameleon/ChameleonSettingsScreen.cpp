@@ -4,7 +4,7 @@
 #include "core/Device.h"
 #include "core/ScreenManager.h"
 #include "core/AchievementManager.h"
-#include "ui/actions/InputSelectOption.h"
+#include "ui/actions/InputSelectAction.h"
 #include "ui/actions/ShowStatusAction.h"
 
 const char* ChameleonSettingsScreen::_animName(uint8_t v) {

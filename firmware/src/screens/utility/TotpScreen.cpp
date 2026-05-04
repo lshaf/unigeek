@@ -5,7 +5,7 @@
 #include "core/ScreenManager.h"
 #include "core/ConfigManager.h"
 #include "core/AchievementManager.h"
-#include "ui/actions/InputSelectOption.h"
+#include "ui/actions/InputSelectAction.h"
 #include "ui/actions/InputTextAction.h"
 #include "ui/actions/ShowStatusAction.h"
 
