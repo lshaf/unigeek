@@ -36,3 +36,4 @@ unigeek/utility/random_line/ideas.txt
 unigeek/lua/base.lua
 unigeek/lua/sample.lua
 unigeek/lua/dino.lua
+unigeek/lua/btntest.lua
