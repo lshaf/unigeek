@@ -2,6 +2,7 @@ firmware/.pio
 .idea
 .vscode
 *.bin
+!sdcard/unigeek/nfc/dumps/*.bin
 .DS_Store
 
 # web
