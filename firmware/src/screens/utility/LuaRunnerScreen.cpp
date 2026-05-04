@@ -121,12 +121,16 @@ void LuaRunnerScreen::_startScript(const String& path) {
 // ── Done state ────────────────────────────────────────────────────────────────
 
 void LuaRunnerScreen::_handleDone(bool isError) {
-  if (isError) {
-    _log.addLine(("[error] " + _errBuf).c_str(), TFT_RED);
-    Serial.println("[lua] " + _errBuf);
-  } else {
-    _log.addLine("[done]", TFT_DARKGREY);
+  _engine.deinit();
+  if (!isError) {
+    _state = STATE_BROWSE;
+    _loadDir(_currentDir);
+    Uni.Lcd.fillScreen(TFT_BLACK);
+    render();
+    return;
   }
+  _log.addLine(("[error] " + _errBuf).c_str(), TFT_RED);
+  Serial.println("[lua] " + _errBuf);
   _state = STATE_DONE;
   Uni.Lcd.fillScreen(TFT_BLACK);
   render();

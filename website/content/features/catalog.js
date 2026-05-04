@@ -6,7 +6,7 @@ export const CATEGORIES = [
   { id: "ble",      label: "BLE",      desc: "Bluetooth Low Energy scanning and spam" },
   { id: "keyboard", label: "HID",      desc: "Keyboard, mouse, and DuckyScript over USB and BLE" },
   { id: "module",   label: "Modules",  desc: "NFC, IR, Sub-GHz, NRF24, GPS" },
-  { id: "utility",  label: "Utility",  desc: "QR, barcode, file manager, TOTP, UART terminal, achievements" },
+  { id: "utility",  label: "Utility",  desc: "QR, barcode, file manager, TOTP, UART terminal, Lua runner, achievements" },
   { id: "game",     label: "Games",    desc: "Lightweight on-device games" },
   { id: "setting",  label: "Settings", desc: "Device preferences and pins" },
 ];
@@ -70,10 +70,12 @@ export const CATALOG = [
   { slug: "barcode",              title: "Barcode",             category: "utility",  summary: "Generate and display a Code 128 barcode from typed or file-loaded text",                             hasDetail: false, stable: true },
   { slug: "file-manager",         title: "File Manager",        category: "utility",  summary: "Browse, view (text or hex), rename, copy, cut, paste, and delete files on device storage",            hasDetail: true,  stable: true },
   { slug: "i2c-detector",         title: "I2C Detector",        category: "utility",  summary: "Scan the I2C bus and list all responding device addresses",                                           hasDetail: false, stable: true },
-  { slug: "achievements",         title: "Achievements",        category: "utility",  summary: "231 achievements across 13 domains (~96 000 EXP pool); set any unlocked entry as your Agent Title", hasDetail: true,  stable: true },
+  { slug: "achievements",         title: "Achievements",        category: "utility",  summary: "244 achievements across 13 domains; set any unlocked entry as your Agent Title",                   hasDetail: true,  stable: true },
   { slug: "totp-auth",            title: "TOTP Auth",           category: "utility",  summary: "Time-based OTP authenticator; add accounts by Base32 secret, view live 6/8-digit codes with countdown, hold to view or delete",  hasDetail: true,  stable: true },
   { slug: "uart-terminal",        title: "UART Terminal",       category: "utility",  summary: "Serial terminal over configurable GPIO pins; text/hex send modes, background receive, optional session log save",                hasDetail: true,  stable: true },
   { slug: "pomodoro",             title: "Pomodoro Timer",      category: "utility",  summary: "Focus/break timer with configurable work and break durations, progress bar, speaker notification, and session counter", hasDetail: false, stable: true },
+  { slug: "random-line",          title: "Random Line Picker",  category: "utility",  summary: "Select up to 30 text files and shuffle a random line from the combined pool; press OK to cycle",              hasDetail: false, stable: true },
+  { slug: "lua-runner",           title: "Lua Runner",          category: "utility",  summary: "Run Lua 5.1 scripts from SD; frame-loop execution with display, button input, SD file I/O, and speaker APIs", hasDetail: true,  stable: true },
 
   // Games
   { slug: "flappy-bird",          title: "Flappy Bird",         category: "game",     summary: "Classic side-scrolling game with randomized pipes and scoring",                                       hasDetail: true,  stable: true },
@@ -81,6 +83,7 @@ export const CATALOG = [
   { slug: "hex-decoder",          title: "HEX Decoder",         category: "game",     summary: "Wordle-style game using hex characters — top 5 high scores per difficulty",                          hasDetail: true,  stable: true },
   { slug: "memory-sequence",      title: "Memory Sequence",     category: "game",     summary: "Simon Says-style memory game across 4 difficulty levels with high score tracking",                  hasDetail: true,  stable: true },
   { slug: "number-guess",         title: "Number Guess",        category: "game",     summary: "Higher/lower guessing game — 4 difficulties (1-99 to 1-9999); top 5 high scores",                    hasDetail: true,  stable: true },
+  { slug: "fishing",              title: "Fishing",             category: "game",     summary: "Cast, wait for a bite, then reel in Common / Rare / Legendary fish; perfect-reel bonus; top 5 session scores on SD; 6 achievements", hasDetail: false, stable: true },
 
   // Settings
   { slug: "setting-general",      title: "General Settings",    category: "setting",  summary: "Device name, display timeout, brightness, volume, navigation sound, theme color, WFM password",    hasDetail: false, stable: true },

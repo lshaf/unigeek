@@ -1,6 +1,7 @@
 /*
-** linit.c — ESP32 subset: base, table, string, math only.
-** Excludes io, os, debug, package (not needed / too large).
+** linit.c — ESP32 subset: base, package, table, string, math.
+** Excludes io, os, debug, coroutine (not needed / too large).
+** package is required for require() to work.
 */
 #define linit_c
 #define LUA_LIB
@@ -10,10 +11,11 @@
 #include "lauxlib.h"
 
 static const luaL_Reg lualibs[] = {
-  {"",               luaopen_base},
-  {LUA_TABLIBNAME,   luaopen_table},
-  {LUA_STRLIBNAME,   luaopen_string},
-  {LUA_MATHLIBNAME,  luaopen_math},
+  {"",                 luaopen_base},
+  {LUA_LOADLIBNAME,   luaopen_package},
+  {LUA_TABLIBNAME,    luaopen_table},
+  {LUA_STRLIBNAME,    luaopen_string},
+  {LUA_MATHLIBNAME,   luaopen_math},
   {NULL, NULL}
 };
 

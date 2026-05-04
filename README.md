@@ -113,10 +113,12 @@ Multi-tool firmware for ESP32-based handheld devices. Built with PlatformIO + Ar
 - **Barcode** — Generate and display a Code 128 barcode from typed or file-loaded text
 - **File Manager** — Browse, rename, copy, cut, paste, and delete files and folders on storage; directories sorted first then alphabetical; tap a file to view its contents; hold 1s to open context menu
 - **File Hex Viewer** — View any file as a scrollable hex dump with offset, hex byte columns, and ASCII representation
-- **Achievements** — View all achievements grouped by domain (13 domains, 238 entries, ≈ 99 100 EXP pool); shows tier (Bronze/Silver/Gold/Platinum), description, and unlock status; long-press an unlocked achievement to set it as your Agent Title ([details](knowledge/achievements.md))
+- **Achievements** — View all achievements grouped by domain (13 domains, 244 entries, ≈ 99 100 EXP pool); shows tier (Bronze/Silver/Gold/Platinum), description, and unlock status; long-press an unlocked achievement to set it as your Agent Title ([details](knowledge/achievements.md))
 - **TOTP Auth** — Time-based one-time password authenticator; add accounts by name and Base32 secret, view live 6- or 8-digit codes with a countdown progress bar, hold an account row to view or delete it; keeps display on while viewing a code ([details](knowledge/totp-auth.md))
 - **UART Terminal** — Serial terminal over configurable GPIO pins; set baud rate, RX and TX GPIOs, switch between string and hex send mode (UP/DOWN toggle), send commands via dialog, receive data in real time, and optionally save the session log to storage ([details](knowledge/uart-terminal.md))
 - **Pomodoro Timer** — 25/5-minute focus timer; configurable work (15–60 min) and break (5–15 min) durations; press to pause/resume; speaker beep on phase transition; tracks session count and shows progress bar; keeps display on while running
+- **Random Line Picker** — Select up to 30 text files from `/unigeek/utility/random_line/`, then shuffle and display a random line from the combined pool; press OK to cycle to the next random line
+- **Lua Runner** — Run Lua 5.1 scripts from `/unigeek/lua/`; scripts loop frame-by-frame with persistent globals; full display drawing, button input, SD file I/O, and speaker APIs; back button exits at any time ([details](knowledge/lua-runner.md))
 
 ### Games
 - **HEX Decoder** — Wordle-style game using hexadecimal characters (0–9, A–F) ([details](knowledge/hex-decoder.md))
@@ -141,6 +143,11 @@ Multi-tool firmware for ESP32-based handheld devices. Built with PlatformIO + Ar
   - 4 difficulty levels: Easy (1–99, unlimited), Medium (1–999, unlimited), Hard (1–9999, unlimited), Extreme (1–9999, 10 attempts)
   - Tracks top 5 high scores per difficulty (ranked by fewest guesses then time)
   - Bonus achievements for lucky guesses, surviving Extreme, and guessing in one try
+- **Fishing** — Idle fishing minigame with cast → bite → reel flow
+  - Three fish types: Common, Rare, Legendary — each with different bite delay and reel speed
+  - Animated water scene with mascot; press OK/UP to cast, OK/UP again in the window to reel
+  - Perfect-reel bonus: keep the indicator in the centre zone with no misses
+  - Top 5 session high scores persisted to SD; 6 achievements
 
 ### Modules
 - **NFC (MFRC522)** — MIFARE Classic card reader and key recovery tool ([details](knowledge/nfc-mifare.md))
@@ -197,7 +204,7 @@ Full-screen profile accessible from the main menu. Displays:
 - **HP** — battery percentage; shows `+CHG` when charging
 - **BRAIN** — free heap as a percentage of total heap
 - **ACHIEVEMENT** — total unlocked achievements out of all available
-- Domain bars for each achievement domain showing per-domain completion (WiFi, Attacks, BT, HID, NFC, IR, RF, NRF24, GPS, Utility, Games, Settings, Chameleon — 13 domains, 238 achievements total, pool ≈ 99 100 EXP)
+- Domain bars for each achievement domain showing per-domain completion (WiFi, Attacks, BT, HID, NFC, IR, RF, NRF24, GPS, Utility, Games, Settings, Chameleon — 13 domains, 244 achievements total, pool ≈ 99 100 EXP)
 
 ### Settings
 - Device name
@@ -363,4 +370,4 @@ This project was built with inspiration and reference from:
 - sticks3 ir receive not functional (RMT/ES8311 conflict); transmit works
 - implement thermal camera
 
-<!-- README last synced at commit: c2e7c21 (Password Manager in HID, duckyscript path → hid/, achievement count 235→238) -->
+<!-- README last synced at commit: f34aa08 (Lua Runner, Fishing game, Random Line Picker, achievement count 238→244) -->

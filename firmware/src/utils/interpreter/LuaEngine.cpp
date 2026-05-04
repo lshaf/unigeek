@@ -103,7 +103,7 @@ bool LuaEngine::stepLoop(String& errOut) {
 
   lua_rawgeti(_lua, LUA_REGISTRYINDEX, _chunkRef);
   int rc = lua_pcall(_lua, 0, 0, 0);
-  if (rc == 0) return true;
+  if (rc == 0) return false; // script returned normally — clean exit
 
   if (lua_islightuserdata(_lua, -1) &&
       lua_touserdata(_lua, -1) == &LuaEngine::exitSentinel) {
@@ -120,39 +120,48 @@ bool LuaEngine::stepLoop(String& errOut) {
 void LuaEngine::_registerBindings() {
   lua_register(_lua, "exit", _lua_exit);
 
-  // uni table
+  // uni table — core functions only; lcd/sd loaded on demand via require()
   lua_newtable(_lua);
-
   lua_pushcfunction(_lua, _uni_debug);  lua_setfield(_lua, -2, "debug");
   lua_pushcfunction(_lua, _uni_delay);  lua_setfield(_lua, -2, "delay");
   lua_pushcfunction(_lua, _uni_btn);    lua_setfield(_lua, -2, "btn");
+  lua_pushcfunction(_lua, _uni_update); lua_setfield(_lua, -2, "update");
   lua_pushcfunction(_lua, _uni_heap);   lua_setfield(_lua, -2, "heap");
   lua_pushcfunction(_lua, _uni_millis); lua_setfield(_lua, -2, "millis");
   lua_pushcfunction(_lua, _uni_beep);   lua_setfield(_lua, -2, "beep");
-
-  // uni.lcd sub-table
-  lua_newtable(_lua);
-  lua_pushcfunction(_lua, _lcd_clear);     lua_setfield(_lua, -2, "clear");
-  lua_pushcfunction(_lua, _lcd_print);     lua_setfield(_lua, -2, "print");
-  lua_pushcfunction(_lua, _lcd_rect);      lua_setfield(_lua, -2, "rect");
-  lua_pushcfunction(_lua, _lcd_line);      lua_setfield(_lua, -2, "line");
-  lua_pushcfunction(_lua, _lcd_color);     lua_setfield(_lua, -2, "color");
-  lua_pushcfunction(_lua, _lcd_textSize);  lua_setfield(_lua, -2, "textSize");
-  lua_pushcfunction(_lua, _lcd_textColor); lua_setfield(_lua, -2, "textColor");
-  lua_pushcfunction(_lua, _lcd_w);         lua_setfield(_lua, -2, "w");
-  lua_pushcfunction(_lua, _lcd_h);         lua_setfield(_lua, -2, "h");
-  lua_setfield(_lua, -2, "lcd");
-
-  // uni.sd sub-table
-  lua_newtable(_lua);
-  lua_pushcfunction(_lua, _sd_read);   lua_setfield(_lua, -2, "read");
-  lua_pushcfunction(_lua, _sd_write);  lua_setfield(_lua, -2, "write");
-  lua_pushcfunction(_lua, _sd_append); lua_setfield(_lua, -2, "append");
-  lua_pushcfunction(_lua, _sd_exists); lua_setfield(_lua, -2, "exists");
-  lua_pushcfunction(_lua, _sd_list);   lua_setfield(_lua, -2, "list");
-  lua_setfield(_lua, -2, "sd");
-
   lua_setglobal(_lua, "uni");
+
+  // Register lazy loaders — tables are built only when require() is called
+  lua_getglobal(_lua, "package");
+  lua_getfield(_lua, -1, "preload");
+  lua_pushcfunction(_lua, _lua_load_lcd); lua_setfield(_lua, -2, "uni.lcd");
+  lua_pushcfunction(_lua, _lua_load_sd);  lua_setfield(_lua, -2, "uni.sd");
+  lua_pop(_lua, 2);
+}
+
+int LuaEngine::_lua_load_lcd(lua_State* L) {
+  lua_newtable(L);
+  lua_pushcfunction(L, _lcd_clear);     lua_setfield(L, -2, "clear");
+  lua_pushcfunction(L, _lcd_print);     lua_setfield(L, -2, "print");
+  lua_pushcfunction(L, _lcd_rect);      lua_setfield(L, -2, "rect");
+  lua_pushcfunction(L, _lcd_line);      lua_setfield(L, -2, "line");
+  lua_pushcfunction(L, _lcd_color);     lua_setfield(L, -2, "color");
+  lua_pushcfunction(L, _lcd_textSize);  lua_setfield(L, -2, "textSize");
+  lua_pushcfunction(L, _lcd_textColor); lua_setfield(L, -2, "textColor");
+  lua_pushcfunction(L, _lcd_textDatum); lua_setfield(L, -2, "textDatum");
+  lua_pushcfunction(L, _lcd_w);         lua_setfield(L, -2, "w");
+  lua_pushcfunction(L, _lcd_h);         lua_setfield(L, -2, "h");
+  return 1;
+}
+
+int LuaEngine::_lua_load_sd(lua_State* L) {
+  lua_newtable(L);
+  lua_pushcfunction(L, _sd_read);   lua_setfield(L, -2, "read");
+  lua_pushcfunction(L, _sd_write);  lua_setfield(L, -2, "write");
+  lua_pushcfunction(L, _sd_append); lua_setfield(L, -2, "append");
+  lua_pushcfunction(L, _sd_exists); lua_setfield(L, -2, "exists");
+  lua_pushcfunction(L, _sd_list);   lua_setfield(L, -2, "list");
+  return 1;
 }
 
 // ── exit() ────────────────────────────────────────────────────────────
@@ -177,30 +186,25 @@ int LuaEngine::_uni_delay(lua_State* L) {
   uint32_t end = millis() + (uint32_t)ms;
   while (millis() < end) {
     if (eng && eng->_exitRequested) break;
-    if (Uni.Nav->wasPressed()) {
-      if (Uni.Nav->readDirection() == INavigation::DIR_BACK) {
-        if (eng) eng->requestExit();
-        break;
-      }
-    }
     vTaskDelay(pdMS_TO_TICKS(10));
   }
   return 0;
 }
 
+int LuaEngine::_uni_update(lua_State* L) {
+  Uni.update();
+  return 0;
+}
+
 int LuaEngine::_uni_btn(lua_State* L) {
   if (!Uni.Nav->wasPressed()) { lua_pushstring(L, "none"); return 1; }
-  LuaEngine* eng = _fromState(L);
   switch (Uni.Nav->readDirection()) {
     case INavigation::DIR_UP:    lua_pushstring(L, "up");    break;
     case INavigation::DIR_DOWN:  lua_pushstring(L, "down");  break;
     case INavigation::DIR_LEFT:  lua_pushstring(L, "left");  break;
     case INavigation::DIR_RIGHT: lua_pushstring(L, "right"); break;
     case INavigation::DIR_PRESS: lua_pushstring(L, "ok");    break;
-    case INavigation::DIR_BACK:
-      lua_pushstring(L, "back");
-      if (eng) eng->requestExit();
-      break;
+    case INavigation::DIR_BACK:  lua_pushstring(L, "back");  break;
     default:                     lua_pushstring(L, "none");  break;
   }
   return 1;
@@ -283,8 +287,20 @@ int LuaEngine::_lcd_textSize(lua_State* L) {
 }
 
 int LuaEngine::_lcd_textColor(lua_State* L) {
+  LuaEngine* eng = _fromState(L);
   uint32_t c = (uint32_t)luaL_checknumber(L, 1);
-  Uni.Lcd.setTextColor(c);
+  if (eng) eng->_textFg = c;
+  if (lua_gettop(L) >= 2 && !lua_isnil(L, 2)) {
+    uint32_t bg = (uint32_t)luaL_checknumber(L, 2);
+    Uni.Lcd.setTextColor(c, bg);
+  } else {
+    Uni.Lcd.setTextColor(c);
+  }
+  return 0;
+}
+
+int LuaEngine::_lcd_textDatum(lua_State* L) {
+  Uni.Lcd.setTextDatum((uint8_t)luaL_checknumber(L, 1));
   return 0;
 }
 
