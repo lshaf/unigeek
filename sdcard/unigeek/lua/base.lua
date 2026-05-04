@@ -11,6 +11,7 @@ local BLACK = lcd.color(  0,   0,   0)
 local frame = 0
 
 while true do
+  uni.update()
   local btn = uni.btn()
   if btn == "back" then break end
 
@@ -26,4 +27,3 @@ while true do
 
   uni.delay(16)  -- ~60 fps
 end
-exit()

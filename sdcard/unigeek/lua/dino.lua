@@ -92,6 +92,7 @@ end
 local prevState = ""
 
 while true do
+  uni.update()
   local btn     = uni.btn()
   if btn == "back" then break end
   local entered = (gstate ~= prevState)
@@ -225,4 +226,3 @@ while true do
 
   uni.delay(16)
 end
-exit()

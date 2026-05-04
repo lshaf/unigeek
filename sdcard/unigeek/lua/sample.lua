@@ -23,6 +23,7 @@ lcd.rect(0,     0,     2, H, C_WALL)
 lcd.rect(W - 2, 0,     2, H, C_WALL)
 
 while true do
+  uni.update()
   local btn = uni.btn()
   if btn == "back" then break end
 
@@ -49,4 +50,3 @@ while true do
 
   uni.delay(16)
 end
-exit()

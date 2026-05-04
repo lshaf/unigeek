@@ -19,6 +19,7 @@ lcd.textSize(2)
 local last = ""
 
 while true do
+  uni.update()
   local btn = uni.btn()
   if btn == "back" then break end
 
@@ -33,4 +34,3 @@ while true do
 
   uni.delay(16)
 end
-exit()
