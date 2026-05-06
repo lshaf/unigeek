@@ -5,6 +5,7 @@
 #ifdef DEVICE_HAS_WEBAUTHN
 
 #include "WebAuthnCrypto.h"
+#include "WebAuthnLog.h"
 
 #include "core/Device.h"
 
@@ -15,30 +16,50 @@ namespace webauthn {
 
 namespace {
 
-constexpr const char* kDir         = "/unigeek/webauthn";
-constexpr const char* kMasterPath  = "/unigeek/webauthn/master.bin";
-constexpr const char* kCounterPath = "/unigeek/webauthn/counter.bin";
+constexpr const char* kDir         = "/unigeek/utility/fido";
+constexpr const char* kMasterPath  = "/unigeek/utility/fido/master.bin";
+constexpr const char* kCounterPath = "/unigeek/utility/fido/counter.bin";
 
 uint8_t  g_master[CredentialStore::kMasterKeySize];
 bool     g_masterLoaded = false;
 uint32_t g_counter      = 0;
 bool     g_counterLoaded = false;
 
-IStorage* lfs() { return Uni.StorageLFS; }
+// Use the primary storage (SD if present, else LFS) — `Uni.Storage` is set
+// by `Device::initStorage()`. Direct StorageLFS sometimes isn't populated
+// on boards that mount SD as primary.
+IStorage* storage() { return Uni.Storage; }
 
 bool ensureDir()
 {
-  if (!lfs() || !lfs()->isAvailable()) return false;
-  if (lfs()->exists(kDir)) return true;
-  // Create the parent /unigeek if missing so makeDir doesn't fail on LFS.
-  if (!lfs()->exists("/unigeek")) lfs()->makeDir("/unigeek");
-  return lfs()->makeDir(kDir);
+  if (!storage()) {
+    WA_LOG("CS ensureDir fail: Uni.Storage is null");
+    return false;
+  }
+  if (!storage()->isAvailable()) {
+    WA_LOG("CS ensureDir fail: Storage not available");
+    return false;
+  }
+  if (storage()->exists(kDir)) return true;
+  // Create parents recursively so makeDir succeeds on LFS (which doesn't
+  // implicitly create intermediate dirs).
+  if (!storage()->exists("/unigeek")) {
+    bool ok = storage()->makeDir("/unigeek");
+    WA_LOG("CS makeDir /unigeek -> %d", (int)ok);
+  }
+  if (!storage()->exists("/unigeek/utility")) {
+    bool ok = storage()->makeDir("/unigeek/utility");
+    WA_LOG("CS makeDir /unigeek/utility -> %d", (int)ok);
+  }
+  bool ok = storage()->makeDir(kDir);
+  WA_LOG("CS makeDir %s -> %d", kDir, (int)ok);
+  return ok;
 }
 
 bool readBytes(const char* path, uint8_t* buf, size_t expected)
 {
-  if (!lfs() || !lfs()->exists(path)) return false;
-  fs::File f = lfs()->open(path, "r");
+  if (!storage() || !storage()->exists(path)) return false;
+  fs::File f = storage()->open(path, "r");
   if (!f) return false;
   size_t n = f.read(buf, expected);
   f.close();
@@ -47,8 +68,8 @@ bool readBytes(const char* path, uint8_t* buf, size_t expected)
 
 bool writeBytes(const char* path, const uint8_t* buf, size_t len)
 {
-  if (!lfs()) return false;
-  fs::File f = lfs()->open(path, "w");
+  if (!storage()) return false;
+  fs::File f = storage()->open(path, "w");
   if (!f) return false;
   size_t n = f.write(buf, len);
   f.close();
@@ -58,14 +79,23 @@ bool writeBytes(const char* path, const uint8_t* buf, size_t len)
 bool loadOrGenMaster()
 {
   if (g_masterLoaded) return true;
-  if (!ensureDir())   return false;
+  if (!ensureDir()) {
+    WA_LOG("CS loadOrGenMaster fail: ensureDir");
+    return false;
+  }
   if (readBytes(kMasterPath, g_master, sizeof(g_master))) {
+    WA_LOG("CS master.bin loaded (%u B)", (unsigned)sizeof(g_master));
     g_masterLoaded = true;
     return true;
   }
   // First boot — generate.
+  WA_LOG("CS master.bin not found, generating");
   WebAuthnCrypto::random(g_master, sizeof(g_master));
-  if (!writeBytes(kMasterPath, g_master, sizeof(g_master))) return false;
+  if (!writeBytes(kMasterPath, g_master, sizeof(g_master))) {
+    WA_LOG("CS loadOrGenMaster fail: writeBytes %s", kMasterPath);
+    return false;
+  }
+  WA_LOG("CS master.bin generated + written");
   g_masterLoaded = true;
   return true;
 }
@@ -115,7 +145,10 @@ bool CredentialStore::encodeCredentialId(const uint8_t priv[kPrivKeySize],
                                          const uint8_t rpIdHash[kRpIdHashSize],
                                          uint8_t out[kCredIdSize])
 {
-  if (!init()) return false;
+  if (!init()) {
+    WA_LOG("CS encodeCredentialId fail: init() returned false");
+    return false;
+  }
   // Layout: nonce(16) || rpIdHash(32) || ct(32) || tag(16)
   uint8_t* nonce = out;
   uint8_t* rid   = out + 16;
@@ -124,8 +157,10 @@ bool CredentialStore::encodeCredentialId(const uint8_t priv[kPrivKeySize],
 
   WebAuthnCrypto::random(nonce, 16);
   memcpy(rid, rpIdHash, 32);
-  if (!WebAuthnCrypto::aes256CbcEncrypt(g_master, nonce, priv, 32, ct))
+  if (!WebAuthnCrypto::aes256CbcEncrypt(g_master, nonce, priv, 32, ct)) {
+    WA_LOG("CS encodeCredentialId fail: aes256CbcEncrypt");
     return false;
+  }
 
   // tag = HMAC(masterKey, nonce || rpIdHash || ct), truncated to 16 bytes
   uint8_t mac[32];
@@ -171,11 +206,18 @@ bool CredentialStore::decodeCredentialId(const uint8_t* idBytes, size_t idLen,
   return WebAuthnCrypto::aes256CbcDecrypt(g_master, nonce, ct, 32, priv);
 }
 
+bool CredentialStore::getMasterKey(uint8_t out[kMasterKeySize])
+{
+  if (!init()) return false;
+  memcpy(out, g_master, kMasterKeySize);
+  return true;
+}
+
 bool CredentialStore::wipe()
 {
-  if (!lfs()) return false;
-  lfs()->deleteFile(kMasterPath);
-  lfs()->deleteFile(kCounterPath);
+  if (!storage()) return false;
+  storage()->deleteFile(kMasterPath);
+  storage()->deleteFile(kCounterPath);
   g_masterLoaded  = false;
   g_counterLoaded = false;
   g_counter       = 0;

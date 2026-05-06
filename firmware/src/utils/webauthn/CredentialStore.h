@@ -7,11 +7,11 @@ namespace webauthn {
 
 // Credential persistence and credential-ID wrapping.
 //
-// Layout under LittleFS:
-//   /unigeek/webauthn/master.bin   — 32 B master key (one-time generated)
-//   /unigeek/webauthn/counter.bin  — 4 B big-endian global signature counter
-//   /unigeek/webauthn/residents.bin — array of ResidentCred records (Phase 5b)
-//   /unigeek/webauthn/pin.bin       — 16 B PIN HMAC + 1 B retry counter (Phase 5c)
+// Layout under primary storage (SD if mounted, else LFS):
+//   /unigeek/utility/fido/master.bin    — 32 B master key (one-time generated)
+//   /unigeek/utility/fido/counter.bin   — 4 B big-endian global signature counter
+//   /unigeek/utility/fido/residents.bin — array of ResidentCred records (Phase 5b)
+//   /unigeek/utility/fido/pin.bin       — 16 B PIN HMAC + 1 B retry counter (Phase 5c)
 //
 // Credential ID format (96 bytes opaque to RP):
 //   nonce(16) || rpIdHash(32) || ct(32) || tag(16)
@@ -46,6 +46,11 @@ public:
   static bool decodeCredentialId(const uint8_t* idBytes, size_t idLen,
                                  const uint8_t rpIdHash[kRpIdHashSize],
                                  uint8_t priv[kPrivKeySize]);
+
+  // Copy out the 32-byte master key (loading + lazily generating on first
+  // call). Used by the hmac-secret extension to derive per-cred secrets;
+  // caller is responsible for zeroing the buffer after use.
+  static bool getMasterKey(uint8_t out[kMasterKeySize]);
 
   // Wipe master + counter + resident table + PIN. Master key is then
   // regenerated lazily on next encode call. All previously issued

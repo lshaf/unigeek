@@ -5,6 +5,7 @@
 #include "core/Device.h"
 #include "core/ScreenManager.h"
 #include "core/AchievementManager.h"
+#include "core/ConfigManager.h"
 #include "utils/webauthn/Ctap2.h"
 #include "utils/webauthn/CredentialStore.h"
 #include "utils/webauthn/WebAuthnCrypto.h"
@@ -30,7 +31,22 @@ void WebAuthnScreen::_onReport(const uint8_t* buf64)
 
 void WebAuthnScreen::onInit()
 {
+#ifdef WEBAUTHN_LOG_BEGIN
+  // Bring up the board-defined debug log Stream once. On cardputer_adv this
+  // is Serial1 wired to the Grove port (also = GPS pins) — Serial/HWCDC is
+  // dead once USB.begin() runs below.
+  static bool s_logInited = false;
+  if (!s_logInited) {
+    s_logInited = true;
+    WEBAUTHN_LOG_BEGIN();
+  }
+#endif
+
   webauthn::WebAuthnCrypto::init();
+  // Ephemeral ECDH key — regenerated each time the WebAuthn screen opens;
+  // hosts negotiate it via authenticatorClientPIN.getKeyAgreement before
+  // every hmac-secret call so a fresh keypair per screen-entry is fine.
+  webauthn::WebAuthnCrypto::initEphemeralEcdh();
   webauthn::CredentialStore::init();
 
   // Construct the singleton — this attempts to claim the WEBAUTHN profile.
@@ -116,7 +132,7 @@ void WebAuthnScreen::onRender()
     lcd.drawString("BACK: Stop", bodyX() + bodyW() / 2, bodyY() + bodyH());
     _chromeDrawn   = true;
     _lastConnected = !connected;  // force first status paint
-    _logSerial     = (uint32_t)-1;
+    _lastTxDrawn   = (uint32_t)-1;
   }
 
   if (_state == ST_PROMPTING) {
@@ -137,22 +153,35 @@ void WebAuthnScreen::onRender()
     return;
   }
 
-  // ── Status banner (top of body) ──────────────────────────────────────
+  // Layout of idle/active body (no log ring — debug goes to Grove Serial1):
+  //   ┌──── bodyY ──────────────────────────┐
+  //   │                                     │
+  //   │            [ Active ]      ← size 3 │
+  //   │            Tx: N           ← size 1 │
+  //   │                                     │
+  //   │            BACK: Stop      ← footer │
+  //   └─────────────────────────────────────┘
+  const int centerX = bodyX() + bodyW() / 2;
+  const int statusY = bodyY() + bodyH() / 2 - 12;
+  const int txY     = bodyY() + bodyH() / 2 + 16;
+
+  // ── Status banner ────────────────────────────────────────────────────
   if (_lastConnected != connected) {
     _lastConnected = connected;
     Sprite sp(&lcd);
-    sp.createSprite(bodyW(), 20);
+    sp.createSprite(bodyW(), 28);
     sp.fillSprite(TFT_BLACK);
     sp.setTextDatum(MC_DATUM);
-    sp.setTextSize(2);
+    sp.setTextSize(3);
     sp.setTextColor(connected ? TFT_GREEN : TFT_RED, TFT_BLACK);
-    sp.drawString(connected ? "Active" : "Idle", bodyW() / 2, 10);
-    sp.pushSprite(bodyX(), bodyY() + 2);
+    sp.drawString(connected ? "Active" : "Idle", bodyW() / 2, 14);
+    sp.pushSprite(bodyX(), statusY - 14);
     sp.deleteSprite();
   }
 
   // ── Tx counter line ──────────────────────────────────────────────────
-  {
+  if (_lastTxDrawn != _txCount) {
+    _lastTxDrawn = _txCount;
     Sprite sp(&lcd);
     sp.createSprite(bodyW(), 12);
     sp.fillSprite(TFT_BLACK);
@@ -162,41 +191,10 @@ void WebAuthnScreen::onRender()
     char buf[32];
     snprintf(buf, sizeof(buf), "Tx: %lu", (unsigned long)_txCount);
     sp.drawString(buf, bodyW() / 2, 6);
-    sp.pushSprite(bodyX(), bodyY() + 24);
+    sp.pushSprite(bodyX(), txY - 6);
     sp.deleteSprite();
   }
-
-  // ── Log ring viewer (bottom of body) ─────────────────────────────────
-  // Repainted only when something new was logged; sized to fill below the
-  // status banner and tx counter.
-#if WEBAUTHN_DEBUG
-  auto& ring = webauthn_log::ring();
-  if (_logSerial == ring.serial) return;
-  _logSerial = ring.serial;
-
-  const int logTop  = bodyY() + 40;
-  const int logH    = (bodyY() + bodyH() - 12) - logTop;  // leave footer space
-  if (logH <= 0) return;
-
-  Sprite sp(&lcd);
-  sp.createSprite(bodyW(), logH);
-  sp.fillSprite(TFT_BLACK);
-  sp.setTextSize(1);
-  sp.setTextDatum(TL_DATUM);
-  sp.setTextColor(TFT_GREEN, TFT_BLACK);
-
-  uint8_t lineH = sp.fontHeight() + 1;
-  uint8_t maxLines = (uint8_t)(logH / lineH);
-  uint8_t shown = ring.count < maxLines ? ring.count : maxLines;
-  // Walk back `shown` slots from head, oldest first.
-  uint8_t start = (uint8_t)((ring.head + webauthn_log::kLines - shown) % webauthn_log::kLines);
-  for (uint8_t i = 0; i < shown; i++) {
-    uint8_t idx = (uint8_t)((start + i) % webauthn_log::kLines);
-    sp.drawString(ring.lines[idx], 0, i * lineH);
-  }
-  sp.pushSprite(bodyX(), logTop);
-  sp.deleteSprite();
-#endif
+  (void)centerX;  // reserved for future indicators (e.g. UV/PIN status)
 }
 
 bool WebAuthnScreen::_onUserPresence(const char* rpId, void* user)
@@ -206,6 +204,18 @@ bool WebAuthnScreen::_onUserPresence(const char* rpId, void* user)
   self->_promptRpId    = rpId;
   self->_promptStartMs = (uint32_t)millis();
   self->_chromeDrawn   = false;
+
+  // Wake the LCD if it auto-dimmed during idle. Refresh `lastActiveMs` here
+  // and on every loop tick below so power-saving can't cut the display while
+  // the user is being prompted to confirm.
+  Uni.lastActiveMs = millis();
+  if (Uni.lcdOff) {
+    Uni.Lcd.setBrightness((uint8_t)Config.get(APP_CONFIG_BRIGHTNESS,
+                                              APP_CONFIG_BRIGHTNESS_DEFAULT).toInt());
+    Uni.lcdOff = false;
+  }
+  if (Uni.Speaker) Uni.Speaker->beep();
+
   self->render();
 
   uint32_t lastKa = 0;
@@ -217,6 +227,12 @@ bool WebAuthnScreen::_onUserPresence(const char* rpId, void* user)
       self->render();
       return false;
     }
+    // Main loop's Device::update isn't running while we block here, so the
+    // keyboard FIFO + nav state would freeze. Pump it explicitly. Also
+    // refresh `lastActiveMs` so power-save can't dim/sleep the screen while
+    // the user is being prompted.
+    Uni.update();
+    Uni.lastActiveMs = millis();
     if (Uni.Nav->wasPressed()) {
       auto dir = Uni.Nav->readDirection();
       if (dir == INavigation::DIR_PRESS) {

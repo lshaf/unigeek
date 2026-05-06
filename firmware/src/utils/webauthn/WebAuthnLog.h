@@ -12,6 +12,14 @@
 #define WEBAUTHN_DEBUG 1
 #endif
 
+// On boards where ARDUINO_USB_MODE=1 makes the default `Serial` (HWCDC) go
+// dead once USB.begin() switches the PHY to TinyUSB for FIDO HID, the board
+// can override which Stream the WA log mirrors to via WEBAUTHN_LOG_STREAM
+// in its pins_arduino.h. Default falls back to Serial.
+#ifndef WEBAUTHN_LOG_STREAM
+#define WEBAUTHN_LOG_STREAM Serial
+#endif
+
 #if WEBAUTHN_DEBUG
 
 // On-device log ring — visible on WebAuthnScreen when serial isn't an option
@@ -57,7 +65,7 @@ inline void writef(const char* fmt, ...)
   vsnprintf(buf, sizeof(buf), fmt, ap);
   va_end(ap);
   // Mirror to Serial so a console (if attached) gets it too.
-  Serial.print("[WA] "); Serial.println(buf);
+  WEBAUTHN_LOG_STREAM.print("[WA] "); WEBAUTHN_LOG_STREAM.println(buf);
   push(buf);
 }
 
@@ -70,7 +78,7 @@ inline void writeHex(const char* tag, const uint8_t* p, size_t n, size_t maxByte
     off += snprintf(buf + off, sizeof(buf) - off, " %02x", p[i]);
   }
   if (n > cap && off < (int)sizeof(buf) - 4) snprintf(buf + off, sizeof(buf) - off, "..");
-  Serial.print("[WA] "); Serial.println(buf);
+  WEBAUTHN_LOG_STREAM.print("[WA] "); WEBAUTHN_LOG_STREAM.println(buf);
   push(buf);
 }
 

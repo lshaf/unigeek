@@ -14,8 +14,12 @@ namespace webauthn {
 //   0x04 authenticatorGetInfo
 //   0x07 authenticatorReset
 //
-// Commands stubbed (return CTAP2_ERR_UNSUPPORTED_OPTION):
-//   0x06 authenticatorClientPIN          — Phase 5c
+// ClientPIN partially implemented (subcommands 0x01 getPINRetries + 0x02
+// getKeyAgreement only — needed by hmac-secret negotiation). Other
+// subcommands (setPIN / changePIN / getPinToken / getPinUvAuthToken*) return
+// CTAP2_ERR_INVALID_OPTION until full Phase 5c lands.
+//
+// Commands stubbed:
 //   0x08 authenticatorGetNextAssertion   — multi-credential (deferred)
 //
 // User presence (UP): currently auto-asserted (always 1). Phase 8 will wire
@@ -46,6 +50,8 @@ private:
   static uint16_t _handleGetAssertion (const uint8_t* req, uint16_t reqLen,
                                        uint8_t* out, uint16_t outMax);
   static uint16_t _handleReset        (uint8_t* out, uint16_t outMax);
+  static uint16_t _handleClientPin    (const uint8_t* req, uint16_t reqLen,
+                                       uint8_t* out, uint16_t outMax);
 };
 
 }  // namespace webauthn

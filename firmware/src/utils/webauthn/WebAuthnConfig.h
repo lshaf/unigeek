@@ -106,7 +106,8 @@ enum Ctap2Status : uint8_t {
 
 // COSE algorithm identifiers
 enum CoseAlg : int32_t {
-  COSE_ES256 = -7,   // ECDSA w/ SHA-256 over P-256
+  COSE_ES256          = -7,    // ECDSA w/ SHA-256 over P-256
+  COSE_ECDH_HKDF_256  = -25,   // ECDH-ES + HKDF-256 (CTAP2 ClientPIN proto v1)
 };
 
 // ── Credential storage limits ─────────────────────────────────────────────

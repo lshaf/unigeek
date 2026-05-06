@@ -7,9 +7,12 @@
 #include <string.h>
 #include <esp_system.h>
 
+#include "CredentialStore.h"
+
 #include <mbedtls/sha256.h>
 #include <mbedtls/md.h>
 #include <mbedtls/aes.h>
+#include <mbedtls/ecdh.h>
 #include <mbedtls/ecdsa.h>
 #include <mbedtls/ecp.h>
 #include <mbedtls/bignum.h>
@@ -23,6 +26,11 @@ namespace {
 mbedtls_entropy_context  g_entropy;
 mbedtls_ctr_drbg_context g_drbg;
 bool                     g_inited = false;
+
+// Ephemeral ECDH P-256 platform key — regenerated per power cycle (and Reset)
+// by initEphemeralEcdh(). Used for ClientPIN negotiation + hmac-secret.
+mbedtls_ecp_keypair      g_ephemeral;
+bool                     g_ephemeralInited = false;
 
 // Entropy callback that pulls from esp_random() — much faster than the
 // default mbedTLS entropy collector and already cryptographically strong on
@@ -182,6 +190,82 @@ bool WebAuthnCrypto::ecdsaP256SignDer(const uint8_t priv[32], const uint8_t hash
   }
   mbedtls_ecdsa_free(&ctx);
   return ok;
+}
+
+bool WebAuthnCrypto::initEphemeralEcdh()
+{
+  if (!g_inited) return false;
+  if (g_ephemeralInited) {
+    mbedtls_ecp_keypair_free(&g_ephemeral);
+    g_ephemeralInited = false;
+  }
+  mbedtls_ecp_keypair_init(&g_ephemeral);
+  bool ok = mbedtls_ecp_group_load(&g_ephemeral.grp, MBEDTLS_ECP_DP_SECP256R1) == 0
+         && mbedtls_ecp_gen_keypair(&g_ephemeral.grp,
+                                    &g_ephemeral.d, &g_ephemeral.Q,
+                                    mbedtls_ctr_drbg_random, &g_drbg) == 0;
+  if (!ok) {
+    mbedtls_ecp_keypair_free(&g_ephemeral);
+    return false;
+  }
+  g_ephemeralInited = true;
+  return true;
+}
+
+bool WebAuthnCrypto::getEphemeralPublicKey(uint8_t pub[65])
+{
+  if (!g_ephemeralInited) return false;
+  size_t plen = 0;
+  bool ok = mbedtls_ecp_point_write_binary(&g_ephemeral.grp, &g_ephemeral.Q,
+                                           MBEDTLS_ECP_PF_UNCOMPRESSED,
+                                           &plen, pub, 65) == 0
+         && plen == 65;
+  return ok;
+}
+
+bool WebAuthnCrypto::ecdhComputeSharedX(const uint8_t peer_pub[65], uint8_t sharedX[32])
+{
+  if (!g_ephemeralInited) return false;
+  if (peer_pub[0] != 0x04) return false;  // require uncompressed
+
+  mbedtls_ecp_point Qp;
+  mbedtls_mpi       z;
+  mbedtls_ecp_point_init(&Qp);
+  mbedtls_mpi_init(&z);
+
+  bool ok = mbedtls_ecp_point_read_binary(&g_ephemeral.grp, &Qp,
+                                          peer_pub, 65) == 0
+         && mbedtls_ecp_check_pubkey(&g_ephemeral.grp, &Qp) == 0
+         && mbedtls_ecdh_compute_shared(&g_ephemeral.grp, &z, &Qp, &g_ephemeral.d,
+                                        mbedtls_ctr_drbg_random, &g_drbg) == 0
+         && mbedtls_mpi_write_binary(&z, sharedX, 32) == 0;
+
+  mbedtls_mpi_free(&z);
+  mbedtls_ecp_point_free(&Qp);
+  return ok;
+}
+
+bool WebAuthnCrypto::deriveHmacSecret(const uint8_t* cred_id, size_t cred_id_len,
+                                      uint8_t out[64])
+{
+  uint8_t master[CredentialStore::kMasterKeySize];
+  if (!CredentialStore::getMasterKey(master)) return false;
+
+  // No-UV variant: HMAC(master, "SLIP-0022") → HMAC(_, "hmac-secret") → HMAC(_, cred_id)
+  uint8_t buf[32];
+  hmacSha256(master, sizeof(master),
+             (const uint8_t*)"SLIP-0022", 9, buf);
+  hmacSha256(buf, 32, (const uint8_t*)"hmac-secret", 11, buf);
+  hmacSha256(buf, 32, cred_id, cred_id_len, out);
+
+  // UV variant: chain off the no-UV result with "hmac-secret-uv" then cred_id.
+  // (No PIN/UV state in UniGeek yet, but emit both halves for forward compat.)
+  hmacSha256(out, 32, (const uint8_t*)"hmac-secret-uv", 14, buf);
+  hmacSha256(buf, 32, cred_id, cred_id_len, out + 32);
+
+  // Wipe the master copy on the way out.
+  memset(master, 0, sizeof(master));
+  return true;
 }
 
 }  // namespace webauthn

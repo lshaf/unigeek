@@ -52,6 +52,39 @@ public:
   // success.
   static bool ecdsaP256SignDer(const uint8_t priv[32], const uint8_t hash[32],
                                uint8_t* outDer, size_t* outLen);
+
+  // ── Ephemeral ECDH (CTAP2 ClientPIN / hmac-secret platform key) ────────
+  // Per CTAP2 §6.5: the authenticator holds a single ephemeral P-256 keypair
+  // that is regenerated each power cycle (and on Reset). Hosts obtain the
+  // public side via authenticatorClientPIN.getKeyAgreement and use it to
+  // negotiate a shared secret via ECDH for both PIN setup and the
+  // hmac-secret extension.
+
+  // (Re)generate the ephemeral keypair. Call from WebAuthnScreen::onInit and
+  // after CTAP2_RESET. Idempotent — subsequent calls regenerate fresh.
+  static bool initEphemeralEcdh();
+
+  // Returns the ephemeral public key as `0x04 || X(32) || Y(32)` (65 bytes).
+  // False if `initEphemeralEcdh()` has not run.
+  static bool getEphemeralPublicKey(uint8_t pub[65]);
+
+  // Compute ECDH shared X-coordinate against a peer's uncompressed pubkey.
+  // For pinUvAuthProtocol v1 the caller hashes the result via SHA-256 to
+  // form the 32-byte sharedSecret; we just return the raw X here.
+  static bool ecdhComputeSharedX(const uint8_t peer_pub[65], uint8_t sharedX[32]);
+
+  // ── HMAC-secret extension key derivation ──────────────────────────────
+  // Per the SLIP-0022 chain pico-fido uses (lifted into UniGeek without the
+  // HD-wallet master refactor): the per-credential 64-byte secret is
+  //   HMAC(masterKey, "SLIP-0022")
+  //   HMAC(_,         "hmac-secret")
+  //   HMAC(_,         cred_id, cred_id_len)             → out[0..32]   no-UV
+  //   HMAC(out[0..32],"hmac-secret-uv")
+  //   HMAC(_,         cred_id, cred_id_len)             → out[32..64]  UV
+  // The masterKey input is read from CredentialStore; caller must have
+  // already initialized the store. Returns false if storage isn't ready.
+  static bool deriveHmacSecret(const uint8_t* cred_id, size_t cred_id_len,
+                               uint8_t out[64]);
 };
 
 }  // namespace webauthn

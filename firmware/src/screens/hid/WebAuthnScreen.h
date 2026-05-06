@@ -34,7 +34,7 @@ private:
   bool         _chromeDrawn      = false;
   bool         _lastConnected    = false;   // tracks first paint
   uint32_t     _txCount          = 0;       // dispatched transactions
-  uint32_t     _logSerial        = 0;       // last log-ring serial drawn
+  uint32_t     _lastTxDrawn      = 0;       // tx counter value at last paint
   const char*  _promptRpId       = nullptr;
   uint32_t     _promptStartMs    = 0;
 

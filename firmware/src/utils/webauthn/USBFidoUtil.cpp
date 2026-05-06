@@ -11,13 +11,17 @@
 namespace webauthn {
 
 // FIDO HID report descriptor — Usage Page 0xF1D0, Usage 0x01 (CTAPHID),
-// 64-byte Input + 64-byte Output, Report ID 3 (FIDO_REPORT_ID).
-static constexpr uint8_t FIDO_REPORT_ID = 3;
+// 64-byte Input + 64-byte Output. Per CTAPv2 §11.2.4 the descriptor MUST
+// use a single collection with NO Report ID — matches Yubikey 5 / SoloKey /
+// Titan exactly. arduino-esp32's USBHID + TinyUSB stack on ESP32-S3 fails
+// to bring up the OTG peripheral when a vendor-defined single-collection
+// descriptor carries a Report ID > 0 (observed on m5_cardputer_adv: STOPPED
+// fires immediately after begin(), STARTED never fires).
+static constexpr uint8_t FIDO_REPORT_ID = 0;
 static const uint8_t kFidoReportDescriptor[] = {
   0x06, 0xD0, 0xF1,        // Usage Page (FIDO Alliance, 0xF1D0)
   0x09, 0x01,              // Usage (CTAPHID)
   0xA1, 0x01,              // Collection (Application)
-  0x85, FIDO_REPORT_ID,    //   Report ID (3)
 
   0x09, 0x20,              //   Usage (FIDO_USAGE_DATA_IN)
   0x15, 0x00,              //   Logical Min (0)
@@ -35,7 +39,7 @@ static const uint8_t kFidoReportDescriptor[] = {
 
   0xC0,                    // End Collection
 };
-static_assert(sizeof(kFidoReportDescriptor) == 36,
+static_assert(sizeof(kFidoReportDescriptor) == 34,
               "FIDO HID descriptor size drift — update USBHID addDevice() len");
 
 USBFidoUtil::USBFidoUtil()

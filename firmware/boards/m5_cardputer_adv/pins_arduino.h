@@ -96,6 +96,12 @@ static const uint8_t SCL = 15;
 #define DEVICE_HAS_SOUND          // speaker attached — enables audio paths and sound settings
 #define DEVICE_HAS_VOLUME_CONTROL // I2S amp + ES8311 codec support setVolume() — shows Volume slider in Settings
 #define DEVICE_HAS_USB_HID        // ESP32-S3 native USB OTG — enables USB HID keyboard
+#define DEVICE_HAS_WEBAUTHN       // FIDO2 / WebAuthn USB security key (CTAP2 + U2F)
+// WA debug log over Grove UART. ARDUINO_USB_MODE=1 makes Serial (HWCDC) unusable
+// once USB.begin() switches the PHY to TinyUSB for FIDO HID, so route to Serial1
+// on the Grove pins (shares pins with GPS — disable GPS while debugging WA).
+#define WEBAUTHN_LOG_STREAM  Serial1
+#define WEBAUTHN_LOG_BEGIN() Serial1.begin(115200, SERIAL_8N1, GPS_RX, GPS_TX)
 #define APP_MENU_POWER_OFF        // show Power Off in main menu (hardware power cut via GPIO 4 + deep sleep)
 // Device has dedicated up/down/left/right navigation in addition to select.
 // Enables row-based grid navigation in MainMenuScreen (UP/DOWN move between

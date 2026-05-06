@@ -24,6 +24,7 @@ void*                 g_upUser = nullptr;
 constexpr uint8_t FLAG_UP = 0x01;
 constexpr uint8_t FLAG_UV = 0x04;
 constexpr uint8_t FLAG_AT = 0x40;
+constexpr uint8_t FLAG_ED = 0x80;  // extension data present
 
 // Single-byte CTAP2 status response
 inline uint16_t statusOnly(uint8_t* out, uint8_t status)
@@ -62,13 +63,58 @@ size_t writeCoseKey(const uint8_t pub65[65], uint8_t* dst, size_t cap)
   return w.ok() ? w.size() : 0;
 }
 
+// Same shape as writeCoseKey but advertised with alg -25 (ECDH-ES + HKDF-256)
+// — the COSE alg identifier the platform expects for the ClientPIN /
+// hmac-secret key-agreement key, NOT the signing key.
+size_t writeCoseEcdhKey(const uint8_t pub65[65], uint8_t* dst, size_t cap)
+{
+  CborWriter w(dst, cap);
+  w.beginMap(5);
+  w.putUint(1);         w.putUint(2);                       // kty: EC2
+  w.putUint(3);         w.putInt(COSE_ECDH_HKDF_256);       // alg: -25
+  w.putInt(-1);         w.putUint(1);                       // crv: P-256
+  w.putInt(-2);         w.putBytes(pub65 + 1, 32);          // x
+  w.putInt(-3);         w.putBytes(pub65 + 33, 32);         // y
+  return w.ok() ? w.size() : 0;
+}
+
+// Parse a COSE_Key map (peer's ECDH P-256 public key) from a CBOR reader
+// already positioned at the map header. Writes uncompressed `0x04 || X || Y`
+// into pub65[65]. Returns false on any structural / type error.
+bool readCoseEcdhKey(CborReader& r, uint8_t pub65[65])
+{
+  size_t mapCount = 0;
+  if (!r.readMapHeader(&mapCount)) return false;
+  pub65[0] = 0x04;
+  bool gotX = false, gotY = false;
+  for (size_t i = 0; i < mapCount; i++) {
+    int64_t k;
+    if (!r.readInt(&k)) return false;
+    if (k == -2) {
+      const uint8_t* p; size_t n;
+      if (!r.readBytes(&p, &n) || n != 32) return false;
+      memcpy(pub65 + 1, p, 32);
+      gotX = true;
+    } else if (k == -3) {
+      const uint8_t* p; size_t n;
+      if (!r.readBytes(&p, &n) || n != 32) return false;
+      memcpy(pub65 + 33, p, 32);
+      gotY = true;
+    } else {
+      r.skip();  // ignore kty / alg / crv — caller only needs the point
+    }
+  }
+  return gotX && gotY;
+}
+
 // Compose authData into `out` and return its length.
 //   authData = rpIdHash(32) | flags(1) | counter(4 BE) | [attCredData] | [ext]
 size_t writeAuthData(uint8_t* out, size_t cap,
                      const uint8_t rpIdHash[32], uint8_t flags, uint32_t counter,
-                     const uint8_t* attCred, size_t attCredLen)
+                     const uint8_t* attCred, size_t attCredLen,
+                     const uint8_t* ext = nullptr, size_t extLen = 0)
 {
-  size_t need = 32 + 1 + 4 + attCredLen;
+  size_t need = 32 + 1 + 4 + attCredLen + extLen;
   if (need > cap) return 0;
   size_t off = 0;
   memcpy(out + off, rpIdHash, 32);            off += 32;
@@ -80,6 +126,10 @@ size_t writeAuthData(uint8_t* out, size_t cap,
   if (attCred && attCredLen) {
     memcpy(out + off, attCred, attCredLen);
     off += attCredLen;
+  }
+  if (ext && extLen) {
+    memcpy(out + off, ext, extLen);
+    off += extLen;
   }
   return off;
 }
@@ -125,8 +175,9 @@ uint16_t Ctap2::_handleGetInfo(const uint8_t*, uint16_t,
   CborWriter w(out + 1, outMax - 1);
 
   // Map keys must be in canonical (ascending) order:
-  //   1 versions, 3 aaguid, 4 options, 5 maxMsgSize, 9 transports, 10 algorithms
-  w.beginMap(6);
+  //   1 versions, 2 extensions, 3 aaguid, 4 options, 5 maxMsgSize,
+  //   6 pinUvAuthProtocols, 9 transports, 10 algorithms
+  w.beginMap(8);
 
   // 0x01 versions — advertise CTAP 2.1 since we emit 2.1-only keys
   // (transports 0x09, algorithms 0x0A). U2F_V2 is for CTAP1/AUTHENTICATE
@@ -136,6 +187,11 @@ uint16_t Ctap2::_handleGetInfo(const uint8_t*, uint16_t,
     w.putText("FIDO_2_0");
     w.putText("FIDO_2_1");
     w.putText("U2F_V2");
+
+  // 0x02 extensions
+  w.putUint(0x02);
+  w.beginArray(1);
+    w.putText("hmac-secret");
 
   // 0x03 aaguid
   w.putUint(0x03);
@@ -153,6 +209,13 @@ uint16_t Ctap2::_handleGetInfo(const uint8_t*, uint16_t,
   // 0x05 maxMsgSize
   w.putUint(0x05);
   w.putUint(kCtapMaxMsgSize);
+
+  // 0x06 pinUvAuthProtocols — advertise v1 because hmac-secret negotiation
+  // shares the same getKeyAgreement subcommand used by ClientPIN. Setting
+  // a PIN is not supported (clientPin option not advertised).
+  w.putUint(0x06);
+  w.beginArray(1);
+    w.putUint(1);
 
   // 0x09 transports
   w.putUint(0x09);
@@ -186,6 +249,7 @@ uint16_t Ctap2::_handleMakeCredential(const uint8_t* req, uint16_t reqLen,
   char     rpId[128]; size_t rpIdLen = 0;
   uint8_t  userId[64]; size_t userIdLen = 0;
   bool     hasEs256 = false;
+  bool     reqHmacSecret = false;
 
   for (size_t i = 0; i < mapCount; i++) {
     uint64_t k;
@@ -252,6 +316,22 @@ uint16_t Ctap2::_handleMakeCredential(const uint8_t* req, uint16_t reqLen,
         }
         break;
       }
+      case 0x06: {  // extensions — text-keyed map
+        size_t extMap;
+        if (!r.readMapHeader(&extMap)) return statusOnly(out, CTAP2_ERR_INVALID_CBOR);
+        for (size_t j = 0; j < extMap; j++) {
+          const char* key; size_t klen;
+          if (!r.readText(&key, &klen)) return statusOnly(out, CTAP2_ERR_INVALID_CBOR);
+          if (klen == 11 && memcmp(key, "hmac-secret", 11) == 0) {
+            bool b;
+            if (!r.readBool(&b)) return statusOnly(out, CTAP2_ERR_INVALID_CBOR);
+            if (b) reqHmacSecret = true;
+          } else {
+            r.skip();
+          }
+        }
+        break;
+      }
       default:
         r.skip();  // ignore unknown / not-yet-supported parameters
         break;
@@ -259,19 +339,29 @@ uint16_t Ctap2::_handleMakeCredential(const uint8_t* req, uint16_t reqLen,
     if (!r.ok()) return statusOnly(out, CTAP2_ERR_INVALID_CBOR);
   }
 
-  if (!gotCdh || rpIdLen == 0)
+  if (!gotCdh || rpIdLen == 0) {
+    WA_LOG("MC fail: missing cdh/rpId (gotCdh=%d rpIdLen=%u)", (int)gotCdh, (unsigned)rpIdLen);
     return statusOnly(out, CTAP2_ERR_MISSING_PARAMETER);
-  if (!hasEs256)
+  }
+  if (!hasEs256) {
+    WA_LOG("MC fail: no ES256 in pubKeyCredParams");
     return statusOnly(out, CTAP2_ERR_UNSUPPORTED_ALGORITHM);
+  }
 
   // ── User presence ───────────────────────────────────────────────────
-  if (!requestUserPresence(rpId))
+  WA_LOG("MC: requesting UP for rp=%s", rpId);
+  if (!requestUserPresence(rpId)) {
+    WA_LOG("MC fail: UP denied/timeout");
     return statusOnly(out, CTAP2_ERR_OPERATION_DENIED);
+  }
+  WA_LOG("MC: UP granted, generating keypair");
 
   // ── Generate credential keypair ────────────────────────────────────
   uint8_t priv[32], pub[65];
-  if (!WebAuthnCrypto::ecdsaP256Keygen(priv, pub))
+  if (!WebAuthnCrypto::ecdsaP256Keygen(priv, pub)) {
+    WA_LOG("MC fail: ecdsaP256Keygen");
     return statusOnly(out, CTAP2_ERR_PROCESSING);
+  }
 
   // rpIdHash = SHA-256(rpId)
   uint8_t rpIdHash[32];
@@ -279,40 +369,83 @@ uint16_t Ctap2::_handleMakeCredential(const uint8_t* req, uint16_t reqLen,
 
   // Wrap private key into a credentialId (96 bytes).
   uint8_t credId[CredentialStore::kCredIdSize];
-  if (!CredentialStore::encodeCredentialId(priv, rpIdHash, credId))
+  if (!CredentialStore::encodeCredentialId(priv, rpIdHash, credId)) {
+    WA_LOG("MC fail: encodeCredentialId");
     return statusOnly(out, CTAP2_ERR_PROCESSING);
+  }
 
   // ── Build authData ─────────────────────────────────────────────────
-  uint8_t cose[128];
+  // Big working buffers held as function-scope statics: dispatch is
+  // single-threaded (driven by the WebAuthn screen's onUpdate), and these
+  // would otherwise eat ~900 B of stack on top of mbedTLS ECDSA's internal
+  // big-integer scratch — observed to crash the loop task on cardputer_adv.
+  static uint8_t cose[128];
   size_t  coseLen = writeCoseKey(pub, cose, sizeof(cose));
-  if (!coseLen) return statusOnly(out, CTAP2_ERR_PROCESSING);
+  if (!coseLen) {
+    WA_LOG("MC fail: writeCoseKey");
+    return statusOnly(out, CTAP2_ERR_PROCESSING);
+  }
 
-  uint8_t attCred[16 + 2 + sizeof(credId) + 128];
+  static uint8_t attCred[16 + 2 + CredentialStore::kCredIdSize + 128];
   size_t  attCredLen = writeAttCredData(attCred, sizeof(attCred),
                                         credId, sizeof(credId),
                                         cose, coseLen);
-  if (!attCredLen) return statusOnly(out, CTAP2_ERR_PROCESSING);
+  if (!attCredLen) {
+    WA_LOG("MC fail: writeAttCredData (coseLen=%u)", (unsigned)coseLen);
+    return statusOnly(out, CTAP2_ERR_PROCESSING);
+  }
 
   uint32_t counter = CredentialStore::bumpCounter();
-  uint8_t  authData[256];
+
+  // Build the extensions CBOR map if any extensions were requested. For
+  // hmac-secret on MakeCredential the response is just the boolean flag.
+  static uint8_t extBuf[64];
+  size_t  extLen = 0;
+  uint8_t mcFlags = FLAG_UP | FLAG_AT;
+  if (reqHmacSecret) {
+    CborWriter we(extBuf, sizeof(extBuf));
+    we.beginMap(1);
+      we.putText("hmac-secret"); we.putBool(true);
+    if (!we.ok()) {
+      WA_LOG("MC fail: extensions CBOR overflow");
+      return statusOnly(out, CTAP2_ERR_PROCESSING);
+    }
+    extLen = we.size();
+    mcFlags |= FLAG_ED;
+  }
+
+  static uint8_t authData[512];
   size_t   authLen = writeAuthData(authData, sizeof(authData), rpIdHash,
-                                   FLAG_UP | FLAG_AT, counter,
-                                   attCred, attCredLen);
-  if (!authLen) return statusOnly(out, CTAP2_ERR_PROCESSING);
+                                   mcFlags, counter,
+                                   attCred, attCredLen,
+                                   extLen ? extBuf : nullptr, extLen);
+  if (!authLen) {
+    WA_LOG("MC fail: writeAuthData (attCredLen=%u extLen=%u counter=%lu)",
+           (unsigned)attCredLen, (unsigned)extLen, (unsigned long)counter);
+    return statusOnly(out, CTAP2_ERR_PROCESSING);
+  }
 
   // ── Self-attestation signature ─────────────────────────────────────
   // sig = ECDSA(privKey, SHA-256(authData || clientDataHash))
-  uint8_t sigInput[256 + 32];
+  static uint8_t sigInput[512 + 32];
   size_t  sigInputLen = authLen + 32;
-  if (sigInputLen > sizeof(sigInput)) return statusOnly(out, CTAP2_ERR_PROCESSING);
+  if (sigInputLen > sizeof(sigInput)) {
+    WA_LOG("MC fail: sigInput overflow (%u > %u)",
+           (unsigned)sigInputLen, (unsigned)sizeof(sigInput));
+    return statusOnly(out, CTAP2_ERR_PROCESSING);
+  }
   memcpy(sigInput, authData, authLen);
   memcpy(sigInput + authLen, clientDataHash, 32);
 
   uint8_t sigHash[32];
   WebAuthnCrypto::sha256(sigInput, sigInputLen, sigHash);
   uint8_t sigDer[72]; size_t sigLen = 0;
-  if (!WebAuthnCrypto::ecdsaP256SignDer(priv, sigHash, sigDer, &sigLen))
+  if (!WebAuthnCrypto::ecdsaP256SignDer(priv, sigHash, sigDer, &sigLen)) {
+    WA_LOG("MC fail: ecdsaP256SignDer");
     return statusOnly(out, CTAP2_ERR_PROCESSING);
+  }
+  WA_LOG("MC: signed, encoding response (authLen=%u sigLen=%u)",
+         (unsigned)authLen, (unsigned)sigLen);
 
   // ── Encode response ────────────────────────────────────────────────
   out[0] = CTAP2_OK;
@@ -325,7 +458,11 @@ uint16_t Ctap2::_handleMakeCredential(const uint8_t* req, uint16_t reqLen,
         w.putText("alg"); w.putInt(COSE_ES256);
         w.putText("sig"); w.putBytes(sigDer, sigLen);
 
-  if (!w.ok()) return statusOnly(out, CTAP2_ERR_PROCESSING);
+  if (!w.ok()) {
+    WA_LOG("MC fail: response CBOR encoder overflow (outMax=%u)", (unsigned)outMax);
+    return statusOnly(out, CTAP2_ERR_PROCESSING);
+  }
+  WA_LOG("MC ok: respLen=%u", (unsigned)(1 + w.size()));
   return (uint16_t)(1 + w.size());
 }
 
@@ -346,6 +483,16 @@ uint16_t Ctap2::_handleGetAssertion(const uint8_t* req, uint16_t reqLen,
   size_t  winnerCredIdLen = 0;
   uint8_t winnerPriv[32];
   bool    found = false;
+
+  // hmac-secret extension input (parsed from request key 0x04). All four
+  // fields are populated together when the host requests hmac-secret.
+  bool     reqHmacSecret = false;
+  uint8_t  hmacPeerPub[65];                  // host's ECDH P-256 pubkey
+  uint8_t  hmacSaltEnc[64 + 16] = {0};       // up to 2 × 32 B salts AES-CBC encrypted
+  size_t   hmacSaltEncLen = 0;
+  uint8_t  hmacSaltAuth[32] = {0};
+  size_t   hmacSaltAuthLen = 0;
+  uint64_t hmacProto = 1;
 
   for (size_t i = 0; i < mapCount; i++) {
     uint64_t k;
@@ -400,6 +547,47 @@ uint16_t Ctap2::_handleGetAssertion(const uint8_t* req, uint16_t reqLen,
         }
         break;
       }
+      case 0x04: {  // extensions — text-keyed map
+        size_t extMap;
+        if (!r.readMapHeader(&extMap)) return statusOnly(out, CTAP2_ERR_INVALID_CBOR);
+        for (size_t j = 0; j < extMap; j++) {
+          const char* key; size_t klen;
+          if (!r.readText(&key, &klen)) return statusOnly(out, CTAP2_ERR_INVALID_CBOR);
+          if (klen == 11 && memcmp(key, "hmac-secret", 11) == 0) {
+            // Inner map: 1=keyAgreement, 2=saltEnc, 3=saltAuth, 4=protocol
+            size_t hsMap;
+            if (!r.readMapHeader(&hsMap)) return statusOnly(out, CTAP2_ERR_INVALID_CBOR);
+            for (size_t kk = 0; kk < hsMap; kk++) {
+              uint64_t hk;
+              if (!r.readUint(&hk)) return statusOnly(out, CTAP2_ERR_INVALID_CBOR);
+              if (hk == 0x01) {
+                if (!readCoseEcdhKey(r, hmacPeerPub))
+                  return statusOnly(out, CTAP2_ERR_INVALID_CBOR);
+              } else if (hk == 0x02) {
+                const uint8_t* p; size_t n;
+                if (!r.readBytes(&p, &n) || n > sizeof(hmacSaltEnc))
+                  return statusOnly(out, CTAP2_ERR_INVALID_CBOR);
+                memcpy(hmacSaltEnc, p, n);
+                hmacSaltEncLen = n;
+              } else if (hk == 0x03) {
+                const uint8_t* p; size_t n;
+                if (!r.readBytes(&p, &n) || n > sizeof(hmacSaltAuth))
+                  return statusOnly(out, CTAP2_ERR_INVALID_CBOR);
+                memcpy(hmacSaltAuth, p, n);
+                hmacSaltAuthLen = n;
+              } else if (hk == 0x04) {
+                if (!r.readUint(&hmacProto)) return statusOnly(out, CTAP2_ERR_INVALID_CBOR);
+              } else {
+                r.skip();
+              }
+            }
+            reqHmacSecret = true;
+          } else {
+            r.skip();
+          }
+        }
+        break;
+      }
       default:
         r.skip();
         break;
@@ -407,48 +595,244 @@ uint16_t Ctap2::_handleGetAssertion(const uint8_t* req, uint16_t reqLen,
     if (!r.ok()) return statusOnly(out, CTAP2_ERR_INVALID_CBOR);
   }
 
-  if (!gotCdh || rpIdLen == 0)
+  if (!gotCdh || rpIdLen == 0) {
+    WA_LOG("GA fail: missing cdh/rpId (gotCdh=%d rpIdLen=%u)",
+           (int)gotCdh, (unsigned)rpIdLen);
     return statusOnly(out, CTAP2_ERR_MISSING_PARAMETER);
-  if (!found)
+  }
+  if (!found) {
+    WA_LOG("GA fail: no matching cred in allowList (rpId=%s)", rpId);
     return statusOnly(out, CTAP2_ERR_NO_CREDENTIALS);
+  }
+  WA_LOG("GA: cred matched, requesting UP for rp=%s", rpId);
 
   // ── User presence ───────────────────────────────────────────────────
-  if (!requestUserPresence(rpId))
+  if (!requestUserPresence(rpId)) {
+    WA_LOG("GA fail: UP denied/timeout");
     return statusOnly(out, CTAP2_ERR_OPERATION_DENIED);
+  }
+  WA_LOG("GA: UP granted, signing");
+
+  // ── hmac-secret extension processing ─────────────────────────────────
+  // Per CTAP2 §12.5: only single-salt (32 B) or double-salt (64 B) is
+  // valid, with the encrypted form being one AES-CBC block longer.
+  static uint8_t hmacResp[64];
+  size_t   hmacRespLen = 0;
+  if (reqHmacSecret) {
+    if (hmacProto != 1) {
+      WA_LOG("GA fail: hmac-secret unsupported proto=%llu", (unsigned long long)hmacProto);
+      return statusOnly(out, CTAP2_ERR_INVALID_OPTION);
+    }
+    if (hmacSaltEncLen != 32 && hmacSaltEncLen != 64) {
+      WA_LOG("GA fail: hmac-secret saltEnc len=%u (want 32 or 64)",
+             (unsigned)hmacSaltEncLen);
+      return statusOnly(out, CTAP2_ERR_INVALID_OPTION);
+    }
+
+    // Proto v1 sharedSecret = SHA-256(ECDH(devPriv, hostPub).X)
+    uint8_t sharedX[32], shared[32];
+    if (!WebAuthnCrypto::ecdhComputeSharedX(hmacPeerPub, sharedX)) {
+      WA_LOG("GA fail: hmac-secret ECDH compute");
+      return statusOnly(out, CTAP2_ERR_PROCESSING);
+    }
+    WebAuthnCrypto::sha256(sharedX, 32, shared);
+
+    // Verify saltAuth = HMAC(shared, saltEnc) truncated to 16 B (proto v1)
+    uint8_t calcAuth[32];
+    WebAuthnCrypto::hmacSha256(shared, 32, hmacSaltEnc, hmacSaltEncLen, calcAuth);
+    if (hmacSaltAuthLen != 16 || memcmp(calcAuth, hmacSaltAuth, 16) != 0) {
+      WA_LOG("GA fail: hmac-secret saltAuth mismatch");
+      return statusOnly(out, CTAP2_ERR_INVALID_OPTION);
+    }
+
+    // Decrypt saltEnc with zero IV → salt_dec
+    uint8_t salt_dec[64] = {0};
+    static const uint8_t zeroIv[16] = {0};
+    if (!WebAuthnCrypto::aes256CbcDecrypt(shared, zeroIv,
+                                          hmacSaltEnc, hmacSaltEncLen, salt_dec)) {
+      WA_LOG("GA fail: hmac-secret saltEnc decrypt");
+      return statusOnly(out, CTAP2_ERR_PROCESSING);
+    }
+
+    // Per-cred secret (64 B; we use the no-UV half since no PIN/UV state)
+    uint8_t cred_random[64];
+    if (!WebAuthnCrypto::deriveHmacSecret(winnerCredId, winnerCredIdLen, cred_random)) {
+      WA_LOG("GA fail: hmac-secret deriveHmacSecret");
+      return statusOnly(out, CTAP2_ERR_PROCESSING);
+    }
+    const uint8_t* variant = cred_random;  // FLAG_UV not set → no-UV half
+
+    // out_plain[i] = HMAC(variant, salt_dec[i*32..(i+1)*32])
+    uint8_t out_plain[64];
+    WebAuthnCrypto::hmacSha256(variant, 32, salt_dec, 32, out_plain);
+    if (hmacSaltEncLen == 64) {
+      WebAuthnCrypto::hmacSha256(variant, 32, salt_dec + 32, 32, out_plain + 32);
+    }
+
+    // Encrypt back with the shared key, zero IV
+    if (!WebAuthnCrypto::aes256CbcEncrypt(shared, zeroIv, out_plain,
+                                          hmacSaltEncLen, hmacResp)) {
+      WA_LOG("GA fail: hmac-secret response encrypt");
+      return statusOnly(out, CTAP2_ERR_PROCESSING);
+    }
+    hmacRespLen = hmacSaltEncLen;
+    memset(cred_random, 0, sizeof(cred_random));
+  }
 
   // ── Build authData (no attestedCredentialData this time) ────────────
   uint8_t rpIdHash[32];
   WebAuthnCrypto::sha256((const uint8_t*)rpId, rpIdLen, rpIdHash);
   uint32_t counter = CredentialStore::bumpCounter();
-  uint8_t  authData[64];
+
+  // Build the response extensions CBOR if hmac-secret was processed.
+  static uint8_t gaExt[128];
+  size_t  gaExtLen = 0;
+  uint8_t gaFlags = FLAG_UP;
+  if (hmacRespLen) {
+    CborWriter we(gaExt, sizeof(gaExt));
+    we.beginMap(1);
+      we.putText("hmac-secret"); we.putBytes(hmacResp, hmacRespLen);
+    if (!we.ok()) {
+      WA_LOG("GA fail: extensions CBOR overflow");
+      return statusOnly(out, CTAP2_ERR_PROCESSING);
+    }
+    gaExtLen = we.size();
+    gaFlags |= FLAG_ED;
+  }
+
+  static uint8_t authData[256];
   size_t   authLen = writeAuthData(authData, sizeof(authData), rpIdHash,
-                                   FLAG_UP, counter, nullptr, 0);
-  if (!authLen) return statusOnly(out, CTAP2_ERR_PROCESSING);
+                                   gaFlags, counter, nullptr, 0,
+                                   gaExtLen ? gaExt : nullptr, gaExtLen);
+  if (!authLen) {
+    WA_LOG("GA fail: writeAuthData (counter=%lu extLen=%u)",
+           (unsigned long)counter, (unsigned)gaExtLen);
+    return statusOnly(out, CTAP2_ERR_PROCESSING);
+  }
 
   // sig = ECDSA(privKey, SHA-256(authData || clientDataHash))
-  uint8_t sigInput[64 + 32];
+  static uint8_t sigInput[256 + 32];
   size_t  sigInputLen = authLen + 32;
+  if (sigInputLen > sizeof(sigInput)) {
+    WA_LOG("GA fail: sigInput overflow (%u > %u)",
+           (unsigned)sigInputLen, (unsigned)sizeof(sigInput));
+    return statusOnly(out, CTAP2_ERR_PROCESSING);
+  }
   memcpy(sigInput, authData, authLen);
   memcpy(sigInput + authLen, clientDataHash, 32);
   uint8_t sigHash[32];
   WebAuthnCrypto::sha256(sigInput, sigInputLen, sigHash);
   uint8_t sigDer[72]; size_t sigLen = 0;
-  if (!WebAuthnCrypto::ecdsaP256SignDer(winnerPriv, sigHash, sigDer, &sigLen))
+  if (!WebAuthnCrypto::ecdsaP256SignDer(winnerPriv, sigHash, sigDer, &sigLen)) {
+    WA_LOG("GA fail: ecdsaP256SignDer");
     return statusOnly(out, CTAP2_ERR_PROCESSING);
+  }
+  WA_LOG("GA: signed (authLen=%u sigLen=%u credIdLen=%u)",
+         (unsigned)authLen, (unsigned)sigLen, (unsigned)winnerCredIdLen);
 
   // ── Encode response ────────────────────────────────────────────────
   out[0] = CTAP2_OK;
   CborWriter w(out + 1, outMax - 1);
+  // Canonical CBOR: shorter text key first → "id" (2) before "type" (4).
+  // Some hosts (Chrome's webauthn stack) reject GetAssertion responses
+  // when keys aren't in canonical order, even if they parse otherwise.
   w.beginMap(3);
     w.putUint(0x01);
       w.beginMap(2);
-        w.putText("type"); w.putText("public-key");
         w.putText("id");   w.putBytes(winnerCredId, winnerCredIdLen);
+        w.putText("type"); w.putText("public-key");
     w.putUint(0x02);  w.putBytes(authData, authLen);
     w.putUint(0x03);  w.putBytes(sigDer, sigLen);
 
-  if (!w.ok()) return statusOnly(out, CTAP2_ERR_PROCESSING);
+  if (!w.ok()) {
+    WA_LOG("GA fail: response CBOR encoder overflow (outMax=%u)", (unsigned)outMax);
+    return statusOnly(out, CTAP2_ERR_PROCESSING);
+  }
+  WA_LOG("GA ok: respLen=%u", (unsigned)(1 + w.size()));
   return (uint16_t)(1 + w.size());
+}
+
+// ── ClientPIN ─────────────────────────────────────────────────────────
+// Partial implementation: only subcommands needed by hmac-secret negotiation
+// are supported (0x01 getPINRetries returning a stub 0, and 0x02
+// getKeyAgreement returning our ephemeral COSE_Key). The rest return
+// CTAP2_ERR_INVALID_OPTION until full Phase 5c lands.
+
+uint16_t Ctap2::_handleClientPin(const uint8_t* req, uint16_t reqLen,
+                                 uint8_t* out, uint16_t outMax)
+{
+  CborReader r(req, reqLen);
+  size_t mapCount = 0;
+  if (!r.readMapHeader(&mapCount)) return statusOnly(out, CTAP2_ERR_INVALID_CBOR);
+
+  uint64_t protocol = 0;
+  uint64_t subcmd   = 0;
+
+  for (size_t i = 0; i < mapCount; i++) {
+    uint64_t k;
+    if (!r.readUint(&k)) return statusOnly(out, CTAP2_ERR_INVALID_CBOR);
+    switch (k) {
+      case 0x01:  // pinUvAuthProtocol
+        if (!r.readUint(&protocol)) return statusOnly(out, CTAP2_ERR_INVALID_CBOR);
+        break;
+      case 0x02:  // subCommand
+        if (!r.readUint(&subcmd)) return statusOnly(out, CTAP2_ERR_INVALID_CBOR);
+        break;
+      default:
+        r.skip();
+        break;
+    }
+    if (!r.ok()) return statusOnly(out, CTAP2_ERR_INVALID_CBOR);
+  }
+
+  // Only proto v1 is advertised in GetInfo; reject anything else.
+  if (protocol != 0 && protocol != 1) {
+    WA_LOG("CP fail: unsupported pinUvAuthProtocol=%llu", (unsigned long long)protocol);
+    return statusOnly(out, CTAP2_ERR_INVALID_OPTION);
+  }
+
+  if (subcmd == 0x01) {
+    // getPINRetries — no PIN set yet, so always returns max retries.
+    WA_LOG("CP getPINRetries");
+    out[0] = CTAP2_OK;
+    CborWriter w(out + 1, outMax - 1);
+    w.beginMap(1);
+      w.putUint(0x03);  w.putUint(kPinMaxRetries);
+    if (!w.ok()) return statusOnly(out, CTAP2_ERR_PROCESSING);
+    return (uint16_t)(1 + w.size());
+  }
+
+  if (subcmd == 0x02) {
+    // getKeyAgreement — return the device's ephemeral COSE_Key.
+    uint8_t pub[65];
+    if (!WebAuthnCrypto::getEphemeralPublicKey(pub)) {
+      WA_LOG("CP fail: getEphemeralPublicKey (not initialized?)");
+      return statusOnly(out, CTAP2_ERR_PROCESSING);
+    }
+    out[0] = CTAP2_OK;
+    CborWriter w(out + 1, outMax - 1);
+    w.beginMap(1);
+      w.putUint(0x01);
+      // Inline the COSE_Key map directly (writeCoseEcdhKey writes into a
+      // separate buffer; here we want it nested in this writer).
+      w.beginMap(5);
+        w.putUint(1);         w.putUint(2);                       // kty: EC2
+        w.putUint(3);         w.putInt(COSE_ECDH_HKDF_256);       // alg: -25
+        w.putInt(-1);         w.putUint(1);                       // crv: P-256
+        w.putInt(-2);         w.putBytes(pub + 1, 32);            // x
+        w.putInt(-3);         w.putBytes(pub + 33, 32);           // y
+    if (!w.ok()) {
+      WA_LOG("CP fail: getKeyAgreement CBOR overflow");
+      return statusOnly(out, CTAP2_ERR_PROCESSING);
+    }
+    WA_LOG("CP getKeyAgreement ok respLen=%u", (unsigned)(1 + w.size()));
+    return (uint16_t)(1 + w.size());
+  }
+
+  // Setting / changing the PIN, getting a PIN token, getUVRetries — none
+  // supported until full ClientPIN lands.
+  WA_LOG("CP fail: unsupported subcommand=%llu", (unsigned long long)subcmd);
+  return statusOnly(out, CTAP2_ERR_INVALID_OPTION);
 }
 
 // ── Reset ──────────────────────────────────────────────────────────────
@@ -503,7 +887,7 @@ uint16_t Ctap2::dispatch(uint8_t cmd,
     case CTAP2_MAKE_CREDENTIAL:    r = _handleMakeCredential(p, pLen, resp, respMax);   break;
     case CTAP2_GET_ASSERTION:      r = _handleGetAssertion(p, pLen, resp, respMax);     break;
     case CTAP2_RESET:              r = _handleReset(resp, respMax);                     break;
-    case CTAP2_CLIENT_PIN:         r = statusOnly(resp, CTAP2_ERR_UNSUPPORTED_OPTION);  break;
+    case CTAP2_CLIENT_PIN:         r = _handleClientPin(p, pLen, resp, respMax);        break;
     case CTAP2_GET_NEXT_ASSERTION: r = statusOnly(resp, CTAP2_ERR_NO_OPERATION_PENDING); break;
     default:                       r = statusOnly(resp, CTAP2_ERR_INVALID_OPTION);      break;
   }
