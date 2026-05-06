@@ -4,6 +4,7 @@
 
 #ifdef DEVICE_HAS_WEBAUTHN
 
+#include "WebAuthnConfig.h"
 #include "WebAuthnCrypto.h"
 #include "WebAuthnLog.h"
 
@@ -21,6 +22,7 @@ constexpr const char* kMasterPath  = "/unigeek/utility/fido/master.bin";
 constexpr const char* kCounterPath = "/unigeek/utility/fido/counter.bin";
 constexpr const char* kDevKeyPath  = "/unigeek/utility/fido/u2f_priv.bin";
 constexpr const char* kDevCertPath = "/unigeek/utility/fido/u2f_cert.der";
+constexpr const char* kPinPath     = "/unigeek/utility/fido/pin.bin";
 
 uint8_t  g_master[CredentialStore::kMasterKeySize];
 bool     g_masterLoaded = false;
@@ -306,6 +308,63 @@ bool CredentialStore::getDeviceCert(const uint8_t** outCert, size_t* outLen)
   return true;
 }
 
+bool CredentialStore::isPinSet()
+{
+  if (!init()) return false;
+  if (!storage()->exists(kPinPath)) return false;
+  // Validate file is the expected 18 bytes; treat anything else as "not set".
+  uint8_t buf[18];
+  return readBytes(kPinPath, buf, sizeof(buf));
+}
+
+bool CredentialStore::setPinHash(const uint8_t pinHash[16], uint8_t pinLen)
+{
+  if (!init() || !ensureDir()) return false;
+  uint8_t buf[18];
+  buf[0] = kPinMaxRetries;
+  buf[1] = pinLen;
+  memcpy(buf + 2, pinHash, 16);
+  return writeBytes(kPinPath, buf, sizeof(buf));
+}
+
+bool CredentialStore::getPinHash(uint8_t pinHash[16], uint8_t* outPinLen,
+                                  uint8_t* outRetries)
+{
+  if (!init()) return false;
+  uint8_t buf[18];
+  if (!readBytes(kPinPath, buf, sizeof(buf))) return false;
+  if (outRetries) *outRetries = buf[0];
+  if (outPinLen)  *outPinLen  = buf[1];
+  memcpy(pinHash, buf + 2, 16);
+  return true;
+}
+
+bool CredentialStore::resetPinRetries()
+{
+  if (!init()) return false;
+  uint8_t buf[18];
+  if (!readBytes(kPinPath, buf, sizeof(buf))) return false;
+  if (buf[0] == kPinMaxRetries) return true;  // no-op
+  buf[0] = kPinMaxRetries;
+  return writeBytes(kPinPath, buf, sizeof(buf));
+}
+
+bool CredentialStore::decrementPinRetries()
+{
+  if (!init()) return false;
+  uint8_t buf[18];
+  if (!readBytes(kPinPath, buf, sizeof(buf))) return false;
+  if (buf[0] > 0) buf[0]--;
+  return writeBytes(kPinPath, buf, sizeof(buf));
+}
+
+bool CredentialStore::clearPin()
+{
+  if (!storage()) return false;
+  storage()->deleteFile(kPinPath);
+  return true;
+}
+
 bool CredentialStore::wipe()
 {
   if (!storage()) return false;
@@ -313,6 +372,7 @@ bool CredentialStore::wipe()
   storage()->deleteFile(kCounterPath);
   storage()->deleteFile(kDevKeyPath);
   storage()->deleteFile(kDevCertPath);
+  storage()->deleteFile(kPinPath);
   g_devKeyLoaded   = false;
   g_devCertLoaded  = false;
   g_devCertLen     = 0;

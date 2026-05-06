@@ -38,6 +38,12 @@ public:
   // Optional: install a user-presence prompt. If unset, UP is auto-asserted.
   static void setUserPresenceFn(UserPresenceFn fn, void* user = nullptr);
 
+  // (Re)generate the per-power-cycle pinUvAuthToken (16 random bytes for
+  // proto v1) and clear the per-boot bad-PIN counter. Call from
+  // WebAuthnScreen::onInit each time the screen opens (= start of a new
+  // USB session, which is the closest UniGeek proxy for CTAP "power cycle").
+  static void initPinAuthToken();
+
 private:
   // Per-command handlers. Each writes a CTAP2 response (status byte + CBOR
   // payload) into `out`/`outMax`, returning the total length, and sets

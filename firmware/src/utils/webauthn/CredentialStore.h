@@ -63,6 +63,19 @@ public:
   static bool getDeviceKey  (uint8_t out[kPrivKeySize]);
   static bool getDeviceCert (const uint8_t** outCert, size_t* outLen);
 
+  // ── ClientPIN ──────────────────────────────────────────────────────────
+  // PIN file at /unigeek/utility/fido/pin.bin = retries(1) | pinLen(1) |
+  // pinHash(16) — pinHash is SHA-256(utf8 PIN)[0..16]. retries decrements on
+  // bad PIN, resets to kPinMaxRetries on success, hits 0 → PIN_BLOCKED until
+  // CredentialStore::wipe().
+  static bool isPinSet();
+  static bool setPinHash       (const uint8_t pinHash[16], uint8_t pinLen);
+  static bool getPinHash       (uint8_t pinHash[16], uint8_t* outPinLen,
+                                uint8_t* outRetries);
+  static bool resetPinRetries  ();
+  static bool decrementPinRetries();
+  static bool clearPin         ();
+
   // Wipe master + counter + resident table + PIN. Master key is then
   // regenerated lazily on next encode call. All previously issued
   // credentials are rendered useless (intended).

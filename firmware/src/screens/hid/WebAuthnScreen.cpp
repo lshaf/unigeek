@@ -48,6 +48,7 @@ void WebAuthnScreen::onInit()
   // hosts negotiate it via authenticatorClientPIN.getKeyAgreement before
   // every hmac-secret call so a fresh keypair per screen-entry is fine.
   webauthn::WebAuthnCrypto::initEphemeralEcdh();
+  webauthn::Ctap2::initPinAuthToken();
   webauthn::CredentialStore::init();
 
   // Construct the singleton — this attempts to claim the WEBAUTHN profile.
