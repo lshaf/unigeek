@@ -7,6 +7,7 @@
 #include "core/AchievementManager.h"
 #include "core/ConfigManager.h"
 #include "utils/webauthn/Ctap2.h"
+#include "utils/webauthn/U2f.h"
 #include "utils/webauthn/CredentialStore.h"
 #include "utils/webauthn/WebAuthnCrypto.h"
 #include "utils/webauthn/WebAuthnConfig.h"
@@ -65,6 +66,7 @@ void WebAuthnScreen::onInit()
   _ctaphid.setHandler(&webauthn::Ctap2::dispatch, nullptr);
 
   webauthn::Ctap2::setUserPresenceFn(&WebAuthnScreen::_onUserPresence, this);
+  webauthn::U2f::setUserPresenceFn  (&WebAuthnScreen::_onUserPresence, this);
 
   int n = Achievement.inc("webauthn_first_use");
   if (n == 1) Achievement.unlock("webauthn_first_use");
@@ -94,6 +96,7 @@ void WebAuthnScreen::onUpdate()
     if (dir == INavigation::DIR_BACK) {
       webauthn::fido().setOnReport(nullptr, nullptr);
       webauthn::Ctap2::setUserPresenceFn(nullptr, nullptr);
+      webauthn::U2f::setUserPresenceFn  (nullptr, nullptr);
       Screen.goBack();
       return;
     }

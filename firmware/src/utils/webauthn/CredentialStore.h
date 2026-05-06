@@ -52,6 +52,17 @@ public:
   // caller is responsible for zeroing the buffer after use.
   static bool getMasterKey(uint8_t out[kMasterKeySize]);
 
+  // ── U2F batch-attestation device identity ──────────────────────────────
+  // A separate ECDSA P-256 keypair from the AES-CBC master used for cred
+  // wrapping. Generated on first call and persisted under
+  // /unigeek/utility/fido/u2f_priv.bin + u2f_cert.der.
+  //
+  // The cert (~500 B) is cached in a static buffer after first load so
+  // U2F REGISTER doesn't touch storage on every call. `*outCert` points into
+  // that static buffer — DO NOT free; valid until next CredentialStore::wipe.
+  static bool getDeviceKey  (uint8_t out[kPrivKeySize]);
+  static bool getDeviceCert (const uint8_t** outCert, size_t* outLen);
+
   // Wipe master + counter + resident table + PIN. Master key is then
   // regenerated lazily on next encode call. All previously issued
   // credentials are rendered useless (intended).

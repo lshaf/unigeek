@@ -19,11 +19,21 @@ namespace {
 constexpr const char* kDir         = "/unigeek/utility/fido";
 constexpr const char* kMasterPath  = "/unigeek/utility/fido/master.bin";
 constexpr const char* kCounterPath = "/unigeek/utility/fido/counter.bin";
+constexpr const char* kDevKeyPath  = "/unigeek/utility/fido/u2f_priv.bin";
+constexpr const char* kDevCertPath = "/unigeek/utility/fido/u2f_cert.der";
 
 uint8_t  g_master[CredentialStore::kMasterKeySize];
 bool     g_masterLoaded = false;
 uint32_t g_counter      = 0;
 bool     g_counterLoaded = false;
+
+uint8_t  g_devKey[CredentialStore::kPrivKeySize];
+bool     g_devKeyLoaded = false;
+
+constexpr size_t kDevCertCap = 768;
+uint8_t  g_devCert[kDevCertCap];
+size_t   g_devCertLen = 0;
+bool     g_devCertLoaded = false;
 
 // Use the primary storage (SD if present, else LFS) — `Uni.Storage` is set
 // by `Device::initStorage()`. Direct StorageLFS sometimes isn't populated
@@ -213,11 +223,101 @@ bool CredentialStore::getMasterKey(uint8_t out[kMasterKeySize])
   return true;
 }
 
+bool CredentialStore::getDeviceKey(uint8_t out[kPrivKeySize])
+{
+  if (!init()) return false;
+  if (g_devKeyLoaded) {
+    memcpy(out, g_devKey, kPrivKeySize);
+    return true;
+  }
+
+  if (readBytes(kDevKeyPath, g_devKey, kPrivKeySize)) {
+    WA_LOG("CS u2f_priv.bin loaded");
+    g_devKeyLoaded = true;
+    memcpy(out, g_devKey, kPrivKeySize);
+    return true;
+  }
+
+  // First boot — generate a fresh ECDSA P-256 keypair and persist the priv.
+  WA_LOG("CS u2f_priv.bin not found, generating");
+  uint8_t pub[65];
+  if (!WebAuthnCrypto::ecdsaP256Keygen(g_devKey, pub)) {
+    WA_LOG("CS getDeviceKey fail: ecdsaP256Keygen");
+    return false;
+  }
+  if (!writeBytes(kDevKeyPath, g_devKey, kPrivKeySize)) {
+    WA_LOG("CS getDeviceKey fail: writeBytes %s", kDevKeyPath);
+    return false;
+  }
+  WA_LOG("CS u2f_priv.bin generated + written");
+  g_devKeyLoaded = true;
+  memcpy(out, g_devKey, kPrivKeySize);
+  return true;
+}
+
+bool CredentialStore::getDeviceCert(const uint8_t** outCert, size_t* outLen)
+{
+  if (!init()) return false;
+  if (g_devCertLoaded) {
+    *outCert = g_devCert;
+    *outLen  = g_devCertLen;
+    return true;
+  }
+
+  if (storage()->exists(kDevCertPath)) {
+    fs::File f = storage()->open(kDevCertPath, "r");
+    if (f) {
+      size_t n = f.read(g_devCert, sizeof(g_devCert));
+      f.close();
+      if (n > 0 && n <= sizeof(g_devCert)) {
+        WA_LOG("CS u2f_cert.der loaded (%u B)", (unsigned)n);
+        g_devCertLen = n;
+        g_devCertLoaded = true;
+        *outCert = g_devCert;
+        *outLen  = g_devCertLen;
+        return true;
+      }
+    }
+  }
+
+  // First boot — build a self-signed cert over the device priv key.
+  WA_LOG("CS u2f_cert.der not found, generating");
+  uint8_t devPriv[kPrivKeySize];
+  if (!getDeviceKey(devPriv)) {
+    WA_LOG("CS getDeviceCert fail: getDeviceKey");
+    return false;
+  }
+  size_t n = 0;
+  if (!WebAuthnCrypto::buildSelfSignedX509(devPriv, g_devCert, sizeof(g_devCert), &n)) {
+    WA_LOG("CS getDeviceCert fail: buildSelfSignedX509");
+    memset(devPriv, 0, sizeof(devPriv));
+    return false;
+  }
+  memset(devPriv, 0, sizeof(devPriv));
+  if (!writeBytes(kDevCertPath, g_devCert, n)) {
+    WA_LOG("CS getDeviceCert fail: writeBytes %s", kDevCertPath);
+    return false;
+  }
+  WA_LOG("CS u2f_cert.der generated + written (%u B)", (unsigned)n);
+  g_devCertLen = n;
+  g_devCertLoaded = true;
+  *outCert = g_devCert;
+  *outLen  = g_devCertLen;
+  return true;
+}
+
 bool CredentialStore::wipe()
 {
   if (!storage()) return false;
   storage()->deleteFile(kMasterPath);
   storage()->deleteFile(kCounterPath);
+  storage()->deleteFile(kDevKeyPath);
+  storage()->deleteFile(kDevCertPath);
+  g_devKeyLoaded   = false;
+  g_devCertLoaded  = false;
+  g_devCertLen     = 0;
+  memset(g_devKey,  0, sizeof(g_devKey));
+  memset(g_devCert, 0, sizeof(g_devCert));
   g_masterLoaded  = false;
   g_counterLoaded = false;
   g_counter       = 0;

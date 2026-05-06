@@ -73,6 +73,15 @@ public:
   // form the 32-byte sharedSecret; we just return the raw X here.
   static bool ecdhComputeSharedX(const uint8_t peer_pub[65], uint8_t sharedX[32]);
 
+  // ── X.509 self-signed cert builder ─────────────────────────────────────
+  // Generates a v3 self-signed P-256 certificate for the given private key.
+  // Writes ASN.1 DER bytes into `out`, sets *outLen on success. Used once at
+  // first-boot to produce the U2F batch-attestation cert. Returns false if
+  // mbedTLS x509write APIs aren't compiled in or the buffer is too small
+  // (typical cert size is ~500 B; budget 768 B).
+  static bool buildSelfSignedX509(const uint8_t priv[32],
+                                  uint8_t* out, size_t outCap, size_t* outLen);
+
   // ── HMAC-secret extension key derivation ──────────────────────────────
   // Per the SLIP-0022 chain pico-fido uses (lifted into UniGeek without the
   // HD-wallet master refactor): the per-credential 64-byte secret is

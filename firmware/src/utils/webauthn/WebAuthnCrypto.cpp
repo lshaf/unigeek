@@ -19,6 +19,9 @@
 #include <mbedtls/ctr_drbg.h>
 #include <mbedtls/entropy.h>
 #include <mbedtls/hkdf.h>
+#include <mbedtls/pk.h>
+#include <mbedtls/x509_crt.h>
+#include <mbedtls/x509.h>
 
 namespace webauthn {
 
@@ -242,6 +245,85 @@ bool WebAuthnCrypto::ecdhComputeSharedX(const uint8_t peer_pub[65], uint8_t shar
 
   mbedtls_mpi_free(&z);
   mbedtls_ecp_point_free(&Qp);
+  return ok;
+}
+
+bool WebAuthnCrypto::buildSelfSignedX509(const uint8_t priv[32],
+                                         uint8_t* out, size_t outCap, size_t* outLen)
+{
+  if (!g_inited) return false;
+
+  mbedtls_x509write_cert ctx;
+  mbedtls_pk_context     pk;
+  mbedtls_ecp_keypair    ecp;
+  mbedtls_mpi            serial;
+
+  mbedtls_x509write_crt_init(&ctx);
+  mbedtls_pk_init(&pk);
+  mbedtls_ecp_keypair_init(&ecp);
+  mbedtls_mpi_init(&serial);
+
+  bool ok = mbedtls_pk_setup(&pk, mbedtls_pk_info_from_type(MBEDTLS_PK_ECKEY)) == 0;
+
+  // Wire our raw priv key into the PK wrapper.
+  if (ok) {
+    mbedtls_ecp_keypair* kp = mbedtls_pk_ec(pk);
+    ok = mbedtls_ecp_group_load(&kp->grp, MBEDTLS_ECP_DP_SECP256R1) == 0
+      && mbedtls_mpi_read_binary(&kp->d, priv, 32) == 0
+      && mbedtls_ecp_mul(&kp->grp, &kp->Q, &kp->d, &kp->grp.G,
+                         mbedtls_ctr_drbg_random, &g_drbg) == 0;
+  }
+
+  // 16 random serial bytes; force MSB clear so it stays positive.
+  uint8_t serialBytes[16];
+  if (ok) {
+    mbedtls_ctr_drbg_random(&g_drbg, serialBytes, sizeof(serialBytes));
+    serialBytes[0] &= 0x7F;
+    serialBytes[0] |= 0x40;  // ensure non-zero leading byte
+    ok = mbedtls_mpi_read_binary(&serial, serialBytes, sizeof(serialBytes)) == 0;
+  }
+
+  if (ok) {
+    mbedtls_x509write_crt_set_version(&ctx, MBEDTLS_X509_CRT_VERSION_3);
+    ok = mbedtls_x509write_crt_set_serial(&ctx, &serial) == 0
+      && mbedtls_x509write_crt_set_validity(&ctx,
+                                            "20260101000000",
+                                            "20760101000000") == 0
+      && mbedtls_x509write_crt_set_issuer_name(&ctx,
+                                               "C=US,O=UniGeek,CN=UniGeek FIDO") == 0
+      && mbedtls_x509write_crt_set_subject_name(&ctx,
+                                                "C=US,O=UniGeek,CN=UniGeek FIDO") == 0;
+  }
+  if (ok) {
+    mbedtls_x509write_crt_set_subject_key(&ctx, &pk);
+    mbedtls_x509write_crt_set_issuer_key(&ctx, &pk);
+    mbedtls_x509write_crt_set_md_alg(&ctx, MBEDTLS_MD_SHA256);
+    ok = mbedtls_x509write_crt_set_basic_constraints(&ctx, 0, 0) == 0
+      && mbedtls_x509write_crt_set_subject_key_identifier(&ctx) == 0
+      && mbedtls_x509write_crt_set_authority_key_identifier(&ctx) == 0
+      && mbedtls_x509write_crt_set_key_usage(&ctx,
+                                             MBEDTLS_X509_KU_DIGITAL_SIGNATURE
+                                           | MBEDTLS_X509_KU_KEY_CERT_SIGN) == 0;
+  }
+
+  // mbedtls_x509write_crt_der writes from the END of `out` and returns the
+  // byte count. Move the bytes to the start so callers see a normal layout.
+  if (ok) {
+    int n = mbedtls_x509write_crt_der(&ctx, out, outCap,
+                                      mbedtls_ctr_drbg_random, &g_drbg);
+    if (n > 0 && (size_t)n <= outCap) {
+      memmove(out, out + outCap - n, (size_t)n);
+      *outLen = (size_t)n;
+    } else {
+      ok = false;
+    }
+  }
+
+  mbedtls_mpi_free(&serial);
+  mbedtls_ecp_keypair_free(&ecp);
+  // pk owns the inner keypair from mbedtls_pk_setup; freeing it is enough.
+  mbedtls_pk_free(&pk);
+  mbedtls_x509write_crt_free(&ctx);
   return ok;
 }
 
