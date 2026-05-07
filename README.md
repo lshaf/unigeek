@@ -367,6 +367,7 @@ This project was built with inspiration and reference from:
 
 ## TODO
 
+- adjust input for 4way navigation, currently it's only working for 2 way. (for define check mainmenuscreen)
 - LoRa
 - ST25 nfc implementation for lora https://github.com/m5stack/M5Unit-NFC
 - sticks3 ir receive not functional (RMT/ES8311 conflict); transmit works
