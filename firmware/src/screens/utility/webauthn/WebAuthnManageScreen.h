@@ -19,8 +19,9 @@ public:
   void onItemSelected(uint8_t index)  override;
 
 private:
-  ListItem _items[3] = {
+  ListItem _items[4] = {
     {nullptr},          // label set in onInit() — "Generate BIP39" or "Regenerate BIP39"
+    {"BIP39 Restore"},
     {"BIP39 Backup"},
     {"Passkeys"},
   };

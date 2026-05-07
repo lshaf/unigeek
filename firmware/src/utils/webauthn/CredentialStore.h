@@ -47,6 +47,12 @@ public:
   //                first, since old credentials are bound to the old master.
   static bool generateMaster(bool force);
 
+  // Restore the master key from caller-provided entropy (e.g. BIP-39 decode
+  // output). Always destructive: existing master + creds + PIN + counter +
+  // config are wiped first, since old credentials were bound to the old
+  // master. `len` must equal kMasterKeySize.
+  static bool restoreMaster(const uint8_t* entropy, size_t len);
+
   // Atomically increment the global signature counter and return the new
   // value. Persists immediately. Returns 0 if storage is unavailable.
   static uint32_t bumpCounter();

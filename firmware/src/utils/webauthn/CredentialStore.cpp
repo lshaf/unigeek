@@ -209,6 +209,30 @@ bool CredentialStore::generateMaster(bool force)
   return true;
 }
 
+bool CredentialStore::restoreMaster(const uint8_t* entropy, size_t len)
+{
+  if (!entropy || len != kMasterKeySize) return false;
+  if (!WebAuthnCrypto::init()) return false;
+  if (!ensureDir())            return false;
+
+  // Always wipe — restore replaces every secret bound to the old master.
+  // wipe() handles the case where master.bin doesn't exist yet (no-op on
+  // the missing files).
+  if (!wipe()) {
+    WA_LOG("CS restoreMaster: wipe failed");
+    return false;
+  }
+  memcpy(g_master, entropy, kMasterKeySize);
+  if (!writeBytes(kMasterPath, g_master, kMasterKeySize)) {
+    WA_LOG("CS restoreMaster fail: write %s", kMasterPath);
+    memset(g_master, 0, kMasterKeySize);
+    return false;
+  }
+  g_masterLoaded = true;
+  WA_LOG("CS restoreMaster ok");
+  return true;
+}
+
 uint32_t CredentialStore::bumpCounter()
 {
   if (!init()) return 0;

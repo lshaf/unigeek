@@ -39,7 +39,6 @@ void WebAuthnBackupScreen::onInit()
     // No PIN — go straight to warning, but the warning copy is sterner.
     _state = ST_WARNING;
   }
-  _chromeDrawn = false;
   render();
 }
 
@@ -88,7 +87,6 @@ void WebAuthnBackupScreen::onUpdate()
       return;
     }
     _state = ST_WARNING;
-    _chromeDrawn = false;
     render();
     return;
   }
@@ -103,10 +101,9 @@ void WebAuthnBackupScreen::onUpdate()
 
   if (_state == ST_WARNING) {
     if (dir == INavigation::DIR_PRESS) {
-      if (!_wordsReady && !_generate()) { _state = ST_DENIED; _chromeDrawn = false; render(); return; }
+      if (!_wordsReady && !_generate()) { _state = ST_DENIED; render(); return; }
       _page = 0;
       _state = ST_WORDS;
-      _chromeDrawn = false;
       render();
     }
     return;
@@ -115,19 +112,11 @@ void WebAuthnBackupScreen::onUpdate()
   if (_state == ST_WORDS) {
     Layout L = _layout();
     if (dir == INavigation::DIR_PRESS || dir == INavigation::DIR_RIGHT || dir == INavigation::DIR_DOWN) {
-      if (_page + 1 < L.pageCount) {
-        _page++;
-      } else {
-        _state = ST_DONE;
-      }
-      _chromeDrawn = false;
+      if (_page + 1 < L.pageCount) _page++;
+      else                         _state = ST_DONE;
       render();
     } else if (dir == INavigation::DIR_LEFT || dir == INavigation::DIR_UP) {
-      if (_page > 0) {
-        _page--;
-        _chromeDrawn = false;
-        render();
-      }
+      if (_page > 0) { _page--; render(); }
     }
     return;
   }

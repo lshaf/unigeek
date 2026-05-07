@@ -54,7 +54,6 @@ private:
   uint8_t  _page        = 0;
   uint16_t _wordIdx[kWordCount];                       // BIP-39 wordlist indices
   bool     _wordsReady  = false;
-  bool     _chromeDrawn = false;
   const char* _err      = nullptr;
 
   bool _generate();          // pull master key, encode to _wordIdx
