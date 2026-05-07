@@ -156,8 +156,10 @@ If the same site has multiple passkeys (e.g. two separate accounts), the browser
 | Resident credentials (`rk=true`, passkeys) | Yes |
 | `GetNextAssertion` — multi-account discoverable signin | Yes |
 | `CredentialManagement` — browser-side passkey manager | Yes |
-| ClientPIN proto v1 — set / change / verify on host | Yes |
+| `AuthenticatorConfig` — `toggleAlwaysUv` + `setMinPINLength` | Yes |
+| ClientPIN proto v1 — set / change / verify on host (10-min idle timeout on the auth token) | Yes |
 | `hmac-secret` extension (PRF) — site-bound 32-byte secrets | Yes |
+| `largeBlob` extension — 4 KB device-stored array, per-cred `largeBlobKey` for SSH-key-bound logins / encrypted account data | Yes |
 | U2F / CTAP1 backward compat — `REGISTER`, `AUTHENTICATE`, `VERSION` | Yes |
 | Algorithms — ECDSA P-256 (`alg = -7`) | Yes |
 | Attestation — packed self-attestation (default) + U2F batch attestation (legacy flow) | Yes |
@@ -201,6 +203,7 @@ Reset is a host-driven command — `fido2-token -R /dev/hidrawN` or your browser
 /unigeek/utility/fido/config.bin       flags(1) + minPinLen(1) + reserved(2) — alwaysUv flag etc.
 /unigeek/utility/fido/u2f_priv.bin     32-byte ECDSA P-256 batch-attestation key
 /unigeek/utility/fido/u2f_cert.der     ~500-byte self-signed P-256 certificate
+/unigeek/utility/fido/largeblob.bin    up to 4 KB of host-encrypted blob data (largeBlob extension)
 /unigeek/utility/fido/credentials/     one 386-byte file per resident credential
   <hex16_rp>_<hex16_user>.bin          hex16_rp = rpIdHash[0..7], hex16_user = sha256(userId)[0..7]
 ```
