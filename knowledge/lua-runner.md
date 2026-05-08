@@ -91,7 +91,7 @@ The `uni` table (core functions: `debug`, `delay`, `millis`, `heap`, `beep`) is 
 
 ## Anti-flicker: Overdraw Technique
 
-> [!warning]
+> [!warn]
 > **Never call `lcd.clear()` inside the while loop.** Clearing the full screen each frame causes severe flicker because the display blanks for a full frame before redrawing.
 
 Instead, **erase only what moved** by painting the background colour over the previous bounding box:
@@ -365,7 +365,7 @@ end
 sp:free()   -- optional; __gc also frees on script exit
 ```
 
-> [!warning]
+> [!warn]
 > A full-screen RGB565 sprite uses `W * H * 2` bytes of internal heap (e.g. 320×240 ≈ 150 KB). If `lcd.sprite()` returns `nil`, allocate a smaller sprite or stick with overdraw.
 
 ### Sprite handle methods
