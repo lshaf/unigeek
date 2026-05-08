@@ -84,6 +84,12 @@ public:
     _draw(lcd, x, y, bmp, color);
   }
 
+  template<typename T>
+  static void drawHome(T& lcd, int16_t x, int16_t y, uint16_t color) {
+    static constexpr uint8_t bmp[] = {0x18, 0x3C, 0x7E, 0xFF, 0x42, 0x5A, 0x5A, 0x7E};
+    _draw(lcd, x, y, bmp, color);
+  }
+
   // Status-bar icons — 2×2 scaled bitmaps (16×16) for 20×20 boxes
   template<typename T>
   static void drawWifiStatus(T& lcd, int16_t x, int16_t y, uint16_t color) {

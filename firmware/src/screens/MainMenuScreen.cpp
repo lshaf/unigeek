@@ -27,6 +27,11 @@ void MainMenuScreen::onInit() {
   _items[7] = {"Settings", Icons::drawSetting};
 #ifdef APP_MENU_POWER_OFF
   _items[8] = {"Power Off", Icons::drawPower};
+# ifdef DEVICE_HAS_TOUCH_NAV
+  _items[9] = {"Home", Icons::drawHome};
+# endif
+#elif defined(DEVICE_HAS_TOUCH_NAV)
+  _items[8] = {"Home", Icons::drawHome};
 #endif
 
   _selectedIndex    = 0;
@@ -34,6 +39,17 @@ void MainMenuScreen::onInit() {
   _partialTopActive = false;
 
   _calculateLayout();
+
+#ifdef DEVICE_HAS_TOUCH_NAV
+  Uni.Nav->setSuppressKeys(true);
+#endif
+}
+
+void MainMenuScreen::onRestore() {
+#ifdef DEVICE_HAS_TOUCH_NAV
+  Uni.Nav->drawOverlay();          // clear any lit bar before suppress turns it off
+  Uni.Nav->setSuppressKeys(true);
+#endif
 }
 
 void MainMenuScreen::_calculateLayout()
@@ -75,9 +91,70 @@ void MainMenuScreen::_scrollIfNeeded()
   }
 }
 
+#ifdef DEVICE_HAS_TOUCH_NAV
+int16_t MainMenuScreen::_itemAtTouch(int16_t tx, int16_t ty) {
+  int16_t lx = tx - (int16_t)bodyX();
+  int16_t ly = ty - (int16_t)bodyY();
+  if (lx < 0 || lx >= (int16_t)bodyW() || ly < 0 || ly >= (int16_t)bodyH()) return -1;
+
+  int16_t leftover = (int16_t)bodyH() - _visibleRows * (int16_t)_itemH;
+  bool hasPartial = leftover >= 5;
+  bool showPartialTop = hasPartial && _scrollOffset > 0 && _partialTopActive;
+  int16_t fullStartY = showPartialTop ? leftover : 0;
+
+  if (ly < fullStartY) return -1;
+  int16_t fly = ly - fullStartY;
+  uint8_t rowInView = fly / _itemH;
+  if (rowInView >= _visibleRows) return -1;
+
+  uint8_t col = lx / _itemW;
+  if (col >= _cols) return -1;
+
+  uint8_t rowIdx = _scrollOffset + rowInView;
+  uint8_t idx = rowIdx * _cols + col;
+  if (idx >= ITEM_COUNT) return -1;
+  return (int16_t)idx;
+}
+#endif
+
 void MainMenuScreen::onUpdate() {
+#ifdef DEVICE_HAS_TOUCH_NAV
+  // Hover highlight while the finger is held down
+  if (Uni.Nav->isPressed()) {
+    int16_t tx = Uni.Nav->lastTouchX();
+    int16_t ty = Uni.Nav->lastTouchY();
+    if (tx >= 0) {
+      int16_t hit = _itemAtTouch(tx, ty);
+      if (hit >= 0 && (uint8_t)hit != _selectedIndex) {
+        _selectedIndex = (uint8_t)hit;
+        onRender();
+      }
+    }
+  }
+#endif
+
   if (Uni.Nav->wasPressed()) {
     auto dir = Uni.Nav->readDirection();
+
+#ifdef DEVICE_HAS_TOUCH_NAV
+    const int16_t tx = Uni.Nav->lastTouchX();
+    const int16_t ty = Uni.Nav->lastTouchY();
+    if (tx >= 0) {
+      int16_t hit = _itemAtTouch(tx, ty);
+      if (hit >= 0) {
+        _selectedIndex = (uint8_t)hit;
+        Uni.Nav->setSuppressKeys(false);
+        onItemSelected(_selectedIndex);
+        return;
+      }
+    }
+    if (dir == INavigation::DIR_BACK) {
+      Uni.Nav->setSuppressKeys(false);
+      onBack();
+      return;
+    }
+    return;
+#endif
 
     if (dir == INavigation::DIR_BACK) {
       onBack();
@@ -221,6 +298,11 @@ void MainMenuScreen::onItemSelected(uint8_t index) {
   case 7: Screen.push(new SettingScreen());      break;
 #ifdef APP_MENU_POWER_OFF
   case 8: Uni.Power.powerOff(); break;
+# ifdef DEVICE_HAS_TOUCH_NAV
+  case 9: onBack(); break;
+# endif
+#elif defined(DEVICE_HAS_TOUCH_NAV)
+  case 8: onBack(); break;
 #endif
   }
 }
