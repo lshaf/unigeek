@@ -15,7 +15,7 @@ private:
   ListItem _items[3] = {
     {"USB MouseKeyboard"},
     {"BLE MouseKeyboard"},
-    {"WebAuthn (USB)"},
+    {"USB Web Authn"},
   };
 #elif defined(DEVICE_HAS_USB_HID)
   ListItem _items[2] = {
