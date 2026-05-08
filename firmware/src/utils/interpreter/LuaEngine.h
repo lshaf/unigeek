@@ -25,6 +25,12 @@ public:
   // runs). Returns false when done (exit() called, error, or requestExit()).
   bool stepLoop(String& errOut);
 
+  // Drain any pending popup the Lua task has parked on the engine. MUST be
+  // called from the main loop task — the firmware actions it dispatches
+  // call Uni.update() / draw to Uni.Lcd, both of which expect the loop task.
+  // Returns immediately when there's nothing to do.
+  void servicePendingPopup();
+
   void requestExit()             { _exitRequested = true; }
   bool isExitRequested()   const { return _exitRequested; }
 
@@ -51,6 +57,32 @@ private:
   // Pending source: owned by the engine, freed by _taskEntry after compile.
   char*  _pendingSrc    = nullptr;
   size_t _pendingSrcLen = 0;
+
+  // Popup bridge — Lua task → loop task. The Lua task fills the request
+  // fields and spins on _popupType going back to POPUP_NONE; the loop task
+  // sees POPUP_NONE != _popupType in servicePendingPopup() and runs the
+  // matching firmware action, then clears the slot.
+  enum PopupType : uint8_t {
+    POPUP_NONE = 0,
+    POPUP_TEXT,
+    POPUP_HEX,
+    POPUP_IP,
+    POPUP_NUMBER,
+    POPUP_CONFIRM,
+    POPUP_SELECT,
+  };
+  static constexpr int kMaxSelectOptions = 16;
+  volatile PopupType _popupType        = POPUP_NONE;
+  String             _popupTitle;
+  String             _popupDefaultStr;
+  String             _popupResultStr;
+  int                _popupMin         = 0;
+  int                _popupMax         = 0;
+  int                _popupDefaultInt  = 0;
+  int                _popupResultInt   = 0;
+  bool               _popupCancelled   = false;
+  String             _popupOptions[kMaxSelectOptions];
+  int                _popupOptionCount = 0;
 
   void*             _task        = nullptr;  // TaskHandle_t (opaque to avoid header pulls)
   volatile Status   _status      = STATUS_IDLE;
@@ -130,4 +162,45 @@ private:
   static int _nav_touchX(lua_State* L);
   static int _nav_touchY(lua_State* L);
   static int _nav_isTouched(lua_State* L);
+
+  // Lazy loaders + bindings for tier-2 modules.
+  static int _lua_load_input(lua_State* L);
+  static int _lua_load_dialog(lua_State* L);
+  static int _lua_load_notify(lua_State* L);
+  static int _lua_load_json(lua_State* L);
+  static int _lua_load_path(lua_State* L);
+  static int _lua_load_time(lua_State* L);
+  static int _lua_load_config(lua_State* L);
+
+  // uni.input.* — popup-bridge to firmware Input*Action classes.
+  static int _input_text(lua_State* L);
+  static int _input_number(lua_State* L);
+  static int _input_hex(lua_State* L);
+  static int _input_ip(lua_State* L);
+
+  // uni.dialog.* — popup-bridge to InputSelectAction.
+  static int _dialog_confirm(lua_State* L);
+  static int _dialog_select(lua_State* L);
+
+  // uni.notify.* — runs directly on the Lua task (just LCD writes + sleep).
+  static int _notify_show(lua_State* L);
+
+  // uni.json.* — cJSON wrappers.
+  static int _json_encode(lua_State* L);
+  static int _json_decode(lua_State* L);
+
+  // uni.path.* — string helpers.
+  static int _path_join(lua_State* L);
+  static int _path_basename(lua_State* L);
+  static int _path_dirname(lua_State* L);
+  static int _path_ext(lua_State* L);
+
+  // uni.time.* — RTC.
+  static int _time_now(lua_State* L);
+
+  // uni.config.* — read-only ConfigManager.
+  static int _config_get(lua_State* L);
+
+  // Helper used by _input_*: park request, wait for loop task to clear it.
+  static int _runPopupAndPushResult(lua_State* L, bool stringResult);
 };

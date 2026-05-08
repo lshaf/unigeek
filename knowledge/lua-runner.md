@@ -67,18 +67,25 @@ Only a subset of Lua 5.1 is included to save flash:
 
 ## `require()` — Lazy Module Loading
 
-Three modules are **lazy-loaded** — the tables are only allocated in memory the first time `require()` is called. Call `require` once before the while loop:
+Modules are **lazy-loaded** — each table is only allocated in memory the first time `require()` is called. Call `require` once before the while loop:
 
 ```lua
-local lcd = require("uni.lcd")   -- display + sprites
-local sd  = require("uni.sd")    -- SD card I/O
-local nav = require("uni.nav")   -- buttons + touch
+local lcd    = require("uni.lcd")     -- display + sprites
+local sd     = require("uni.sd")      -- SD card I/O
+local nav    = require("uni.nav")     -- buttons + touch
+local input  = require("uni.input")   -- text / number / hex / ip prompts
+local dialog = require("uni.dialog")  -- confirm / select popups
+local notify = require("uni.notify")  -- on-screen toast
+local json   = require("uni.json")    -- encode / decode
+local path   = require("uni.path")    -- join / basename / dirname / ext
+local time   = require("uni.time")    -- RTC clock
+local config = require("uni.config")  -- read device settings
 ```
 
 The `uni` table (core functions: `debug`, `delay`, `millis`, `heap`, `beep`) is always available as a global — no require needed.
 
 > [!note]
-> There is no file-backed loader. `require("mymodule")` will **not** load `/unigeek/lua/mymodule.lua`. Only `uni.lcd`, `uni.sd`, and `uni.nav` are available via require.
+> There is no file-backed loader. `require("mymodule")` will **not** load `/unigeek/lua/mymodule.lua`. Only the modules above are available via require.
 
 ---
 
@@ -509,6 +516,158 @@ end
 
 ---
 
+## `uni.input` — Modal prompts
+
+Each call blocks the script until the user dismisses the popup. Returns `nil` on cancel. Internally the script's Lua task parks the request on the engine and the runner's loop task drives the actual popup — so the popup gets the same `Uni.update()` flow as any other firmware screen.
+
+| Function | Returns | Notes |
+|---|---|---|
+| `input.text(title, [default])` | string \| nil | free-form text |
+| `input.number(title, [min], [max], [default])` | number \| nil | digits only; `min`/`max` validated by the popup |
+| `input.hex(title, [default])` | string \| nil | hex digits + space |
+| `input.ip(title, [default])` | string \| nil | digits + `.` |
+
+```lua
+local input = require("uni.input")
+
+local name = input.text("Your name?", "Anon")
+if not name then return end                     -- user cancelled
+
+local age = input.number("Age?", 0, 120, 18)
+local mac = input.hex("MAC?", "AABBCCDDEEFF")
+local ip  = input.ip("Server IP?", "192.168.1.1")
+```
+
+---
+
+## `uni.dialog` — Modal choice popups
+
+Same blocking behaviour as `uni.input`.
+
+| Function | Returns | Notes |
+|---|---|---|
+| `dialog.confirm(title)` | bool | `true` for Yes, `false` for No or cancel |
+| `dialog.select(title, options)` | string \| nil | `options` is a Lua array of strings; returns the chosen string |
+
+```lua
+local dialog = require("uni.dialog")
+
+if dialog.confirm("Erase save file?") then
+  sd.remove("/unigeek/games/save.txt")
+end
+
+local mode = dialog.select("Pick mode", {"Easy", "Medium", "Hard"})
+if mode then uni.debug("got: " .. mode) end
+```
+
+`dialog.select` is capped at 16 options.
+
+---
+
+## `uni.notify` — Toast
+
+Non-blocking (well, blocks the script for `ms` ms but not the rest of the firmware): paints a centred status box, sleeps, wipes.
+
+```lua
+local notify = require("uni.notify")
+notify.show("Saved!", 800)        -- 800 ms toast
+notify.show("Quick blip", 250)
+```
+
+`ms` defaults to 800.
+
+---
+
+## `uni.json` — Encode / Decode
+
+Backed by the ESP-IDF `cJSON`. Round-trips Lua tables, numbers, strings, booleans, and `nil`.
+
+| Function | Returns | Notes |
+|---|---|---|
+| `json.encode(value)` | string \| nil | `nil` on failure |
+| `json.decode(str)` | value \| nil | `nil` on parse error |
+
+```lua
+local json = require("uni.json")
+
+local raw = '{"name":"Mira","scores":[12,34,56]}'
+local t = json.decode(raw)
+uni.debug(t.name)              -- Mira
+uni.debug(tostring(t.scores[2])) -- 34
+
+local out = json.encode({ ok = true, list = {1, 2, 3} })
+sd.write("/unigeek/games/save.json", out)
+```
+
+> [!note]
+> A Lua table with sequential 1..N integer keys encodes as a JSON array; everything else (including `{}`) encodes as a JSON object. Mixed key types are encoded as objects with stringified keys.
+
+---
+
+## `uni.path` — Path helpers
+
+Pure string ops; no SD access.
+
+| Function | Returns | Example |
+|---|---|---|
+| `path.join(a, b, ...)` | string | `path.join("/unigeek", "lua", "save.txt")` → `/unigeek/lua/save.txt` |
+| `path.basename(p)` | string | `path.basename("/foo/bar.txt")` → `bar.txt` |
+| `path.dirname(p)` | string | `path.dirname("/foo/bar.txt")` → `/foo` |
+| `path.ext(p)` | string | `path.ext("save.txt")` → `txt` |
+
+```lua
+local path = require("uni.path")
+
+local entries = sd.list("/unigeek/lua")
+for _, e in ipairs(entries) do
+  if not e.isDir and path.ext(e.name) == "lua" then
+    uni.debug("script: " .. path.join("/unigeek/lua", e.name))
+  end
+end
+```
+
+---
+
+## `uni.time` — RTC
+
+```lua
+local time = require("uni.time")
+local t = time.now()
+-- t.year, t.month, t.day, t.hour, t.min, t.sec, t.wday (0=Sun), t.epoch
+uni.debug(string.format("%04d-%02d-%02d %02d:%02d:%02d",
+  t.year, t.month, t.day, t.hour, t.min, t.sec))
+```
+
+`t.wday` follows C convention: 0 = Sunday, 6 = Saturday. `t.epoch` is Unix seconds.
+
+If the device hasn't synced its RTC (no NTP since boot), the values will reflect whatever the RTC currently holds — typically `1970-01-01` shortly after a cold boot.
+
+---
+
+## `uni.config` — Read device settings
+
+Read-only window into the firmware's `ConfigManager`.
+
+| Key | Returns | Notes |
+|---|---|---|
+| `"theme_color"` | number | resolved RGB565 — feed straight into `lcd.color`-style args |
+| `"device_name"` | string | e.g. `"UniGeek"` |
+| `"primary_color"` | string | colour name (`"Blue"`, `"Red"`, …) |
+| `"brightness"` | string | `"0".."100"` |
+| `"volume"` | string | `"0".."100"` |
+| any other key | string | raw stored value, or `""` if unset |
+
+```lua
+local config = require("uni.config")
+local theme = config.get("theme_color")     -- number
+local name  = config.get("device_name")     -- string
+lcd.fillRoundRect(8, 8, 100, 24, 4, theme)
+lcd.textColor(lcd.color(255, 255, 255), theme)
+lcd.print(16, 14, name)
+```
+
+---
+
 ## Writing Scripts with AI
 
 Paste the context block below into any AI chat **before** describing what you want.
@@ -537,10 +696,17 @@ NOT available: io, os, debug.
 All file I/O goes through sd.* (require "uni.sd").
 
 ## require() — module loading
-Three modules are lazy-loaded — call require() once before the while loop:
-  local lcd = require("uni.lcd")   -- display + sprites
-  local sd  = require("uni.sd")    -- SD card I/O
-  local nav = require("uni.nav")   -- buttons + touch
+Modules are lazy-loaded — call require() once before the while loop:
+  local lcd    = require("uni.lcd")     -- display + sprites
+  local sd     = require("uni.sd")      -- SD card I/O
+  local nav    = require("uni.nav")     -- buttons + touch
+  local input  = require("uni.input")   -- text/number/hex/ip prompts (modal)
+  local dialog = require("uni.dialog")  -- confirm/select popups (modal)
+  local notify = require("uni.notify")  -- toast (auto-wipe after ms)
+  local json   = require("uni.json")    -- encode/decode
+  local path   = require("uni.path")    -- join/basename/dirname/ext
+  local time   = require("uni.time")    -- RTC clock
+  local config = require("uni.config")  -- read device settings
 The uni table (debug, delay, millis, heap, beep) is always a global — no require needed.
 There is NO file-backed loader — require("mymodule") does NOT load .lua files.
 
@@ -622,18 +788,58 @@ sd.rename(src, dst)       -- rename/move file; returns true/false
 sd.mkdir(path)            -- create directory; returns true/false
 sd.size(path)             -- file size in bytes; -1 if missing/unavailable
 
+### Modal prompts — block the script until dismissed; return nil/false on cancel
+input  = require("uni.input")
+input.text(title, [default])                   -- string | nil — free-form text
+input.number(title, [min], [max], [default])   -- number | nil — digits only
+input.hex(title, [default])                    -- string | nil — hex digits
+input.ip(title, [default])                     -- string | nil — digits + dot
+
+dialog = require("uni.dialog")
+dialog.confirm(title)                          -- bool — true = Yes
+dialog.select(title, {"a","b","c"})            -- string | nil — picks one of the options (max 16)
+
+notify = require("uni.notify")
+notify.show(msg, [ms])                         -- toast; default 800 ms; auto-wipes
+
+### Data
+json = require("uni.json")
+json.encode(value)        -- string | nil — encodes Lua tables, numbers, strings, booleans, nil
+json.decode(str)          -- value | nil — nil on parse error
+                          -- Lua tables with sequential 1..N integer keys → JSON arrays;
+                          -- everything else (and {}) → JSON objects.
+
+path = require("uni.path")
+path.join(a, b, …)        -- string — joins parts with /
+path.basename(p)          -- string — last component
+path.dirname(p)           -- string — everything before last /
+path.ext(p)               -- string — extension without the dot ("" if none)
+
+### Device awareness
+time = require("uni.time")
+time.now()                -- {year, month, day, hour, min, sec, wday, epoch}
+                          -- wday: 0=Sun .. 6=Sat. epoch is Unix seconds.
+                          -- 1970-01-01 if RTC hasn't been synced.
+
+config = require("uni.config")
+config.get("theme_color")    -- number (RGB565) — feed straight into lcd.color args
+config.get("device_name")    -- string
+config.get("primary_color")  -- string ("Blue", "Red", ...)
+config.get(any_other_key)    -- string ("" if unset)
+
 ## Rules you must follow
 1. Use the while-loop pattern: while true do … end — runner exits automatically when script returns.
 2. Declare all persistent state as locals BEFORE the while loop — not globals.
 3. NEVER call lcd.clear() or lcd.fillScreen() inside the loop — use overdraw, textColor(fg,bg), or sprites.
 4. Always call uni.delay(ms) inside the loop.
-5. Call require("uni.lcd"), require("uni.sd"), require("uni.nav") once, before the loop.
+5. Call require(...) once for each module, before the loop.
 6. Use math.floor() before passing float coordinates to lcd functions.
 7. Strings passed to lcd.print() must be strings — use tostring() if needed.
 8. Do NOT use `//` for integer division — use math.floor(a/b) (Lua 5.1, not 5.3).
 9. sd.list() returns a 1-indexed Lua array; iterate with ipairs().
 10. Save game state to /unigeek/games/<name>.txt (not /unigeek/lua/).
 11. Sprites are not free — a full-screen RGB565 sprite is w*h*2 bytes of internal heap; check for nil.
+12. input.* / dialog.* block the script. The runner's main loop drives the popup, then resumes the script.
 ```
 
 ---

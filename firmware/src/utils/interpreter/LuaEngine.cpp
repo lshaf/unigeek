@@ -1,9 +1,16 @@
 #include "utils/interpreter/LuaEngine.h"
 #include "core/Device.h"
 #include "core/INavigation.h"
+#include "core/ConfigManager.h"
+#include "ui/actions/InputTextAction.h"
+#include "ui/actions/InputNumberAction.h"
+#include "ui/actions/InputSelectAction.h"
+#include "ui/actions/ShowStatusAction.h"
 #include <esp_heap_caps.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
+#include <time.h>
+#include <cJSON.h>
 
 char LuaEngine::exitSentinel = '\0';
 
@@ -38,14 +45,6 @@ void LuaEngine::_countHook(lua_State* L, lua_Debug*) {
   LuaEngine* eng = _fromState(L);
   // Yield every hook tick so the loop task / WDT can run.
   vTaskDelay(0);
-  // Heartbeat every ~100k instructions (hook fires per 1000): heap watch
-  static uint32_t tickCount = 0;
-  if ((++tickCount % 100) == 0) {
-    Serial.printf("[Lua] tick=%u freeInt=%u freePsram=%u\n",
-      (unsigned)tickCount,
-      (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
-      (unsigned)heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
-  }
   if (eng && eng->_exitRequested) {
     lua_pushlightuserdata(L, &LuaEngine::exitSentinel);
     lua_error(L);
@@ -66,15 +65,8 @@ LuaEngine* LuaEngine::_fromState(lua_State* L) {
 
 bool LuaEngine::init() {
   if (_lua) deinit();
-  Serial.printf("[Lua] init pre  freeInt=%u freePsram=%u largestPsram=%u\n",
-    (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
-    (unsigned)heap_caps_get_free_size(MALLOC_CAP_SPIRAM),
-    (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_SPIRAM));
   _lua = lua_newstate(_alloc, nullptr);
   if (!_lua) { Serial.println("[Lua] lua_newstate FAILED"); return false; }
-  Serial.printf("[Lua] init post freeInt=%u freePsram=%u\n",
-    (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
-    (unsigned)heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
 
   lua_pushlightuserdata(_lua, (void*)&kRegKey);
   lua_pushlightuserdata(_lua, this);
@@ -112,6 +104,9 @@ void LuaEngine::deinit() {
   }
   if (_lua) { lua_close(_lua); _lua = nullptr; }
   _exitRequested = false;
+  // Drop any popup state so the next script starts with a clean slot.
+  _popupType        = POPUP_NONE;
+  _popupOptionCount = 0;
 }
 
 // ── Script loading ────────────────────────────────────────────────────
@@ -135,8 +130,6 @@ bool LuaEngine::loadScript(char* src, size_t len, String& errOut) {
   _pendingSrc    = src;
   _pendingSrcLen = len;
   _exitRequested = false;
-  Serial.printf("[Lua] load queued bytes=%u (compile happens on lua task)\n",
-    (unsigned)len);
   return true;
 }
 
@@ -150,13 +143,9 @@ void LuaEngine::_taskEntry(void* arg) {
   LuaEngine* eng = (LuaEngine*)arg;
   lua_State* L   = eng->_lua;
 
-  Serial.printf("[Lua] task start freeInt=%u\n",
-    (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL));
-
   // Compile on this task — the parser is recursive and would overflow the
   // 8 KB loop-task stack on large scripts. We have 32 KB here.
   if (eng->_pendingSrc) {
-    Serial.printf("[Lua] compile bytes=%u\n", (unsigned)eng->_pendingSrcLen);
     int crc = luaL_loadbuffer(L, eng->_pendingSrc, eng->_pendingSrcLen, "script");
     heap_caps_free(eng->_pendingSrc);
     eng->_pendingSrc    = nullptr;
@@ -171,7 +160,6 @@ void LuaEngine::_taskEntry(void* arg) {
       return;
     }
     eng->_chunkRef = luaL_ref(L, LUA_REGISTRYINDEX);
-    Serial.println("[Lua] compile OK");
   }
 
   if (eng->_chunkRef == LUA_NOREF) {
@@ -194,11 +182,10 @@ void LuaEngine::_taskEntry(void* arg) {
     next = STATUS_DONE_EXIT;
   } else {
     eng->_taskErrOut = lua_isstring(L, -1) ? lua_tostring(L, -1) : "unknown error";
+    Serial.printf("[Lua] runtime err: %s\n", eng->_taskErrOut.c_str());
     lua_pop(L, 1);
     next = STATUS_DONE_ERR;
   }
-  Serial.printf("[Lua] task end rc=%d freeInt=%u\n", rc,
-    (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL));
 
   eng->_task   = nullptr;
   eng->_status = next;       // publish AFTER clearing handle
@@ -224,8 +211,6 @@ bool LuaEngine::stepLoop(String& errOut) {
       return false;
     }
     _task = (void*)handle;
-    Serial.printf("[Lua] task spawned freeInt=%u\n",
-      (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL));
     return true;
   }
 
@@ -233,12 +218,7 @@ bool LuaEngine::stepLoop(String& errOut) {
 
   Status s = _status;
   _status  = STATUS_IDLE;
-  if (s == STATUS_DONE_ERR) {
-    errOut = _taskErrOut;
-    Serial.printf("[Lua] error: %s\n", errOut.c_str());
-  } else if (s == STATUS_DONE_EXIT) {
-    Serial.println("[Lua] exit() sentinel");
-  }
+  if (s == STATUS_DONE_ERR) errOut = _taskErrOut;
   return false;
 }
 
@@ -259,9 +239,16 @@ void LuaEngine::_registerBindings() {
   // Register lazy loaders — tables are built only when require() is called
   lua_getglobal(_lua, "package");
   lua_getfield(_lua, -1, "preload");
-  lua_pushcfunction(_lua, _lua_load_lcd); lua_setfield(_lua, -2, "uni.lcd");
-  lua_pushcfunction(_lua, _lua_load_sd);  lua_setfield(_lua, -2, "uni.sd");
-  lua_pushcfunction(_lua, _lua_load_nav); lua_setfield(_lua, -2, "uni.nav");
+  lua_pushcfunction(_lua, _lua_load_lcd);    lua_setfield(_lua, -2, "uni.lcd");
+  lua_pushcfunction(_lua, _lua_load_sd);     lua_setfield(_lua, -2, "uni.sd");
+  lua_pushcfunction(_lua, _lua_load_nav);    lua_setfield(_lua, -2, "uni.nav");
+  lua_pushcfunction(_lua, _lua_load_input);  lua_setfield(_lua, -2, "uni.input");
+  lua_pushcfunction(_lua, _lua_load_dialog); lua_setfield(_lua, -2, "uni.dialog");
+  lua_pushcfunction(_lua, _lua_load_notify); lua_setfield(_lua, -2, "uni.notify");
+  lua_pushcfunction(_lua, _lua_load_json);   lua_setfield(_lua, -2, "uni.json");
+  lua_pushcfunction(_lua, _lua_load_path);   lua_setfield(_lua, -2, "uni.path");
+  lua_pushcfunction(_lua, _lua_load_time);   lua_setfield(_lua, -2, "uni.time");
+  lua_pushcfunction(_lua, _lua_load_config); lua_setfield(_lua, -2, "uni.config");
   lua_pop(_lua, 2);
 
   // Sprite metatable lives in the registry; attached to each sprite userdata.
@@ -456,13 +443,8 @@ int LuaEngine::_sd_read(lua_State* L) {
   IStorage* s = _storage();
   if (!s) { lua_pushnil(L); return 1; }
   const char* path = luaL_checkstring(L, 1);
-  if (!s->exists(path)) {
-    Serial.printf("[Lua] sd.read miss '%s' -> nil\n", path);
-    lua_pushnil(L);
-    return 1;
-  }
+  if (!s->exists(path)) { lua_pushnil(L); return 1; }
   String data = s->readFile(path);
-  Serial.printf("[Lua] sd.read '%s' bytes=%u\n", path, (unsigned)data.length());
   lua_pushstring(L, data.c_str());
   return 1;
 }
@@ -869,5 +851,449 @@ int LuaEngine::_nav_touchY(lua_State* L) {
 
 int LuaEngine::_nav_isTouched(lua_State* L) {
   lua_pushboolean(L, (Uni.Nav && Uni.Nav->isPressed()) ? 1 : 0);
+  return 1;
+}
+
+// ── Lazy loaders for tier-2 modules ───────────────────────────────────
+
+int LuaEngine::_lua_load_input(lua_State* L) {
+  lua_newtable(L);
+  lua_pushcfunction(L, _input_text);   lua_setfield(L, -2, "text");
+  lua_pushcfunction(L, _input_number); lua_setfield(L, -2, "number");
+  lua_pushcfunction(L, _input_hex);    lua_setfield(L, -2, "hex");
+  lua_pushcfunction(L, _input_ip);     lua_setfield(L, -2, "ip");
+  return 1;
+}
+
+int LuaEngine::_lua_load_dialog(lua_State* L) {
+  lua_newtable(L);
+  lua_pushcfunction(L, _dialog_confirm); lua_setfield(L, -2, "confirm");
+  lua_pushcfunction(L, _dialog_select);  lua_setfield(L, -2, "select");
+  return 1;
+}
+
+int LuaEngine::_lua_load_notify(lua_State* L) {
+  lua_newtable(L);
+  lua_pushcfunction(L, _notify_show); lua_setfield(L, -2, "show");
+  return 1;
+}
+
+int LuaEngine::_lua_load_json(lua_State* L) {
+  lua_newtable(L);
+  lua_pushcfunction(L, _json_encode); lua_setfield(L, -2, "encode");
+  lua_pushcfunction(L, _json_decode); lua_setfield(L, -2, "decode");
+  return 1;
+}
+
+int LuaEngine::_lua_load_path(lua_State* L) {
+  lua_newtable(L);
+  lua_pushcfunction(L, _path_join);     lua_setfield(L, -2, "join");
+  lua_pushcfunction(L, _path_basename); lua_setfield(L, -2, "basename");
+  lua_pushcfunction(L, _path_dirname);  lua_setfield(L, -2, "dirname");
+  lua_pushcfunction(L, _path_ext);      lua_setfield(L, -2, "ext");
+  return 1;
+}
+
+int LuaEngine::_lua_load_time(lua_State* L) {
+  lua_newtable(L);
+  lua_pushcfunction(L, _time_now); lua_setfield(L, -2, "now");
+  return 1;
+}
+
+int LuaEngine::_lua_load_config(lua_State* L) {
+  lua_newtable(L);
+  lua_pushcfunction(L, _config_get); lua_setfield(L, -2, "get");
+  return 1;
+}
+
+// ── Popup bridge ──────────────────────────────────────────────────────
+//
+// Lua task fills a request slot on the engine and waits. The loop task drains
+// it via servicePendingPopup() — calling popup() on the loop task is the only
+// way to keep the firmware action's internal Uni.update() / Uni.Lcd flow on
+// the same task that already drives them. From the Lua task we'd race the
+// M5Unified mutexes and assert.
+
+int LuaEngine::_runPopupAndPushResult(lua_State* L, bool stringResult) {
+  LuaEngine* eng = _fromState(L);
+  if (!eng) { lua_pushnil(L); return 1; }
+  // Spin until the loop task clears the slot. Honour exit so a script kill
+  // doesn't strand the Lua task forever inside a popup wait.
+  while (eng->_popupType != POPUP_NONE) {
+    if (eng->_exitRequested) {
+      eng->_popupType      = POPUP_NONE;
+      eng->_popupCancelled = true;
+      break;
+    }
+    vTaskDelay(pdMS_TO_TICKS(15));
+  }
+  if (eng->_popupCancelled) {
+    lua_pushnil(L);
+  } else if (stringResult) {
+    lua_pushstring(L, eng->_popupResultStr.c_str());
+  } else {
+    lua_pushnumber(L, (lua_Number)eng->_popupResultInt);
+  }
+  return 1;
+}
+
+void LuaEngine::servicePendingPopup() {
+  if (_popupType == POPUP_NONE) return;
+  PopupType type = _popupType;
+
+  switch (type) {
+    case POPUP_TEXT: {
+      String r = InputTextAction::popup(_popupTitle.c_str(), _popupDefaultStr,
+                                        InputTextAction::INPUT_TEXT);
+      _popupCancelled = InputTextAction::wasCancelled();
+      _popupResultStr = _popupCancelled ? String("") : r;
+      break;
+    }
+    case POPUP_HEX: {
+      String r = InputTextAction::popup(_popupTitle.c_str(), _popupDefaultStr,
+                                        InputTextAction::INPUT_HEX);
+      _popupCancelled = InputTextAction::wasCancelled();
+      _popupResultStr = _popupCancelled ? String("") : r;
+      break;
+    }
+    case POPUP_IP: {
+      String r = InputTextAction::popup(_popupTitle.c_str(), _popupDefaultStr,
+                                        InputTextAction::INPUT_IP_ADDRESS);
+      _popupCancelled = InputTextAction::wasCancelled();
+      _popupResultStr = _popupCancelled ? String("") : r;
+      break;
+    }
+    case POPUP_NUMBER: {
+      int r = InputNumberAction::popup(_popupTitle.c_str(), _popupMin, _popupMax,
+                                       _popupDefaultInt);
+      _popupCancelled = InputNumberAction::wasCancelled();
+      _popupResultInt = r;
+      break;
+    }
+    case POPUP_CONFIRM: {
+      static constexpr InputSelectAction::Option opts[] = {
+        {"No",  "no"},
+        {"Yes", "yes"},
+      };
+      const char* sel = InputSelectAction::popup(_popupTitle.c_str(), opts, 2, "no");
+      _popupCancelled = (sel == nullptr);
+      _popupResultStr = (sel && strcmp(sel, "yes") == 0) ? "yes" : "no";
+      break;
+    }
+    case POPUP_SELECT: {
+      InputSelectAction::Option opts[kMaxSelectOptions];
+      int n = _popupOptionCount;
+      if (n > kMaxSelectOptions) n = kMaxSelectOptions;
+      for (int i = 0; i < n; i++) {
+        opts[i].label = _popupOptions[i].c_str();
+        opts[i].value = _popupOptions[i].c_str();
+      }
+      const char* sel = InputSelectAction::popup(_popupTitle.c_str(), opts, n);
+      _popupCancelled = (sel == nullptr);
+      _popupResultStr = sel ? String(sel) : String("");
+      break;
+    }
+    default: break;
+  }
+
+  _popupType = POPUP_NONE;   // releases the Lua task's spin-wait
+}
+
+// ── uni.input.* ───────────────────────────────────────────────────────
+
+int LuaEngine::_input_text(lua_State* L) {
+  LuaEngine* eng = _fromState(L);
+  if (!eng) { lua_pushnil(L); return 1; }
+  eng->_popupTitle      = luaL_checkstring(L, 1);
+  eng->_popupDefaultStr = luaL_optstring(L, 2, "");
+  eng->_popupCancelled  = false;
+  eng->_popupResultStr  = "";
+  eng->_popupType       = POPUP_TEXT;
+  return _runPopupAndPushResult(L, /*stringResult=*/true);
+}
+
+int LuaEngine::_input_hex(lua_State* L) {
+  LuaEngine* eng = _fromState(L);
+  if (!eng) { lua_pushnil(L); return 1; }
+  eng->_popupTitle      = luaL_checkstring(L, 1);
+  eng->_popupDefaultStr = luaL_optstring(L, 2, "");
+  eng->_popupCancelled  = false;
+  eng->_popupResultStr  = "";
+  eng->_popupType       = POPUP_HEX;
+  return _runPopupAndPushResult(L, true);
+}
+
+int LuaEngine::_input_ip(lua_State* L) {
+  LuaEngine* eng = _fromState(L);
+  if (!eng) { lua_pushnil(L); return 1; }
+  eng->_popupTitle      = luaL_checkstring(L, 1);
+  eng->_popupDefaultStr = luaL_optstring(L, 2, "");
+  eng->_popupCancelled  = false;
+  eng->_popupResultStr  = "";
+  eng->_popupType       = POPUP_IP;
+  return _runPopupAndPushResult(L, true);
+}
+
+int LuaEngine::_input_number(lua_State* L) {
+  LuaEngine* eng = _fromState(L);
+  if (!eng) { lua_pushnil(L); return 1; }
+  eng->_popupTitle      = luaL_checkstring(L, 1);
+  eng->_popupMin        = (int)luaL_optnumber(L, 2, INT_MIN);
+  eng->_popupMax        = (int)luaL_optnumber(L, 3, INT_MAX);
+  eng->_popupDefaultInt = (int)luaL_optnumber(L, 4, 0);
+  eng->_popupCancelled  = false;
+  eng->_popupResultInt  = 0;
+  eng->_popupType       = POPUP_NUMBER;
+  return _runPopupAndPushResult(L, /*stringResult=*/false);
+}
+
+// ── uni.dialog.* ──────────────────────────────────────────────────────
+
+int LuaEngine::_dialog_confirm(lua_State* L) {
+  LuaEngine* eng = _fromState(L);
+  if (!eng) { lua_pushboolean(L, 0); return 1; }
+  eng->_popupTitle     = luaL_checkstring(L, 1);
+  eng->_popupCancelled = false;
+  eng->_popupResultStr = "";
+  eng->_popupType      = POPUP_CONFIRM;
+  while (eng->_popupType != POPUP_NONE) {
+    if (eng->_exitRequested) {
+      eng->_popupType      = POPUP_NONE;
+      eng->_popupCancelled = true;
+      break;
+    }
+    vTaskDelay(pdMS_TO_TICKS(15));
+  }
+  // Confirm returns boolean: true = yes, false = no/cancelled.
+  bool yes = !eng->_popupCancelled && eng->_popupResultStr == "yes";
+  lua_pushboolean(L, yes ? 1 : 0);
+  return 1;
+}
+
+int LuaEngine::_dialog_select(lua_State* L) {
+  LuaEngine* eng = _fromState(L);
+  if (!eng) { lua_pushnil(L); return 1; }
+  eng->_popupTitle = luaL_checkstring(L, 1);
+  luaL_checktype(L, 2, LUA_TTABLE);
+  int n = (int)lua_objlen(L, 2);
+  if (n > kMaxSelectOptions) n = kMaxSelectOptions;
+  eng->_popupOptionCount = n;
+  for (int i = 0; i < n; i++) {
+    lua_rawgeti(L, 2, i + 1);
+    eng->_popupOptions[i] = luaL_checkstring(L, -1);
+    lua_pop(L, 1);
+  }
+  eng->_popupCancelled = false;
+  eng->_popupResultStr = "";
+  eng->_popupType      = POPUP_SELECT;
+  return _runPopupAndPushResult(L, /*stringResult=*/true);
+}
+
+// ── uni.notify.* ──────────────────────────────────────────────────────
+//
+// Runs entirely on the Lua task: ShowStatusAction with positive duration just
+// paints + sleeps + wipes (no Uni.update / Nav reads), so it's safe to call
+// here without going through the popup bridge.
+
+int LuaEngine::_notify_show(lua_State* L) {
+  const char* msg = luaL_checkstring(L, 1);
+  int ms          = (int)luaL_optnumber(L, 2, 800);
+  if (ms < 0) ms = 0;
+  ShowStatusAction::show(msg, ms > 0 ? ms : 0);
+  return 0;
+}
+
+// ── uni.json.* ────────────────────────────────────────────────────────
+//
+// Recursive cJSON ↔ Lua marshalling. Tables with a sequential 1..N integer
+// keyset map to JSON arrays; everything else maps to JSON objects.
+
+static void _cjsonToLua(lua_State* L, const cJSON* node);
+static cJSON* _luaToCjson(lua_State* L, int idx);
+
+static void _cjsonToLua(lua_State* L, const cJSON* node) {
+  if (!node || cJSON_IsNull(node)) { lua_pushnil(L); return; }
+  if (cJSON_IsBool(node))   { lua_pushboolean(L, cJSON_IsTrue(node) ? 1 : 0); return; }
+  if (cJSON_IsNumber(node)) { lua_pushnumber(L, node->valuedouble); return; }
+  if (cJSON_IsString(node)) { lua_pushstring(L, node->valuestring ? node->valuestring : ""); return; }
+  if (cJSON_IsArray(node)) {
+    lua_newtable(L);
+    int i = 1;
+    cJSON* it = nullptr;
+    cJSON_ArrayForEach(it, node) {
+      _cjsonToLua(L, it);
+      lua_rawseti(L, -2, i++);
+    }
+    return;
+  }
+  if (cJSON_IsObject(node)) {
+    lua_newtable(L);
+    cJSON* it = nullptr;
+    cJSON_ArrayForEach(it, node) {
+      _cjsonToLua(L, it);
+      lua_setfield(L, -2, it->string ? it->string : "");
+    }
+    return;
+  }
+  lua_pushnil(L);
+}
+
+static bool _luaTableIsArray(lua_State* L, int idx, int* lenOut) {
+  // 1..N integer keys with no holes → array. Empty tables encode as objects
+  // (`{}` round-trips that way; arrays should have an explicit element).
+  size_t n = lua_objlen(L, idx);
+  *lenOut = (int)n;
+  if (n == 0) return false;
+  for (size_t i = 1; i <= n; i++) {
+    lua_rawgeti(L, idx, (int)i);
+    bool ok = !lua_isnil(L, -1);
+    lua_pop(L, 1);
+    if (!ok) return false;
+  }
+  return true;
+}
+
+static cJSON* _luaToCjson(lua_State* L, int idx) {
+  int t = lua_type(L, idx);
+  switch (t) {
+    case LUA_TNIL:     return cJSON_CreateNull();
+    case LUA_TBOOLEAN: return cJSON_CreateBool(lua_toboolean(L, idx) ? 1 : 0);
+    case LUA_TNUMBER:  return cJSON_CreateNumber(lua_tonumber(L, idx));
+    case LUA_TSTRING:  return cJSON_CreateString(lua_tostring(L, idx));
+    case LUA_TTABLE: {
+      int absIdx = idx > 0 ? idx : lua_gettop(L) + idx + 1;
+      int n = 0;
+      if (_luaTableIsArray(L, absIdx, &n)) {
+        cJSON* arr = cJSON_CreateArray();
+        for (int i = 1; i <= n; i++) {
+          lua_rawgeti(L, absIdx, i);
+          cJSON* child = _luaToCjson(L, -1);
+          if (child) cJSON_AddItemToArray(arr, child);
+          lua_pop(L, 1);
+        }
+        return arr;
+      }
+      cJSON* obj = cJSON_CreateObject();
+      lua_pushnil(L);
+      while (lua_next(L, absIdx) != 0) {
+        // key at -2, value at -1; cJSON keys must be strings.
+        if (lua_type(L, -2) == LUA_TSTRING) {
+          const char* key = lua_tostring(L, -2);
+          cJSON* child = _luaToCjson(L, -1);
+          if (child) cJSON_AddItemToObject(obj, key, child);
+        } else if (lua_type(L, -2) == LUA_TNUMBER) {
+          char buf[32];
+          snprintf(buf, sizeof(buf), "%g", lua_tonumber(L, -2));
+          cJSON* child = _luaToCjson(L, -1);
+          if (child) cJSON_AddItemToObject(obj, buf, child);
+        }
+        lua_pop(L, 1);
+      }
+      return obj;
+    }
+    default: return cJSON_CreateNull();
+  }
+}
+
+int LuaEngine::_json_decode(lua_State* L) {
+  const char* str = luaL_checkstring(L, 1);
+  cJSON* root = cJSON_Parse(str);
+  if (!root) { lua_pushnil(L); return 1; }
+  _cjsonToLua(L, root);
+  cJSON_Delete(root);
+  return 1;
+}
+
+int LuaEngine::_json_encode(lua_State* L) {
+  cJSON* root = _luaToCjson(L, 1);
+  if (!root) { lua_pushnil(L); return 1; }
+  char* str = cJSON_PrintUnformatted(root);
+  if (!str) { cJSON_Delete(root); lua_pushnil(L); return 1; }
+  lua_pushstring(L, str);
+  cJSON_free(str);
+  cJSON_Delete(root);
+  return 1;
+}
+
+// ── uni.path.* ────────────────────────────────────────────────────────
+
+int LuaEngine::_path_join(lua_State* L) {
+  String out = luaL_checkstring(L, 1);
+  int n = lua_gettop(L);
+  for (int i = 2; i <= n; i++) {
+    const char* part = luaL_checkstring(L, i);
+    if (!*part) continue;
+    if (out.length() > 0 && out[out.length() - 1] != '/' && part[0] != '/') {
+      out += '/';
+    } else if (out.length() > 0 && out[out.length() - 1] == '/' && part[0] == '/') {
+      out += (part + 1);
+      continue;
+    }
+    out += part;
+  }
+  lua_pushstring(L, out.c_str());
+  return 1;
+}
+
+int LuaEngine::_path_basename(lua_State* L) {
+  const char* p = luaL_checkstring(L, 1);
+  const char* slash = strrchr(p, '/');
+  lua_pushstring(L, slash ? slash + 1 : p);
+  return 1;
+}
+
+int LuaEngine::_path_dirname(lua_State* L) {
+  const char* p = luaL_checkstring(L, 1);
+  const char* slash = strrchr(p, '/');
+  if (!slash) { lua_pushstring(L, ""); return 1; }
+  if (slash == p) { lua_pushstring(L, "/"); return 1; }
+  lua_pushlstring(L, p, (size_t)(slash - p));
+  return 1;
+}
+
+int LuaEngine::_path_ext(lua_State* L) {
+  const char* p = luaL_checkstring(L, 1);
+  const char* slash = strrchr(p, '/');
+  const char* base  = slash ? slash + 1 : p;
+  const char* dot   = strrchr(base, '.');
+  if (!dot || dot == base) { lua_pushstring(L, ""); return 1; }
+  lua_pushstring(L, dot + 1);
+  return 1;
+}
+
+// ── uni.time.* ────────────────────────────────────────────────────────
+
+int LuaEngine::_time_now(lua_State* L) {
+  time_t now = time(nullptr);
+  struct tm tmv = {};
+  // localtime_r can return NULL on uninitialised tz data (early boot) — leave
+  // tmv zeroed in that case so the script gets 1900-01-01 instead of garbage.
+  localtime_r(&now, &tmv);
+  lua_newtable(L);
+  lua_pushnumber(L, tmv.tm_year + 1900); lua_setfield(L, -2, "year");
+  lua_pushnumber(L, tmv.tm_mon + 1);     lua_setfield(L, -2, "month");
+  lua_pushnumber(L, tmv.tm_mday);        lua_setfield(L, -2, "day");
+  lua_pushnumber(L, tmv.tm_hour);        lua_setfield(L, -2, "hour");
+  lua_pushnumber(L, tmv.tm_min);         lua_setfield(L, -2, "min");
+  lua_pushnumber(L, tmv.tm_sec);         lua_setfield(L, -2, "sec");
+  lua_pushnumber(L, tmv.tm_wday);        lua_setfield(L, -2, "wday");
+  lua_pushnumber(L, (lua_Number)now);    lua_setfield(L, -2, "epoch");
+  return 1;
+}
+
+// ── uni.config.* ──────────────────────────────────────────────────────
+//
+// Read-only access to ConfigManager values. Returns the raw stored string for
+// most keys; "theme_color" returns the resolved RGB565 number so scripts can
+// match the device theme without re-parsing the colour name.
+
+int LuaEngine::_config_get(lua_State* L) {
+  const char* key = luaL_checkstring(L, 1);
+  if (strcmp(key, "theme_color") == 0) {
+    lua_pushnumber(L, (lua_Number)Config.getThemeColor());
+    return 1;
+  }
+  String val = Config.get(key, "");
+  lua_pushstring(L, val.c_str());
   return 1;
 }

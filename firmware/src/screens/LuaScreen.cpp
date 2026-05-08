@@ -42,6 +42,10 @@ void LuaScreen::onUpdate() {
     return;
   }
 
+  // Drain any popup the Lua task is waiting on (input/dialog) — must happen
+  // on this loop task because the firmware popup actions own Uni.update().
+  _engine.servicePendingPopup();
+
   _errBuf = "";
   bool keepGoing = _engine.stepLoop(_errBuf);
   if (!keepGoing) _handleDone(!_errBuf.isEmpty());
@@ -127,8 +131,6 @@ void LuaScreen::_startScript(const String& path) {
   size_t n = f.readBytes(buf, size);
   f.close();
   buf[n] = '\0';
-  Serial.printf("[lua] script size=%u in %s\n", (unsigned)n,
-    (caps & MALLOC_CAP_SPIRAM) ? "PSRAM" : "INTERNAL");
 
   if (!_engine.init()) {
     heap_caps_free(buf);
@@ -183,7 +185,6 @@ void LuaScreen::_handleDone(bool isError) {
     return;
   }
   _log.addLine(("[error] " + _errBuf).c_str(), TFT_RED);
-  Serial.println("[lua] " + _errBuf);
   _state = STATE_DONE;
   Uni.Lcd.fillScreen(TFT_BLACK);
   render();
