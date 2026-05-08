@@ -178,16 +178,18 @@ private:
 #endif
 
       auto _isDummy = [&](int i) { return !_sets[i].isAction && _sets[i].label[0] == '\0'; };
-      switch (dir) {
-      case INavigation::DIR_UP:
-      case INavigation::DIR_LEFT:
+#ifdef DEVICE_HAS_4WAY_NAV
+      if (dir == INavigation::DIR_UP) {
+        do { _scrollPos = (_scrollPos - _gridCols() + _setCount) % _setCount; } while (_isDummy(_scrollPos));
+      } else if (dir == INavigation::DIR_DOWN) {
+        do { _scrollPos = (_scrollPos + _gridCols()) % _setCount; } while (_isDummy(_scrollPos));
+      } else
+#endif
+      if (dir == INavigation::DIR_LEFT || dir == INavigation::DIR_UP) {
         do { _scrollPos = (_scrollPos - 1 + _setCount) % _setCount; } while (_isDummy(_scrollPos));
-        break;
-      case INavigation::DIR_DOWN:
-      case INavigation::DIR_RIGHT:
+      } else if (dir == INavigation::DIR_RIGHT || dir == INavigation::DIR_DOWN) {
         do { _scrollPos = (_scrollPos + 1) % _setCount; } while (_isDummy(_scrollPos));
-        break;
-      case INavigation::DIR_PRESS: {
+      } else if (dir == INavigation::DIR_PRESS) {
         String prevErr = _error;
         _handleSelect();
         if (!_done && !_cancelled) {
@@ -197,10 +199,8 @@ private:
           _drawGridInput();
         }
         delay(10); continue;
-      }
-      case INavigation::DIR_BACK:
-        _cancelled = true; break;
-      default: break;
+      } else if (dir == INavigation::DIR_BACK) {
+        _cancelled = true;
       }
 
       if (!_done && !_cancelled && prev != _scrollPos) {

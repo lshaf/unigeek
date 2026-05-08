@@ -558,32 +558,29 @@ private:
       }
 #endif
 
-      switch (dir) {
-        // Linear traversal in reading order so 2-button nav boards (where
-        // DIR_LEFT/DIR_RIGHT aren't emitted) can still walk the whole grid.
-        // RIGHT/DOWN advances; LEFT/UP retreats; both wrap row→row at the
-        // edges. Same convention as InputNumberAction.
-        case INavigation::DIR_UP:
-        case INavigation::DIR_LEFT:
-          _moveBy(-1);
-          break;
-        case INavigation::DIR_DOWN:
-        case INavigation::DIR_RIGHT:
-          _moveBy(+1);
-          break;
-        case INavigation::DIR_PRESS:
-          _select(_scrollPos);
-          break;
-        case INavigation::DIR_BACK:
-          if (_input.length() > 0) {
-            _input.remove(_input.length() - 1);
-            _rebuildCells();
-            _drawAll();
-          } else {
-            _cancelled = true;
-          }
-          break;
-        default: break;
+#ifdef DEVICE_HAS_4WAY_NAV
+      if (dir == INavigation::DIR_UP) {
+        _moveBy(-_gridCols());
+      } else if (dir == INavigation::DIR_DOWN) {
+        _moveBy(+_gridCols());
+      } else
+#endif
+      // Linear traversal: 2-button boards emit only UP/DOWN; 4-way boards
+      // use LEFT/RIGHT for column steps.
+      if (dir == INavigation::DIR_LEFT || dir == INavigation::DIR_UP) {
+        _moveBy(-1);
+      } else if (dir == INavigation::DIR_RIGHT || dir == INavigation::DIR_DOWN) {
+        _moveBy(+1);
+      } else if (dir == INavigation::DIR_PRESS) {
+        _select(_scrollPos);
+      } else if (dir == INavigation::DIR_BACK) {
+        if (_input.length() > 0) {
+          _input.remove(_input.length() - 1);
+          _rebuildCells();
+          _drawAll();
+        } else {
+          _cancelled = true;
+        }
       }
 
       if (!_done && !_cancelled && prev != _scrollPos) {
