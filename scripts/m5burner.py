@@ -8,9 +8,10 @@ http://m5burner-api.m5stack.com/api/admin/firmware with the
 
 Usage:
     python scripts/m5burner.py list                       # GET firmware index
-    python scripts/m5burner.py upload <version>           # POST all m5* boards
-    python scripts/m5burner.py upload <version> <env>...  # POST specific envs
+    python scripts/m5burner.py upload <version>           # POST + auto-publish all m5* boards
+    python scripts/m5burner.py upload <version> <env>...  # POST + auto-publish specific envs
     python scripts/m5burner.py upload <version> --dry-run # validate only
+    python scripts/m5burner.py publish <version>          # PUT publish on already-uploaded m5* boards
 """
 
 from __future__ import annotations
@@ -134,6 +135,22 @@ def cmd_list(_args: argparse.Namespace) -> int:
     return 0 if 200 <= status < 300 else 1
 
 
+def _publish_one(token: str, fid: str, bin_id: str) -> tuple[int, bytes]:
+    """PUT /api/admin/firmware/<fid>/publish/<bin_id>/1 — flips published=true."""
+    url = f"{API_URL}/{fid}/publish/{bin_id}/1"
+    return request("PUT", url, token=token)
+
+
+def _print_response(status: int, body: bytes, indent: str = "  ") -> None:
+    print(f"{indent}HTTP {status}")
+    try:
+        parsed = json.loads(body)
+        print(f"{indent}{json.dumps(parsed, ensure_ascii=False)}")
+    except json.JSONDecodeError:
+        tail = body[:500].decode(errors="replace")
+        print(f"{indent}{tail}")
+
+
 def _resolve_targets(envs: list[str]) -> list[str]:
     if not envs:
         return list(M5_BOARDS.keys())
@@ -224,20 +241,99 @@ def cmd_upload(args: argparse.Namespace) -> int:
         print(f"\n→ POST {proj} ({bin_path.stat().st_size} bytes)")
         status, resp = request("POST", API_URL, token=token,
                                body=body, content_type=ctype)
-        print(f"  HTTP {status}")
-        try:
-            parsed = json.loads(resp)
-            print("  " + json.dumps(parsed, ensure_ascii=False))
-        except json.JSONDecodeError:
-            tail = resp[:500].decode(errors="replace")
-            print(f"  {tail}")
+        _print_response(status, resp)
         if not (200 <= status < 300):
+            failed.append(env_key)
+            continue
+
+        # Auto-publish: extract fid + this version's file id from the upload
+        # response and PUT the publish endpoint.
+        try:
+            data = json.loads(resp)
+        except json.JSONDecodeError:
+            print("  (cannot auto-publish: response not JSON)")
+            failed.append(env_key)
+            continue
+        fid = data.get("fid")
+        target = next(
+            (v for v in data.get("versions", []) if v.get("version") == version),
+            None,
+        )
+        if not fid or not target:
+            print("  (cannot auto-publish: missing fid / version in response)")
+            failed.append(env_key)
+            continue
+        bin_id = target.get("file")
+        if not bin_id:
+            print("  (cannot auto-publish: missing file id)")
+            failed.append(env_key)
+            continue
+        print(f"  → PUT publish {bin_id}")
+        pstatus, pbody = _publish_one(token, fid, bin_id)
+        _print_response(pstatus, pbody, indent="    ")
+        if not (200 <= pstatus < 300):
             failed.append(env_key)
 
     if failed:
         print(f"\nfailed: {', '.join(failed)}", file=sys.stderr)
         return 1
     print("\nall uploads ok")
+    return 0
+
+
+def cmd_publish(args: argparse.Namespace) -> int:
+    """PUT publish on already-uploaded m5* entries that match `version`."""
+    version = args.version
+    token = auth_token()
+
+    status, body = request("GET", API_URL, token=token)
+    if status != 200:
+        print(f"failed to fetch firmware index: HTTP {status}", file=sys.stderr)
+        return 1
+    try:
+        firmwares = json.loads(body)
+    except json.JSONDecodeError:
+        print("firmware index is not JSON", file=sys.stderr)
+        return 1
+
+    target_names = {f"UniGeek {spec['name']}" for spec in M5_BOARDS.values()}
+    failed: list[str] = []
+    matched = 0
+    for fw in firmwares:
+        name = fw.get("name", "")
+        if name not in target_names:
+            continue
+        matched += 1
+        fid = fw.get("fid")
+        target = next(
+            (v for v in fw.get("versions", []) if v.get("version") == version),
+            None,
+        )
+        if not target:
+            print(f"  [{name}] no version '{version}' uploaded yet, skip")
+            continue
+        if target.get("published"):
+            print(f"  [{name}] v{version} already published, skip")
+            continue
+        bin_id = target.get("file")
+        if not fid or not bin_id:
+            print(f"  [{name}] missing fid / file id, skip", file=sys.stderr)
+            failed.append(name)
+            continue
+        print(f"\n→ PUBLISH {name} v{version} ({bin_id})")
+        status, resp = _publish_one(token, fid, bin_id)
+        _print_response(status, resp)
+        if not (200 <= status < 300):
+            failed.append(name)
+
+    if matched == 0:
+        print("no UniGeek m5* firmwares found in M5Burner; "
+              "did you run `upload` first?", file=sys.stderr)
+        return 1
+    if failed:
+        print(f"\nfailed: {', '.join(failed)}", file=sys.stderr)
+        return 1
+    print("\nall publishes ok")
     return 0
 
 
@@ -260,6 +356,12 @@ def main() -> int:
     p_up.add_argument("--dry-run", action="store_true",
                       help="validate everything but don't POST")
     p_up.set_defaults(func=cmd_upload)
+
+    p_pub = sub.add_parser("publish",
+                           help="PUT publish on already-uploaded m5* entries")
+    p_pub.add_argument("version",
+                       help="version to publish (must already be uploaded)")
+    p_pub.set_defaults(func=cmd_publish)
 
     args = parser.parse_args()
     return args.func(args)
