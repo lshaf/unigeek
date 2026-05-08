@@ -75,7 +75,7 @@ export const CATALOG = [
   { slug: "uart-terminal",        title: "UART Terminal",       category: "utility",  summary: "Serial terminal over configurable GPIO pins; text/hex send modes, background receive, Log Mode picks Off / File / Stream AP / Stream Network (Telnet TCP-23, up to 4 clients)",                hasDetail: true,  stable: true },
   { slug: "pomodoro",             title: "Pomodoro Timer",      category: "utility",  summary: "Focus/break timer with configurable work and break durations, progress bar, speaker notification, and session counter", hasDetail: false, stable: true },
   { slug: "random-line",          title: "Random Line Picker",  category: "utility",  summary: "Select up to 30 text files and shuffle a random line from the combined pool; press OK to cycle",              hasDetail: false, stable: true },
-  { slug: "lua-runner",           title: "Lua Runner",          category: "utility",  summary: "Top-level main menu item; run Lua 5.1 scripts from SD; frame-loop execution with display, button input, SD file I/O, and speaker APIs", hasDetail: true,  stable: true },
+  { slug: "lua-runner",           title: "Lua Runner",          category: "utility",  summary: "Top-level main menu item; run Lua 5.1 scripts from SD with display + sprite graphics, button + touch input, modal text/number/select/confirm prompts, JSON, path/time/config helpers, SD CRUD, and toast notifications", hasDetail: true,  stable: true },
 
   // Games
   { slug: "flappy-bird",          title: "Flappy Bird",         category: "game",     summary: "Classic side-scrolling game with randomized pipes and scoring",                                       hasDetail: true,  stable: true },

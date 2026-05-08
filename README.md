@@ -120,7 +120,13 @@ Multi-tool firmware for ESP32-based handheld devices. Built with PlatformIO + Ar
 - **Random Line Picker** — Select up to 30 text files from `/unigeek/utility/random_line/`, then shuffle and display a random line from the combined pool; press OK to cycle to the next random line
 
 ### LUA
-- **Lua Runner** — Run Lua 5.1 scripts from `/unigeek/lua/`; scripts loop frame-by-frame with persistent globals; full display drawing, button input, SD file I/O, and speaker APIs; back button exits at any time ([details](knowledge/lua-runner.md))
+- **Lua Runner** — Run Lua 5.1 scripts from `/unigeek/lua/` on a dedicated FreeRTOS task (32 KB stack, PSRAM source buffer for scripts ≥ 2 KB); samples include `base`, `sample`, `dino`, `btntest`, `inputs`, `savedata`, `clock` ([details](knowledge/lua-runner.md))
+  - **Display (`uni.lcd`)** — rect / line / circle / fillCircle / roundRect / fillRoundRect / fillScreen, text + textWidth + textDatum, plus off-screen sprites with full draw API and atomic `push(x,y[,transp])`
+  - **Input (`uni.nav` / `uni.input` / `uni.dialog` / `uni.notify`)** — buttons + raw touch coords; modal text / number / hex / ip prompts; confirm and select popups; auto-wiping toast
+  - **Data (`uni.json` / `uni.path`)** — cJSON encode/decode, plus path join / basename / dirname / ext helpers
+  - **Storage (`uni.sd`)** — read / write / append / list / exists / remove / rename / mkdir / size
+  - **Device (`uni.time` / `uni.config`)** — RTC clock (`time.now()` → year/month/day/hour/min/sec/wday/epoch); read theme color, device name, brightness, volume from ConfigManager
+  - **System (`uni`)** — `debug` (serial), `delay`, `millis`, `heap`, `beep`
 
 ### Games
 - **HEX Decoder** — Wordle-style game using hexadecimal characters (0–9, A–F) ([details](knowledge/hex-decoder.md))
@@ -372,4 +378,4 @@ This project was built with inspiration and reference from:
 - sticks3 ir receive not functional (RMT/ES8311 conflict); transmit works
 - implement thermal camera
 
-<!-- README last synced at commit: d3730bf (webauthn: type-to-confirm passkey delete; input: 4-way nav for grid actions; lua: dedicated FreeRTOS task + PSRAM source buffer; mainmenu: touch hover + Home tile; hid: rename USB Web Authn) -->
+<!-- README last synced at commit: c536e51 (lua: tier-2 modules input/dialog/notify/json/path/time/config + uni.nav, lcd primitives + sprites, sd CRUD ops; input action BACK = backspace; m5burner uploader script + version-flagged release builds) -->
