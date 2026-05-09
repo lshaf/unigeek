@@ -74,26 +74,17 @@ void WifiPacketMonitorScreen::onRender()
   const uint16_t themeColor = Config.getThemeColor();
   auto& lcd = Uni.Lcd;
 
-  // Bar layout — T-Lora Pager: fixed bar size; others: fit all 13 in bodyW
-#ifdef DEVICE_T_LORA_PAGER
-  const uint16_t barW = 20;
-  const uint16_t gap  = 4;
-#else
-  const uint16_t gap  = 2;
-  const uint16_t barW = (uint16_t)((bodyW() - gap * (_NUM_CH - 1)) / _NUM_CH);
-#endif
-
   const uint16_t labelH  = (uint16_t)(lcd.fontHeight() + 2);
   const uint16_t maxBarH = (uint16_t)(bodyH() - labelH - 2);
+  const uint16_t stepX   = (uint16_t)(bodyW() / _NUM_CH);
 
-  // Static chrome: channel labels only drawn on first render
   if (!_chromeDrawn) {
     lcd.fillRect(bodyX(), bodyY(), bodyW(), bodyH(), TFT_BLACK);
     lcd.setTextColor(TFT_WHITE, TFT_BLACK);
     lcd.setTextDatum(TC_DATUM);
     for (uint8_t ch = 1; ch <= _NUM_CH; ch++) {
-      uint16_t cx = (uint16_t)((ch - 1) * (barW + gap) + barW / 2);
-      lcd.drawString(String(ch), bodyX() + cx, bodyY() + bodyH() - labelH + 2);
+      uint16_t cx = (uint16_t)(bodyX() + (ch - 1) * stepX + stepX / 2);
+      lcd.drawString(String(ch), cx, bodyY() + bodyH() - labelH + 2);
     }
     lcd.setTextDatum(TL_DATUM);
     _chromeDrawn = true;
@@ -110,7 +101,6 @@ void WifiPacketMonitorScreen::onRender()
     return;
   }
 
-  // Transitioning out of first sweep — wipe bar region once to clear "Scanning..."
   if (_scanningVisible) {
     lcd.fillRect(bodyX(), bodyY(), bodyW(), maxBarH, TFT_BLACK);
     memset(_lastBarH,   0, sizeof(_lastBarH));
@@ -118,43 +108,71 @@ void WifiPacketMonitorScreen::onRender()
     _scanningVisible = false;
   }
 
-  // normalize to tallest bar (target heights)
   uint32_t maxCount = 1;
   for (uint8_t i = 1; i <= _NUM_CH; i++) {
     if (_displayCounts[i] > maxCount) maxCount = _displayCounts[i];
   }
 
-  // Interpolation factor — linear 0..1, clamped, with quadratic ease-out
   const uint32_t elapsed = millis() - _animStartMs;
   const bool     done    = elapsed >= _ANIM_MS;
   float t = done ? 1.0f : (float)elapsed / (float)_ANIM_MS;
-  t = 1.0f - (1.0f - t) * (1.0f - t);  // ease-out
+  t = 1.0f - (1.0f - t) * (1.0f - t);
 
-  // per-bar delta redraw: interpolate toward target, erase shrink, paint growth
+  uint16_t h[_NUM_CH + 1] = {};
   for (uint8_t ch = 1; ch <= _NUM_CH; ch++) {
-    uint16_t x = (uint16_t)((ch - 1) * (barW + gap));
     uint16_t target = (uint16_t)(((uint32_t)_displayCounts[ch] * maxBarH) / maxCount);
     if (target == 0 && _displayCounts[ch] > 0) target = 1;
-
-    int32_t startH = (int32_t)_animStartH[ch];
-    int32_t delta  = (int32_t)target - startH;
-    int32_t hInt   = startH + (int32_t)(delta * t);
-    if (done) hInt = target;
+    int32_t hInt = (int32_t)_animStartH[ch] + (int32_t)(((int32_t)target - (int32_t)_animStartH[ch]) * t);
+    if (done) hInt = (int32_t)target;
     if (hInt < 0) hInt = 0;
-    if (hInt > maxBarH) hInt = maxBarH;
-    uint16_t h = (uint16_t)hInt;
-
-    uint16_t oldH = _lastBarH[ch];
-    if (h == oldH) continue;
-
-    if (h < oldH) {
-      lcd.fillRect(bodyX() + x, bodyY() + maxBarH - oldH, barW, oldH - h, TFT_BLACK);
-    } else {
-      lcd.fillRect(bodyX() + x, bodyY() + maxBarH - h, barW, h - oldH, themeColor);
-    }
-    _lastBarH[ch] = h;
+    if (hInt > maxBarH) hInt = (int32_t)maxBarH;
+    h[ch] = (uint16_t)hInt;
   }
 
+  bool changed = false;
+  for (uint8_t ch = 1; ch <= _NUM_CH; ch++) {
+    if (h[ch] != _lastBarH[ch]) { changed = true; break; }
+  }
+  if (!changed) { if (done) _animActive = false; return; }
+
+  const uint16_t baseY = (uint16_t)(bodyY() + maxBarH);
+
+  // Dim glow color (1/3 brightness of theme)
+  uint16_t glowColor = (uint16_t)((((themeColor >> 11) & 0x1F) / 3 << 11) |
+                                  (((themeColor >>  5) & 0x3F) / 3 <<  5) |
+                                  (( themeColor        & 0x1F) / 3));
+
+  // x positions are constant; compute old and new y separately
+  uint16_t cx[_NUM_CH + 1], ocy[_NUM_CH + 1], ncy[_NUM_CH + 1];
+  for (uint8_t ch = 1; ch <= _NUM_CH; ch++) {
+    cx[ch]  = (uint16_t)(bodyX() + (ch - 1) * stepX + stepX / 2);
+    ocy[ch] = (uint16_t)(baseY - _lastBarH[ch]);
+    ncy[ch] = (uint16_t)(baseY - h[ch]);
+  }
+
+  // Erase previous glow line and dots
+  for (uint8_t ch = 1; ch < _NUM_CH; ch++) {
+    lcd.drawLine(cx[ch], ocy[ch] - 1, cx[ch + 1], ocy[ch + 1] - 1, TFT_BLACK);
+    lcd.drawLine(cx[ch], ocy[ch],     cx[ch + 1], ocy[ch + 1],     TFT_BLACK);
+    lcd.drawLine(cx[ch], ocy[ch] + 1, cx[ch + 1], ocy[ch + 1] + 1, TFT_BLACK);
+  }
+  for (uint8_t ch = 1; ch <= _NUM_CH; ch++)
+    lcd.fillCircle(cx[ch], ocy[ch], 3, TFT_BLACK);
+
+  // 3px glow line: dim at ±1 pixel, bright at center
+  for (uint8_t ch = 1; ch < _NUM_CH; ch++) {
+    lcd.drawLine(cx[ch], ncy[ch] - 1, cx[ch + 1], ncy[ch + 1] - 1, glowColor);
+    lcd.drawLine(cx[ch], ncy[ch] + 1, cx[ch + 1], ncy[ch + 1] + 1, glowColor);
+    lcd.drawLine(cx[ch], ncy[ch],     cx[ch + 1], ncy[ch + 1],     themeColor);
+  }
+
+  // Dots: theme-colored ring + white center
+  for (uint8_t ch = 1; ch <= _NUM_CH; ch++) {
+    lcd.fillCircle(cx[ch], ncy[ch], 2, themeColor);
+    lcd.fillCircle(cx[ch], ncy[ch], 1, TFT_WHITE);
+  }
+
+  memcpy(_lastBarH, h, sizeof(h));
   if (done) _animActive = false;
 }
 
