@@ -24,6 +24,7 @@ void AboutScreen::onInit()
   _rows[i++] = { "pivotchip",      "FrostedFastPair" };
   _rows[i++] = { "GameTec-live",    "ChameleonUltraGUI" };
   _rows[i++] = { "Anthropic",       "claude-desktop-buddy" };
+  _rows[i++] = { "Pol Henarejos",   "pico-fido" };
   _rows[i++] = { "Xinyuan-LilyGO", "LilyGoLib" };
   _rows[i++] = { "m5stack",        "M5Unified" };
 

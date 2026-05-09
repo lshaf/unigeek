@@ -366,6 +366,8 @@ This project was built with inspiration and reference from:
   - PN532 / PN532Killer HSU wire protocol, ACK/NACK framing, and command codes (InListPassiveTarget, InDataExchange, magic Gen1a/Gen3) used by the PN532 UART module
 - [claude-desktop-buddy](https://github.com/anthropics/claude-desktop-buddy) by Anthropic
   - Claude Buddy: BLE desk pet that connects to Claude for macOS/Windows via Nordic UART Service, showing session status, approval prompts, token counts, and animated ASCII/GIF characters
+- [pico-fido](https://github.com/polhenarejos/pico-fido) by Pol Henarejos (AGPLv3)
+  - WebAuthn / FIDO2: CTAP 2.1 dispatch shape, ClientPIN proto v1 auth-token KDF, hmac-secret derivation, resident-credential storage layout, U2F REGISTER + attestation cert flow, CBOR canonical key ordering for MakeCredential / GetAssertion responses
 - [LilyGoLib](https://github.com/Xinyuan-LilyGO/LilyGoLib) — Hardware reference for LilyGO T-Lora Pager
 - [M5Unified](https://github.com/m5stack/M5Unified) — Hardware reference for M5Stack devices (speaker, display, power)
 
