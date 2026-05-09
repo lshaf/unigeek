@@ -117,6 +117,8 @@ public:
       { 62, "wifi_cctv_stream",          "Live Feed",              1, 2, "View a live IP camera stream" },
       { 200, "wifi_probe_logged",        "Probe Collector",        1, 1, "Detect a device leaking its preferred network list" },
       { 201, "wifi_beacon_flood",        "Flood Watcher",          1, 2, "Detect a beacon flood attack" },
+      { 246, "wifi_cast_bomb_first",     "Cast Bomb",              1, 0, "Discover cast targets on the local network" },
+      { 247, "wifi_cast_bomb_hit",       "Rick Roll",              1, 1, "Successfully cast a video to a smart device" },
       // ── Bluetooth (domain 2) ──────────────────────────────────────────────
       { 63, "ble_analyzer_scan",         "Bluetooth Scout",        2, 0, "Scan for nearby BLE devices" },
       { 64, "ble_analyzer_detail",       "BLE Inspector",          2, 0, "View details of a BLE device" },

@@ -66,13 +66,6 @@ Ideas that exploit zero-auth consumer network protocols. Use only on networks yo
 
 ### Visible reactions
 
-**Cast Bomb** *(Chromecast / AirPlay / DLNA)*
-Discover nearby media renderers via SSDP / mDNS / DLNA, then push a video URL to them. The TV starts playing on its own.
-- **Targets:** Chromecast (`urn:dial-multiscreen-org:service:dial:1`), Roku, AirPlay receivers, any DLNA renderer
-- **Protocol:** Plain HTTP POST — no auth, no pairing, original DIAL/Cast specs
-- **Slot:** WiFi → Network → Cast Bomb
-- **Effort:** Medium. SSDP discovery is ~30 lines; reuses WiFi connection.
-
 **Network Identity Spoof** *(NetBIOS + mDNS)*
 Register the device as 50+ phantom hostnames on the LAN. Anyone who opens "Network" in Windows or Finder sees:
 ```
@@ -127,6 +120,5 @@ Combine existing **Karma Captive** + **Beacon Spam** to broadcast every popular 
 |---|---|---|
 | Themed beacon SSID lists | 0 | Strong — 30 s to deploy |
 | NetBIOS / mDNS hostname spoof | ~150 | Strong — slow burn |
-| Cast Bomb | ~300 | Highest — TV spontaneously rickrolls |
 | WoL Broadcaster | ~80 | Subtle but funny over time |
 | Comic Sans portal | 0 (web only) | Medium |

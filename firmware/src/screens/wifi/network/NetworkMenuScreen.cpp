@@ -14,6 +14,7 @@
 #include "screens/wifi/network/NetworkMitmScreen.h"
 #include "screens/wifi/network/CctvSnifferScreen.h"
 #include "screens/wifi/network/WigleScreen.h"
+#include "screens/wifi/network/CastBombScreen.h"
 #include "ui/actions/ShowStatusAction.h"
 #include "ui/actions/ShowQRCodeAction.h"
 #include <WiFi.h>
@@ -67,6 +68,7 @@ void NetworkMenuScreen::onItemSelected(uint8_t index) {
       case 7: Screen.push(new NetworkMitmScreen()); break;
       case 8: Screen.push(new CctvSnifferScreen()); break;
       case 9: Screen.push(new WigleScreen()); break;
+      case 10: Screen.push(new CastBombScreen()); break;
     }
   } else if (_state == STATE_INFORMATION) {
     _showMenu();
