@@ -73,8 +73,8 @@ static const uint8_t SCK  = SPI_SCK_PIN;
 #define SMOOTH_FONT
 #define USE_HSPI_PORT
 #define TFT_DEFAULT_ORIENTATION 6
-#define SPI_FREQUENCY        10000000
-#define SPI_READ_FREQUENCY   10000000
+#define SPI_FREQUENCY        40000000
+#define SPI_READ_FREQUENCY   20000000
 
 // ─── Grove 5V direction ───────────────────────────────────────
 #define GROVE_5V_OUTPUT true          // true = Grove 5V sources power (default)
