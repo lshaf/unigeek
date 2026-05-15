@@ -7,6 +7,9 @@
 #include "screens/game/GameMemoryScreen.h"
 #include "screens/game/GameNumberGuessScreen.h"
 #include "screens/game/GameFishingScreen.h"
+#ifdef DEVICE_HAS_SOUND
+#include "screens/game/GameMusicComposerScreen.h"
+#endif
 
 void GameMenuScreen::onInit()
 {
@@ -28,5 +31,8 @@ void GameMenuScreen::onItemSelected(uint8_t index)
     case 4: Screen.push(new GameMemoryScreen()); break;
     case 5: Screen.push(new GameNumberGuessScreen()); break;
     case 6: Screen.push(new GameFishingScreen()); break;
+#ifdef DEVICE_HAS_SOUND
+    case 7: Screen.push(new GameMusicComposerScreen()); break;
+#endif
   }
 }

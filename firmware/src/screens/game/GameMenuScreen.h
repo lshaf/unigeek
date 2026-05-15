@@ -1,5 +1,6 @@
 #pragma once
 
+#include <Arduino.h>  // for DEVICE_HAS_SOUND
 #include "ui/templates/ListScreen.h"
 
 class GameMenuScreen : public ListScreen
@@ -12,6 +13,18 @@ public:
   void onItemSelected(uint8_t index) override;
 
 private:
+#ifdef DEVICE_HAS_SOUND
+  ListItem _items[8] = {
+    {"HEX Decoder"},
+    {"Wordle EN"},
+    {"Wordle ID"},
+    {"Flappy Bird"},
+    {"Memory Sequence"},
+    {"Number Guess"},
+    {"Fishing"},
+    {"Music Composer"},
+  };
+#else
   ListItem _items[7] = {
     {"HEX Decoder"},
     {"Wordle EN"},
@@ -21,4 +34,5 @@ private:
     {"Number Guess"},
     {"Fishing"},
   };
+#endif
 };
