@@ -47,8 +47,17 @@ static const uint8_t SCL = 15;
 #define IR_TX  44
 
 // ─── CC1101 Sub-GHz ──────────────────────────────────────
+// SPI bus is the shared SD/LoRa bus (SCK=40, MISO=39, MOSI=14).
+// Only CS + GDO0 land on the Grove header; SCK/MISO/MOSI need
+// to be tapped off the SD bus pins on the side header.
 #define CC1101_CS_PIN   1   // GROVE_SCL
 #define CC1101_GDO0_PIN 2   // GROVE_SDA
+
+// ─── NRF24L01+ ────────────────────────────────────────────
+// Same Grove pins as CC1101 — physically exclusive (one Grove
+// module at a time). SPI bus is the shared SD/LoRa bus.
+#define NRF24_CSN_PIN   1   // GROVE_SCL
+#define NRF24_CE_PIN    2   // GROVE_SDA
 
 // ─── RGB LED (SK6812) ─────────────────────────────────────
 #define RGB_LED  21

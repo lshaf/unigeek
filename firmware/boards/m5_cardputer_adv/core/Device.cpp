@@ -9,7 +9,7 @@ static DisplayImpl    display;
 static KeyboardImpl   keyboard;
 static NavigationImpl navigation(&keyboard);
 static PowerImpl      power;
-static ExtSpiClass    sdSpi(FSPI);
+static ExtSpiClass    sdSpi;
 static SpeakerADV     speaker;
 
 void Device::boardHook() {}
