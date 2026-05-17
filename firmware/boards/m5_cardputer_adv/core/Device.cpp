@@ -23,8 +23,10 @@ Device* Device::createInstance() {
   digitalWrite(SD_CS, HIGH);
   sdSpi.begin(SPI_SCK_PIN, SPI_MISO_PIN, SPI_MOSI_PIN, -1);
 
+  Wire.begin(GROVE_SDA, GROVE_SCL);  // Grove I2C (ExI2C) — Wire1 is reserved for keyboard+codec
+
   auto* dev = new Device(display, power, &navigation, &keyboard, &sdSpi, &speaker);
-  dev->ExI2C = &Wire;   // free — Keyboard+ES8311 use Wire1
+  dev->ExI2C = &Wire;   // Grove I2C
   dev->InI2C = &Wire1;  // TCA8418 keyboard + ES8311 codec
   return dev;
 }

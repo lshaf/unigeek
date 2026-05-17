@@ -26,6 +26,8 @@ Device* Device::createInstance() {
 
   sdSpi.begin(SPI_SCK_PIN, SPI_MISO_PIN, SPI_MOSI_PIN, -1);
 
+  Wire.begin(GROVE_SDA, GROVE_SCL);  // Grove I2C (ExI2C)
+
   auto* dev = new Device(display, power, &navigation, &keyboard, &sdSpi, &speaker);
   dev->ExI2C = &Wire;
   return dev;

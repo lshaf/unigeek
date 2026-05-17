@@ -25,6 +25,7 @@ Device* Device::createInstance() {
   pinMode(BTN_B, INPUT_PULLUP);
   pinMode(BTN_A, INPUT_PULLUP);
   Wire1.begin(INTERNAL_SDA, INTERNAL_SCL);  // Wire1: AXP192 + BM8563 share same internal I2C bus
+  Wire.begin(GROVE_SDA, GROVE_SCL);         // Wire: Grove I2C (ExI2C)
 
   // Grove port SPI — pins stored but NOT begun here.
   // GPIO 32/33 are shared with GPS UART2 (TX=32, RX=33).
@@ -33,7 +34,7 @@ Device* Device::createInstance() {
   extSpi.setPins(V_SPI_SCK, V_SPI_MISO, V_SPI_MOSI, -1);
 
   auto* dev = new Device(display, power, &navigation, nullptr, &extSpi, &speaker);
-  dev->ExI2C = &Wire;   // free — Wire1 is used for AXP192+RTC
+  dev->ExI2C = &Wire;   // Grove I2C — Wire1 is reserved for AXP192+RTC
   dev->InI2C = &Wire1;  // AXP192 + BM8563 RTC
   return dev;
 }

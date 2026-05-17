@@ -16,7 +16,9 @@ Device* Device::createInstance() {
   pinMode(LCD_BL, OUTPUT);
   digitalWrite(LCD_BL, HIGH);
 
+  Wire.begin(GROVE_SDA, GROVE_SCL);  // Grove I2C (ExI2C)
+
   auto* dev = new Device(display, power, &navigation);
-  dev->ExI2C = &Wire;  // free — no internal I2C on this board
+  dev->ExI2C = &Wire;  // Grove I2C — no internal I2C on this board
   return dev;
 }

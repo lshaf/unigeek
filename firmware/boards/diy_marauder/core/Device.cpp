@@ -22,6 +22,8 @@ Device* Device::createInstance() {
   // is a no-op if the bus is already initialised, so SD stays on the right pins.
   sdSpi.begin(SDCARD_SCK, SDCARD_MISO, SDCARD_MOSI, -1);
 
+  Wire.begin(GROVE_SDA, GROVE_SCL);  // Grove I2C (ExI2C)
+
   auto* dev = new Device(display, power, &navigation, nullptr, &sdSpi, nullptr);
   dev->ExI2C = &Wire;
   return dev;

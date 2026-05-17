@@ -23,6 +23,8 @@ Device* Device::createInstance() {
   // Pre-init the shared display/SD SPI bus so CC1101 and initStorage() use correct pins.
   sdSpi.begin(TFT_SCLK, TFT_MISO, TFT_MOSI, -1);
 
+  Wire.begin(GROVE_SDA, GROVE_SCL);  // Grove I2C (ExI2C) — shared with BQ25896 charger
+
   auto* dev = new Device(display, power, &navigation, nullptr, &sdSpi, nullptr);
   dev->ExI2C = &Wire;  // Grove I2C — also used by BQ25896 in Power.h
   return dev;

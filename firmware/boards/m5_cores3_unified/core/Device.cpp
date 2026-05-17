@@ -47,7 +47,8 @@ Device* Device::createInstance() {
   // I2C_NUM_1, pins 12/11) via its ESP-IDF driver — exposing &Wire1 here would
   // collide with that driver. Only expose Grove (Ex_I2C, pins 2/1) as &Wire;
   // M5 only setPort()s I2C_NUM_0 without claiming it, so Arduino Wire is free
-  // to begin(GROVE_SDA, GROVE_SCL) on demand.
+  // to claim it for the Grove port.
+  Wire.begin(GROVE_SDA, GROVE_SCL);
   dev->ExI2C = &Wire;
   return dev;
 }

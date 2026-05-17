@@ -30,6 +30,7 @@ Device* Device::createInstance() {
 
   // Internal I2C for BM8563 RTC
   Wire1.begin(INTERNAL_SDA, INTERNAL_SCL);
+  Wire.begin(GROVE_SDA, GROVE_SCL);          // Grove I2C (ExI2C)
 
   // PWM backlight
   display.initBacklight();
@@ -41,7 +42,7 @@ Device* Device::createInstance() {
   extSpi.setPins(V_SPI_SCK, V_SPI_MISO, V_SPI_MOSI, -1);
 
   auto* dev = new Device(display, power, &navigation, nullptr, &extSpi, &speaker);
-  dev->ExI2C = &Wire;   // free — Wire1 is used for RTC
+  dev->ExI2C = &Wire;   // Grove I2C — Wire1 is reserved for RTC
   dev->InI2C = &Wire1;  // BM8563 RTC
   return dev;
 }

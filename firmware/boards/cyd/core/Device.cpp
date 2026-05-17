@@ -42,7 +42,10 @@ Device* Device::createInstance() {
   // Pre-init the VSPI bus so initStorage() and CC1101Util use correct pins.
   sdSpi.begin(SPI_SCK_PIN, SPI_MISO_PIN, SPI_MOSI_PIN, -1);
 
-  // ExI2C available for Grove port (SDA=21, SCL=22)
+  // Grove I2C (ExI2C, SDA=21/SCL=22). Touch variants (CST816S/GT911) may
+  // re-begin Wire on their own pins in Navigation.cpp::begin().
+  Wire.begin(GROVE_SDA, GROVE_SCL);
+
   auto* dev = new Device(display, power, &navigation, nullptr, &sdSpi);
   dev->ExI2C = &Wire;
   return dev;
