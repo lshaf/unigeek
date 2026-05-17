@@ -56,6 +56,17 @@ public:
     i2s_zero_dma_buffer(_port);
   }
 
+private:
+  // Cooperative cancellation — the audio task always self-deletes so we never
+  // race against FreeRTOS by calling vTaskDelete() from another context on a
+  // task that may have just finished. Calling tone() while a task is running
+  // sets the flag; the task observes it on the next iteration, drains DMA,
+  // and exits cleanly. _stopTask() spin-waits (≤1 tick) for the handle to
+  // clear before returning.
+  volatile bool _stopFlag = false;
+
+public:
+
   void setVolume(uint8_t vol) override {
     _amplitude = (int16_t)((uint32_t)vol * baseAmplitude / 100);
   }
@@ -151,11 +162,15 @@ private:
   uint8_t _seqLen = 0;
 
   void _stopTask() {
-    if (_taskHandle) {
-      vTaskDelete(_taskHandle);
-      _taskHandle = nullptr;
-      i2s_zero_dma_buffer(_port);
-    }
+    if (!_taskHandle) return;
+    _stopFlag = true;
+    // Wait for the task to acknowledge by clearing _taskHandle and self-deleting.
+    // Bounded — the longest a task can take to observe the flag is one chunk
+    // of i2s_write() at portMAX_DELAY, which in practice returns within a few ms.
+    for (int i = 0; i < 200 && _taskHandle; i++) vTaskDelay(1);
+    _stopFlag   = false;
+    _taskHandle = nullptr;   // safety net if the task hung
+    i2s_zero_dma_buffer(_port);
   }
 
   static uint16_t _readU16(const uint8_t* p) {
@@ -177,7 +192,7 @@ private:
     bool     high  = true;
     uint32_t phase = 0;
 
-    while (done < total) {
+    while (done < total && !self->_stopFlag) {
       uint32_t chunk = (total - done) < 64 ? (total - done) : 64;
       for (uint32_t i = 0; i < chunk; i++) {
         int16_t s = high ? self->_amplitude : -self->_amplitude;
@@ -206,7 +221,7 @@ private:
 
     int16_t outBuf[128];  // stereo: 64 frames × 2 channels
 
-    while (remaining > 0) {
+    while (remaining > 0 && !self->_stopFlag) {
       uint32_t outFrames = 0;
 
       if (bits == 8) {
@@ -250,7 +265,7 @@ private:
   static void _seqTask(void* arg) {
     auto* self = static_cast<SpeakerI2S*>(arg);
 
-    for (uint8_t n = 0; n < self->_seqLen; n++) {
+    for (uint8_t n = 0; n < self->_seqLen && !self->_stopFlag; n++) {
       const Note& note  = self->_seq[n];
       uint32_t    total = _sampleRate * note.durationMs / 1000;
       uint32_t    half  = _sampleRate / ((uint32_t)note.freq * 2);
@@ -261,7 +276,7 @@ private:
       bool     high  = true;
       uint32_t phase = 0;
 
-      while (done < total) {
+      while (done < total && !self->_stopFlag) {
         uint32_t chunk = (total - done) < 64 ? (total - done) : 64;
         for (uint32_t i = 0; i < chunk; i++) {
           int16_t s = high ? self->_amplitude : -self->_amplitude;
@@ -274,7 +289,7 @@ private:
         done += chunk;
       }
 
-      if (note.delayMs > 0) {
+      if (note.delayMs > 0 && !self->_stopFlag) {
         i2s_zero_dma_buffer(_port);
         vTaskDelay(pdMS_TO_TICKS(note.delayMs));
       }

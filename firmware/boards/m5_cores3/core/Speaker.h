@@ -98,6 +98,8 @@ private:
   uint16_t     _coreFreq       = 1000;
   uint32_t     _coreDur        = 150;
   TaskHandle_t _coreToneHandle = nullptr;
+  // Same cooperative-cancellation pattern as SpeakerI2S — see comment there.
+  volatile bool _coreStopFlag  = false;
 
   static constexpr uint8_t AW88298_ADDR = 0x36;
 
@@ -114,11 +116,12 @@ private:
   }
 
   void _stopCoreTone() {
-    if (_coreToneHandle) {
-      vTaskDelete(_coreToneHandle);
-      _coreToneHandle = nullptr;
-      i2s_zero_dma_buffer((i2s_port_t)SPK_I2S_PORT);
-    }
+    if (!_coreToneHandle) return;
+    _coreStopFlag = true;
+    for (int i = 0; i < 200 && _coreToneHandle; i++) vTaskDelay(1);
+    _coreStopFlag   = false;
+    _coreToneHandle = nullptr;
+    i2s_zero_dma_buffer((i2s_port_t)SPK_I2S_PORT);
   }
 
   // Fixed-rate phase-accumulated tone. Two constraints to satisfy at once:
@@ -154,7 +157,7 @@ private:
 
     int16_t  buf[128 * 2];  // 128 frames stereo = 512 bytes per write
     uint32_t done = 0;
-    while (done < totalFrames) {
+    while (done < totalFrames && !self->_coreStopFlag) {
       uint32_t chunk = (totalFrames - done) < 128 ? (totalFrames - done) : 128;
       for (uint32_t i = 0; i < chunk; i++) {
         uint8_t idx = (phase >> 8) & 0xF;

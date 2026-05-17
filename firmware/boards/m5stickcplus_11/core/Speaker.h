@@ -103,13 +103,31 @@ private:
   TaskHandle_t _taskHandle = nullptr;
   Note         _seq[4]     = {};
   uint8_t      _seqLen     = 0;
+  // Cooperative cancellation — same pattern as SpeakerI2S. The task chunks
+  // its vTaskDelay so it can observe the flag and self-exit cleanly.
+  volatile bool _stopFlag  = false;
 
   void _stopTask() {
-    if (_taskHandle) {
-      vTaskDelete(_taskHandle);
-      _taskHandle = nullptr;
-      ledcWrite(_ch, 0);
+    if (!_taskHandle) return;
+    _stopFlag = true;
+    for (int i = 0; i < 200 && _taskHandle; i++) vTaskDelay(1);
+    _stopFlag   = false;
+    _taskHandle = nullptr;
+    ledcWrite(_ch, 0);
+  }
+
+  // Sleep for ms in 5-tick chunks, returning true if the stop flag fires.
+  static bool _sleepInterruptible(SpeakerBuzzer* self, uint32_t ms) {
+    const TickType_t step = 5;
+    TickType_t total = pdMS_TO_TICKS(ms);
+    TickType_t done  = 0;
+    while (done < total) {
+      if (self->_stopFlag) return true;
+      TickType_t chunk = (total - done) < step ? (total - done) : step;
+      vTaskDelay(chunk);
+      done += chunk;
     }
+    return false;
   }
 
   void _playTone(uint16_t freq) {
@@ -121,7 +139,7 @@ private:
   static void _toneTask(void* arg) {
     auto* self = static_cast<SpeakerBuzzer*>(arg);
     self->_playTone(self->_freq);
-    vTaskDelay(pdMS_TO_TICKS(self->_duration));
+    _sleepInterruptible(self, self->_duration);
     ledcWrite(_ch, 0);
     self->_taskHandle = nullptr;
     vTaskDelete(nullptr);
@@ -129,13 +147,14 @@ private:
 
   static void _seqTask(void* arg) {
     auto* self = static_cast<SpeakerBuzzer*>(arg);
-    for (uint8_t n = 0; n < self->_seqLen; n++) {
+    for (uint8_t n = 0; n < self->_seqLen && !self->_stopFlag; n++) {
       const Note& note = self->_seq[n];
       self->_playTone(note.freq);
-      vTaskDelay(pdMS_TO_TICKS(note.durationMs));
+      if (_sleepInterruptible(self, note.durationMs)) break;
       ledcWrite(_ch, 0);
-      if (note.delayMs > 0) vTaskDelay(pdMS_TO_TICKS(note.delayMs));
+      if (note.delayMs > 0 && _sleepInterruptible(self, note.delayMs)) break;
     }
+    ledcWrite(_ch, 0);
     self->_taskHandle = nullptr;
     vTaskDelete(nullptr);
   }
