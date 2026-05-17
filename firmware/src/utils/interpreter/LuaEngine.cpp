@@ -160,16 +160,21 @@ bool LuaEngine::loadScript(char* src, size_t len, String& errOut) {
 
 // ── Loop step ─────────────────────────────────────────────────────────
 
-// Lua execution lives on its own FreeRTOS task: a generous 32 KB stack so the
-// VM + str_format-style recursion can't blow the loop task's 8 KB stack and
-// stomp the heap. The first stepLoop() spawns the task; later calls poll its
-// status. The task self-deletes after pcall returns.
+// Lua execution lives on its own FreeRTOS task. Stack size is board-conditional:
+//   - PSRAM boards (cores3, sticks3): 32 KB — comfortable headroom for the
+//     recursive parser + deep call chains; plenty of internal SRAM to spare.
+//   - No-PSRAM boards (cardputer, stickc plus, t-display, …): 8 KB — keeps
+//     the bulk of internal SRAM available for WiFi DMA. WARNING:
+//     luaL_loadbuffer is a recursive-descent parser; large scripts
+//     (≳ 8 KB source) may overflow this stack at compile time.
+// The first stepLoop() spawns the task; later calls poll its status. The task
+// self-deletes after pcall returns.
 void LuaEngine::_taskEntry(void* arg) {
   LuaEngine* eng = (LuaEngine*)arg;
   lua_State* L   = eng->_lua;
 
-  // Compile on this task — the parser is recursive and would overflow the
-  // 8 KB loop-task stack on large scripts. We have 32 KB here.
+  // Compile on this task — the parser is recursive. On no-PSRAM boards the
+  // 8 KB stack is tight; large scripts may overflow here.
   if (eng->_pendingSrc) {
     int crc = luaL_loadbuffer(L, eng->_pendingSrc, eng->_pendingSrcLen, "script");
     heap_caps_free(eng->_pendingSrc);
@@ -227,8 +232,13 @@ bool LuaEngine::stepLoop(String& errOut) {
     _taskErrOut = "";
     _status = STATUS_RUNNING;
     TaskHandle_t handle = nullptr;
+#ifdef BOARD_HAS_PSRAM
+    constexpr size_t kLuaTaskStack = 32 * 1024;
+#else
+    constexpr size_t kLuaTaskStack = 8 * 1024;
+#endif
     BaseType_t ok = xTaskCreatePinnedToCore(
-      _taskEntry, "lua", 32 * 1024, this, 1, &handle, 1);
+      _taskEntry, "lua", kLuaTaskStack, this, 1, &handle, 1);
     if (ok != pdPASS) {
       _status = STATUS_IDLE;
       errOut  = "task create failed";
