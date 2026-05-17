@@ -21,8 +21,9 @@ void I2CDetectorScreen::_scan() {
   TwoWire* bus = (_wireIndex == 0) ? Uni.ExI2C : Uni.InI2C;
   if (!bus) return;
 
-  if (_wireIndex == 0 && !_hasBoth) {
-    // ExI2C only, not managed by board — initialize with configured pins
+  if (_wireIndex == 0) {
+    // ExI2C — always re-begin with the currently-configured pins so runtime
+    // ext_sda/ext_scl changes from Settings → Pin apply without a reboot.
     int sda = PinConfig.getInt(PIN_CONFIG_EXT_SDA, PIN_CONFIG_EXT_SDA_DEFAULT);
     int scl = PinConfig.getInt(PIN_CONFIG_EXT_SCL, PIN_CONFIG_EXT_SCL_DEFAULT);
     bus->begin(sda, scl);
@@ -33,7 +34,8 @@ void I2CDetectorScreen::_scan() {
     }
     bus->end();
   } else {
-    // Bus already initialized by board (encoder, RTC, etc.) — scan in-place, don't reinit
+    // InI2C — managed by the board (PMIC, RTC, encoder, audio codec, …).
+    // Never begin()/end() it; just scan in place.
     bus->setTimeOut(50);
     for (uint8_t addr = 0x08; addr < 0x78; addr++) {
       bus->beginTransmission(addr);

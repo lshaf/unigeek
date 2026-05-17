@@ -223,8 +223,13 @@ bool PN532I2cScreen::_initModule() {
   ProgressView::init();
   ProgressView::progress("Probing PN532 I2C...", 10);
 
-  // ExI2C is already initialised by Device — just probe it
+  // Re-begin ExI2C on the currently-configured pins so runtime ext_sda/ext_scl
+  // changes from Settings → Pin take effect without a reboot.
   if (Uni.ExI2C) {
+    int sda = PinConfig.getInt(PIN_CONFIG_EXT_SDA, PIN_CONFIG_EXT_SDA_DEFAULT);
+    int scl = PinConfig.getInt(PIN_CONFIG_EXT_SCL, PIN_CONFIG_EXT_SCL_DEFAULT);
+    Uni.ExI2C->begin(sda, scl);
+
     _nfc = new Adafruit_PN532(255, 255, Uni.ExI2C);
     _nfc->begin(); // begin(false) internally — no Wire.begin()
     ProgressView::progress("Probing ExI2C...", 35);
@@ -242,6 +247,7 @@ bool PN532I2cScreen::_initModule() {
       return true;
     }
     delete _nfc; _nfc = nullptr;
+    Uni.ExI2C->end();  // free pins for next consumer
   }
 
   // Fall back to InI2C
@@ -272,6 +278,9 @@ bool PN532I2cScreen::_initModule() {
 
 void PN532I2cScreen::_cleanup() {
   delete _nfc; _nfc = nullptr;
+  // Release ExI2C so a later screen can re-begin with a different pin set.
+  // InI2C is shared with the PMIC / on-board peripherals — never end() it.
+  if (_wire && _wire == Uni.ExI2C) _wire->end();
   _wire    = nullptr;
   _busName = nullptr;
   _ready   = false;

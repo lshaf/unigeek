@@ -49,9 +49,14 @@ Device* Device::createInstance() {
   }
   sharedSpi.begin(SPI_SCK_PIN, SPI_MISO_PIN, SPI_MOSI_PIN, -1);
 
+  // Grove I2C — uses compile-time GROVE_SDA/SCL; PinConfig overrides aren't
+  // loaded yet at this point, so runtime ext_sda/ext_scl changes only apply
+  // for consumers that re-begin() the bus on use (MFRC522, UartTerminal).
+  Wire.begin(GROVE_SDA, GROVE_SCL);
+
   auto* dev = new Device(display, power, &navigation, nullptr, &sharedSpi, &speaker);
 
-  dev->ExI2C = &Wire;   // Grove I2C (SDA=9, SCL=10) — free, caller must begin()
+  dev->ExI2C = &Wire;   // Grove I2C (SDA=9, SCL=10)
   dev->InI2C = &Wire1;  // M5PM1 power IC (SDA=47, SCL=48)
   return dev;
 }
