@@ -50,7 +50,7 @@ export const CATALOG = [
   { slug: "claude-buddy",         title: "Claude Buddy",        category: "ble",      summary: "BLE desk pet for Claude Desktop on macOS / Windows — shows session status, running tasks, and lets you approve permission prompts from the device", hasDetail: true,  stable: true },
 
   // HID
-  { slug: "ducky-script",         title: "Ducky Script",        category: "keyboard", summary: "Run script files from storage to automate keystrokes over BLE or USB HID",                           hasDetail: true,  stable: true },
+  { slug: "ducky-script",         title: "Ducky Script",        category: "keyboard", summary: "Run script files from storage to automate keystrokes over BLE or USB HID — variables, IF/WHILE, functions, expressions (DuckyScript 3.0 subset)", hasDetail: true,  stable: true },
   { slug: "ble-keyboard",         title: "BLE Keyboard",        category: "keyboard", summary: "Act as a wireless Bluetooth HID keyboard — works on all devices",                                     hasDetail: false, stable: true },
   { slug: "usb-keyboard",         title: "USB Keyboard",        category: "keyboard", summary: "Act as a wired USB HID keyboard — ESP32-S3 devices only",                                            hasDetail: false, stable: true },
   { slug: "keyboard-relay",       title: "Keyboard Relay",      category: "keyboard", summary: "Forward physical keypresses directly to the connected host in real time — keyboard devices only",    hasDetail: false, stable: true },

@@ -273,19 +273,17 @@ void KeyboardScreen::_runDuckyScript(const String& path)
   }
 
   DuckScriptUtil ducky(_keyboard);
-  int start = 0;
-  while (start < (int)content.length()) {
-    int end  = content.indexOf('\n', start);
-    if (end < 0) end = content.length();
-    String line = content.substring(start, end);
-    line.trim();
-    start = end + 1;
-    if (line.isEmpty()) continue;
-
-    bool ok = ducky.runCommand(line);
-    _addScriptLine(line, ok);
-    render();
-  }
+  ducky.runScript(content, [this](const String& line, bool ok) -> bool {
+    if (line.length() > 0) {
+      _addScriptLine(line, ok);
+      render();
+    }
+    if (Uni.Nav->wasPressed()) {
+      auto dir = Uni.Nav->readDirection();
+      if (dir == INavigation::DIR_BACK || dir == INavigation::DIR_PRESS) return false;
+    }
+    return true;
+  });
 }
 
 void KeyboardScreen::_addScriptLine(const String& text, bool ok)
