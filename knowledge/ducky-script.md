@@ -216,6 +216,178 @@ WHILE $count < #LIMIT
 END_WHILE
 ```
 
+## Writing Scripts with AI
+
+Paste the context block below into any AI chat **before** describing the payload you want. It pins the AI to the dialect this firmware actually executes, so you don't get back DuckyScript 3.0 features that we don't implement (HOLD, RANDOM_*, ATTACKMODE, etc.).
+
+---
+
+### Context block — copy and paste this first
+
+```
+You are writing a UniGeek DuckyScript payload that will be saved as a .txt or
+.ds file and run by the UniGeek ESP32 firmware over BLE HID (most boards) or
+USB HID (ESP32-S3 boards). Output ONLY the script — no markdown fences, no
+commentary, no explanations.
+
+## Execution model
+- One command per line, top to bottom. The interpreter pre-scans the file to
+  build IF / WHILE / FUNCTION jump tables, then executes linearly.
+- Every line is .trim()'d on load — leading and trailing whitespace is
+  stripped, so indentation is purely cosmetic and STRING cannot end in spaces.
+- Blank lines and REM lines are skipped silently.
+- Every executed line (including IF / WHILE / FUNCTION headers, END_*, function
+  calls) is mirrored to the device screen as a log line, green on success,
+  red on failure. Keep scripts short and meaningful.
+- The user can press BACK or ENTER at any time to abort mid-script.
+- A 200000-step guard aborts runaway loops.
+
+## Typing commands
+| Command                | Effect                                       |
+|------------------------|----------------------------------------------|
+| STRING <text>          | Type text exactly as written (no Enter)      |
+| STRINGLN <text>        | Type text, then press Enter                  |
+| STRINGLN               | Press Enter only (no argument)               |
+| DELAY <expr>           | Sleep N ms; <expr> can be any expression     |
+| REM <text>             | Single-line comment                          |
+| REM_BLOCK ... END_REM  | Multi-line comment                           |
+
+STRING and STRINGLN interpolate $name (variable) and #name (constant) inline.
+Use $$ to type a literal $, ## to type a literal #. Unknown $name / #name is
+left as-is in the output.
+
+## Modifier combos
+Modifier lines are space-separated tokens. Each token may further use '-' to
+combine modifiers (CTRL-SHIFT == CTRL SHIFT). The LAST token must be the key
+to press; everything before it must be a modifier name.
+
+Recognised modifier aliases:
+  Ctrl  = CTRL, CONTROL
+  Shift = SHIFT
+  Alt   = ALT, OPTION
+  GUI   = GUI, WINDOWS, COMMAND   (Win key / macOS Command)
+
+Examples:
+  GUI r              → Win+R / Cmd+R
+  CTRL c             → Copy
+  ALT F4             → Close window
+  CTRL SHIFT ESC     → Task Manager
+  CTRL ALT DELETE    → Secure-attention sequence
+  COMMAND OPTION i   → macOS DevTools
+
+## Standalone keys (on their own line, no parameter)
+ENTER / RETURN, SPACE, TAB, BACKSPACE, DELETE / DEL, INSERT,
+ESC / ESCAPE, CAPSLOCK,
+UP / UPARROW, DOWN / DOWNARROW, LEFT / LEFTARROW, RIGHT / RIGHTARROW,
+HOME, END, PAGEUP, PAGEDOWN, F1..F12.
+
+## Variables and constants
+- Variables start with '$'. 32-bit signed integers.
+  Declare:  VAR $name = <expr>
+  Reassign: $name = <expr>
+  Note: '==' is reserved for comparison, '=' is assignment.
+- Constants start with '#'. Defined once with DEFINE:
+    DEFINE #NAME value         (the '=' is optional)
+    DEFINE #NAME = value
+- Identifier rule: [A-Za-z_][A-Za-z0-9_]*  (case-sensitive)
+- Missing $var or #const evaluates to 0 — does NOT raise an error.
+
+## Expressions (low → high precedence)
+|| && | ^ & == != < > <= >= << >> + - * / % unary -/+/!
+Primaries: integer (42, 0xFF, 0b1010), $var, #const, (expr), TRUE, FALSE.
+Expressions are integer-only; there are no string, float, or boolean types.
+
+## Conditionals
+IF <expr> THEN          ← the trailing " THEN" is REQUIRED (one space)
+  ...
+ELSE                    ← optional
+  ...
+END_IF
+
+## Loops
+WHILE <expr>            ← no THEN / DO; <expr> re-evaluated each iteration
+  ...
+END_WHILE
+
+## Functions (zero-argument, no return value used in expressions)
+FUNCTION name()         ← parentheses are REQUIRED
+  ...
+  RETURN                ← optional early return
+END_FUNCTION
+
+Call as its own line:  name()
+- The pre-scan registers every FUNCTION, so calls can appear ABOVE the
+  definition. Functions are never executed during linear flow — only via a call.
+- A function call CANNOT appear inside an expression — it's always a top-level
+  statement.
+
+## Payload control
+STOP_PAYLOAD       — end the script immediately
+RESTART_PAYLOAD    — jump back to line 0, clear the call stack
+RESET              — release all currently-held keys
+
+## NOT supported — do NOT emit these
+HOLD, RELEASE,
+ATTACKMODE / SAVE_ATTACKMODE / RESTORE_ATTACKMODE,
+BUTTON_DEF / WAIT_FOR_BUTTON_PRESS / ENABLE_BUTTON / DISABLE_BUTTON,
+LED_R / LED_G / LED_OFF,
+WAIT_FOR_CAPS_ON / NUM / SCROLL family,
+$_JITTER_*, RANDOM_*, $_RANDOM_*,
+EXFIL, HIDE_PAYLOAD, RESTORE_PAYLOAD,
+function return values inside expressions,
+named keys not listed above (PRINTSCREEN, MENU / APP, PAUSE / BREAK, NUMLOCK,
+SCROLLLOCK).
+
+## Rules you must follow
+1. Start with `DELAY 500` (or longer) so the host has time to enumerate HID.
+2. After opening a window (e.g. GUI r → Run), DELAY 500-1500 ms before typing.
+3. Use STRINGLN to type text + Enter — never STRING followed by ENTER.
+4. Every IF needs END_IF; every WHILE needs END_WHILE; every FUNCTION needs
+   END_FUNCTION. Mismatched blocks abort the script before any line runs.
+5. The IF header MUST end with " THEN" (single trailing space + THEN).
+6. Functions MUST be declared as `FUNCTION name()` and called as `name()`.
+7. Don't depend on trailing whitespace inside STRING / STRINGLN — it is trimmed.
+8. Keep payloads short. Every executed line is rendered on the device's small
+   screen, including each iteration of a WHILE loop.
+9. If targeting non-Windows hosts, prefer COMMAND / OPTION over GUI / ALT for
+   clarity, even though they are aliases.
+```
+
+---
+
+### What a correct script looks like
+
+```
+REM Open notepad and write three lines, then a banner.
+DELAY 500
+GUI r
+DELAY 500
+STRINGLN notepad
+DELAY 1500
+
+DEFINE #ROUNDS 3
+
+FUNCTION banner()
+  STRINGLN ----------------------------
+END_FUNCTION
+
+banner()
+STRINGLN UniGeek script
+banner()
+
+VAR $i = 1
+WHILE $i <= #ROUNDS
+  IF $i == #ROUNDS THEN
+    STRINGLN line $i (last)
+  ELSE
+    STRINGLN line $i
+  END_IF
+  $i = $i + 1
+END_WHILE
+```
+
+---
+
 ## Sample Scripts
 
 Ready-made samples are available via **WiFi > Network > Download > Firmware Sample Files**:
