@@ -1,0 +1,34 @@
+REM DuckyScript 3.0 feature demo — opens notepad and runs a countdown.
+REM Showcases DEFINE / VAR / FUNCTION / WHILE / IF + STRING interpolation.
+DELAY 500
+GUI r
+DELAY 500
+STRINGLN notepad
+DELAY 1500
+
+DEFINE #ROUNDS 5
+
+FUNCTION banner()
+  STRINGLN ============================
+END_FUNCTION
+
+banner()
+STRINGLN UniGeek DuckyScript 3.0 demo
+banner()
+STRINGLN
+
+VAR $i = #ROUNDS
+WHILE $i > 0
+  IF $i == 1 THEN
+    STRINGLN T-minus $i ... ready?
+  ELSE
+    STRINGLN T-minus $i
+  END_IF
+  DELAY $i * 200
+  $i = $i - 1
+END_WHILE
+
+STRINGLN
+banner()
+STRINGLN Liftoff!
+banner()

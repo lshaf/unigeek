@@ -225,6 +225,7 @@ Ready-made samples are available via **WiFi > Network > Download > Firmware Samp
 - `wifi_password.txt` — Extracts saved WiFi passwords (Windows)
 - `reverse_shell.txt` — Opens a reverse shell (Windows)
 - `disable_defender.txt` — Disables Windows Defender
+- `ducky3_demo.txt` — Walks through DuckyScript 3.0 features (DEFINE / VAR / FUNCTION / WHILE / IF + interpolation) by typing a countdown into Notepad
 
 > [!warn]
 > Only run scripts on hosts you own or have explicit permission to test. Several samples modify security settings or fetch remote payloads — review the source before executing.

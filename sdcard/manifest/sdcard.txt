@@ -3,6 +3,7 @@ unigeek/hid/duckyscript/reverse_shell.txt
 unigeek/hid/duckyscript/wifi_password.txt
 unigeek/hid/duckyscript/rick_roll.txt
 unigeek/hid/duckyscript/disable_defender.txt
+unigeek/hid/duckyscript/ducky3_demo.txt
 unigeek/qrcode/rickroll.txt
 unigeek/qrcode/wifi_example.txt
 unigeek/qrcode/contact.txt
