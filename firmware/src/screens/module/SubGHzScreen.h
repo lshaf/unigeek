@@ -86,13 +86,11 @@ private:
   static constexpr const char* kRootPath = "/unigeek/rf";
   String _browsePath;
   BrowseFileView _browser;
-  bool    _holdFired = false;
-  uint8_t _pendingHoldIdx = 0;
+  bool _holdFired = false;
   void _loadBrowseDir(const String& path);
   void _sendBrowseFile(uint8_t index);
-  void _showBrowseTapOptions(uint8_t index);   // Send / Info (on tap)
-  void _showBrowseOptions(uint8_t index);      // Send / Info / Rename / Delete (on hold)
-  void _showBrowseFileInfo(uint8_t index);     // parses .sub, opens info view
+  void _showBrowseOptions(uint8_t index);    // Send / Info / Rename / Delete
+  void _showBrowseFileInfo(uint8_t index);   // parses .sub, opens info view
   String _makeUniquePath(const String& name);
 };
 

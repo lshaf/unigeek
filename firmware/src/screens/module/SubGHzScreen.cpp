@@ -163,26 +163,6 @@ void SubGHzScreen::onUpdate() {
     return;
   }
 
-  if (_state == STATE_SEND_BROWSE) {
-    if (!_holdFired && Uni.Nav->isPressed() && Uni.Nav->heldDuration() >= 1000) {
-      _holdFired = true;
-      _pendingHoldIdx = _selectedIndex;
-      // Show popup immediately — don't wait for release
-      if (_pendingHoldIdx < _browser.count() && !_browser.entry(_pendingHoldIdx).isDir)
-        _showBrowseOptions(_pendingHoldIdx);
-      else
-        render();
-      return;
-    }
-  }
-  if (_holdFired) {
-    if (Uni.Nav->wasPressed()) {
-      Uni.Nav->readDirection();  // consume the release so it doesn't trigger onItemSelected
-      _holdFired = false;
-    }
-    return;
-  }
-
   ListScreen::onUpdate();
 }
 
@@ -476,7 +456,7 @@ void SubGHzScreen::onItemSelected(uint8_t index) {
       _loadBrowseDir(_browser.entry(index).path);
       return;
     }
-    _showBrowseTapOptions(index);
+    _showBrowseOptions(index);
     return;
   }
 }
@@ -512,18 +492,6 @@ void SubGHzScreen::_sendBrowseFile(uint8_t index) {
   }
   ShowStatusAction::show(("Sent: " + e.name).c_str(), 1000);
   render();
-}
-
-void SubGHzScreen::_showBrowseTapOptions(uint8_t index) {
-  static constexpr InputSelectAction::Option tapOpts[] = {
-    {"Send", "send"},
-    {"Info", "info"},
-  };
-  const char* choice = InputSelectAction::popup("Options", tapOpts, 2, "send");
-  if (!choice) { render(); return; }
-
-  if (strcmp(choice, "send") == 0)      _sendBrowseFile(index);
-  else if (strcmp(choice, "info") == 0) _showBrowseFileInfo(index);
 }
 
 void SubGHzScreen::_showBrowseFileInfo(uint8_t index) {

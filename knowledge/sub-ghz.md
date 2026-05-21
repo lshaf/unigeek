@@ -103,12 +103,12 @@ Browse and send `.sub` signal files from storage.
 
 1. Select **Send** from the menu
 2. Browse from `/unigeek/rf/` — navigate into subfolders
-3. **Tap** a file to send it immediately
-4. **Hold** a file (1 second) to open the action menu:
+3. Tap a file to open the action menu:
    - **Send** — transmit the signal
+   - **Info** — open the signal info view (same fields as captured-signal Info; BACK returns here)
    - **Rename** — rename the file
    - **Delete** — delete the file
-5. The frequency stored in the file is used automatically during send
+4. The frequency stored in the file is used automatically during send
 
 ## Jammer
 
