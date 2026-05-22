@@ -7,19 +7,31 @@ Captures WPA2 4-way handshakes from nearby networks and saves them as PCAP files
 ### Setup
 
 1. Go to **WiFi > EAPOL Capture**
-2. Configure settings before starting:
-   - **Discovery Dwell** — Time spent per channel during scanning to discover SSID and BSSID (250–10000 ms, default 500)
-   - **Attack Dwell** — Time spent on a channel after sending deauth to get EAPOL (250–10000 ms, default 6000)
-   - **Max Deauth** — Maximum deauth attempts per AP before rescanning (5–30, default 20)
-3. **Start** — Begins the capture
+2. Pick a **Mode** at the top of the menu:
+   - **Target** (default) — attack a single AP that you choose from a live scan. The menu collapses to `Mode / Target WiFi / Max Deauth / Start` — Discovery/Attack Dwell are hidden because there is only one channel to attack.
+   - **All** — sweep every visible AP across all 13 channels. The menu becomes `Mode / Discovery Dwell / Attack Dwell / Max Deauth / Start`.
+3. Configure as needed:
+   - **Target WiFi** *(Target mode only)* — runs a ~10 s active scan across all 13 channels and lists each network as `[channel] SSID` with its BSSID; tap one to lock it in.
+   - **Discovery Dwell** *(All mode only)* — time per channel during scanning (250–10000 ms, default 1000).
+   - **Attack Dwell** *(All mode only)* — time on a channel after deauth (250–10000 ms, default 8000).
+   - **Max Deauth** — max deauth bursts per AP before giving up (5–30, default 10).
+4. **Start** — begins capture.
 
 ### How It Works
 
-1. **Discovery phase** — Scans all 13 channels to discover APs and collect beacon frames
-2. **Attack phase** — Sends deauth bursts to discovered APs to force clients to reconnect, capturing the EAPOL handshake during reconnection
-3. The deauth log shows progress as `[current/max]` (e.g., `Deauth CH6 (2 AP) [3/20]`)
+#### Target mode
+1. The selected AP is seeded directly into the attack list — no discovery scan, no channel hopping.
+2. The screen jumps straight to **Attack phase** on the target's channel and sends deauth bursts until either a valid handshake lands or `Max Deauth` is reached.
+3. **Only the selected BSSID is deauthed.** Other APs that happen to broadcast on the same channel during the attack are filtered out — their beacons and EAPOL frames are dropped before `_apTargets` gets polluted. The deauth burst only ever hits the chosen network.
+4. On finish, the log shows `Done. Handshake captured.` (green) or `Done. No handshake (timeout).` (yellow) and waits. Press **BACK** to leave. No automatic rescan.
+
+#### All mode
+1. **Discovery phase** — scans all 13 channels to discover APs and collect beacon frames
+2. **Attack phase** — sends deauth bursts to discovered APs to force clients to reconnect, capturing the EAPOL handshake during reconnection
+3. The deauth log shows progress as `[current/max]` (e.g., `Deauth CH6 (2 AP) [3/10]`)
 4. When all APs are either captured or reach the max deauth limit, incomplete APs are reset and discovery restarts
-5. Validated handshakes (beacon + M1 + M2) are saved as PCAP files to `/unigeek/wifi/eapol/`
+
+Validated handshakes (beacon + M1 + M2) are saved as PCAP files to `/unigeek/wifi/eapol/` in both modes.
 
 ### Status Bar
 

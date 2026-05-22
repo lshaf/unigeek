@@ -8,6 +8,7 @@
 #include "utils/StorageUtil.h"
 
 #include "utils/network/WifiAttackUtil.h"
+#include <WiFi.h>
 #include <cstring>
 
 // ── Static definitions ────────────────────────────────────────────────────
@@ -115,33 +116,85 @@ void WifiEapolCaptureScreen::onInit() {
 }
 
 void WifiEapolCaptureScreen::_showMenu() {
+  // Action ids used to keep onItemSelected mode-agnostic.
+  enum { ACT_MODE = 0, ACT_TARGET_WIFI, ACT_DISCOVERY_DWELL, ACT_ATTACK_DWELL,
+         ACT_MAX_DEAUTH, ACT_START };
+
+  _modeSub      = (_mode == MODE_TARGET) ? "Target" : "All";
+  _targetSub    = _target.ssid;
   _discoverySub = String(_discoveryDwellMs) + " ms";
   _attackSub    = String(_attackDwellMs) + " ms";
   _deauthSub    = String(_maxDeauthAttempts);
-  _menuItems[0] = {"Discovery Dwell", _discoverySub.c_str()};
-  _menuItems[1] = {"Attack Dwell", _attackSub.c_str()};
-  _menuItems[2] = {"Max Deauth", _deauthSub.c_str()};
-  _menuItems[3] = {"Start"};
-  setItems(_menuItems, 4);
+
+  _menuCount = 0;
+  auto add = [&](const char* label, const char* sub, uint8_t act) {
+    _menuItems[_menuCount] = {label, sub};
+    _menuMap[_menuCount]   = act;
+    _menuCount++;
+  };
+
+  add("Mode", _modeSub.c_str(), ACT_MODE);
+  if (_mode == MODE_TARGET) {
+    add("Target WiFi", _targetSub.c_str(), ACT_TARGET_WIFI);
+  } else {
+    add("Discovery Dwell", _discoverySub.c_str(), ACT_DISCOVERY_DWELL);
+    add("Attack Dwell",    _attackSub.c_str(),    ACT_ATTACK_DWELL);
+  }
+  add("Max Deauth", _deauthSub.c_str(), ACT_MAX_DEAUTH);
+  add("Start",      nullptr,            ACT_START);
+
+  setItems(_menuItems, _menuCount);
 }
 
 void WifiEapolCaptureScreen::onItemSelected(uint8_t index) {
+  if (_phase == PHASE_SELECT_WIFI) {
+    if (index >= _scanCount) return;
+    // _scanLabels[index] is "[ch] ssid"
+    _target.channel = atoi(_scanLabels[index] + 1);
+    const char* sp = strchr(_scanLabels[index], ']');
+    _target.ssid = (sp && sp[1]) ? String(sp + 2) : String("(hidden)");
+    sscanf(_scanValues[index], "%hhx:%hhx:%hhx:%hhx:%hhx:%hhx",
+           &_target.bssid[0], &_target.bssid[1], &_target.bssid[2],
+           &_target.bssid[3], &_target.bssid[4], &_target.bssid[5]);
+    _phase = PHASE_MENU;
+    _showMenu();
+    return;
+  }
   if (_phase != PHASE_MENU) return;
 
-  switch (index) {
-    case 0:
+  if (index >= _menuCount) return;
+  enum { ACT_MODE = 0, ACT_TARGET_WIFI, ACT_DISCOVERY_DWELL, ACT_ATTACK_DWELL,
+         ACT_MAX_DEAUTH, ACT_START };
+  switch (_menuMap[index]) {
+    case ACT_MODE:
+      _mode = (_mode == MODE_TARGET) ? MODE_ALL : MODE_TARGET;
+      _showMenu();
+      break;
+    case ACT_TARGET_WIFI:
+      _selectWifi();
+      break;
+    case ACT_DISCOVERY_DWELL:
       _discoveryDwellMs = InputNumberAction::popup("Discovery Dwell (ms)", 250, 10000, _discoveryDwellMs);
       _showMenu();
       break;
-    case 1:
+    case ACT_ATTACK_DWELL:
       _attackDwellMs = InputNumberAction::popup("Attack Dwell (ms)", 250, 10000, _attackDwellMs);
       _showMenu();
       break;
-    case 2:
+    case ACT_MAX_DEAUTH:
       _maxDeauthAttempts = InputNumberAction::popup("Max Deauth Attempts", 5, 30, _maxDeauthAttempts);
       _showMenu();
       break;
-    case 3: {
+    case ACT_START: {
+      if (_mode == MODE_TARGET) {
+        bool unset = (_target.ssid == "-" || _target.channel == 0);
+        uint8_t blank[6] = {0};
+        if (unset && memcmp(_target.bssid, blank, 6) == 0) {
+          ShowStatusAction::show("Select a Target WiFi first!");
+          return;
+        }
+      }
+
       // Start capture
       _channel          = 0;
       _needRefresh      = false;
@@ -186,11 +239,37 @@ void WifiEapolCaptureScreen::onItemSelected(uint8_t index) {
       int ne = Achievement.inc("wifi_eapol_capture_started");
       if (ne == 1) Achievement.unlock("wifi_eapol_capture_started");
 
-      _logView.addLine("Discovery scan...", TFT_DARKGREY);
-
       _attacker = new WifiAttackUtil();
       esp_wifi_set_promiscuous(true);
       esp_wifi_set_promiscuous_rx_cb(&WifiEapolCaptureScreen::_promiscuousCb);
+
+      if (_mode == MODE_TARGET) {
+        // Seed the chosen AP and jump straight to PHASE_ATTACK on its channel.
+        // No discovery scan, no channel hopping, no rescan on failure.
+        MacAddr mac;
+        memcpy(mac.data(), _target.bssid, 6);
+        memcpy(_apTargets[0].bssid, _target.bssid, 6);
+        _apTargets[0].channel     = (uint8_t)_target.channel;
+        _apTargets[0].deauthCount = 0;
+        _apCount = 1;
+        _ssidMap[mac] = std::string(_target.ssid.c_str());
+
+        _phase           = PHASE_ATTACK;
+        _attackChans[0]  = (uint8_t)_target.channel;
+        _attackChanCount = 1;
+        _attackChanIdx   = 0;
+        _channel         = _target.channel;
+        _attacker->setChannel(_channel);
+        _deauthFired     = false;
+        // Beacons stay enabled briefly so we can capture one for the PCAP header.
+        // _flush() handles the beacon → PCAP write path normally.
+
+        char buf[44];
+        snprintf(buf, sizeof(buf), "Target: %s CH%d", _target.ssid.c_str(), _target.channel);
+        _logView.addLine(buf, TFT_CYAN);
+      } else {
+        _logView.addLine("Discovery scan...", TFT_DARKGREY);
+      }
 
       render();
       break;
@@ -198,8 +277,40 @@ void WifiEapolCaptureScreen::onItemSelected(uint8_t index) {
   }
 }
 
+void WifiEapolCaptureScreen::_selectWifi() {
+  _phase = PHASE_SELECT_WIFI;
+  ShowStatusAction::show("Scanning (10s)...", 0);
+
+  WiFi.mode(WIFI_STA);
+  WiFi.disconnect();
+  // 770 ms per channel × 13 channels ≈ 10 s — long sweep so weaker / less
+  // chatty APs have time to broadcast at least one beacon per channel.
+  const int total = WiFi.scanNetworks(false, false, false, 770, 0);
+
+  if (total <= 0) {
+    ShowStatusAction::show("No networks found");
+    _phase = PHASE_MENU;
+    _showMenu();
+    return;
+  }
+
+  _scanCount = total > MAX_SCAN ? MAX_SCAN : total;
+  for (int i = 0; i < _scanCount; i++) {
+    snprintf(_scanLabels[i], sizeof(_scanLabels[i]), "[%2d] %s",
+             WiFi.channel(i), WiFi.SSID(i).c_str());
+    snprintf(_scanValues[i], sizeof(_scanValues[i]), "%s",
+             WiFi.BSSIDstr(i).c_str());
+    _scanItems[i] = {_scanLabels[i], _scanValues[i]};
+  }
+
+  setItems(_scanItems, _scanCount);
+}
+
 void WifiEapolCaptureScreen::onUpdate() {
-  if (_phase == PHASE_MENU) { ListScreen::onUpdate(); return; }
+  if (_phase == PHASE_MENU || _phase == PHASE_SELECT_WIFI) {
+    ListScreen::onUpdate();
+    return;
+  }
 
   const unsigned long now = millis();
 
@@ -260,7 +371,26 @@ void WifiEapolCaptureScreen::onUpdate() {
       } else {
         _attackChanIdx++;
         if (_attackChanIdx >= _attackChanCount) {
-          // All attack channels exhausted — reset incomplete APs and rescan
+          if (_mode == MODE_TARGET) {
+            // Single target — either captured or out of attempts. Stop here.
+            MacAddr mac;
+            memcpy(mac.data(), _target.bssid, 6);
+            auto it = _eapolMap.find(mac);
+            const bool got = (it != _eapolMap.end() && it->second.validated);
+            _logView.addLine(got ? "Done. Handshake captured." : "Done. No handshake (timeout).",
+                             got ? TFT_GREEN : TFT_YELLOW);
+            _logView.addLine("BACK to exit.", TFT_DARKGREY);
+            render();
+            // Stop firing deauths; let user press BACK.
+            _phase = PHASE_ATTACK;  // keep state, but no more channels to attack
+            _attackChanIdx   = 0;
+            _attackChanCount = 0;
+            _chanDwellUntil  = ULONG_MAX;  // never re-fire
+            _deauthFired     = true;
+            return;
+          }
+
+          // All mode — reset incomplete APs and rescan
           for (int i = 0; i < _apCount; i++) {
             MacAddr mac;
             memcpy(mac.data(), _apTargets[i].bssid, 6);
@@ -307,11 +437,19 @@ void WifiEapolCaptureScreen::onUpdate() {
 }
 
 void WifiEapolCaptureScreen::onRender() {
-  if (_phase == PHASE_MENU) { ListScreen::onRender(); return; }
+  if (_phase == PHASE_MENU || _phase == PHASE_SELECT_WIFI) {
+    ListScreen::onRender();
+    return;
+  }
   _logView.draw(Uni.Lcd, bodyX(), bodyY(), bodyW(), bodyH(), _statusBarCb, this);
 }
 
 void WifiEapolCaptureScreen::onBack() {
+  if (_phase == PHASE_SELECT_WIFI) {
+    _phase = PHASE_MENU;
+    _showMenu();
+    return;
+  }
   Screen.goBack();
 }
 
@@ -561,6 +699,16 @@ void WifiEapolCaptureScreen::_flush() {
   while (_ringTail != _ringHead) {
     const RawCapture& cap = _ring[_ringTail];
     _ringTail = (_ringTail + 1) % RING_SIZE;
+
+    // Target mode: drop everything that isn't the chosen AP. The promiscuous
+    // callback can't filter (it has no instance state), so collateral beacons
+    // / EAPOL on the same channel still arrive here — we discard them now so
+    // _apTargets stays at exactly one entry (the picked target) and the
+    // deauth burst only ever hits that BSSID.
+    if (_mode == MODE_TARGET &&
+        memcmp(cap.bssid.data(), _target.bssid, 6) != 0) {
+      continue;
+    }
 
     if (cap.isBeacon) {
       // Parse SSID from beacon IEs (802.11 header=24B + fixed params=12B = offset 36)
