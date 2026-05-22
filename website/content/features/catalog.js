@@ -66,6 +66,7 @@ export const CATALOG = [
   { slug: "gps-wardriving",       title: "GPS & Wardriving",    category: "module",   summary: "Live GPS view, WiFi/BLE wardriving with Wigle CSV export, and Wigle upload integration",             hasDetail: true,  stable: true },
   { slug: "ir-remote",            title: "IR Remote",           category: "module",   summary: "Capture, replay, and manage IR signals — compatible with Flipper Zero and Bruce formats",            hasDetail: true,  stable: true },
   { slug: "sub-ghz",              title: "Sub-GHz (CC1101)",    category: "module",   summary: "Capture, replay, and jam Sub-GHz RF signals — compatible with Flipper Zero .sub format",            hasDetail: true,  stable: true },
+  { slug: "m5-rf433",             title: "M5 RF433",            category: "module",   summary: "Capture, replay, and jam 433.92 MHz signals via the M5 RF433T/R two-pin GPIO modules — no CC1101 needed; shares .sub files with Sub-GHz", hasDetail: true,  stable: true },
   { slug: "nrf24",                title: "NRF24L01+",           category: "module",   summary: "2.4 GHz spectrum analyzer, multi-mode jammer, and MouseJack wireless keyboard injection",             hasDetail: true,  stable: true },
   { slug: "pin-setting",          title: "Pin Setting",         category: "module",   summary: "Configure GPIO pins for GPS, I2C, CC1101, NRF24, PN532, and CoreS3 Grove 5V direction — defaults per board, with safety notes", hasDetail: true,  stable: true },
 

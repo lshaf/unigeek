@@ -7,6 +7,7 @@
 #include "screens/module/GPSScreen.h"
 #include "screens/module/IRScreen.h"
 #include "screens/module/SubGHzScreen.h"
+#include "screens/module/M5RF433Screen.h"
 #include "screens/module/NRF24Screen.h"
 #include "screens/setting/PinSettingScreen.h"
 
@@ -26,7 +27,8 @@ void ModuleMenuScreen::onItemSelected(uint8_t index) {
     case 3: Screen.push(new GPSScreen());         break;
     case 4: Screen.push(new IRScreen());          break;
     case 5: Screen.push(new SubGHzScreen());      break;
-    case 6: Screen.push(new NRF24Screen());       break;
-    case 7: Screen.push(new PinSettingScreen());  break;
+    case 6: Screen.push(new M5RF433Screen());     break;
+    case 7: Screen.push(new NRF24Screen());       break;
+    case 8: Screen.push(new PinSettingScreen());  break;
   }
 }

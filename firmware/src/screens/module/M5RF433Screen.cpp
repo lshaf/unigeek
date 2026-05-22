@@ -1,38 +1,47 @@
-#include "SubGHzScreen.h"
+#include "M5RF433Screen.h"
 #include "core/AchievementManager.h"
 #include "core/ScreenManager.h"
 #include "core/Device.h"
-#include "core/PinConfigManager.h"
 #include "screens/module/ModuleMenuScreen.h"
-#include "ui/actions/InputNumberAction.h"
 #include "ui/actions/InputTextAction.h"
 #include "ui/actions/InputSelectAction.h"
 #include "ui/actions/ShowStatusAction.h"
 #include "ui/views/ProgressView.h"
 
-void SubGHzScreen::onInit() {
-  _csPin   = PinConfig.get(PIN_CONFIG_CC1101_CS,   PIN_CONFIG_CC1101_CS_DEFAULT).toInt();
-  _gdo0Pin = PinConfig.get(PIN_CONFIG_CC1101_GDO0, PIN_CONFIG_CC1101_GDO0_DEFAULT).toInt();
+// Pinout is fixed per board at build time. M5 RF433T/R Units plug into the
+// Grove port — default to GROVE_SDA (TX) / GROVE_SCL (RX). A board can override
+// either with -DM5RF433_TX_PIN / -DM5RF433_RX_PIN in pins_arduino.h.
+#if defined(M5RF433_TX_PIN)
+  static constexpr int8_t kDefaultTxPin = (int8_t)M5RF433_TX_PIN;
+#elif defined(GROVE_SDA)
+  static constexpr int8_t kDefaultTxPin = (int8_t)GROVE_SDA;
+#else
+  static constexpr int8_t kDefaultTxPin = -1;
+#endif
 
-  if (_csPin < 0 || _gdo0Pin < 0) {
-    ShowStatusAction::show("Set CC1101 pins first");
+#if defined(M5RF433_RX_PIN)
+  static constexpr int8_t kDefaultRxPin = (int8_t)M5RF433_RX_PIN;
+#elif defined(GROVE_SCL)
+  static constexpr int8_t kDefaultRxPin = (int8_t)GROVE_SCL;
+#else
+  static constexpr int8_t kDefaultRxPin = -1;
+#endif
+
+void M5RF433Screen::onInit() {
+  _txPin = kDefaultTxPin;
+  _rxPin = kDefaultRxPin;
+
+  if (_txPin < 0 && _rxPin < 0) {
+    ShowStatusAction::show("M5 RF433 not supported");
     Screen.goBack();
     return;
   }
 
-  ProgressView::init();
-  ProgressView::progress("Detecting CC1101...", 30);
-  if (!_rf.begin(Uni.Spi, _csPin, _gdo0Pin)) {
-    ShowStatusAction::show("CC1101 not found!");
-    Screen.goBack();
-    return;
-  }
-  _rf.end();
-
+  _rf.begin(_txPin, _rxPin);
   _showMenu();
 }
 
-void SubGHzScreen::onUpdate() {
+void M5RF433Screen::onUpdate() {
   if (_state == STATE_SIGNAL_INFO) {
     if (!Uni.Nav->wasPressed()) return;
     auto dir = Uni.Nav->readDirection();
@@ -44,29 +53,9 @@ void SubGHzScreen::onUpdate() {
     return;
   }
 
-  if (_state == STATE_SCANNING) {
-    if (Uni.Nav->wasPressed()) {
-      auto dir = Uni.Nav->readDirection();
-      if (dir == INavigation::DIR_BACK || dir == INavigation::DIR_PRESS) {
-        _rf.endScan();
-        _rf.end();
-        _showMenu();
-        return;
-      }
-    }
-    _rf.stepScan();
-    if (!_rfDetectFired && _rf.getScanRssi() > CC1101Util::RSSI_THRESHOLD) {
-      _rfDetectFired = true;
-      int n = Achievement.inc("rf_detect_freq");
-      if (n == 1) Achievement.unlock("rf_detect_freq");
-    }
-    render();
-    return;
-  }
-
   if (_state == STATE_RECEIVING) {
     if (_capturedCount < kMaxCapture) {
-      CC1101Util::Signal sig;
+      M5RF433Util::Signal sig;
       if (_rf.pollReceive(sig) && !_isDuplicate(sig)) {
         _capturedSignals[_capturedCount] = sig;
         _capturedTimes[_capturedCount]   = _generateTimestampName();
@@ -79,7 +68,7 @@ void SubGHzScreen::onUpdate() {
         }
         if (_capturedCount >= kMaxCapture) {
           _rf.endReceive();
-          snprintf(_titleBuf, sizeof(_titleBuf), "Sub-GHz Full");
+          snprintf(_titleBuf, sizeof(_titleBuf), "M5 RF433 Full");
         }
         _showReceiveList();
       }
@@ -97,15 +86,13 @@ void SubGHzScreen::onUpdate() {
     }
     if (_holdFired) {
       if (Uni.Nav->wasPressed()) {
-        Uni.Nav->readDirection();  // swallow the release so PRESS click doesn't fire
+        Uni.Nav->readDirection();
         _holdFired = false;
       }
       return;
     }
 
     // Nav: RIGHT/LEFT toggles filter; UP/DOWN/PRESS/BACK navigate the captured list.
-    // We intercept here instead of falling through to ListScreen::onUpdate so we
-    // can claim LEFT/RIGHT for the filter toggle (Bruce-style live switch).
     if (Uni.Nav->wasPressed()) {
       auto dir = Uni.Nav->readDirection();
       if (dir == INavigation::DIR_LEFT || dir == INavigation::DIR_RIGHT) {
@@ -129,7 +116,6 @@ void SubGHzScreen::onUpdate() {
       return;
     }
 
-    // Blink title indicator while still listening
     if (_capturedCount < kMaxCapture && millis() - _lastRender > 500) {
       _lastRender = millis();
       render();
@@ -141,19 +127,13 @@ void SubGHzScreen::onUpdate() {
     if (Uni.Nav->wasPressed()) {
       auto dir = Uni.Nav->readDirection();
       if (dir == INavigation::DIR_BACK || dir == INavigation::DIR_PRESS) {
-        digitalWrite(_gdo0Pin, LOW);
-        _rf.end();
+        _rf.stopJam();
         _showMenu();
         return;
       }
     }
 
-    for (int i = 0; i < 50; i++) {
-      uint32_t pw  = 5 + (micros() % 46);
-      uint32_t gap = 5 + (micros() % 96);
-      digitalWrite(_gdo0Pin, HIGH); delayMicroseconds(pw);
-      digitalWrite(_gdo0Pin, LOW);  delayMicroseconds(gap);
-    }
+    _rf.jamBurst();
     yield();
 
     if (millis() - _jamStart > 500) {
@@ -166,7 +146,7 @@ void SubGHzScreen::onUpdate() {
   ListScreen::onUpdate();
 }
 
-void SubGHzScreen::onRender() {
+void M5RF433Screen::onRender() {
   if (_state == STATE_SIGNAL_INFO) {
     _textView.render(bodyX(), bodyY(), bodyW(), bodyH());
     return;
@@ -175,19 +155,16 @@ void SubGHzScreen::onRender() {
   if (_state == STATE_RECEIVING) {
     if (_capturedCount == 0) {
       auto& lcd = Uni.Lcd;
-      // Waiting view is fully static — paint once per state entry.
       if (_chromeDrawn) return;
       lcd.fillRect(bodyX(), bodyY(), bodyW(), bodyH(), TFT_BLACK);
       lcd.setTextSize(1);
       lcd.setTextDatum(MC_DATUM);
       lcd.setTextColor(TFT_WHITE, TFT_BLACK);
-      char freqStr[24];
-      snprintf(freqStr, sizeof(freqStr), "%.2f MHz", _rf.getFrequency());
-      lcd.drawString(freqStr, bodyX() + bodyW() / 2, bodyY() + bodyH() / 2 - 20);
+      lcd.drawString("433.92 MHz", bodyX() + bodyW() / 2, bodyY() + bodyH() / 2 - 20);
       lcd.drawString("Waiting for signal...", bodyX() + bodyW() / 2, bodyY() + bodyH() / 2);
       lcd.fillRect(bodyX(), bodyY() + bodyH() - 16, bodyW(), 16, Config.getThemeColor());
       lcd.setTextColor(TFT_WHITE, Config.getThemeColor());
-      const char* filterLabel = (_rf.getRxFilter() == CC1101Util::RX_FILTER_CODE)
+      const char* filterLabel = (_rf.getRxFilter() == M5RF433Util::RX_FILTER_CODE)
                                 ? "> Filter: Code" : "> Filter: RAW";
       lcd.setTextDatum(ML_DATUM);
       #ifdef DEVICE_HAS_KEYBOARD
@@ -204,107 +181,7 @@ void SubGHzScreen::onRender() {
     return;
   }
 
-  if (_state == STATE_SCANNING) {
-    auto& lcd = Uni.Lcd;
-
-    static constexpr int kRssiFloor   = -110;
-    static constexpr int kRssiCeiling = -30;
-    static constexpr int kRssiRange   = kRssiCeiling - kRssiFloor; // 80
-
-    const int footerH = 16;
-    const int infoH   = 26;
-    const int contentH = bodyH() - footerH;   // info + chart area
-    const int chartY   = infoH;                // inside sprite
-    const int chartH   = contentH - infoH;
-
-    // Footer chrome painted once.
-    if (!_chromeDrawn) {
-      lcd.fillRect(bodyX(), bodyY(), bodyW(), bodyH(), TFT_BLACK);
-      lcd.setTextSize(1);
-      lcd.setTextDatum(MC_DATUM);
-      lcd.fillRect(bodyX(), bodyY() + bodyH() - footerH, bodyW(), footerH, Config.getThemeColor());
-      lcd.setTextColor(TFT_WHITE, Config.getThemeColor());
-      #ifdef DEVICE_HAS_KEYBOARD
-        lcd.drawString("BACK: Stop", bodyX() + bodyW() / 2, bodyY() + bodyH() - 8);
-      #else
-        lcd.drawString("< Stop", bodyX() + bodyW() / 2, bodyY() + bodyH() - 8);
-      #endif
-      _chromeDrawn = true;
-    }
-
-    uint8_t n = _rf.getScanCount();
-    int barW  = bodyW() / (n ? n : 1);
-    if (barW < 1) barW = 1;
-
-    uint8_t bestIdx  = 0;
-    int     bestRssi = -120;
-    for (uint8_t i = 0; i < n; i++) {
-      int r = _rf.getScanRssiAt(i);
-      if (r > bestRssi) { bestRssi = r; bestIdx = i; }
-    }
-
-    Sprite sp(&lcd);
-    sp.createSprite(bodyW(), contentH);
-    sp.fillSprite(TFT_BLACK);
-    sp.setTextSize(1);
-
-    // Bars
-    for (uint8_t i = 0; i < n; i++) {
-      int rssi    = _rf.getScanRssiAt(i);
-      int clamped = constrain(rssi, kRssiFloor, kRssiCeiling);
-      int barH    = (clamped - kRssiFloor) * chartH / kRssiRange;
-      int x       = i * barW;
-      int y       = chartY + chartH - barH;
-
-      uint16_t color;
-      if (i == bestIdx && rssi > CC1101Util::RSSI_THRESHOLD)     color = TFT_YELLOW;
-      else if (rssi > CC1101Util::RSSI_THRESHOLD)                color = TFT_GREEN;
-      else if (rssi > kRssiFloor + 10)                           color = 0x2945;
-      else                                                       color = TFT_DARKGREY;
-
-      if (barH > 0) sp.fillRect(x, y, barW - 1, barH, color);
-    }
-
-    // Cursor
-    for (uint8_t i = 0; i < n; i++) {
-      if (fabsf(_rf.getScanFreqAt(i) - _rf.getScanFreq()) < 0.01f) {
-        sp.drawFastVLine(i * barW + barW / 2, chartY, chartH, TFT_WHITE);
-        break;
-      }
-    }
-
-    // Info
-    sp.setTextDatum(ML_DATUM);
-    sp.setTextColor(TFT_WHITE, TFT_BLACK);
-    char freqBuf[20];
-    snprintf(freqBuf, sizeof(freqBuf), "%.3f MHz", _rf.getScanFreq());
-    sp.drawString(freqBuf, 2, 7);
-
-    sp.setTextDatum(MR_DATUM);
-    char rssiBuf[16];
-    snprintf(rssiBuf, sizeof(rssiBuf), "%d dBm", _rf.getScanRssi());
-    uint16_t rssiColor = (_rf.getScanRssi() > CC1101Util::RSSI_THRESHOLD) ? TFT_GREEN : TFT_CYAN;
-    sp.setTextColor(rssiColor, TFT_BLACK);
-    sp.drawString(rssiBuf, bodyW() - 2, 7);
-
-    sp.setTextDatum(ML_DATUM);
-    if (bestRssi > CC1101Util::RSSI_THRESHOLD) {
-      sp.setTextColor(TFT_YELLOW, TFT_BLACK);
-      char bestBuf[28];
-      snprintf(bestBuf, sizeof(bestBuf), "> %.3f MHz %ddBm", _rf.getScanFreqAt(bestIdx), bestRssi);
-      sp.drawString(bestBuf, 2, 19);
-    } else {
-      sp.setTextColor(TFT_DARKGREY, TFT_BLACK);
-      sp.drawString("No signal", 2, 19);
-    }
-
-    sp.pushSprite(bodyX(), bodyY());
-    sp.deleteSprite();
-    return;
-  }
-
   if (_state == STATE_JAMMING) {
-    // Fully static — paint once per state entry.
     if (_chromeDrawn) return;
     auto& lcd = Uni.Lcd;
     lcd.fillRect(bodyX(), bodyY(), bodyW(), bodyH(), TFT_BLACK);
@@ -312,9 +189,7 @@ void SubGHzScreen::onRender() {
     lcd.setTextSize(1);
     lcd.setTextColor(TFT_WHITE, TFT_BLACK);
 
-    char freqStr[16];
-    snprintf(freqStr, sizeof(freqStr), "%.2f MHz", _rf.getFrequency());
-    lcd.drawString(freqStr, bodyX() + bodyW() / 2, bodyY() + bodyH() / 2 - 20);
+    lcd.drawString("433.92 MHz", bodyX() + bodyW() / 2, bodyY() + bodyH() / 2 - 20);
     lcd.drawString("Jamming...", bodyX() + bodyW() / 2, bodyY() + bodyH() / 2);
 
     #ifdef DEVICE_HAS_KEYBOARD
@@ -331,16 +206,14 @@ void SubGHzScreen::onRender() {
   ListScreen::onRender();
 }
 
-void SubGHzScreen::onBack() {
+void M5RF433Screen::onBack() {
   if (_state == STATE_SIGNAL_INFO) {
-    // Restore the list state then re-open the popup that summoned the info view.
     uint8_t idx = _infoIdx;
     if (_infoSource == INFO_FROM_CAPTURE) {
       _state = STATE_RECEIVING;
       _showReceiveList();
       _handleCaptureSelection(idx);
     } else {
-      // Browse: state is already STATE_SEND_BROWSE in spirit — repaint list, re-pop.
       _state = STATE_SEND_BROWSE;
       _loadBrowseDir(_browsePath);
       _showBrowseOptions(idx);
@@ -351,15 +224,10 @@ void SubGHzScreen::onBack() {
     _rf.end();
     Screen.goBack();
   } else if (_state == STATE_RECEIVING) {
-    _rf.end();
-    _showMenu();
-  } else if (_state == STATE_SCANNING) {
-    _rf.endScan();
-    _rf.end();
+    _rf.endReceive();
     _showMenu();
   } else if (_state == STATE_JAMMING) {
-    digitalWrite(_gdo0Pin, LOW);
-    _rf.end();
+    _rf.stopJam();
     _showMenu();
   } else if (_state == STATE_SEND_BROWSE) {
     if (_browsePath == kRootPath) {
@@ -372,25 +240,12 @@ void SubGHzScreen::onBack() {
   }
 }
 
-void SubGHzScreen::onItemSelected(uint8_t index) {
+void M5RF433Screen::onItemSelected(uint8_t index) {
   if (_state == STATE_MENU) {
     switch (index) {
-      case 0: { // Frequency
-        _selectFrequency();
-        return;
-      }
-      case 1: { // Detect Freq
-        _startScan();
-        return;
-      }
-      case 2: { // Receive
-        if (_csPin < 0 || _gdo0Pin < 0) {
-          ShowStatusAction::show("Set CS and GDO0 pins first");
-          render();
-          return;
-        }
-        if (!_rf.begin(Uni.Spi, _csPin, _gdo0Pin)) {
-          ShowStatusAction::show("CC1101 not found");
+      case 0: { // Receive
+        if (_rxPin < 0) {
+          ShowStatusAction::show("RX pin not available");
           render();
           return;
         }
@@ -398,36 +253,31 @@ void SubGHzScreen::onItemSelected(uint8_t index) {
         _lastRender = 0;
         _state = STATE_RECEIVING;
         _chromeDrawn = false;
-        snprintf(_titleBuf, sizeof(_titleBuf), "Sub-GHz RX (0/%d)", kMaxCapture);
+        snprintf(_titleBuf, sizeof(_titleBuf), "M5 RF433 RX (0/%d)", kMaxCapture);
         _rf.beginReceive();
-        setItems(_capturedItems, 0);  // prime pointer once; _showReceiveList uses setCount after this
+        setItems(_capturedItems, 0);
         break;
       }
-      case 3: { // Send
-        if (_csPin < 0) {
-          ShowStatusAction::show("Set CS pin first");
+      case 1: { // Send
+        if (_txPin < 0) {
+          ShowStatusAction::show("TX pin not available");
           render();
           return;
         }
         _loadBrowseDir(kRootPath);
         break;
       }
-      case 4: { // Jammer
-        if (_csPin < 0 || _gdo0Pin < 0) {
-          ShowStatusAction::show("Set CS and GDO0 pins first");
+      case 2: { // Jammer
+        if (_txPin < 0) {
+          ShowStatusAction::show("TX pin not available");
           render();
           return;
         }
-        if (!_rf.begin(Uni.Spi, _csPin, _gdo0Pin)) {
-          ShowStatusAction::show("CC1101 not found");
-          render();
-          return;
-        }
-        _rf.startTx();
+        _rf.startJam();
         _state = STATE_JAMMING;
         _chromeDrawn = false;
         _jamStart = millis();
-        strcpy(_titleBuf, "Sub-GHz Jam");
+        strcpy(_titleBuf, "M5 RF433 Jam");
         {
           int n = Achievement.inc("rf_jammer_first");
           if (n == 1) Achievement.unlock("rf_jammer_first");
@@ -444,7 +294,6 @@ void SubGHzScreen::onItemSelected(uint8_t index) {
   if (_state == STATE_RECEIVING) {
     if (index < _capturedCount) {
       _handleCaptureSelection(index);
-      // If a deletion freed a slot and receive was stopped, restart it
       if (_capturedCount < kMaxCapture) _rf.beginReceive();
     }
     return;
@@ -463,7 +312,7 @@ void SubGHzScreen::onItemSelected(uint8_t index) {
 
 // ── Browse helpers ────────────────────────────────────────────────────────
 
-void SubGHzScreen::_sendBrowseFile(uint8_t index) {
+void M5RF433Screen::_sendBrowseFile(uint8_t index) {
   const auto& e = _browser.entry(index);
   String content = Uni.Storage->readFile(e.path.c_str());
   if (content.length() == 0) {
@@ -471,21 +320,15 @@ void SubGHzScreen::_sendBrowseFile(uint8_t index) {
     render();
     return;
   }
-  CC1101Util::Signal sig;
+  M5RF433Util::Signal sig;
   if (!CC1101Util::loadFile(content, sig)) {
     ShowStatusAction::show("Invalid .sub file");
-    render();
-    return;
-  }
-  if (!_rf.begin(Uni.Spi, _csPin, _gdo0Pin)) {
-    ShowStatusAction::show("CC1101 not found");
     render();
     return;
   }
   ProgressView::init();
   ProgressView::progress(("Sending " + e.name).c_str(), 50);
   _rf.sendSignal(sig);
-  _rf.end();
   {
     int n = Achievement.inc("rf_send_first");
     if (n == 1) Achievement.unlock("rf_send_first");
@@ -494,9 +337,9 @@ void SubGHzScreen::_sendBrowseFile(uint8_t index) {
   render();
 }
 
-void SubGHzScreen::_showBrowseFileInfo(uint8_t index) {
+void M5RF433Screen::_showBrowseFileInfo(uint8_t index) {
   String content = Uni.Storage->readFile(_browser.entry(index).path.c_str());
-  CC1101Util::Signal sig;
+  M5RF433Util::Signal sig;
   if (!CC1101Util::loadFile(content, sig)) {
     ShowStatusAction::show("Invalid .sub file");
     render();
@@ -505,7 +348,7 @@ void SubGHzScreen::_showBrowseFileInfo(uint8_t index) {
   _showSignalInfo(sig, INFO_FROM_BROWSE, index);
 }
 
-void SubGHzScreen::_showBrowseOptions(uint8_t index) {
+void M5RF433Screen::_showBrowseOptions(uint8_t index) {
   static constexpr InputSelectAction::Option fileOpts[] = {
     {"Send",   "send"},
     {"Info",   "info"},
@@ -550,94 +393,32 @@ void SubGHzScreen::_showBrowseOptions(uint8_t index) {
 
 // ── Menu ──────────────────────────────────────────────────────────────────
 
-void SubGHzScreen::_showMenu() {
+void M5RF433Screen::_showMenu() {
   _state = STATE_MENU;
   _chromeDrawn = false;
-  strcpy(_titleBuf, "Sub-GHz");
-  _updateSublabels();
+  strcpy(_titleBuf, "M5 RF433");
   setItems(_menuItems, kMenuCount);
 }
 
-void SubGHzScreen::_updateSublabels() {
-  char buf[12];
-  snprintf(buf, sizeof(buf), "%.2f MHz", _rf.getFrequency());
-  _freqSub = buf;
-  _menuItems[0].sublabel = _freqSub.c_str();
-}
-
-void SubGHzScreen::_startScan() {
-  if (_csPin < 0 || _gdo0Pin < 0) {
-    ShowStatusAction::show("Set CS and GDO0 pins first");
-    render();
-    return;
-  }
-  if (!_rf.begin(Uni.Spi, _csPin, _gdo0Pin)) {
-    ShowStatusAction::show("CC1101 not found");
-    render();
-    return;
-  }
-  _rfDetectFired = false;
-  _rf.beginScan();
-  _state = STATE_SCANNING;
-  _chromeDrawn = false;
-  strcpy(_titleBuf, "Detect Freq");
-  render();
-}
-
-void SubGHzScreen::_toggleRxFilter() {
+void M5RF433Screen::_toggleRxFilter() {
   auto cur = _rf.getRxFilter();
-  _rf.setRxFilter(cur == CC1101Util::RX_FILTER_CODE
-                  ? CC1101Util::RX_FILTER_RAW
-                  : CC1101Util::RX_FILTER_CODE);
+  _rf.setRxFilter(cur == M5RF433Util::RX_FILTER_CODE
+                  ? M5RF433Util::RX_FILTER_RAW
+                  : M5RF433Util::RX_FILTER_CODE);
   _chromeDrawn = false;  // redraw waiting-screen footer with new label
   if (Uni.Speaker) Uni.Speaker->beep();
 }
 
-void SubGHzScreen::_selectFrequency() {
-  static constexpr InputSelectAction::Option freqOpts[] = {
-    {"300 MHz",    "300"},
-    {"315 MHz",    "315"},
-    {"345 MHz",    "345"},
-    {"390 MHz",    "390"},
-    {"433.92 MHz", "433.92"},
-    {"434 MHz",    "434"},
-    {"868 MHz",    "868"},
-    {"915 MHz",    "915"},
-    {"Custom",     "custom"},
-  };
+// ── Captured List ──────────────────────────────────────────────────────────
 
-  char curBuf[12];
-  snprintf(curBuf, sizeof(curBuf), "%.2f", _rf.getFrequency());
-
-  const char* choice = InputSelectAction::popup("Frequency", freqOpts, 9, curBuf);
-  if (!choice) { render(); return; }
-
-  float mhz;
-  if (strcmp(choice, "custom") == 0) {
-    int val = InputNumberAction::popup("MHz (280-928)", 280, 928, (int)_rf.getFrequency());
-    if (InputNumberAction::wasCancelled()) { render(); return; }
-    mhz = (float)val;
-  } else {
-    mhz = atof(choice);
-  }
-
-  if (!_rf.setFrequency(mhz)) {
-    ShowStatusAction::show("Invalid frequency");
-  }
-  _updateSublabels();
+void M5RF433Screen::_showReceiveList() {
+  snprintf(_titleBuf, sizeof(_titleBuf), "M5 RF433 RX (%d/%d)", _capturedCount, kMaxCapture);
+  _rebuildCapturedItems();
+  setCount(_capturedCount);
   render();
 }
 
-// ── Captured List ──────────────────────────────────────────────────────────
-
-void SubGHzScreen::_showReceiveList() {
-  snprintf(_titleBuf, sizeof(_titleBuf), "Sub-GHz RX (%d/%d)", _capturedCount, kMaxCapture);
-  _rebuildCapturedItems();   // update array in-place (SettingScreen pattern)
-  setCount(_capturedCount);  // update count, clamp selection, adjust scroll — no render
-  render();                  // one render at the current selection
-}
-
-void SubGHzScreen::_handleCaptureSelection(uint8_t index) {
+void M5RF433Screen::_handleCaptureSelection(uint8_t index) {
   if (index >= _capturedCount) return;
 
   static constexpr InputSelectAction::Option captureOpts[] = {
@@ -680,7 +461,7 @@ void SubGHzScreen::_handleCaptureSelection(uint8_t index) {
   }
 }
 
-void SubGHzScreen::_showSignalInfo(const CC1101Util::Signal& sig, InfoSource src, uint8_t idx) {
+void M5RF433Screen::_showSignalInfo(const M5RF433Util::Signal& sig, InfoSource src, uint8_t idx) {
   _infoSource = src;
   _infoIdx    = idx;
   strcpy(_titleBuf, "Signal Info");
@@ -689,9 +470,9 @@ void SubGHzScreen::_showSignalInfo(const CC1101Util::Signal& sig, InfoSource src
   render();
 }
 
-void SubGHzScreen::_rebuildCapturedItems() {
+void M5RF433Screen::_rebuildCapturedItems() {
   for (uint8_t i = 0; i < _capturedCount; i++) {
-    const CC1101Util::Signal& sig = _capturedSignals[i];
+    const M5RF433Util::Signal& sig = _capturedSignals[i];
     if (_capturedSaved[i]) {
       _capturedSubLabels[i] = "Saved";
     } else if (sig.protocol == "RcSwitch") {
@@ -700,7 +481,6 @@ void SubGHzScreen::_rebuildCapturedItems() {
                (unsigned long long)sig.key, sig.preset.c_str(), sig.bit);
       _capturedSubLabels[i] = buf;
     } else {
-      // Count pulses in RAW data as a proxy for complexity
       int pulses = 0;
       for (char c : sig.rawData) { if (c == ' ') pulses++; }
       pulses++;
@@ -712,19 +492,13 @@ void SubGHzScreen::_rebuildCapturedItems() {
   }
 }
 
-void SubGHzScreen::_sendCapturedSignal(uint8_t index) {
+void M5RF433Screen::_sendCapturedSignal(uint8_t index) {
   if (index >= _capturedCount) return;
-  if (_csPin < 0) {
-    ShowStatusAction::show("Set CS pin first");
+  if (_txPin < 0) {
+    ShowStatusAction::show("Set M5 RF433T (TX) pin first");
     render();
     return;
   }
-  // Replay flow: stop receive → init/send/end transfer → start receive.
-  // Chip is already initialised by STATE_RECEIVING. We must detach the RX
-  // ISR before TX or every pulse on GDO0 we drive for transmission would
-  // re-fire the receive interrupt (corrupts RX buffer + adds pulse jitter).
-  // The caller (onItemSelected STATE_RECEIVING) re-arms RX via beginReceive().
-  _rf.endReceive();
   ProgressView::init();
   ProgressView::progress(("Replaying " + _capturedTimes[index]).c_str(), 50);
   _rf.sendSignal(_capturedSignals[index]);
@@ -736,7 +510,7 @@ void SubGHzScreen::_sendCapturedSignal(uint8_t index) {
   render();
 }
 
-void SubGHzScreen::_saveSignal(uint8_t index, const String& name) {
+void M5RF433Screen::_saveSignal(uint8_t index, const String& name) {
   if (!Uni.Storage || !Uni.Storage->isAvailable()) {
     ShowStatusAction::show("No storage");
     return;
@@ -762,10 +536,10 @@ void SubGHzScreen::_saveSignal(uint8_t index, const String& name) {
   }
 }
 
-bool SubGHzScreen::_isDuplicate(const CC1101Util::Signal& sig) const {
-  if (sig.protocol != "RcSwitch") return false; // RAW: accept all, timing jitter makes dedup unreliable
+bool M5RF433Screen::_isDuplicate(const M5RF433Util::Signal& sig) const {
+  if (sig.protocol != "RcSwitch") return false;
   for (uint8_t i = 0; i < _capturedCount; i++) {
-    const CC1101Util::Signal& s = _capturedSignals[i];
+    const M5RF433Util::Signal& s = _capturedSignals[i];
     if (s.protocol == "RcSwitch" &&
         s.key    == sig.key    &&
         s.preset == sig.preset &&
@@ -776,7 +550,7 @@ bool SubGHzScreen::_isDuplicate(const CC1101Util::Signal& sig) const {
   return false;
 }
 
-String SubGHzScreen::_generateTimestampName() {
+String M5RF433Screen::_generateTimestampName() {
   uint32_t s = millis() / 1000;
   char buf[20];
   snprintf(buf, sizeof(buf), "rf_%05lu", (unsigned long)(s % 100000));
@@ -785,7 +559,7 @@ String SubGHzScreen::_generateTimestampName() {
 
 // ── File Browser ──────────────────────────────────────────────────────────
 
-String SubGHzScreen::_makeUniquePath(const String& name) {
+String M5RF433Screen::_makeUniquePath(const String& name) {
   String base = String(kRootPath) + "/" + name + ".sub";
   if (!Uni.Storage || !Uni.Storage->exists(base.c_str())) return base;
   for (int n = 2; n < 1000; n++) {
@@ -795,7 +569,7 @@ String SubGHzScreen::_makeUniquePath(const String& name) {
   return base;
 }
 
-void SubGHzScreen::_loadBrowseDir(const String& path) {
+void M5RF433Screen::_loadBrowseDir(const String& path) {
   _browsePath = path;
   _state = STATE_SEND_BROWSE;
 

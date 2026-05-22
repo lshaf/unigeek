@@ -82,15 +82,20 @@ Capture RF signals on the configured frequency.
 
 1. Set the desired frequency first via **Detect Freq** (reference) and **Frequency** (set)
 2. Select **Receive**
-3. The device listens on the configured frequency
-4. Captured signals appear in the list with protocol details:
+3. The device listens on the configured frequency. The footer shows the current Receive Filter:
+   - **Filter: RAW** (default) — capture both RCSwitch-decoded protocols **and** raw pulse streams that no protocol matched. Best for unknown remotes and unusual signals.
+   - **Filter: Code** — drop raw captures; only emit signals that decoded as one of the 23 known protocols (Princeton, HT6P20B, CAME, NICE, KeeLoq, …). Cuts noise when hunting a fixed-code remote.
+4. Toggle between RAW / Code live without leaving the screen — the footer label updates immediately. Setting is session-only.
+   - **4-way devices** (Cardputer, Cardputer ADV, DIY Smoochie, DIY Marauder, sticks in Encoder mode): press **LEFT** or **RIGHT**.
+   - **2-way devices** (M5StickS3, T-Display, T-Lora Pager, T-Embed CC1101, CYD touch, CoreS3, sticks in default mode): **hold OK / PRESS for 500 ms**. The release after the hold is swallowed so it doesn't open a capture popup.
+5. Captured signals appear in the list with protocol details:
    - **RcSwitch**: `0xABCDEF P1 24b` (hex value, protocol number, bit count)
    - **RAW**: `RAW 120 pulses` (raw pulse count)
-5. Duplicate RcSwitch signals are automatically filtered
-6. Select a captured signal to **Replay**, **Save**, or **Delete** it
-7. Saved files go to `/unigeek/rf/` in `.sub` format
-8. Up to 15 signals can be captured per session
-9. Press **BACK** to stop receiving and return to the menu
+6. Duplicate RcSwitch signals are automatically filtered
+7. Select a captured signal to **Replay**, **Save**, or **Delete** it
+8. Saved files go to `/unigeek/rf/` in `.sub` format
+9. Up to 15 signals can be captured per session
+10. Press **BACK** to stop receiving and return to the menu
 
 ## Send
 
@@ -98,12 +103,12 @@ Browse and send `.sub` signal files from storage.
 
 1. Select **Send** from the menu
 2. Browse from `/unigeek/rf/` — navigate into subfolders
-3. **Tap** a file to send it immediately
-4. **Hold** a file (1 second) to open the action menu:
+3. Tap a file to open the action menu:
    - **Send** — transmit the signal
+   - **Info** — open the signal info view (same fields as captured-signal Info; BACK returns here)
    - **Rename** — rename the file
    - **Delete** — delete the file
-5. The frequency stored in the file is used automatically during send
+4. The frequency stored in the file is used automatically during send
 
 ## Jammer
 

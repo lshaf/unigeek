@@ -155,7 +155,7 @@ bool CC1101Util::pollReceive(Signal& out) {
     _sw.resetAvailable();
   }
 
-  if (_sw.RAWavailable()) {
+  if (_rxFilter == RX_FILTER_RAW && _sw.RAWavailable()) {
     delay(400); // let full signal arrive
     unsigned int* raw = _sw.getRAWReceivedRawdata();
     String rawStr;
@@ -429,6 +429,62 @@ String CC1101Util::saveToString(const Signal& sig) {
   }
 
   return content;
+}
+
+String CC1101Util::signalInfoText(const Signal& sig) {
+  String out;
+  char buf[80];
+
+  // Frequency
+  snprintf(buf, sizeof(buf), "Frequency: %.2f MHz\n", sig.frequency);
+  out += buf;
+
+  // Protocol line (Bruce shows "Protocol: <name>(<preset>)" when preset is set)
+  if (sig.preset.length() > 0)
+    out += "Protocol: " + sig.protocol + " (" + sig.preset + ")\n";
+  else
+    out += "Protocol: " + sig.protocol + "\n";
+
+  if (sig.protocol == "RcSwitch") {
+    out += "Length: " + String(sig.bit) + " bits\n";
+    snprintf(buf, sizeof(buf), "Key: 0x%llX\n", (unsigned long long)sig.key);
+    out += buf;
+    if (sig.te > 0) out += "TE: " + String(sig.te) + " us\n";
+
+    // Binary breakdown grouped by 4 bits — capped to 40 bits like Bruce
+    int bits = sig.bit;
+    if (bits > 40) bits = 40;
+    if (bits > 0) {
+      String bin;
+      for (int i = bits - 1; i >= 0; i--) {
+        bin += ((sig.key >> i) & 1ULL) ? '1' : '0';
+        if (i > 0 && (i % 4) == 0) bin += ' ';
+      }
+      out += "Binary: " + bin + "\n";
+    }
+  } else {
+    // RAW — count pulses, show TE (first pulse), then a head of the timing data
+    int pulses = 0;
+    for (char c : sig.rawData) if (c == ' ') pulses++;
+    pulses++;
+    out += "Length: " + String(pulses) + " transitions\n";
+
+    int firstTe = 0;
+    int sp = sig.rawData.indexOf(' ');
+    String firstTok = (sp < 0) ? sig.rawData : sig.rawData.substring(0, sp);
+    firstTok.trim();
+    firstTe = firstTok.toInt();
+    if (firstTe < 0) firstTe = -firstTe;
+    if (firstTe > 0) out += "TE: " + String(firstTe) + " us\n";
+
+    if (sig.rawData.length() > 0) {
+      String head = sig.rawData;
+      if (head.length() > 240) head = head.substring(0, 240) + "...";
+      out += "Data:\n" + head + "\n";
+    }
+  }
+
+  return out;
 }
 
 String CC1101Util::signalLabel(const Signal& sig) {
