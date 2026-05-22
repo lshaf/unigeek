@@ -3,6 +3,7 @@
 //
 
 #include "M5RF433Util.h"
+#include "KeeloqUtil.h"
 
 bool M5RF433Util::begin(int8_t txPin, int8_t rxPin) {
   _txPin = txPin;
@@ -47,6 +48,10 @@ bool M5RF433Util::pollReceive(Signal& out) {
       out.te        = (int)_sw.getReceivedDelay();
       out.bit       = (int)_sw.getReceivedBitlength();
       out.rawData   = "";
+      if (_sw.getReceivedProtocol() == 23) {
+        KeeloqUtil::unpack(val, out.fix, out.encrypted, out.btn, out.serial);
+        KeeloqUtil::identify(out);
+      }
       _sw.resetAvailable();
       return true;
     }

@@ -5,6 +5,7 @@
 
 #include "CC1101Util.h"
 #include "RCSwitchUtil.h"
+#include "KeeloqUtil.h"
 #include <ELECHOUSE_CC1101_SRC_DRV.h>
 
 // ── Frequency list (Bruce rf_utils.cpp) ─────────────────────────────────────
@@ -149,6 +150,13 @@ bool CC1101Util::pollReceive(Signal& out) {
       out.te        = (int)_sw.getReceivedDelay();
       out.bit       = (int)_sw.getReceivedBitlength();
       out.rawData   = "";
+      // KeeLoq auto-decode: protocol 23 frames carry fix+encrypted+btn+serial
+      // packed into a 64-bit value. Always unpack the structured fields; then
+      // try the manufacturer keystore (no-op if /unigeek/mfcodes is missing).
+      if (_sw.getReceivedProtocol() == 23) {
+        KeeloqUtil::unpack(val, out.fix, out.encrypted, out.btn, out.serial);
+        KeeloqUtil::identify(out);
+      }
       _sw.resetAvailable();
       return true;
     }
@@ -382,10 +390,34 @@ bool CC1101Util::loadFile(const String& content, Signal& out) {
     } else if (key == "RAW_Data" || key == "Data_RAW") {
       if (rawAccum.length() > 0) rawAccum += ' ';
       rawAccum += val;
+    } else if (key == "Manufacturer") {
+      out.mf_name = val;
+    } else if (key == "Serial") {
+      String clean = val;
+      if (clean.startsWith("0x") || clean.startsWith("0X")) clean.remove(0, 2);
+      out.serial = (uint32_t)strtoul(clean.c_str(), nullptr, 16);
+    } else if (key == "Button") {
+      out.btn = (uint8_t)val.toInt();
+    } else if (key == "Counter") {
+      out.cnt = (uint16_t)val.toInt();
     }
   }
 
   out.rawData = rawAccum;
+
+  // KeeLoq: always unpack structured fields from the captured Key. If the
+  // .sub came from a peer device that already had the mf_name resolved, those
+  // file-supplied values win; otherwise try our local keystore now.
+  if (out.protocol == "RcSwitch" && out.preset == "23" && out.key != 0) {
+    uint32_t fix, encrypted, serial;
+    uint8_t  btn;
+    KeeloqUtil::unpack(out.key, fix, encrypted, btn, serial);
+    out.fix       = fix;
+    out.encrypted = encrypted;
+    if (out.btn == 0)    out.btn    = btn;
+    if (out.serial == 0) out.serial = serial;
+    if (out.mf_name.length() == 0) KeeloqUtil::identify(out);
+  }
 
   if (out.frequency <= 0) return false;
   if (out.protocol == "RAW") return out.rawData.length() > 0;
@@ -404,6 +436,17 @@ String CC1101Util::saveToString(const Signal& sig) {
     char keyBuf[20];
     snprintf(keyBuf, sizeof(keyBuf), "0x%llX", (unsigned long long)sig.key);
     content += "Key: " + String(keyBuf) + "\n";
+
+    // KeeLoq extras when the manufacturer was identified at capture time —
+    // Flipper Zero .sub spec fields, also recognised by Bruce's reader.
+    if (sig.preset == "23" && sig.mf_name.length() > 0) {
+      content += "Manufacturer: " + sig.mf_name + "\n";
+      char hexBuf[16];
+      snprintf(hexBuf, sizeof(hexBuf), "0x%07lX", (unsigned long)sig.serial);
+      content += "Serial: " + String(hexBuf) + "\n";
+      content += "Button: " + String(sig.btn) + "\n";
+      content += "Counter: " + String(sig.cnt) + "\n";
+    }
   } else {
     // RAW: split into lines of max 512 values (Flipper compat)
     const String& data = sig.rawData;
@@ -438,6 +481,33 @@ String CC1101Util::signalInfoText(const Signal& sig) {
   // Frequency
   snprintf(buf, sizeof(buf), "Frequency: %.2f MHz\n", sig.frequency);
   out += buf;
+
+  // KeeLoq (RcSwitch protocol 23) — show the structured field breakdown
+  // instead of the opaque Key/Binary. Same layout as Bruce's display_signal_data.
+  if (sig.protocol == "RcSwitch" && sig.preset == "23") {
+    out += "Protocol: KeeLoq\n";
+    out += "Manufacturer: " + (sig.mf_name.length() > 0 ? sig.mf_name : String("Unknown")) + "\n";
+    snprintf(buf, sizeof(buf), "Serial: 0x%07lX\n", (unsigned long)sig.serial);
+    out += buf;
+    snprintf(buf, sizeof(buf), "Button: %d\n", sig.btn);
+    out += buf;
+    snprintf(buf, sizeof(buf), "Fix: 0x%08lX\n", (unsigned long)sig.fix);
+    out += buf;
+    if (sig.mf_name.length() > 0) {
+      snprintf(buf, sizeof(buf), "Hop: 0x%08lX\n", (unsigned long)sig.hop);
+      out += buf;
+      snprintf(buf, sizeof(buf), "Counter: 0x%04X\n", sig.cnt);
+      out += buf;
+    } else {
+      snprintf(buf, sizeof(buf), "Encrypted: 0x%08lX\n", (unsigned long)sig.encrypted);
+      out += buf;
+    }
+    if (sig.te > 0) {
+      snprintf(buf, sizeof(buf), "TE: %d us\n", sig.te);
+      out += buf;
+    }
+    return out;
+  }
 
   // Protocol line (Bruce shows "Protocol: <name>(<preset>)" when preset is set)
   if (sig.preset.length() > 0)

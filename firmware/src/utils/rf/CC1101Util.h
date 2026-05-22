@@ -35,6 +35,18 @@ public:
     uint64_t key = 0;         // decoded key value
     int te = 0;               // timing element / pulse length in µs
     int bit = 0;              // number of data bits
+
+    // KeeLoq fields — populated by KeeloqUtil::unpack() / identify() when
+    // protocol == "RcSwitch" and preset == "23". When no manufacturer key
+    // matches, mf_name stays empty but fix/encrypted/btn/serial are still
+    // valid (derived purely from the captured value, no keystore lookup).
+    String   mf_name;         // "" if unidentified or non-KeeLoq
+    uint32_t serial    = 0;
+    uint8_t  btn       = 0;
+    uint16_t cnt       = 0;
+    uint32_t fix       = 0;
+    uint32_t encrypted = 0;
+    uint32_t hop       = 0;   // decrypted plaintext (only set when identified)
   };
 
   // Initialize CC1101 with CS and GDO0 pins.
