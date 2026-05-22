@@ -22,7 +22,8 @@ Captures WPA2 4-way handshakes from nearby networks and saves them as PCAP files
 #### Target mode
 1. The selected AP is seeded directly into the attack list — no discovery scan, no channel hopping.
 2. The screen jumps straight to **Attack phase** on the target's channel and sends deauth bursts until either a valid handshake lands or `Max Deauth` is reached.
-3. On finish, the log shows `Done. Handshake captured.` (green) or `Done. No handshake (timeout).` (yellow) and waits. Press **BACK** to leave. No automatic rescan.
+3. **Only the selected BSSID is deauthed.** Other APs that happen to broadcast on the same channel during the attack are filtered out — their beacons and EAPOL frames are dropped before `_apTargets` gets polluted. The deauth burst only ever hits the chosen network.
+4. On finish, the log shows `Done. Handshake captured.` (green) or `Done. No handshake (timeout).` (yellow) and waits. Press **BACK** to leave. No automatic rescan.
 
 #### All mode
 1. **Discovery phase** — scans all 13 channels to discover APs and collect beacon frames

@@ -700,6 +700,16 @@ void WifiEapolCaptureScreen::_flush() {
     const RawCapture& cap = _ring[_ringTail];
     _ringTail = (_ringTail + 1) % RING_SIZE;
 
+    // Target mode: drop everything that isn't the chosen AP. The promiscuous
+    // callback can't filter (it has no instance state), so collateral beacons
+    // / EAPOL on the same channel still arrive here — we discard them now so
+    // _apTargets stays at exactly one entry (the picked target) and the
+    // deauth burst only ever hits that BSSID.
+    if (_mode == MODE_TARGET &&
+        memcmp(cap.bssid.data(), _target.bssid, 6) != 0) {
+      continue;
+    }
+
     if (cap.isBeacon) {
       // Parse SSID from beacon IEs (802.11 header=24B + fixed params=12B = offset 36)
       bool newSsid = false;
