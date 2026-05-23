@@ -32,6 +32,7 @@ unigeek/web/portals/dns_config
 unigeek/web/portals/default/index.html
 unigeek/nfc/dictionaries/default.txt
 unigeek/nfc/dictionaries/extended.txt
+unigeek/mfcodes
 unigeek/nfc/dumps/sample_1k_DEADBEEF.bin
 unigeek/nfc/dumps/sample_1k_CAFEBABE.bin
 unigeek/nfc/dumps/sample_mini_12345678.bin
