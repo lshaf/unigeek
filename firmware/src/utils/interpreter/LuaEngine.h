@@ -7,6 +7,9 @@ extern "C" {
   #include "lualib.h"
 }
 
+class CC1101Util;
+class M5RF433Util;
+
 class LuaEngine {
 public:
   // Unique address used as a sentinel to distinguish clean exit() from errors.
@@ -197,6 +200,47 @@ private:
   // Tear down anything the script touched on the network side: WiFi (only if
   // the script started it) and any cached HTTP transport state.
   void _cleanupNetwork();
+
+  // uni.subghz — single facade over CC1101 (SPI) and M5 RF433 (GPIO bit-bang).
+  // The backend is decided lazily on the first call to _subghzEnsureOpen():
+  // CC1101 is tried first when its CS/GDO0 pins are configured and SPI is
+  // available; falls back to M5 RF433 when the board exposes Grove pins.
+  enum SubGhzBackend : uint8_t {
+    SUBGHZ_NONE   = 0,
+    SUBGHZ_CC1101 = 1,
+    SUBGHZ_RF433  = 2,
+  };
+  SubGhzBackend _subghzBackend   = SUBGHZ_NONE;
+  CC1101Util*   _subghzCc        = nullptr;
+  M5RF433Util*  _subghzRf        = nullptr;
+  bool          _subghzReceiving = false;
+  bool          _subghzScanning  = false;
+  bool          _subghzJamming   = false;
+
+  bool _subghzEnsureOpen();
+  void _cleanupSubghz();
+
+  // Lazy loader + bindings for uni.subghz.
+  static int _lua_load_subghz(lua_State* L);
+  static int _subghz_info(lua_State* L);
+  static int _subghz_setFrequency(lua_State* L);
+  static int _subghz_getFrequency(lua_State* L);
+  static int _subghz_setRxFilter(lua_State* L);
+  static int _subghz_beginReceive(lua_State* L);
+  static int _subghz_pollReceive(lua_State* L);
+  static int _subghz_endReceive(lua_State* L);
+  static int _subghz_send(lua_State* L);
+  static int _subghz_beginScan(lua_State* L);
+  static int _subghz_stepScan(lua_State* L);
+  static int _subghz_endScan(lua_State* L);
+  static int _subghz_getScanFreq(lua_State* L);
+  static int _subghz_getScanRssi(lua_State* L);
+  static int _subghz_startJam(lua_State* L);
+  static int _subghz_jamBurst(lua_State* L);
+  static int _subghz_stopJam(lua_State* L);
+  static int _subghz_parseSub(lua_State* L);
+  static int _subghz_formatSub(lua_State* L);
+  static int _subghz_close(lua_State* L);
 
   // uni.input.* — popup-bridge to firmware Input*Action classes.
   static int _input_text(lua_State* L);
