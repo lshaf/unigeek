@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { FIRMWARE_VERSION, BUILD_ID, COPYRIGHT_YEAR, REPO_URL, TIKTOK_URL } from '@/content/meta';
+import { FIRMWARE_VERSION, BUILD_ID, COPYRIGHT_YEAR, REPO_URL, TIKTOK_URL, DISCORD_URL } from '@/content/meta';
 
 export default function Footer() {
   return (
@@ -35,6 +35,9 @@ export default function Footer() {
             </a>
             <a href={`${REPO_URL}/issues`} target="_blank" rel="noreferrer">
               Issues
+            </a>
+            <a href={DISCORD_URL} target="_blank" rel="noreferrer">
+              Discord
             </a>
             <a href={TIKTOK_URL} target="_blank" rel="noreferrer">
               TikTok

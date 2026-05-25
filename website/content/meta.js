@@ -16,3 +16,4 @@ export const BUILD_ID = '20260421';
 export const COPYRIGHT_YEAR = 2026;
 export const REPO_URL = 'https://github.com/lshaf/unigeek';
 export const TIKTOK_URL = 'https://www.tiktok.com/@llshaf';
+export const DISCORD_URL = 'https://discord.gg/5shcPcQvfr';
