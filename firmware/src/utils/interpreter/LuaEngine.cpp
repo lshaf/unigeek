@@ -30,10 +30,20 @@ void* LuaEngine::_alloc(void*, void* ptr, size_t osize, size_t nsize) {
     heap_caps_free(ptr);
     return nullptr;
   }
-  // VM heap stays in internal SRAM on every board: Lua's many small reallocs
-  // and pointer-chasing GC are unsafe under PSRAM cache contention.
+  // PSRAM boards: keep the whole VM heap (script chunk + variables) in PSRAM so
+  // it never starves the scarce internal SRAM shared with WiFi/display. Boards
+  // without PSRAM fall back to internal SRAM.
+#ifdef BOARD_HAS_PSRAM
+  uint32_t caps = MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT;
+#else
   uint32_t caps = MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT;
+#endif
   void* p = heap_caps_realloc(ptr, nsize, caps);
+#ifdef BOARD_HAS_PSRAM
+  // If PSRAM is momentarily exhausted, fall back to internal SRAM rather than
+  // failing the allocation outright.
+  if (!p) p = heap_caps_realloc(ptr, nsize, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+#endif
   if (!p) {
     Serial.printf("[Lua] ALLOC FAIL nsize=%u osize=%u freeInt=%u freePsram=%u largestPsram=%u\n",
       (unsigned)nsize, (unsigned)osize,

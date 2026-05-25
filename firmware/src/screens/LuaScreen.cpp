@@ -111,10 +111,11 @@ void LuaScreen::_startScript(const String& path) {
     return;
   }
 
-  static constexpr size_t kPsramThreshold = 2048;
   uint32_t caps = MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT;
 #ifdef BOARD_HAS_PSRAM
-  if (size >= kPsramThreshold) caps = MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT;
+  // PSRAM boards load the script into PSRAM so it never competes with the
+  // scarce internal SRAM; falls back to internal below if PSRAM is exhausted.
+  caps = MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT;
 #endif
   char* buf = (char*)heap_caps_malloc(size + 1, caps);
 #ifdef BOARD_HAS_PSRAM
