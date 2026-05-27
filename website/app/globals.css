@@ -99,14 +99,13 @@ button { font: inherit; color: inherit; background: transparent; border: 0; }
   position: relative;
   display: inline-flex; align-items: center; justify-content: center;
 }
-.brand-mark::before,
-.brand-mark::after {
+.brand-mark::before {
   content: '';
-  position: absolute;
+  width: 13px; height: 15px;
   background: var(--accent);
+  -webkit-mask: url('/u-mark.svg') center / contain no-repeat;
+  mask: url('/u-mark.svg') center / contain no-repeat;
 }
-.brand-mark::before { width: 10px; height: 1px; }
-.brand-mark::after { width: 1px; height: 10px; }
 .brand-name { color: var(--ink); }
 .brand-name span { color: var(--accent); }
 .nav-links {

@@ -10,7 +10,11 @@ export const metadata = {
   title: 'UniGeek — Multi-tool firmware for ESP32',
   description:
     'Open-source multi-tool firmware for ESP32-family boards. WiFi, BLE, NFC, IR, Sub-GHz, USB HID — one reflashable image across twelve boards.',
-  icons: { icon: '/favicon.svg' },
+  icons: {
+    icon: '/favicon.svg',
+    shortcut: '/favicon.svg',
+    apple: '/apple-icon.svg',
+  },
 };
 
 export const viewport = {
