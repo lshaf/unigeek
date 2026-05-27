@@ -36,59 +36,141 @@ void _bootSplash() {
   Uni.applyOrientation();   // rotate screen + flip nav before any drawing
   Uni.Lcd.setBrightness((uint8_t)Config.get(APP_CONFIG_BRIGHTNESS, APP_CONFIG_BRIGHTNESS_DEFAULT).toInt());
 
-  // ── Static UI ─────────────────────────────────────────────────────────────
+  // ── Splash UI ─────────────────────────────────────────────────────────────
+  // A pixel-art UniGeek "U" rendered from a 32×32 base. The body is solid (no
+  // gaps), built into a 32×32 sprite then nearest-neighbour scaled into a
+  // screen-fit sprite. The detached top-right blocks (a 2×3 zone) stay separated
+  // and blink between two diagonal phases:  .# / #. / .#  ⇄  #. / .# / #.
+  // A progress bar + "loading" label sit below. Shows for exactly 2 s.
   auto& lcd = Uni.Lcd;
-  uint16_t w = lcd.width();
-  uint16_t h = lcd.height();
+  const uint16_t w = lcd.width();
+  const uint16_t h = lcd.height();
+  const uint16_t accent = Config.getThemeColor();
 
   lcd.fillScreen(TFT_BLACK);
-  lcd.setTextDatum(MC_DATUM);
-  lcd.setTextSize(3);
-  lcd.setTextColor(Config.getThemeColor());
-  lcd.drawString("UniGeek", w / 2, h / 2 - 14);
-  lcd.setTextSize(1);
-  lcd.setTextColor(TFT_DARKGREY);
-  lcd.drawString(__DATE__, w / 2, h / 2 + 10);
 
-  const uint16_t barW  = w / 2;
-  const uint16_t barH  = 4;
-  const uint16_t barX  = (w - barW) / 2;
-  const uint16_t barY  = h / 2 + 28;
-  const uint16_t lblY  = barY + barH + 6;
-  const uint16_t fillW = barW - 2;
-  lcd.drawRoundRect(barX, barY, barW, barH, 1, TFT_DARKGREY);
-
-  // progress(pct, label) — fills bar to pct% and updates status text
-  auto progress = [&](uint8_t pct, const char* label) {
-    lcd.fillRect(barX + 1, barY + 1, fillW * pct / 100, barH - 2, Config.getThemeColor());
-    lcd.fillRect(0, lblY, w, 12, TFT_BLACK);   // clear full label row before redraw
-    lcd.setTextDatum(TC_DATUM);                // top-centre: y is the TOP of the text
-    lcd.setTextSize(1);
-    lcd.setTextColor(TFT_DARKGREY, TFT_BLACK);
-    lcd.drawString(label, w / 2, lblY + 2);
+  // 32×32 U body (bit 31 = leftmost column). The top-right zone x[20,30) y[0,15)
+  // is cleared here — it's owned by the animated separated blocks.
+  static const uint32_t U_BODY[32] = {
+    0x00000000, 0x00000000, 0x00000000, 0x00000000,
+    0x3FC00000, 0x3FC00000, 0x3FC00000, 0x3FC00000,
+    0x3FC00000, 0x3FC00000, 0x3FC00000, 0x3FC00000,
+    0x3FC007F8, 0x3FC007F8, 0x3FC007F8, 0x3FC007F8,
+    0x3FC007F8, 0x3FC007F8, 0x3FC007F8, 0x3FC007F8,
+    0x3FC007F8, 0x3FC007F8, 0x3FC007F8, 0x3FF83FF8,
+    0x3FF83FF8, 0x07FFFFC0, 0x07FFFFC0, 0x07FFFFC0,
+    0x00FFFE00, 0x007FFC00, 0x007FFC00, 0x007FFC00,
   };
 
-  progress(25, "Config loaded");
-  delay(300);
+  // baseOn(bx,by,phase) — is base pixel (bx,by) lit for this blink phase?
+  // The top-right zigzag is 3 blocks of 4×4 at the mark's real positions:
+  // cols 21-24 (left) / 25-28 (right), rows 0-3 / 4-7 / 8-11.
+  //   phase 0 (matches the mark): right / left / right
+  //   phase 1 (mirror):           left  / right / left
+  auto baseOn = [&](int bx, int by, uint8_t phase) -> bool {
+    if (bx >= 21 && bx < 29 && by < 12) {
+      int litCol = (((by / 4) & 1) == 0) ? 1 : 0;
+      if (phase) litCol ^= 1;
+      return ((bx - 21) / 4) == litCol;
+    }
+    return (U_BODY[by] & (0x80000000u >> bx)) != 0;
+  };
 
-  // ── Init steps ────────────────────────────────────────────────────────────
-  AchStore.load(Uni.Storage);
-  progress(50, "Achievements loaded");
-  delay(300);
+  // Screen-fit square; capped so the view sprite stays a sane size on big panels.
+  const int16_t grid = constrain(min((int)(h * 0.40f), (int)(w * 0.60f)), 48, 120);
+  const int16_t gx   = (w - grid) / 2;
+  const int16_t gy   = (int16_t)(h * 0.38f) - grid / 2;
 
-  Achievement.recalibrate(Uni.Storage);
-  progress(75, "EXP calibrated");
-  delay(300);
+  Sprite base(&lcd), view(&lcd);
+  const bool haveBase = base.createSprite(32, 32);
+  const bool haveView = haveBase && view.createSprite(grid, grid);
 
-  RandomSeed::init();
-  Uni.applyNavMode();
-  progress(90, "System ready");
-  delay(300);
+  // showLogo(phase) — paint the 32×32 base, NN-scale it to the view, push it.
+  auto showLogo = [&](uint8_t phase) {
+    if (haveView) {
+      base.fillSprite(TFT_BLACK);
+      for (int by = 0; by < 32; by++)
+        for (int bx = 0; bx < 32; bx++)
+          if (baseOn(bx, by, phase)) base.drawPixel(bx, by, accent);
+      for (int16_t y = 0; y < grid; y++)
+        for (int16_t x = 0; x < grid; x++)
+          view.drawPixel(x, y, base.readPixel(x * 32 / grid, y * 32 / grid));
+      view.pushSprite(gx, gy);
+    } else {  // low-memory fallback: tile straight to the LCD (still no gaps)
+      for (int by = 0; by < 32; by++) {
+        int16_t y0 = gy + by * grid / 32, y1 = gy + (by + 1) * grid / 32;
+        for (int bx = 0; bx < 32; bx++) {
+          int16_t x0 = gx + bx * grid / 32, x1 = gx + (bx + 1) * grid / 32;
+          lcd.fillRect(x0, y0, x1 - x0, y1 - y0, baseOn(bx, by, phase) ? accent : TFT_BLACK);
+        }
+      }
+    }
+  };
 
-  if (Uni.Speaker) Uni.Speaker->setVolume((uint8_t)Config.get(APP_CONFIG_VOLUME, APP_CONFIG_VOLUME_DEFAULT).toInt());
-  if (Uni.Speaker) Uni.Speaker->playWin();
-  progress(100, "Starting...");
-  delay(300);
+  // ── Progress bar + "loading" label below the mark ──────────────────────────
+  const int16_t barW  = constrain((int)(w * 0.50f), 60, 220);
+  const int16_t barH  = 4;
+  const int16_t barX  = (w - barW) / 2;
+  const int16_t barY  = gy + grid + constrain((int)(h * 0.08f), 12, 36);
+  const int16_t fillW = barW - 2;
+  const int16_t lblY  = barY + barH + 6;
+  lcd.drawRoundRect(barX, barY, barW, barH, 1, TFT_DARKGREY);
+
+  // ── Animate for 2 s, gating the real init steps onto the timeline ───────────
+  const uint32_t SPLASH_MS = 2000;
+  const uint32_t BLINK_MS  = 320;            // top-right phase toggle interval
+  int8_t      initStep  = 0;
+  uint8_t     pctPrev   = 255;
+  int8_t      phasePrev = -1;
+  const char* label     = "Config loaded";   // config is already loaded pre-draw
+  const char* labelPrev = nullptr;
+  const uint32_t t0 = millis();
+  for (;;) {
+    uint32_t el = millis() - t0;
+    const bool done = el >= SPLASH_MS;
+    if (done) el = SPLASH_MS;
+
+    // Real init work — same steps/order as before, paced across the splash; the
+    // label under the bar tracks the step that just completed.
+    if (initStep == 0 && el >= 150)  { AchStore.load(Uni.Storage);                 initStep = 1; label = "Achievements loaded"; }
+    else if (initStep == 1 && el >= 650)  { Achievement.recalibrate(Uni.Storage);  initStep = 2; label = "EXP calibrated"; }
+    else if (initStep == 2 && el >= 1100) { RandomSeed::init(); Uni.applyNavMode(); initStep = 3; label = "System ready"; }
+    else if (initStep == 3 && el >= 1550) {
+      if (Uni.Speaker) {
+        Uni.Speaker->setVolume((uint8_t)Config.get(APP_CONFIG_VOLUME, APP_CONFIG_VOLUME_DEFAULT).toInt());
+        Uni.Speaker->playWin();
+      }
+      initStep = 4;
+      label = "Starting...";
+    }
+
+    // Status label — clear the row and redraw when the step changes.
+    if (label != labelPrev) {
+      lcd.fillRect(0, lblY, w, 12, TFT_BLACK);
+      lcd.setTextDatum(TC_DATUM);
+      lcd.setTextSize(1);
+      lcd.setTextColor(TFT_DARKGREY, TFT_BLACK);
+      lcd.drawString(label, w / 2, lblY + 2);
+      labelPrev = label;
+    }
+
+    // Blink the top-right blocks between their two phases (re-scale + push).
+    int8_t phase = (int8_t)((el / BLINK_MS) & 1);
+    if (phase != phasePrev) { showLogo((uint8_t)phase); phasePrev = phase; }
+
+    // Progress bar tracks the 2 s timeline.
+    uint8_t pct = (uint8_t)(el * 100UL / SPLASH_MS);
+    if (pct != pctPrev) {
+      lcd.fillRect(barX + 1, barY + 1, (int32_t)fillW * pct / 100, barH - 2, accent);
+      pctPrev = pct;
+    }
+
+    if (done) break;
+    delay(16);
+  }
+
+  if (haveView) view.deleteSprite();
+  if (haveBase) base.deleteSprite();
 }
 
 // ── mbedTLS allocator override (PSRAM boards only) ───────────────────────────
