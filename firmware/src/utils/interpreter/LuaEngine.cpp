@@ -371,6 +371,7 @@ int LuaEngine::_lua_load_nav(lua_State* L) {
   lua_pushcfunction(L, _nav_touchX);    lua_setfield(L, -2, "touchX");
   lua_pushcfunction(L, _nav_touchY);    lua_setfield(L, -2, "touchY");
   lua_pushcfunction(L, _nav_isTouched); lua_setfield(L, -2, "isTouched");
+  lua_pushcfunction(L, _nav_hasTouch);  lua_setfield(L, -2, "hasTouch");
   return 1;
 }
 
@@ -954,6 +955,17 @@ int LuaEngine::_nav_touchY(lua_State* L) {
 
 int LuaEngine::_nav_isTouched(lua_State* L) {
   lua_pushboolean(L, (Uni.Nav && Uni.Nav->isPressed()) ? 1 : 0);
+  return 1;
+}
+
+// True on boards with a touch screen; false on button/stick/keyboard boards.
+// Lets a script branch its UI instead of inferring touch from a -1 touchX().
+int LuaEngine::_nav_hasTouch(lua_State* L) {
+#if defined(DEVICE_HAS_TOUCH) || defined(DEVICE_HAS_TOUCH_NAV)
+  lua_pushboolean(L, 1);
+#else
+  lua_pushboolean(L, 0);
+#endif
   return 1;
 }
 

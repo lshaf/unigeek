@@ -172,6 +172,7 @@ private:
   static int _nav_touchX(lua_State* L);
   static int _nav_touchY(lua_State* L);
   static int _nav_isTouched(lua_State* L);
+  static int _nav_hasTouch(lua_State* L);
 
   // Lazy loaders + bindings for tier-2 modules.
   static int _lua_load_input(lua_State* L);
