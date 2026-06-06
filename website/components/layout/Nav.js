@@ -15,6 +15,7 @@ const LINKS = [
     match: '/app',
     children: [
       { href: '/app/files', label: 'File Manager' },
+      { href: '/app/remote', label: 'Remote Access' },
       { href: '/app/download', label: 'Download', wip: true },
     ],
   },

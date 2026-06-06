@@ -16,6 +16,7 @@ export default function sitemap() {
     { path: '/install/', priority: 0.8 },
     { path: '/releases/', priority: 0.6 },
     { path: '/app/files/', priority: 0.5 },
+    { path: '/app/remote/', priority: 0.5 },
   ].map((r) => ({
     url: url(r.path),
     lastModified: now,
