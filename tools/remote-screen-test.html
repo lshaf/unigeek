@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>UniGeek — Remote Screen Probe</title>
+<style>
+  :root { color-scheme: dark; }
+  body { font: 14px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+         background:#0b0e14; color:#cdd6f4; margin:0; padding:24px; }
+  h1 { font-size:16px; margin:0 0 16px; color:#89b4fa; }
+  button { font:inherit; background:#1e2230; color:#cdd6f4; border:1px solid #313244;
+           border-radius:6px; padding:7px 14px; cursor:pointer; }
+  button:hover:not(:disabled) { border-color:#89b4fa; }
+  button:disabled { opacity:.4; cursor:default; }
+  label { user-select:none; }
+  .row { display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin-bottom:16px; }
+  canvas { image-rendering:pixelated; border:1px solid #313244; background:#000;
+           width:480px; height:auto; }
+  #log { white-space:pre-wrap; color:#9399b2; margin-top:16px; max-height:160px;
+         overflow:auto; font-size:12px; }
+  .stat { color:#a6e3a1; }
+</style>
+</head>
+<body>
+<h1>UniGeek — Remote Screen Probe (ctx 'S')</h1>
+<div class="row">
+  <button id="connect">Connect USB</button>
+  <button id="start" disabled>Start stream</button>
+  <button id="stop" disabled>Stop</button>
+  <label><input type="checkbox" id="swap"> swap pixel bytes</label>
+  <span class="stat" id="stat"></span>
+</div>
+<canvas id="screen" width="240" height="135"></canvas>
+<div id="log"></div>
+
+<script>
+// ── Protocol constants — must match firmware/src/utils/uart/FileManagerCore.h ──
+const SOF1 = 0xa5, SOF2 = 0x5a;
+const CTX_REMOTE  = 'S'.charCodeAt(0); // 0x53
+const C_SCR_START = 0x01;
+const C_SCR_STOP  = 0x02;
+const T_SCR_HELLO = 0xa0;
+const T_SCR_FRAME = 0xa1;
+const T_SCR_FILL  = 0xa2;
+const T_ERR       = 0xf1;
+
+// Same VID:PID filters as the installer / FileManagerClient.
+const USB_FILTERS = [
+  { usbVendorId: 0x10c4, usbProductId: 0xea60 }, // CP2102
+  { usbVendorId: 0x0403, usbProductId: 0x6010 }, // FT2232H
+  { usbVendorId: 0x303a, usbProductId: 0x1001 }, // Espressif JTAG
+  { usbVendorId: 0x303a, usbProductId: 0x0002 }, // Espressif CDC
+  { usbVendorId: 0x1a86, usbProductId: 0x55d4 }, // CH9102F
+  { usbVendorId: 0x1a86, usbProductId: 0x7523 }, // CH340T
+  { usbVendorId: 0x0403, usbProductId: 0x6001 }, // FT232R
+];
+
+function crc32(bytes) {
+  let crc = 0xffffffff;
+  for (let i = 0; i < bytes.length; i++) {
+    crc ^= bytes[i];
+    for (let k = 0; k < 8; k++) crc = (crc >>> 1) ^ (0xedb88320 & -(crc & 1));
+  }
+  return (~crc) >>> 0;
+}
+
+function buildFrame(ctx, type, seq, payload) {
+  const len = payload ? payload.length : 0;
+  const f = new Uint8Array(9 + len + 4);
+  f[0] = SOF1; f[1] = SOF2; f[2] = ctx; f[3] = type; f[4] = seq;
+  f[5] = len & 0xff; f[6] = (len >>> 8) & 0xff;
+  f[7] = (len >>> 16) & 0xff; f[8] = (len >>> 24) & 0xff;
+  if (payload) f.set(payload, 9);
+  const crc = crc32(f.subarray(2, 9 + len));
+  f[9 + len] = crc & 0xff; f[9 + len + 1] = (crc >>> 8) & 0xff;
+  f[9 + len + 2] = (crc >>> 16) & 0xff; f[9 + len + 3] = (crc >>> 24) & 0xff;
+  return f;
+}
+
+function makeFrameParser(onFrame) {
+  let state = 0, hdrIdx = 0, ctx = 0, type = 0, seq = 0, len = 0;
+  let payload = null, pIdx = 0, crcIdx = 0;
+  const hdr = new Uint8Array(7), crcBuf = new Uint8Array(4);
+  return (chunk) => {
+    for (let i = 0; i < chunk.length; i++) {
+      const b = chunk[i];
+      switch (state) {
+        case 0: if (b === SOF1) state = 1; break;
+        case 1: if (b === SOF2) { state = 2; hdrIdx = 0; } else if (b !== SOF1) state = 0; break;
+        case 2:
+          hdr[hdrIdx++] = b;
+          if (hdrIdx === 7) {
+            ctx = hdr[0]; type = hdr[1]; seq = hdr[2];
+            len = hdr[3] | (hdr[4] << 8) | (hdr[5] << 16) | (hdr[6] << 24);
+            if (len > 16384) { state = 0; break; }
+            pIdx = 0; crcIdx = 0;
+            if (len > 0) { payload = new Uint8Array(len); state = 3; }
+            else { payload = new Uint8Array(0); state = 4; }
+          }
+          break;
+        case 3: payload[pIdx++] = b; if (pIdx >= len) state = 4; break;
+        case 4:
+          crcBuf[crcIdx++] = b;
+          if (crcIdx === 4) {
+            const exp = (crcBuf[0] | (crcBuf[1] << 8) | (crcBuf[2] << 16) | (crcBuf[3] << 24)) >>> 0;
+            const buf = new Uint8Array(7 + len);
+            buf.set(hdr, 0); if (len) buf.set(payload, 7);
+            if (crc32(buf) === exp) onFrame(ctx, type, seq, payload);
+            state = 0;
+          }
+          break;
+      }
+    }
+  };
+}
+
+// ── UI / state ────────────────────────────────────────────────────────────
+const $ = (id) => document.getElementById(id);
+const cv = $('screen'), ctx2d = cv.getContext('2d');
+let port = null, writer = null, reader = null, keepReading = false;
+let regions = 0, lastTick = performance.now();
+
+function log(msg) {
+  const el = $('log');
+  el.textContent += msg + '\n';
+  el.scrollTop = el.scrollHeight;
+}
+
+function rd16(p, o) { return p[o] | (p[o + 1] << 8); }
+function css565(v) {
+  const r = ((v >> 11) & 0x1f) * 255 / 31;
+  const g = ((v >> 5)  & 0x3f) * 255 / 63;
+  const b = (v & 0x1f) * 255 / 31;
+  return `rgb(${r | 0},${g | 0},${b | 0})`;
+}
+function tick() {
+  regions++;
+  const now = performance.now();
+  if (now - lastTick >= 1000) { $('stat').textContent = `${regions} regions/s`; regions = 0; lastTick = now; }
+}
+
+function onFrame(ctx, type, seq, p) {
+  if (ctx !== CTX_REMOTE) return;
+  if (type === T_ERR) { log('device ERR: ' + new TextDecoder().decode(p)); return; }
+
+  if (type === T_SCR_HELLO) {
+    const w = rd16(p, 0), h = rd16(p, 2), fmt = p[4];
+    cv.width = w; cv.height = h;            // also clears the canvas
+    cv.style.height = (480 * h / w) + 'px';
+    log(`HELLO ${w}x${h} fmt=${fmt}`);
+    return;
+  }
+
+  // Region streamed as it's drawn — blit straight onto the persistent canvas.
+  if (type === T_SCR_FRAME) {
+    const x = rd16(p, 0), y = rd16(p, 2), w = rd16(p, 4), h = rd16(p, 6);
+    const swap = $('swap').checked;
+    const img = ctx2d.createImageData(w, h);
+    const px = img.data;
+    let o = 8;
+    for (let i = 0; i < w * h; i++, o += 2) {
+      const lo = p[o], hi = p[o + 1];
+      const v = swap ? ((lo << 8) | hi) : ((hi << 8) | lo);
+      const di = i * 4;
+      px[di]     = ((v >> 11) & 0x1f) * 255 / 31;
+      px[di + 1] = ((v >> 5)  & 0x3f) * 255 / 63;
+      px[di + 2] = (v & 0x1f) * 255 / 31;
+      px[di + 3] = 255;
+    }
+    ctx2d.putImageData(img, x, y);
+    tick();
+    return;
+  }
+
+  // Solid-rect op (clears, scrollbar) — 10 bytes instead of pixels.
+  if (type === T_SCR_FILL) {
+    const x = rd16(p, 0), y = rd16(p, 2), w = rd16(p, 4), h = rd16(p, 6), c = rd16(p, 8);
+    ctx2d.fillStyle = css565(c);
+    ctx2d.fillRect(x, y, w, h);
+    tick();
+    return;
+  }
+}
+
+const parse = makeFrameParser(onFrame);
+
+async function readLoop() {
+  keepReading = true;
+  while (keepReading && port && port.readable) {
+    reader = port.readable.getReader();
+    try {
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        if (value) parse(value);
+      }
+    } catch (e) { log('read error: ' + e.message); }
+    finally { reader.releaseLock(); }
+  }
+}
+
+async function send(frame) {
+  if (!writer) return;
+  await writer.write(frame);
+}
+
+$('connect').onclick = async () => {
+  try {
+    port = await navigator.serial.requestPort({ filters: USB_FILTERS });
+    await port.open({ baudRate: 115200 });
+    writer = port.writable.getWriter();
+    readLoop();
+    $('start').disabled = false; $('stop').disabled = false;
+    $('connect').disabled = true;
+    log('connected');
+  } catch (e) { log('connect failed: ' + e.message); }
+};
+
+$('start').onclick = () => { send(buildFrame(CTX_REMOTE, C_SCR_START, 1, new Uint8Array([10]))); log('→ START fps=10'); };
+$('stop').onclick  = () => { send(buildFrame(CTX_REMOTE, C_SCR_STOP, 2, null)); log('→ STOP'); };
+
+if (!('serial' in navigator)) {
+  log('Web Serial not available — use Chrome/Edge over https or localhost.');
+  $('connect').disabled = true;
+}
+</script>
+</body>
+</html>

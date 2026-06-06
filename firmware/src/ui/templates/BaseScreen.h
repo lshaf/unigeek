@@ -2,6 +2,7 @@
 
 #include "core/IScreen.h"
 #include "core/AchievementManager.h"
+#include "core/ScreenMirror.h"
 #include "ui/components/Header.h"
 #include "ui/components/StatusBar.h"
 
@@ -10,6 +11,7 @@ class BaseScreen : public IScreen
 public:
   void init() override {
     Uni.Lcd.fillScreen(TFT_BLACK);
+    Mirror.fill(0, 0, Uni.Lcd.width(), Uni.Lcd.height(), TFT_BLACK); // clear mirror on screen change
     onInit();
     render();
   }

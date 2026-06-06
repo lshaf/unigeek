@@ -8,15 +8,19 @@ void UartFileManager::_sendBytes(const uint8_t* data, size_t len) {
 }
 
 void UartFileManager::begin() {
-  if (_core) return;
-  _core = new FileManagerCore();
-  _core->setSender(_sendBytes);
+  if (_fm) return;
+  _fm  = new FileManagerCore();
+  _scr = new ScreenStreamCore();
+  _fm->setSender(_sendBytes);
+  _scr->setSender(_sendBytes);
 }
 
 void UartFileManager::update() {
-  if (!_core) return;
+  if (!_fm) return;
   while (Serial.available() > 0) {
-    _core->onByte((uint8_t)Serial.read());
+    uint8_t b = (uint8_t)Serial.read();
+    _fm->onByte(b);   // ctx 'F'
+    _scr->onByte(b);  // ctx 'S' (ignores 'F' frames, and vice-versa)
   }
-  _core->pump();
+  _fm->pump();
 }

@@ -1,24 +1,26 @@
 #pragma once
 
-// UART transport for FileManagerCore. Optional background service — enabled in
-// setup() (gated on APP_CONFIG_SERIAL_FM), polled in loop(). The protocol
-// details live in FileManagerCore; this class just shuttles bytes between
-// Serial and the core's state machine.
+// UART transport for the Serial multi-context protocol. Optional background
+// service — enabled in setup() (gated on APP_CONFIG_SERIAL_FM), polled in
+// loop(). Shuttles bytes between Serial and the codec subsystems; protocol
+// details live in FileManagerCore (ctx 'F') and ScreenStreamCore (ctx 'S').
 //
-// The core is heap-allocated so a disabled service costs zero SRAM: begin()
-// allocates the ~8 KB FileManagerCore, and update() is a no-op until then.
-// This matters on no-PSRAM boards where internal SRAM is scarce.
+// Both codecs are heap-allocated so a disabled service costs zero SRAM. They
+// parse the same byte stream in parallel, each acting only on its own context,
+// and share one outbound sender.
 
 #include "utils/uart/FileManagerCore.h"
+#include "utils/uart/ScreenStreamCore.h"
 
 class UartFileManager {
 public:
-  void begin();              // allocate the core + wire the sender (idempotent)
+  void begin();              // allocate the cores + wire the sender (idempotent)
   void update();             // no-op until begin() has run
-  bool isActive() const { return _core != nullptr; }
+  bool isActive() const { return _fm != nullptr; }
 
 private:
-  FileManagerCore* _core = nullptr;
+  FileManagerCore*  _fm  = nullptr;
+  ScreenStreamCore* _scr = nullptr;
   static void _sendBytes(const uint8_t* data, size_t len);
 };
 

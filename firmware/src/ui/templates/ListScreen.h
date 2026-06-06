@@ -113,6 +113,7 @@ public:
 
     if (eff == 0) {
       lcd.fillRect(bodyX(), bodyY(), bodyW(), bodyH(), TFT_BLACK);
+      Mirror.fill(bodyX(), bodyY(), bodyW(), bodyH(), TFT_BLACK);
       return;
     }
 
@@ -183,8 +184,10 @@ public:
       }
     }
 
-    if (usedH < (int16_t)bodyH())
+    if (usedH < (int16_t)bodyH()) {
       lcd.fillRect(bodyX(), bodyY() + usedH, bodyW(), bodyH() - usedH, TFT_BLACK);
+      Mirror.fill(bodyX(), bodyY() + usedH, bodyW(), bodyH() - usedH, TFT_BLACK);
+    }
 
     {
       static constexpr uint8_t SB_W = 3;
@@ -192,13 +195,16 @@ public:
       int16_t sbY = bodyY();
       int16_t sbH = bodyH();
       lcd.fillRect(sbX, sbY, SB_W, sbH, 0x2104);
+      Mirror.fill(sbX, sbY, SB_W, sbH, 0x2104);
       if (eff <= fullyVisible) {
         lcd.fillRect(sbX, sbY, SB_W, sbH, Config.getThemeColor());
+        Mirror.fill(sbX, sbY, SB_W, sbH, Config.getThemeColor());
       } else {
         int16_t thumbH = sbH * (int16_t)fullyVisible / (int16_t)eff;
         if (thumbH < 8) thumbH = 8;
         int16_t thumbY = sbY + ((int16_t)_scrollOffset * (sbH - thumbH)) / (int16_t)(eff - fullyVisible);
         lcd.fillRect(sbX, thumbY, SB_W, thumbH, Config.getThemeColor());
+        Mirror.fill(sbX, thumbY, SB_W, thumbH, Config.getThemeColor());
       }
     }
   }
