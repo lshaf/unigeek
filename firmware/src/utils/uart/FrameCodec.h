@@ -15,6 +15,8 @@
 // fans incoming bytes to every codec and shares one outbound sender.
 
 #include <Arduino.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/semphr.h>
 
 class FrameCodec {
 public:
@@ -22,6 +24,15 @@ public:
 
   static constexpr uint8_t SOF1 = 0xA5;
   static constexpr uint8_t SOF2 = 0x5A;
+
+  // Recursive mutex serializing ALL outbound frames across tasks. Necessary
+  // because the Lua interpreter runs on its own FreeRTOS task and its draw calls
+  // now emit screen frames — without this they interleave with the main loop's
+  // serial traffic and corrupt the stream. Exposed so the screen capture can
+  // also hold a sprite's band-fill+emit atomic. Lazily created (thread-safe via
+  // C++ static-local init); recursive so nested takes (capture → sendFrame) are
+  // fine.
+  static SemaphoreHandle_t txLock();
 
   // Response types — ctx is echoed from the request.
   static constexpr uint8_t T_OK  = 0xF0;

@@ -33,7 +33,13 @@ public:
   // Sink frames the (type,data,len) into the transport's wire format and sends.
   using Sink = void (*)(void* ctx, uint8_t type, const uint8_t* data, uint32_t len);
 
-  bool active() const { return _sink != nullptr; }
+  // Master gate set once at boot from APP_CONFIG_SCREEN_MIRROR. When off, the
+  // mirror can never start and every capture tap exits on this single bool —
+  // no band buffer, no work, nothing.
+  void setEnabled(bool e) { _enabled = e; }
+  bool enabled() const { return _enabled; }
+
+  bool active() const { return _enabled && _sink != nullptr; }
 
   // maxPayload caps the band size so a band always fits one transport frame.
   // Returns false on bad size / OOM.
@@ -58,6 +64,7 @@ public:
   }
 
 private:
+  bool      _enabled  = false;
   Sink      _sink     = nullptr;
   void*     _ctx      = nullptr;
   uint8_t*  _band     = nullptr;

@@ -221,6 +221,7 @@ void setup() {
   //     actively streaming. Only receives short commands, so no RX growth needed.
   bool fmOn     = Config.get(APP_CONFIG_SERIAL_FM, APP_CONFIG_SERIAL_FM_DEFAULT).toInt();
   bool mirrorOn = Config.get(APP_CONFIG_SCREEN_MIRROR, APP_CONFIG_SCREEN_MIRROR_DEFAULT).toInt();
+  Mirror.setEnabled(mirrorOn); // master gate: off ⇒ no codec, no buffer, taps all no-op
   if (fmOn) {
     Serial.end();
     Serial.setRxBufferSize(4096);

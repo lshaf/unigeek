@@ -67,6 +67,11 @@ void FrameCodec::onByte(uint8_t b) {
   }
 }
 
+SemaphoreHandle_t FrameCodec::txLock() {
+  static SemaphoreHandle_t m = xSemaphoreCreateRecursiveMutex();
+  return m;
+}
+
 void FrameCodec::sendFrame(uint8_t ctx, uint8_t type, uint8_t seq, const uint8_t* data, uint32_t len) {
   if (!_send) return;
   uint8_t hdr[9];
@@ -85,9 +90,14 @@ void FrameCodec::sendFrame(uint8_t ctx, uint8_t type, uint8_t seq, const uint8_t
     (uint8_t)(crc >> 24),
   };
 
+  // Hold the lock across all three writes so a frame can't be split by another
+  // task's frame (e.g. Lua-task screen frames vs main-loop FM traffic).
+  SemaphoreHandle_t m = txLock();
+  if (m) xSemaphoreTakeRecursive(m, portMAX_DELAY);
   _send(hdr, 9);
   if (len) _send(data, len);
   _send(crcb, 4);
+  if (m) xSemaphoreGiveRecursive(m);
 }
 
 void FrameCodec::sendErr(uint8_t ctx, uint8_t seq, const char* msg) {

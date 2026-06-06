@@ -1,11 +1,13 @@
 #include "core/ScreenMirror.h"
 #include "core/IDisplay.h"
+#include "utils/uart/FrameCodec.h" // shared TX lock (Lua draws on its own task)
 #include <string.h>
 
 ScreenMirror Mirror;
 
 bool ScreenMirror::start(uint16_t w, uint16_t h, uint32_t maxPayload, Sink sink, void* ctx) {
   stop();
+  if (!_enabled) return false; // hard gate: never allocate when the setting is off
   if (!w || !h || !sink) return false;
 
   // Tallest band whose pixels + 8-byte rect header fit one transport frame.
@@ -32,7 +34,7 @@ void ScreenMirror::stop() {
 static inline void _wr16(uint8_t* p, uint16_t v) { p[0] = (uint8_t)v; p[1] = (uint8_t)(v >> 8); }
 
 void ScreenMirror::fill(int16_t x, int16_t y, int16_t w, int16_t h, uint16_t color) {
-  if (!_sink) return;
+  if (!_enabled || !_sink) return;
   // Clip to screen bounds so the host never writes out of range.
   if (x < 0) { w += x; x = 0; }
   if (y < 0) { h += y; y = 0; }
@@ -50,9 +52,13 @@ void ScreenMirror::fill(int16_t x, int16_t y, int16_t w, int16_t h, uint16_t col
 }
 
 void ScreenMirror::image(int16_t x, int16_t y, int16_t w, int16_t h, const uint16_t* src) {
-  if (!_sink || !_band || !src || w <= 0 || h <= 0) return;
+  if (!_enabled || !_sink || !_band || !src || w <= 0 || h <= 0) return;
   // Band-split the source rows so each FRAME fits one transport frame. src is
   // row-major, stride == w (the full-image pushImage overload, no cropping).
+  // Hold the TX lock for the whole sequence so the shared _band and the multi-
+  // band emit stay atomic against draws on another task (Lua).
+  SemaphoreHandle_t m = FrameCodec::txLock();
+  if (m) xSemaphoreTakeRecursive(m, portMAX_DELAY);
   for (int16_t j = 0; j < h; j += _bandRows) {
     int16_t bh = (j + (int16_t)_bandRows <= h) ? (int16_t)_bandRows : (h - j);
     memcpy(_band + 8, src + (size_t)j * w, (size_t)w * bh * 2);
@@ -62,6 +68,7 @@ void ScreenMirror::image(int16_t x, int16_t y, int16_t w, int16_t h, const uint1
     _wr16(_band + 6, (uint16_t)bh);
     emit(ScreenProto::T_FRAME, _band, 8 + (uint32_t)w * bh * 2);
   }
+  if (m) xSemaphoreGiveRecursive(m);
 }
 
 #ifndef DISPLAY_BACKEND_M5GFX
@@ -78,6 +85,8 @@ void CaptureSprite::pushSprite(int32_t x, int32_t y) {
   uint8_t*       band = Mirror.band();
   if (!band || w <= 0 || h <= 0) return;
 
+  SemaphoreHandle_t m = FrameCodec::txLock();
+  if (m) xSemaphoreTakeRecursive(m, portMAX_DELAY);
   for (int16_t j = 0; j < h; j += rows) {
     int16_t bh = (j + (int16_t)rows <= h) ? (int16_t)rows : (h - j);
     uint16_t* px = (uint16_t*)(band + 8);
@@ -90,6 +99,7 @@ void CaptureSprite::pushSprite(int32_t x, int32_t y) {
     _wr16(band + 6, (uint16_t)bh);
     Mirror.emit(ScreenProto::T_FRAME, band, 8 + (uint32_t)w * bh * 2);
   }
+  if (m) xSemaphoreGiveRecursive(m);
 }
 
 void CaptureSprite::pushSprite(int32_t x, int32_t y, uint16_t transparent) {
@@ -105,6 +115,8 @@ void CaptureSprite::pushSprite(int32_t x, int32_t y, uint16_t transparent) {
   uint8_t*       band = Mirror.band();
   if (!band || w <= 0 || h <= 0) return;
 
+  SemaphoreHandle_t m = FrameCodec::txLock();
+  if (m) xSemaphoreTakeRecursive(m, portMAX_DELAY);
   for (int16_t j = 0; j < h; j += rows) {
     int16_t bh = (j + (int16_t)rows <= h) ? (int16_t)rows : (h - j);
     uint16_t* px = (uint16_t*)(band + 8);
@@ -117,5 +129,6 @@ void CaptureSprite::pushSprite(int32_t x, int32_t y, uint16_t transparent) {
     _wr16(band + 6, (uint16_t)bh);
     Mirror.emit(ScreenProto::T_FRAME, band, 8 + (uint32_t)w * bh * 2);
   }
+  if (m) xSemaphoreGiveRecursive(m);
 }
 #endif
