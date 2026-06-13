@@ -50,13 +50,13 @@ void NavigationImpl::update() {
     updateState(DIR_BACK);
   } else if (_selStable) {
     updateState(DIR_PRESS);
-  } else if (_posDiff <= -SCROLL_THRESH) {
+  } else if (_posDiff < -SCROLL_THRESH) {
     updateState(DIR_DOWN);
 #ifdef T_EMBED_CC1101
     LedRing::addEncoderDelta(-1);
 #endif
     _posDiff = 0;
-  } else if (_posDiff >= SCROLL_THRESH) {
+  } else if (_posDiff > SCROLL_THRESH) {
     updateState(DIR_UP);
 #ifdef T_EMBED_CC1101
     LedRing::addEncoderDelta(+1);
