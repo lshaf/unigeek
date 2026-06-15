@@ -7,7 +7,7 @@
 
 #pragma once
 
-#ifdef T_EMBED_CC1101
+#ifdef DEVICE_T_EMBED_CC1101
 
 class LedRing {
 public:
@@ -23,4 +23,4 @@ private:
 
 extern LedRing ledRing;
 
-#endif // T_EMBED_CC1101
+#endif // DEVICE_T_EMBED_CC1101

@@ -46,7 +46,7 @@ void SettingScreen::_refresh() {
   _navSndSub   = Config.get(APP_CONFIG_NAV_SOUND,            APP_CONFIG_NAV_SOUND_DEFAULT).toInt() ? "On" : "Off";
 #endif
   _colorSub    = Config.get(APP_CONFIG_PRIMARY_COLOR,        APP_CONFIG_PRIMARY_COLOR_DEFAULT);
-#ifdef T_EMBED_CC1101
+#ifdef DEVICE_T_EMBED_CC1101
   {
     String m = Config.get(APP_CONFIG_LED_MODE, APP_CONFIG_LED_MODE_DEFAULT);
     _ledModeSub = m == "solid"   ? "Solid"
@@ -83,7 +83,7 @@ void SettingScreen::_refresh() {
   _items[SETT_NAV_SOUND].sublabel = _navSndSub.c_str();
 #endif
   _items[SETT_COLOR].sublabel        = _colorSub.c_str();
-#ifdef T_EMBED_CC1101
+#ifdef DEVICE_T_EMBED_CC1101
   _items[SETT_LED_MODE].sublabel     = _ledModeSub.c_str();
 #endif
 #ifdef DEVICE_HAS_NAV_MODE_SWITCH
@@ -225,7 +225,7 @@ void SettingScreen::onItemSelected(uint8_t index) {
       break;
     }
 
-#ifdef T_EMBED_CC1101
+#ifdef DEVICE_T_EMBED_CC1101
     case SETT_LED_MODE: {
       static constexpr InputSelectAction::Option opts[] = {
         {"Off",     "off"},
