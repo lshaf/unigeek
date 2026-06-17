@@ -8,19 +8,20 @@
 
 #include "ui/templates/BaseScreen.h"
 #include "utils/network/WifiAttackUtil.h"
-#include "utils/MoodFace.h"
+#include "utils/MoodFace.h"   // MoodFace::Mood enum + MoodMsg phrases
+#include "utils/MoodArt.h"    // rasterized SVG face bitmaps
 
 // ── Unigotchi ───────────────────────────────────────────────────────────────
-// Pwnagotchi-style handshake hunter. Standard unigeek chrome (Header + StatusBar).
-// A large M5Gotchi-style pixel-art mood face with a speech bubble beside it.
-// M5PORKCHOP-grade active capture: client enumeration + targeted deauth state
-// machine. Pwngrid spam broadcasts names read from a .txt on the SD card (Bruce-style).
+// Pwnagotchi-style handshake hunter. Standard unigeek left StatusBar, plus a
+// plain-text pwnagotchi layout: name + uptime on top, a big SVG-derived mood
+// face centred, a plain-text status/mood line, and plain-text counters at the
+// bottom (no boxes). M5PORKCHOP-grade active capture underneath.
 //
 // Handshakes are written as PCAP into the EAPOL Capture dir/format.
 class WifiUnigotchiScreen : public BaseScreen {
 public:
-  const char* title() override { return nullptr; }      // full-screen, like the home face
-  bool isFullScreen() override { return true; }
+  const char* title() override { return nullptr; }      // no header; left StatusBar only
+  bool isFullScreen() override { return false; }        // show the standard left StatusBar
   bool inhibitPowerOff() override { return true; }
 
   ~WifiUnigotchiScreen();
@@ -132,21 +133,15 @@ private:
   uint16_t            _pwnIdx    = 0;
   bool                _pwnLoaded = false;
 
-  // ── Face + speech bubble (same layout as the home CharacterScreen) ────────
-  enum : uint8_t { D_TOP = 1, D_HEAD = 2, D_BUBBLE = 4, D_STATS = 8, D_ALL = 15 };
-  uint8_t        _dirty       = D_ALL;
-  bool           _firstRender = true;
-  MoodFace::Mood _faceMood    = MoodFace::LOOKING;
-  uint8_t        _faceVariant = 0;
-  uint16_t       _faceColor   = TFT_CYAN;
-  uint8_t        _animFrame   = 0;
-  unsigned long  _lastAnimMs  = 0;
-  unsigned long  _lastMoodMs  = 0;
-  // typing bubble with fading history (newest bright, older faint)
-  char           _curMsg[40]     = {};
-  char           _history[2][40] = {};
-  uint8_t        _typePos     = 0;
-  unsigned long  _lastCharMs  = 0;
+  // ── Pwnagotchi-style UI (SVG face bitmap + plain text) ─────────────────────
+  enum : uint8_t { D_TOP = 1, D_BODY = 2, D_STATS = 4, D_ALL = 7 };
+  uint8_t        _dirty        = D_ALL;
+  bool           _firstRender  = true;
+  MoodFace::Mood _faceMood     = MoodFace::LOOKING;
+  uint8_t        _faceVariant  = 0;
+  unsigned long  _lastMoodMs   = 0;
+  unsigned long  _lastFaceMs   = 0;   // periodic face-variant cycle
+  char           _curMsg[96]   = {};
 
   // ── Capture engine ─────────────────────────────────────────────────────────
   void _flush();
@@ -181,4 +176,8 @@ private:
   // ── UI ─────────────────────────────────────────────────────────────────────
   void _openModeMenu();
   void _say(MoodFace::Mood mood, uint16_t faceColor, const String& phrase);
+  String _statusSentence();
+  void _drawTop(int bx, int by, int bw);
+  void _drawBody(int bx, int by, int bw, int h);
+  void _drawStats(int bx, int by, int bw);
 };

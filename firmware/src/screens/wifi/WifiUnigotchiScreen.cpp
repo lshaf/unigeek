@@ -92,7 +92,7 @@ void WifiUnigotchiScreen::onInit() {
 
   const unsigned long now = millis();
   _sessionStart = now; _chanHopUntil = now + 500;
-  _lastAnimMs = _lastMoodMs = now; _lastFreeCheck = 0; _animFrame = 0;
+  _lastMoodMs = _lastFaceMs = now; _lastFreeCheck = 0;
 
   _storageOk = false;
   if (Uni.Storage && Uni.Storage->isAvailable() && StorageUtil::hasSpace()) {
@@ -100,11 +100,9 @@ void WifiUnigotchiScreen::onInit() {
     _storageOk = true;
   }
 
-  _faceMood = MoodFace::EXCITED; _faceColor = TFT_GREEN;
-  _history[0][0] = _history[1][0] = '\0';
+  _faceMood = MoodFace::HAPPY; _faceVariant = 0;
   strncpy(_curMsg, "Hi! I'm Unigotchi!", sizeof(_curMsg) - 1);
   _curMsg[sizeof(_curMsg) - 1] = '\0';
-  _typePos = 0; _lastCharMs = now;
   _firstRender = true; _dirty = D_ALL;
 
   _startRadio();
@@ -153,21 +151,20 @@ void WifiUnigotchiScreen::onUpdate() {
     _runHunt();
   }
 
-  // blink
-  if (_animFrame == 0) {
-    if (now - _lastAnimMs > 3500) { _animFrame = 1; _lastAnimMs = now; _dirty |= D_HEAD; }
-  } else {
-    if (now - _lastAnimMs > 150)  { _animFrame = 0; _lastAnimMs = now; _dirty |= D_HEAD; }
+  // Cycle to another face variant of the current mood for a little life.
+  if (now - _lastFaceMs > 2500) {
+    _lastFaceMs = now;
+    _faceVariant++;   // _drawBody wraps it to the mood's variant count
+    _dirty |= D_BODY;
   }
 
-  // typing reveal of the current bubble message
-  int mlen = (int)strlen(_curMsg);
-  if (_typePos < (uint8_t)mlen && now - _lastCharMs > 45) {
-    _typePos++; _lastCharMs = now; _dirty |= D_BUBBLE;
-  }
-
+  // Idle: refresh the plain-text pwnagotchi status sentence.
   if (_mode != MODE_PWNGRID && _auto == ST_RECON && now - _lastMoodMs > 7000)
-    _say(MoodFace::LOOKING, TFT_CYAN, MoodMsg::looking());
+    _say(MoodFace::LOOKING, TFT_CYAN, _statusSentence());
+
+  // Uptime ticks on the top line.
+  static unsigned long lastSec = 0;
+  if (now - lastSec > 1000) { lastSec = now; _dirty |= D_TOP; }
 
   if (_dirty) onRender();
 }
@@ -718,145 +715,153 @@ void WifiUnigotchiScreen::_promiscuousCb(void* buf, wifi_promiscuous_pkt_type_t 
   }
 }
 
-// ── UI ────────────────────────────────────────────────────────────────────────
+// ── UI (pwnagotchi-style: SVG face bitmap + plain text) ───────────────────────
 
-// New message: fade the shown one into history, then type the new one in bright.
+// Off-white ink for all Unigotchi content — rgb(223,223,223) in RGB565.
+static const uint16_t UG_INK = 0xDEFB;
+
 void WifiUnigotchiScreen::_say(MoodFace::Mood mood, uint16_t faceColor, const String& phrase) {
-  if (_curMsg[0]) {
-    strncpy(_history[0], _history[1], sizeof(_history[0]) - 1);
-    _history[0][sizeof(_history[0]) - 1] = '\0';
-    strncpy(_history[1], _curMsg, sizeof(_history[1]) - 1);
-    _history[1][sizeof(_history[1]) - 1] = '\0';
-  }
-  _faceMood = mood; _faceColor = faceColor; _faceVariant = (uint8_t)random(4);
+  (void)faceColor;   // pwnagotchi look: everything is white
+  _faceMood = mood; _faceVariant = (uint8_t)random(8);
   strncpy(_curMsg, phrase.c_str(), sizeof(_curMsg) - 1);
   _curMsg[sizeof(_curMsg) - 1] = '\0';
-  _typePos = 0; _lastCharMs = millis(); _lastMoodMs = millis();
-  _dirty |= D_HEAD | D_BUBBLE;
+  _lastMoodMs = millis();
+  _dirty |= D_BODY;
 }
 
-// Full-screen layout cloned from the home CharacterScreen: face at the same
-// size/position as the hacker head, and a 3-row speech bubble where the newest
-// line is bright and older lines fade.
+// Pwnagotchi-flavoured status line built from the live counters.
+String WifiUnigotchiScreen::_statusSentence() {
+  unsigned long mins = (millis() - _sessionStart) / 60000UL;
+  char b[96];
+  snprintf(b, sizeof(b), "Pwning for %lum, kicked %lu, ate %lu HS & %lu PMKID",
+           mins, (unsigned long)_deauths, (unsigned long)_handshakes, (unsigned long)_pmkids);
+  return String(b);
+}
+
+// Draw a 1-bit bitmap (byte-aligned rows, MSB first), each set bit scaled.
+template <typename T>
+static void _drawBits(T& lcd, const uint8_t* bmp, int w, int h, int x, int y, int scale, uint16_t color) {
+  const int bw = (w + 7) / 8;
+  for (int row = 0; row < h; row++) {
+    const uint8_t* r = bmp + row * bw;
+    for (int col = 0; col < w; col++) {
+      if (r[col >> 3] & (0x80 >> (col & 7))) {
+        if (scale == 1) lcd.drawPixel(x + col, y + row, color);
+        else            lcd.fillRect(x + col * scale, y + row * scale, scale, scale, color);
+      }
+    }
+  }
+}
+
+static const MoodArtFace* _pickFace(MoodFace::Mood mood, uint8_t variant) {
+  const MoodArtFace* arr; uint8_t n;
+  switch (mood) {
+    case MoodFace::SLEEPING: arr = MOODART_sleeping; n = MOODART_sleeping_count; break;
+    case MoodFace::HAPPY:    arr = MOODART_happy;    n = MOODART_happy_count;    break;
+    case MoodFace::SAD:      arr = MOODART_sad;      n = MOODART_sad_count;      break;
+    case MoodFace::EXCITED:  arr = MOODART_excited;  n = MOODART_excited_count;  break;
+    case MoodFace::LOOKING:
+    default:                 arr = MOODART_looking;  n = MOODART_looking_count;  break;
+  }
+  return &arr[variant % n];
+}
+
 void WifiUnigotchiScreen::onRender() {
   auto& lcd = Uni.Lcd;
-  const int W = lcd.width(), H = lcd.height();
-  const int PAD   = 4;
-  const uint16_t theme = Config.getThemeColor();
-  const int scale = W < 360 ? 1 : W < 600 ? 2 : 3;
-  const int lineH = scale * 8;
-  const int barH  = scale * 16;
-  const int gap   = scale * 2;
-  const int ps    = (W < 360) ? 3 : (W < 600) ? 6 : 9;
+  const int bx = bodyX(), by = bodyY(), bw = bodyW(), bh = bodyH();
+  const int ts    = bw < 320 ? 1 : 2;
+  const int lineH = ts * 9;
 
-  const int topY1 = PAD + 2;
-  const int topY2 = topY1 + lineH + gap;
-  const int midY  = topY2 + lineH + gap;
+  const int topH  = lineH + 4;         // single status line + separator
+  const int statH = lineH + 4;         // separator + bottom counters
+  const int by0   = by + topH;
+  const int bh0   = bh - topH - statH;
+  const int statY = by + bh - statH;
 
-  const int sec2H = barH * 2 + gap;
-  const int sec2Y = H - 1 - sec2H;
-  const int halfW = (W - PAD * 2 - gap) / 2;
+  if (_firstRender) { lcd.fillRect(bx, by, bw, bh, TFT_BLACK); _firstRender = false; _dirty = D_ALL; }
 
-  const int headW = 12 * ps;
-  const int headH = 14 * ps;
-  const int headX = PAD + scale * 4;
-  const int midH  = sec2Y - midY;
-  const int headY = midH > headH ? (midY + (midH - headH) / 2) : midY;
+  if (_dirty & D_TOP)   { _drawTop(bx, by, bw);        _dirty &= ~D_TOP; }
+  if (_dirty & D_BODY)  { _drawBody(bx, by0, bw, bh0); _dirty &= ~D_BODY; }
+  if (_dirty & D_STATS) { _drawStats(bx, statY, bw);   _dirty &= ~D_STATS; }
+}
 
-  const int bubX = headX + headW + gap * 3;
-  const int bubW = W - bubX - PAD;
-  const int ip   = gap * 2;
-  const int rowH = lineH + gap;
-  const int bubH = lineH * 3 + gap * 2 + ip * 2;
-  const int bubY = headY + headH / 2 - bubH / 2;
-  const int btx  = bubX + gap * 2;
+// Top: AP / CH (left) + UP (right), then a separator line. Plain white.
+void WifiUnigotchiScreen::_drawTop(int bx, int by, int bw) {
+  auto& lcd = Uni.Lcd;
+  const int ts = bw < 320 ? 1 : 2, lineH = ts * 9;
+  lcd.fillRect(bx, by, bw, lineH + 4, TFT_BLACK);
+  lcd.setTextSize(ts);
+  lcd.setTextColor(UG_INK, TFT_BLACK);
+  char l[24]; snprintf(l, sizeof(l), "AP %d  CH %d", _apCount, _channel);
+  lcd.setTextDatum(TL_DATUM); lcd.drawString(l, bx, by);
+  unsigned long up = (millis() - _sessionStart) / 1000UL;
+  char r[16]; snprintf(r, sizeof(r), "UP %lu:%02lu", up / 60, up % 60);
+  lcd.setTextDatum(TR_DATUM); lcd.drawString(r, bx + bw, by);
+  lcd.drawFastHLine(bx, by + lineH + 2, bw, UG_INK);
+}
 
-  const uint16_t bubBg = 0x0841;
-  const uint16_t col3 = TFT_GREEN, col2 = 0x0460, col1 = 0x01C0;
+// Centred block: "Unigotchi> Lvl N" (bigger) + left-aligned face + message.
+// Everything white (pwnagotchi look).
+void WifiUnigotchiScreen::_drawBody(int bx, int by, int bw, int h) {
+  auto& lcd = Uni.Lcd;
+  const int ts = bw < 320 ? 1 : 2, lineH = ts * 9;
+  const int hts = ts + 1, hLineH = hts * 9;   // header a bit bigger
+  const int gap = 4;
 
-  const bool isFirst = _firstRender;
-  if (isFirst) { lcd.fillScreen(TFT_BLACK); _firstRender = false; _dirty = D_ALL; }
-  lcd.setTextSize(scale);
+  lcd.fillRect(bx, by, bw, h, TFT_BLACK);
 
-  // ── TOP: title + mode badge + channel ──────────────────────────────────
-  if (_dirty & D_TOP) {
-    lcd.fillRect(0, 0, W, midY, TFT_BLACK);
-    lcd.setTextDatum(TL_DATUM);
-    lcd.setTextColor(theme);
-    lcd.drawString("UNIGOTCHI", PAD, topY1);
-    const char* nm = _mode == MODE_ACTIVE ? "ACTIVE" : _mode == MODE_PWNGRID ? "PWNGRID" : "PASSIVE";
-    lcd.setTextDatum(TR_DATUM);
-    lcd.setTextColor(_mode == MODE_ACTIVE ? TFT_RED : _mode == MODE_PWNGRID ? TFT_CYAN : TFT_GREEN);
-    lcd.drawString(nm, W - PAD, topY1);
-    char l2[16]; snprintf(l2, sizeof(l2), "CH %d", _channel);
-    lcd.setTextDatum(TL_DATUM); lcd.setTextColor(TFT_DARKGREY);
-    lcd.drawString(l2, PAD, topY2);
-    _dirty &= ~D_TOP;
-  }
+  const char* hdr = "Unigotchi>";
 
-  // ── HEAD (hacker head, same as the home screen — rank from EXP + blink) ──
-  if (_dirty & D_HEAD) {
-    lcd.fillRect(headX, headY, headW, headH, TFT_BLACK);
-    int rank = hackerGetRank(Achievement.getExp()).rank;
-    hackerDrawHead(lcd, headX, headY, ps, _animFrame == 1, rank);
-    _dirty &= ~D_HEAD;
-  }
+  // face (left-aligned), scaled to fit
+  const MoodArtFace* f = _pickFace(_faceMood, _faceVariant);
+  int scale = 1;
+  int faceMaxH = h - hLineH - gap * 2 - lineH;
+  while ((f->h * (scale + 1)) <= faceMaxH && (f->w * (scale + 1)) <= bw && scale < 4) scale++;
+  int fh = f->h * scale;
 
-  // ── BUBBLE (3 rows: newest bright, older faded) ─────────────────────────
-  if (_dirty & D_BUBBLE) {
-    if (bubW > lineH * 2) {
-      if (isFirst) {
-        lcd.fillRect(bubX, bubY, bubW, bubH, bubBg);
-        lcd.drawRect(bubX, bubY, bubW, bubH, col3);
-        const int tailW = gap * 3; const int tailMy = bubY + bubH / 2;
-        for (int i = 0; i < tailW; i++) {
-          int spr = i + 1; int tx2 = bubX - tailW + i + 1;
-          lcd.drawFastVLine(tx2, tailMy - spr, spr * 2, bubBg);
-          lcd.drawPixel(tx2, tailMy - spr, col3);
-          lcd.drawPixel(tx2, tailMy + spr - 1, col3);
-        }
-      }
-      const int spW = bubW - gap * 4;
-      const int spH = lineH * 3 + gap * 2;
-      Sprite sp(&lcd);
-      sp.createSprite(spW, spH);
-      sp.fillSprite(bubBg);
-      sp.setTextSize(scale);
-      sp.setTextDatum(ML_DATUM);
-      const int sy1 = lineH / 2, sy2 = rowH + lineH / 2, sy3 = rowH * 2 + lineH / 2;
-      sp.setTextColor(col1); if (_history[0][0]) sp.drawString(_history[0], 0, sy1);
-      sp.setTextColor(col2); if (_history[1][0]) sp.drawString(_history[1], 0, sy2);
-      {
-        int len = (int)strlen(_curMsg);
-        int shown = (_typePos <= (uint8_t)len) ? (int)_typePos : len;
-        char buf[42] = {};
-        if (shown > 0) memcpy(buf, _curMsg, shown);
-        buf[shown] = '_';
-        sp.setTextColor(col3); sp.drawString(buf, 0, sy3);
-      }
-      sp.pushSprite(btx, bubY + ip);
-      sp.deleteSprite();
+  // wrap "> message" and count lines
+  String s = String("> ") + _curMsg;
+  String lines[4]; int nLines = 0;
+  lcd.setTextSize(ts);
+  for (int start = 0, n = s.length(); start < n && nLines < 4; ) {
+    int cut = n, lastSpace = -1;
+    for (int i = start; i < n; i++) {
+      if (lcd.textWidth(s.substring(start, i + 1).c_str()) > bw) { cut = (lastSpace > start) ? lastSpace : i; break; }
+      if (s[i] == ' ') lastSpace = i;
     }
-    _dirty &= ~D_BUBBLE;
+    lines[nLines++] = s.substring(start, cut);
+    start = (cut < n && s[cut] == ' ') ? cut + 1 : cut;
   }
+  int msgH = nLines * lineH;
 
-  // ── STATS (two-bar stack, like the home HP/BRAIN bars) ──────────────────
-  if (_dirty & D_STATS) {
-    auto box = [&](int x, int y, int w, const char* lab, const char* val, uint16_t vc) {
-      lcd.fillRect(x, y, w, barH, 0x2104);
-      lcd.drawRect(x, y, w, barH, TFT_DARKGREY);
-      lcd.setTextDatum(ML_DATUM); lcd.setTextColor(TFT_WHITE, 0x2104);
-      lcd.drawString(lab, x + 5, y + barH / 2);
-      lcd.setTextDatum(MR_DATUM); lcd.setTextColor(vc, 0x2104);
-      lcd.drawString(val, x + w - 5, y + barH / 2);
-    };
-    lcd.setTextSize(scale);
-    char b[16];
-    const int r1 = sec2Y, r2 = sec2Y + barH + gap;
-    snprintf(b, sizeof(b), "%lu", (unsigned long)_handshakes); box(PAD,          r1, halfW, "HS",     b, TFT_MAGENTA);
-    snprintf(b, sizeof(b), "%lu", (unsigned long)_pmkids);     box(PAD+halfW+gap, r1, halfW, "PMKID",  b, TFT_ORANGE);
-    snprintf(b, sizeof(b), "%lu", (unsigned long)_deauths);    box(PAD,          r2, halfW, "DEAUTH", b, TFT_YELLOW);
-    snprintf(b, sizeof(b), "%lu", (unsigned long)_disassocs);  box(PAD+halfW+gap, r2, halfW, "DISASC", b, TFT_YELLOW);
-    _dirty &= ~D_STATS;
-  }
+  // vertically centre the whole block
+  int blockH = hLineH + gap + fh + gap + msgH;
+  int y = by + (h - blockH) / 2; if (y < by) y = by;
+
+  lcd.setTextSize(hts); lcd.setTextDatum(TL_DATUM); lcd.setTextColor(UG_INK, TFT_BLACK);
+  lcd.drawString(hdr, bx, y);
+  y += hLineH + gap;
+
+  _drawBits(lcd, f->bits, f->w, f->h, bx, y, scale, UG_INK);
+  y += fh + gap;
+
+  lcd.setTextSize(ts); lcd.setTextColor(UG_INK, TFT_BLACK);
+  for (int i = 0; i < nLines; i++) lcd.drawString(lines[i].c_str(), bx, y + i * lineH);
+}
+
+// Bottom: counters (left) + mode (right). Plain white.
+void WifiUnigotchiScreen::_drawStats(int bx, int by, int bw) {
+  auto& lcd = Uni.Lcd;
+  const int ts = bw < 320 ? 1 : 2, lineH = ts * 9;
+  lcd.fillRect(bx, by, bw, lineH + 4, TFT_BLACK);
+  lcd.drawFastHLine(bx, by, bw, UG_INK);        // separator above the counters
+  const int ty = by + 4;
+  lcd.setTextSize(ts);
+  lcd.setTextColor(UG_INK, TFT_BLACK);
+  char b[40];
+  snprintf(b, sizeof(b), "HS %lu PM %lu DE %lu", (unsigned long)_handshakes,
+           (unsigned long)_pmkids, (unsigned long)_deauths);
+  lcd.setTextDatum(TL_DATUM); lcd.drawString(b, bx, ty);
+  const char* nm = _mode == MODE_ACTIVE ? "ACTIVE" : _mode == MODE_PWNGRID ? "PWNGRID" : "PASSIVE";
+  lcd.setTextDatum(TR_DATUM); lcd.drawString(nm, bx + bw, ty);
 }
