@@ -5,12 +5,96 @@
 #include "core/Device.h"
 #include "core/ScreenManager.h"
 #include "screens/MainMenuScreen.h"
-#include "utils/HackerHead.h"
+#include "utils/HackerHead.h"   // hackerGetRank / RankInfo (rank label + colour)
+#include "utils/DevilHead.h"    // pixel-art devil mascot (replaces the head art)
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 namespace {
 
 int _clampPct(int v) { return v < 0 ? 0 : v > 100 ? 100 : v; }
+
+// Scale an RGB565 colour's brightness by num/den — derives the dim Matrix shades
+// from the user's theme colour (same source as the message bubble text).
+inline uint16_t _dim565(uint16_t c, int num, int den) {
+  int r = (c >> 11) & 0x1F, g = (c >> 5) & 0x3F, b = c & 0x1F;
+  r = r * num / den; g = g * num / den; b = b * num / den;
+  return (uint16_t)((r << 11) | (g << 5) | b);
+}
+
+inline uint32_t _h32(uint32_t x) {
+  x ^= x >> 16; x *= 0x7feb352dU; x ^= x >> 15; x *= 0x846ca68bU; x ^= x >> 16; return x;
+}
+
+// Animated "Matrix" rain, evaluated statelessly per cell so any region (the
+// header sprite, the devil sprite, the free background) can render a consistent
+// slice from the same global animation frame. Returns the trail level
+// (0 = bright head … upward) or -1 when the cell is dark.
+constexpr int MTX_TRAIL = 6;
+int _mtxCell(int col, int row, uint32_t f, int vrows, char& glyph) {
+  uint32_t hc = _h32((uint32_t)col * 2654435761U + 1U);
+  if ((hc & 3U) == 0U) return -1;                        // ~1/4 columns stay empty
+  int spd   = 1 + (int)((hc >> 5) & 1U);                 // fall speed 1..2
+  int phase = (int)(hc % (uint32_t)vrows);
+  int head  = (int)(((f * (uint32_t)spd) + (uint32_t)phase) % (uint32_t)vrows);
+  int d = head - row;
+  if (d < 0 || d >= MTX_TRAIL) return -1;
+  glyph = (_h32((uint32_t)(col * 131 + row * 977) + (f >> 3)) & 1U) ? '1' : '0';
+  return d;
+}
+
+inline uint16_t _mtxColor(int level, uint16_t theme) {
+  switch (level) {                          // kept subtle/translucent on purpose
+    case 0:  return _dim565(theme, 1, 2);   // head
+    case 1:  return _dim565(theme, 1, 3);
+    case 2:  return _dim565(theme, 1, 5);
+    case 3:  return _dim565(theme, 1, 8);
+    default: return _dim565(theme, 1, 12);
+  }
+}
+
+// Render lit cells overlapping screen-rect [ax,ay,aw,ah] into `dc`, whose (0,0)
+// maps to screen (ox,oy). The caller has already cleared the target to black.
+template<typename T>
+void _mtxInto(T& dc, int ax, int ay, int aw, int ah, int ox, int oy,
+              uint32_t f, int vrows, int cw, int chh, uint16_t theme) {
+  dc.setTextSize(cw / 6); dc.setTextDatum(TL_DATUM);
+  for (int row = ay / chh; row <= (ay + ah - 1) / chh; row++)
+    for (int col = ax / cw; col <= (ax + aw - 1) / cw; col++) {
+      char g; int lvl = _mtxCell(col, row, f, vrows, g);
+      if (lvl < 0) continue;
+      dc.setTextColor(_mtxColor(lvl, theme), TFT_BLACK);
+      char s[2] = { g, 0 };
+      dc.drawString(s, col * cw - ox, row * chh - oy);
+    }
+}
+
+// Animate the Matrix straight onto the free background rows [y0,y1), erasing dark
+// cells and skipping the two excluded widget rectangles (head band, bubble+tail).
+template<typename T>
+void _mtxFree(T& lcd, int y0, int y1, int W, uint32_t f, int vrows,
+              int cw, int chh, uint16_t theme,
+              int e1x, int e1y, int e1w, int e1h,
+              int e2x, int e2y, int e2w, int e2h) {
+  lcd.setTextSize(cw / 6); lcd.setTextDatum(TL_DATUM);
+  for (int row = y0 / chh; row <= (y1 - 1) / chh; row++) {
+    int py = row * chh;
+    int ch = chh; if (py + ch > y1) ch = y1 - py;     // clip so it never spills onto the bars
+    if (ch <= 0) continue;
+    for (int col = 0; col * cw < W; col++) {
+      int px = col * cw;
+      if ((px + cw > e1x && px < e1x + e1w && py + chh > e1y && py < e1y + e1h) ||
+          (px + cw > e2x && px < e2x + e2w && py + chh > e2y && py < e2y + e2h)) continue;
+      char g; int lvl = _mtxCell(col, row, f, vrows, g);
+      if (lvl >= 0 && ch == chh) {                     // only full-height glyphs
+        lcd.setTextColor(_mtxColor(lvl, theme), TFT_BLACK);
+        char s[2] = { g, 0 };
+        lcd.drawString(s, px, py);
+      } else {
+        lcd.fillRect(px, py, cw, ch, TFT_BLACK);       // clipped erase
+      }
+    }
+  }
+}
 
 template<typename T>
 void _drawInlineBar(T& dc, int x, int y, int w, int h,
@@ -127,6 +211,20 @@ void CharacterScreen::onUpdate()
     if (now - _lastAnimMs > 150)  { _animFrame = 0; _lastAnimMs = now; _dirtyMask |= DIRTY_HEAD; }
   }
 
+  // ── head side-to-side sway ───────────────────────────────────────────
+  if (now - _lastSwayMs > 420) {
+    _lastSwayMs = now;
+    _swayPhase  = (_swayPhase + 1) % 12;
+    _dirtyMask |= DIRTY_HEAD;
+  }
+
+  // ── Matrix rain tick: advance the frame; header + head recomposite over it ─
+  if (now - _lastMatrixMs > 110) {
+    _lastMatrixMs = now;
+    _matrixFrame++;
+    _dirtyMask |= DIRTY_MATRIX | DIRTY_TOP | DIRTY_HEAD;
+  }
+
   // ── dialog bubble state machine ──────────────────────────────────────
   // state 0 = TYPING:   add one char every 65 ms
   // state 1 = PAUSING:  hold full word for 2.5 s, then push into history and start next word
@@ -178,6 +276,11 @@ void CharacterScreen::onRender()
   const int      gap   = scale * 2;
   const int      ps    = (W < 360) ? 3 : (W < 600) ? 6 : 9;
 
+  // Matrix glyph grid (shared global cells so every region lines up)
+  const int      cw    = 6 * scale;
+  const int      chh   = 8 * scale;
+  const int      vrows = H / chh + 10;
+
   const int topY1 = PAD + 2;
   const int topY2 = topY1 + lineH + gap;
   const int midY  = topY2 + lineH + gap;
@@ -186,24 +289,29 @@ void CharacterScreen::onRender()
   const int sec2Y = H - 1 - sec2H;
   const int halfW = (W - PAD * 2 - gap) / 2;
 
-  const int headW = 12 * ps;
-  const int headH = 14 * ps;
+  const int headW = DEVIL_W * ps;
+  const int headH = DEVIL_H * ps;
   const int headX = PAD + scale * 4;
+  const int swayMax = scale * 3;          // head sway amplitude (px)
   const int midH  = sec2Y - midY;
   const int headY = midH > headH ? (midY + (midH - headH) / 2) : midY;
+  // Head sprite band, snapped to the Matrix cell grid so the rain meets it with
+  // no black gutter, and wide enough for the sway clearance.
+  const int bandX = ((headX - swayMax) / cw) * cw;
+  const int bandY = (headY / chh) * chh;
+  const int bandW = (((headX + headW + swayMax) + cw - 1) / cw) * cw - bandX;
+  const int bandH = (((headY + headH) + chh - 1) / chh) * chh - bandY;
 
-  const int bubX = headX + headW + gap * 3;
+  const int tailW = gap * 3;                 // bubble tail width
+  // Start the bubble (and its tail) just past the head's cell-aligned band so the
+  // head sprite (repainted every Matrix tick) can never clip the tail tip.
+  const int bubX = bandX + bandW + tailW + gap;
   const int bubW = W - bubX - PAD;
   const int ip   = gap * 2;
   const int rowH = lineH + gap;
   const int bubH = lineH * 3 + gap * 2 + ip * 2;
   const int bubY = headY + headH / 2 - bubH / 2;
   const int btx  = bubX + gap * 2;
-
-  const uint16_t bubBg = 0x0841;
-  const uint16_t col3  = TFT_GREEN;
-  const uint16_t col2  = 0x0460;
-  const uint16_t col1  = 0x01C0;
 
   // ── data ─────────────────────────────────────────────────────────────
   int      exp      = Achievement.getExp();
@@ -229,31 +337,43 @@ void CharacterScreen::onRender()
 
   Uni.Lcd.setTextSize(scale);
 
-  // ── TOP SECTION ───────────────────────────────────────────────────────
+  // ── MATRIX background (animated, free area between header and bars) ────
+  if (_dirtyMask & DIRTY_MATRIX) {
+    _mtxFree(Uni.Lcd, midY, sec2Y, W, _matrixFrame, vrows, cw, chh, theme,
+             bandX, bandY, bandW, bandH,
+             bubX - tailW, bubY, bubW + tailW, bubH);
+    _dirtyMask &= ~DIRTY_MATRIX;
+  }
+
+  // ── TOP SECTION (agent / exp, composited over the Matrix) ─────────────
   if (_dirtyMask & DIRTY_TOP) {
-    Uni.Lcd.fillRect(0, 0, W, midY, TFT_BLACK);
-    const int indent = Uni.Lcd.textWidth("AGENT ");
+    Sprite tb(&Uni.Lcd);
+    tb.createSprite(W, midY);
+    tb.fillSprite(TFT_BLACK);
+    _mtxInto(tb, 0, 0, W, midY, 0, 0, _matrixFrame, vrows, cw, chh, theme);
+    tb.setTextSize(scale);
+    const int indent = tb.textWidth("AGENT ");
 
     const char* t = agTitle.length() > 0 ? agTitle.c_str() : "No Title";
     char rankBuf[48];
     snprintf(rankBuf, sizeof(rankBuf), "[%s] %s", ri.label, t);
 
-    Uni.Lcd.setTextDatum(TL_DATUM);
-    Uni.Lcd.setTextColor(TFT_DARKGREY);
-    Uni.Lcd.drawString("AGENT", PAD, topY1);
-    Uni.Lcd.setTextColor(TFT_WHITE);
-    Uni.Lcd.drawString(agent.substring(0, 15).c_str(), PAD + indent, topY1);
-    Uni.Lcd.setTextDatum(TR_DATUM);
-    Uni.Lcd.setTextColor(ri.color);
-    Uni.Lcd.drawString(rankBuf, W - PAD, topY1);
+    tb.setTextDatum(TL_DATUM);
+    tb.setTextColor(TFT_DARKGREY, TFT_BLACK);
+    tb.drawString("AGENT", PAD, topY1);
+    tb.setTextColor(TFT_WHITE, TFT_BLACK);
+    tb.drawString(agent.substring(0, 15).c_str(), PAD + indent, topY1);
+    tb.setTextDatum(TR_DATUM);
+    tb.setTextColor(ri.color, TFT_BLACK);
+    tb.drawString(rankBuf, W - PAD, topY1);
 
     char expBuf[12];
     snprintf(expBuf, sizeof(expBuf), "%d", exp);
-    Uni.Lcd.setTextDatum(TL_DATUM);
-    Uni.Lcd.setTextColor(TFT_DARKGREY);
-    Uni.Lcd.drawString("EXP", PAD, topY2);
-    Uni.Lcd.setTextColor(TFT_ORANGE);
-    Uni.Lcd.drawString(expBuf, PAD + indent, topY2);
+    tb.setTextDatum(TL_DATUM);
+    tb.setTextColor(TFT_DARKGREY, TFT_BLACK);
+    tb.drawString("EXP", PAD, topY2);
+    tb.setTextColor(TFT_ORANGE, TFT_BLACK);
+    tb.drawString(expBuf, PAD + indent, topY2);
 
     int nextExp = (exp < 4500)  ? 4500  : (exp < 15000) ? 15000
                 : (exp < 30000) ? 30000 : 43000;
@@ -264,61 +384,68 @@ void CharacterScreen::onRender()
     int bx    = W * 5 / 8;
     int bw    = W - bx - PAD;
     int rBarH = scale * 6;
-    Uni.Lcd.fillRect(bx, topY2 + scale, bw, rBarH, TFT_BLACK);
-    Uni.Lcd.drawRect(bx, topY2 + scale, bw, rBarH, TFT_DARKGREY);
+    tb.fillRect(bx, topY2 + scale, bw, rBarH, TFT_BLACK);
+    tb.drawRect(bx, topY2 + scale, bw, rBarH, TFT_DARKGREY);
     int fill = (bw - 2) * rPct / 100;
-    if (fill > 0) Uni.Lcd.fillRect(bx + 1, topY2 + scale + 1, fill, rBarH - 2, theme);
+    if (fill > 0) tb.fillRect(bx + 1, topY2 + scale + 1, fill, rBarH - 2, theme);
 
+    tb.pushSprite(0, 0);
+    tb.deleteSprite();
     _dirtyMask &= ~DIRTY_TOP;
   }
 
-  // ── HEAD ──────────────────────────────────────────────────────────────
+  // ── HEAD (devil: blinks + sways, over the Matrix — no black box) ──────
   if (_dirtyMask & DIRTY_HEAD) {
-    if (isFirst) {
-      Uni.Lcd.fillRect(headX, headY, headW, headH, TFT_BLACK);
-      hackerDrawHead(Uni.Lcd, headX, headY, ps, _animFrame == 1, ri.rank);
-    } else {
-      hackerDrawEyes(Uni.Lcd, headX, headY, ps, _animFrame == 1, ri.rank);
-    }
+    static const int8_t kSway[12] = {0, 1, 2, 3, 2, 1, 0, -1, -2, -3, -2, -1};
+    const int swayX = kSway[_swayPhase] * scale;
+    Sprite hs(&Uni.Lcd);
+    hs.createSprite(bandW, bandH);
+    hs.fillSprite(TFT_BLACK);
+    // Matrix slice behind the head, so the rain shows around the devil
+    _mtxInto(hs, bandX, bandY, bandW, bandH, bandX, bandY,
+             _matrixFrame, vrows, cw, chh, theme);
+    devilDrawHead(hs, (headX - bandX) + swayX, headY - bandY, ps, _animFrame == 1);
+    hs.pushSprite(bandX, bandY);
+    hs.deleteSprite();
     _dirtyMask &= ~DIRTY_HEAD;
   }
 
-  // ── BUBBLE ────────────────────────────────────────────────────────────
+  // ── BUBBLE (pixel speech balloon, rounded, theme-coloured frame) ──────
   if (_dirtyMask & DIRTY_BUBBLE) {
     if (bubW > lineH * 2) {
+      const int r = scale * 3;             // rounded-corner radius
       if (isFirst) {
-        // Frame and tail drawn once — persist on LCD until next full render
-        Uni.Lcd.fillRect(bubX, bubY, bubW, bubH, bubBg);
-        Uni.Lcd.drawRect(bubX, bubY, bubW, bubH, col3);
+        // Frame + tail drawn once; they persist on the LCD between text updates
+        Uni.Lcd.fillRoundRect(bubX, bubY, bubW, bubH, r, TFT_BLACK);
+        Uni.Lcd.drawRoundRect(bubX, bubY, bubW, bubH, r, theme);
+        // chunky pixel tail pointing at the head
         const int tailW  = gap * 3;
         const int tailMy = bubY + bubH / 2;
         for (int i = 0; i < tailW; i++) {
           int spread = i + 1;
           int tx2    = bubX - tailW + i + 1;
-          Uni.Lcd.drawFastVLine(tx2, tailMy - spread, spread * 2, bubBg);
-          Uni.Lcd.drawPixel(tx2, tailMy - spread,     col3);
-          Uni.Lcd.drawPixel(tx2, tailMy + spread - 1, col3);
+          Uni.Lcd.drawFastVLine(tx2, tailMy - spread, spread * 2, TFT_BLACK);
+          Uni.Lcd.drawPixel(tx2, tailMy - spread,     theme);
+          Uni.Lcd.drawPixel(tx2, tailMy + spread - 1, theme);
         }
       }
 
-      // Text rows via sprite — compose into a bubBg-filled buffer, push once.
-      // Sprite covers the inner text area only; frame/tail stay on LCD.
+      // Text rows via sprite — composed on black, pushed over the inner area.
       const int spW = bubW - gap * 4;
       const int spH = lineH * 3 + gap * 2;
       Sprite sp(&Uni.Lcd);
       sp.createSprite(spW, spH);
-      sp.fillSprite(bubBg);
+      sp.fillSprite(TFT_BLACK);
       sp.setTextSize(scale);
       sp.setTextDatum(ML_DATUM);
 
-      // y positions are relative to sprite top (origin = btx, bubY + ip)
       const int sy1 = lineH / 2;
       const int sy2 = rowH + lineH / 2;
       const int sy3 = rowH * 2 + lineH / 2;
 
-      sp.setTextColor(col1);
+      sp.setTextColor(0x52AA);                            // oldest — dim
       if (_history[0][0]) sp.drawString(_history[0], 0, sy1);
-      sp.setTextColor(col2);
+      sp.setTextColor(0x9CD3);                            // recent — brighter
       if (_history[1][0]) sp.drawString(_history[1], 0, sy2);
 
       {
@@ -328,7 +455,7 @@ void CharacterScreen::onRender()
         char        buf[20] = {};
         if (shown > 0) memcpy(buf, word, shown);
         buf[shown] = '_';
-        sp.setTextColor(col3);
+        sp.setTextColor(theme);                           // typing — theme colour
         sp.drawString(buf, 0, sy3);
       }
 
