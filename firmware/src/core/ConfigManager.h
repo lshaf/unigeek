@@ -54,6 +54,8 @@
 #define APP_CONFIG_WIKI_LANG_DEFAULT            "en"
 #define APP_CONFIG_LED_MODE                     "led_mode"
 #define APP_CONFIG_LED_MODE_DEFAULT             "off"
+#define APP_CONFIG_MASCOT                       "mascot"
+#define APP_CONFIG_MASCOT_DEFAULT               "hacker"
 
 class ConfigManager
 {

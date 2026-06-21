@@ -1,9 +1,10 @@
 #include "ClaudeBuddyScreen.h"
 #include "utils/ble/BuddyNus.h"
-#include "utils/HackerHead.h"
+#include "utils/Mascot.h"       // mascot registry (head art) + hackerGetRank
 #include "core/Device.h"
 #include "core/ScreenManager.h"
 #include "core/AchievementManager.h"
+#include "core/ConfigManager.h"
 #include <esp_mac.h>
 #include <string.h>
 #include <stdlib.h>
@@ -215,10 +216,13 @@ void ClaudeBuddyScreen::onRender() {
 
   const uint16_t kDialogH = bh - kFooterH - kGapH;
 
-  // ── Character column ──────────────────────────────────────────────────────
-  const int ps    = 3;
-  const int headW = 12 * ps;
-  const int headH = 14 * ps;
+  // ── Character column (mascot, see utils/Mascot.h; hacker is the default) ──
+  const Mascot& mascot = Mascot::current();
+  const int kHeadMaxH = 42;                  // vertical budget for the head art
+  // Fit the art into the column by both width and height so any mascot scales.
+  const int ps    = max(1, min((kCharColW - 2) / mascot.w, kHeadMaxH / mascot.h));
+  const int headW = mascot.w * ps;
+  const int headH = mascot.h * ps;
   const int artX  = (kCharColW - headW) / 2;
   const int artY  = 6;
 
@@ -231,7 +235,7 @@ void ClaudeBuddyScreen::onRender() {
   } else {
     blink = (_animTick & 7) < 1;
   }
-  hackerDrawHead(sp, artX, artY, ps, blink, rank);
+  mascot.draw(sp, artX, artY, ps, blink, rank);
 
   uint16_t btnY      = (uint16_t)(artY + headH + 8);
   bool     hasPending = st.promptId[0] && !_responseSent;
@@ -256,16 +260,17 @@ void ClaudeBuddyScreen::onRender() {
   }
   sp.setTextDatum(TL_DATUM);
 
-  // ── Dialog box — colors match CharacterScreen bubble ─────────────────────
-  const uint16_t kBubBg = 0x0841;
-  const uint16_t kCol3  = TFT_GREEN;
-  const uint16_t kCol2  = 0x0460;
-  const uint16_t kCol1  = 0x01C0;
+  // ── Dialog box — same pixel balloon as the home-screen devil bubble ──────
+  const uint16_t theme  = Config.getThemeColor();
+  const uint16_t kBubBg = TFT_BLACK;
+  const uint16_t kCol3  = theme;     // highlight / latest line
+  const uint16_t kCol2  = 0x9CD3;    // recent — brighter grey
+  const uint16_t kCol1  = 0x52AA;    // older — dim grey
 
   const uint16_t dbx  = kCharColW + 1u + kTailW;
   const uint16_t dbw  = bw - dbx;
-  sp.fillRect(dbx + 1, 1, dbw - 2, kDialogH - 2, kBubBg);
-  sp.drawRect(dbx, 0, dbw, kDialogH, kCol3);
+  sp.fillRoundRect(dbx, 0, dbw, kDialogH, 4, kBubBg);
+  sp.drawRoundRect(dbx, 0, dbw, kDialogH, 4, theme);
 
   uint16_t dx   = dbx + 3;
   uint16_t dy   = 3;

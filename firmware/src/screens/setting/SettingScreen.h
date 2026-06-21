@@ -35,6 +35,7 @@ private:
     SETT_SPEAKER_TEST,
 #endif
     SETT_COLOR,
+    SETT_MASCOT,
 #ifdef DEVICE_T_EMBED_CC1101
     SETT_LED_MODE,
 #endif
@@ -75,6 +76,7 @@ private:
   String _navSndSub;
 #endif
   String _colorSub;
+  String _mascotSub;
 #ifdef DEVICE_T_EMBED_CC1101
   String _ledModeSub;
 #endif
@@ -108,6 +110,7 @@ private:
     {"Speaker Test"},
 #endif
     {"Primary Color",    ""},
+    {"Mascot",           ""},
 #ifdef DEVICE_T_EMBED_CC1101
     {"LED Effect",       ""},
 #endif

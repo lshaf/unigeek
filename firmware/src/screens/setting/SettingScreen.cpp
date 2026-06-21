@@ -12,6 +12,7 @@
 #include "ui/actions/InputNumberAction.h"
 #include "ui/actions/InputSelectAction.h"
 #include "ui/actions/ShowStatusAction.h"
+#include "utils/Mascot.h"
 #include "screens/setting/PinSettingScreen.h"
 #include "screens/setting/DeviceStatusScreen.h"
 #include "screens/setting/AboutScreen.h"
@@ -46,6 +47,7 @@ void SettingScreen::_refresh() {
   _navSndSub   = Config.get(APP_CONFIG_NAV_SOUND,            APP_CONFIG_NAV_SOUND_DEFAULT).toInt() ? "On" : "Off";
 #endif
   _colorSub    = Config.get(APP_CONFIG_PRIMARY_COLOR,        APP_CONFIG_PRIMARY_COLOR_DEFAULT);
+  _mascotSub   = Mascot::current().label;
 #ifdef DEVICE_T_EMBED_CC1101
   {
     String m = Config.get(APP_CONFIG_LED_MODE, APP_CONFIG_LED_MODE_DEFAULT);
@@ -83,6 +85,7 @@ void SettingScreen::_refresh() {
   _items[SETT_NAV_SOUND].sublabel = _navSndSub.c_str();
 #endif
   _items[SETT_COLOR].sublabel        = _colorSub.c_str();
+  _items[SETT_MASCOT].sublabel       = _mascotSub.c_str();
 #ifdef DEVICE_T_EMBED_CC1101
   _items[SETT_LED_MODE].sublabel     = _ledModeSub.c_str();
 #endif
@@ -220,6 +223,25 @@ void SettingScreen::onItemSelected(uint8_t index) {
         Config.save(Uni.Storage);
         int n = Achievement.inc("settings_color_changed");
         if (n == 1) Achievement.unlock("settings_color_changed");
+      }
+      _refresh();
+      break;
+    }
+
+    case SETT_MASCOT: {
+      // Built straight from the Mascot registry, so a new mascot needs no edit here.
+      InputSelectAction::Option opts[8];
+      uint8_t n = Mascot::count();
+      if (n > 8) n = 8;
+      for (uint8_t i = 0; i < n; i++) {
+        opts[i].label = Mascot::at(i).label;
+        opts[i].value = Mascot::at(i).id;
+      }
+      String      cur    = Config.get(APP_CONFIG_MASCOT, APP_CONFIG_MASCOT_DEFAULT);
+      const char* result = InputSelectAction::popup("Mascot", opts, n, cur.c_str());
+      if (result != nullptr) {
+        Config.set(APP_CONFIG_MASCOT, result);
+        Config.save(Uni.Storage);
       }
       _refresh();
       break;
