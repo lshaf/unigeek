@@ -46,19 +46,20 @@ static const int8_t CAT_EYE_OPEN[][2]   = {{3,8},{4,8},{5,8},{5,9},{6,9},
 static const int8_t CAT_EYE_CLOSED[][2] = {{4,9},{5,9},{6,9},{12,9},{13,9},{14,9}};
 
 template<typename T>
-void catDrawEyes(T& dc, int ox, int oy, int ps, bool blink, uint16_t body) {
+void catDrawEyes(T& dc, int ox, int oy, int ps, bool blink, uint16_t body, uint16_t eye) {
   auto cell = [&](int cx, int cy, uint16_t c) { dc.fillRect(ox + cx * ps, oy + cy * ps, ps, ps, c); };
   // clear both eye rows back to the body colour first (so blink can toggle)
   for (int y = 8; y <= 9; y++)
     for (int x = 3; x <= 15; x++) cell(x, y, body);
   if (blink)
-    for (auto& e : CAT_EYE_CLOSED) cell(e[0], e[1], CAT_K);
+    for (auto& e : CAT_EYE_CLOSED) cell(e[0], e[1], eye);
   else
-    for (auto& e : CAT_EYE_OPEN)   cell(e[0], e[1], CAT_K);
+    for (auto& e : CAT_EYE_OPEN)   cell(e[0], e[1], eye);
 }
 
+// `eye` is the rank accent colour so the cat "levels up" as the agent ranks.
 template<typename T>
-void catDrawHead(T& dc, int ox, int oy, int ps, bool blink, uint16_t body) {
+void catDrawHead(T& dc, int ox, int oy, int ps, bool blink, uint16_t body, uint16_t eye) {
   auto cell = [&](int cx, int cy, uint16_t c) { dc.fillRect(ox + cx * ps, oy + cy * ps, ps, ps, c); };
   for (int y = 0; y < CAT_H; y++) {
     const char* row = CAT_ART[y];
@@ -70,5 +71,5 @@ void catDrawHead(T& dc, int ox, int oy, int ps, bool blink, uint16_t body) {
       }
     }
   }
-  catDrawEyes(dc, ox, oy, ps, blink, body);
+  catDrawEyes(dc, ox, oy, ps, blink, body, eye);
 }

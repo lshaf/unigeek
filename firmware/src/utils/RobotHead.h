@@ -29,20 +29,22 @@ static const char* const ROBOT_ART[ROBOT_H] = {
 static constexpr uint16_t ROBOT_K = 0x0000;   // black outline / grille / eyes
 
 template<typename T>
-void robotDrawEyes(T& dc, int ox, int oy, int ps, bool blink, uint16_t body) {
+void robotDrawEyes(T& dc, int ox, int oy, int ps, bool blink, uint16_t body, uint16_t eye) {
   auto cell = [&](int cx, int cy, uint16_t c) { dc.fillRect(ox + cx * ps, oy + cy * ps, ps, ps, c); };
   // clear the eye cells back to the body colour first (so blink can toggle)
   for (int y = 4; y <= 5; y++) { cell(3, y, body); cell(7, y, body); }
   if (blink) {                          // squint — only the lower cell
-    cell(3, 5, ROBOT_K); cell(7, 5, ROBOT_K);
+    cell(3, 5, eye); cell(7, 5, eye);
   } else {                              // wide open — both cells
-    cell(3, 4, ROBOT_K); cell(3, 5, ROBOT_K);
-    cell(7, 4, ROBOT_K); cell(7, 5, ROBOT_K);
+    cell(3, 4, eye); cell(3, 5, eye);
+    cell(7, 4, eye); cell(7, 5, eye);
   }
 }
 
+// `accent` is the rank colour, used for the eyes + antenna bulb so the robot
+// "levels up" as the agent ranks.
 template<typename T>
-void robotDrawHead(T& dc, int ox, int oy, int ps, bool blink, uint16_t body) {
+void robotDrawHead(T& dc, int ox, int oy, int ps, bool blink, uint16_t body, uint16_t accent) {
   auto cell = [&](int cx, int cy, uint16_t c) { dc.fillRect(ox + cx * ps, oy + cy * ps, ps, ps, c); };
   for (int y = 0; y < ROBOT_H; y++) {
     const char* row = ROBOT_ART[y];
@@ -54,5 +56,8 @@ void robotDrawHead(T& dc, int ox, int oy, int ps, bool blink, uint16_t body) {
       }
     }
   }
-  robotDrawEyes(dc, ox, oy, ps, blink, body);
+  // antenna bulb glows the rank colour (status-LED style)
+  cell(5, 0, accent);
+  cell(4, 1, accent); cell(5, 1, accent); cell(6, 1, accent);
+  robotDrawEyes(dc, ox, oy, ps, blink, body, accent);
 }

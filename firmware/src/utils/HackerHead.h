@@ -13,13 +13,30 @@
 
 struct RankInfo { const char* label; uint16_t color; int rank; };
 
-inline RankInfo hackerGetRank(int exp) {
-  if (exp >= 68000) return { "LEGEND", TFT_VIOLET,   4 };
-  if (exp >= 42000) return { "ELITE",  TFT_YELLOW,   3 };
-  if (exp >= 21000) return { "EXPERT", TFT_CYAN,     2 };
-  if (exp >= 8500)  return { "HACKER", TFT_GREEN,    1 };
-                    return { "NOVICE", TFT_DARKGREY, 0 };
+// Canonical rank table (label + colour) by rank index 0..4 — the single source
+// of truth for both the exp lookup and the mascot level "upgrade" accent.
+inline RankInfo hackerRankByIndex(int rank) {
+  static const RankInfo kRanks[5] = {
+    { "NOVICE", TFT_DARKGREY, 0 },
+    { "HACKER", TFT_GREEN,    1 },
+    { "EXPERT", TFT_CYAN,     2 },
+    { "ELITE",  TFT_YELLOW,   3 },
+    { "LEGEND", TFT_VIOLET,   4 },
+  };
+  return kRanks[rank < 0 ? 0 : rank > 4 ? 4 : rank];
 }
+
+inline RankInfo hackerGetRank(int exp) {
+  if (exp >= 68000) return hackerRankByIndex(4);
+  if (exp >= 42000) return hackerRankByIndex(3);
+  if (exp >= 21000) return hackerRankByIndex(2);
+  if (exp >= 8500)  return hackerRankByIndex(1);
+                    return hackerRankByIndex(0);
+}
+
+// Accent colour for a rank index — matches the rank label colours so any mascot
+// can show a level "upgrade" (e.g. glowing eyes) as the agent ranks up.
+inline uint16_t hackerRankColor(int rank) { return hackerRankByIndex(rank).color; }
 
 template<typename T>
 void hackerDrawHead(T& dc, int ox, int oy, int ps, bool blink, int rank) {

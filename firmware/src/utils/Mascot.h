@@ -40,14 +40,16 @@ private:
   static void _drawHacker(Sprite& dc, int ox, int oy, int ps, bool blink, int rank) {
     hackerDrawHead(dc, ox, oy, ps, blink, rank);
   }
-  // Single-colour mascots take their body colour from the active theme.
+  // Rank "upgrade" accent: black at NOVICE (base look), then the rank colour.
+  static uint16_t _accent(int rank) { return rank <= 0 ? (uint16_t)0x0000 : hackerRankColor(rank); }
+
+  // Single-colour mascots take their body colour from the active theme and a
+  // rank-coloured accent (eyes / antenna) so they level up with the agent.
   static void _drawCat(Sprite& dc, int ox, int oy, int ps, bool blink, int rank) {
-    (void)rank;
-    catDrawHead(dc, ox, oy, ps, blink, Config.getThemeColor());
+    catDrawHead(dc, ox, oy, ps, blink, Config.getThemeColor(), _accent(rank));
   }
   static void _drawRobot(Sprite& dc, int ox, int oy, int ps, bool blink, int rank) {
-    (void)rank;
-    robotDrawHead(dc, ox, oy, ps, blink, Config.getThemeColor());
+    robotDrawHead(dc, ox, oy, ps, blink, Config.getThemeColor(), _accent(rank));
   }
 
   // First row is the default (matches APP_CONFIG_MASCOT_DEFAULT = "hacker").
