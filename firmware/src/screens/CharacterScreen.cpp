@@ -202,10 +202,13 @@ void CharacterScreen::onUpdate()
     // ── debug preview: cycle mascot / level without touching saved state ──
     if (dir == INavigation::DIR_UP) {
       _dbgMascot = (int8_t)((_dbgMascot + 1) % Mascot::count());
-      _dirtyMask |= DIRTY_HEAD | DIRTY_TOP;
+      // The head size can change between mascots, which moves the bubble — full
+      // repaint so the bubble reflows and any old frame is cleared.
+      _firstRender = true;
+      _dirtyMask   = 0xFF;
     } else if (dir == INavigation::DIR_DOWN) {
       _dbgRank = (int8_t)((_dbgRank + 1) % 5);
-      _dirtyMask |= DIRTY_HEAD | DIRTY_TOP;
+      _dirtyMask |= DIRTY_HEAD | DIRTY_TOP;   // rank changes colours, not size
     }
   }
 
