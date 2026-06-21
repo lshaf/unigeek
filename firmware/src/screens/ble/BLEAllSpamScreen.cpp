@@ -7,10 +7,6 @@
 extern "C" int ble_hs_id_set_rnd(const uint8_t *addr);
 
 // Payload tables (same wire formats as the per-platform screens).
-static const uint16_t kAppleDevices[] = {
-  0x0E20, 0x1420, 0x2420, 0x0A20, 0x0220, 0x0F20, 0x1320, 0x0B20,
-  0x1120, 0x1020, 0x0620, 0x0920, 0x1720, 0x1220, 0x0055, 0x0030,
-};
 static const uint8_t kAppleActionFlags[] = {0xC0, 0xC0, 0xC0, 0xC0, 0x40, 0xC0};
 static const uint8_t kAppleActions[]     = {0x13, 0x27, 0x20, 0x09, 0x21, 0x2E};
 
@@ -106,7 +102,7 @@ void BLEAllSpamScreen::onRender()
   sp.setTextDatum(MC_DATUM);
   sp.setTextColor(TFT_WHITE, TFT_BLACK);
   static const char* kNames[] = {"iOS", "Android", "Samsung", "Windows"};
-  String label = String("[") + _spinner[_spinIdx] + "] All: " + kNames[_type & 3];
+  String label = String("[") + _spinner[_spinIdx] + "] All: " + kNames[_type];
   sp.drawString(label.c_str(), bodyW() / 2, labelH / 2);
   sp.pushSprite(bodyX(), cy - labelH / 2);
   sp.deleteSprite();
@@ -127,7 +123,7 @@ void BLEAllSpamScreen::_spam()
   advData.setFlags(0x06);
 
   // Random platform each burst (Bruce-style rotation across all families).
-  _type = (uint8_t)random(4);
+  _type = (uint8_t)random(4);  // 0..3, one payload family per burst
   switch (_type) {
     case 0: {  // Apple Continuity (NearbyAction modal)
       int i = random(_count(kAppleActions));
@@ -167,7 +163,6 @@ void BLEAllSpamScreen::_spam()
       break;
     }
   }
-  (void)kAppleDevices;  // reserved for future ProximityPair rotation
 
   _pAdv->setAdvertisementData(advData);
   _pAdv->start();

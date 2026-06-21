@@ -18,7 +18,7 @@ public:
 private:
   static constexpr const char* _spinner = "-\\|/";
   uint8_t  _spinIdx     = 0;
-  uint8_t  _type        = 0;     // cycles 0..3 across the payload families
+  uint8_t  _type        = 0;     // 0..3, random payload family of the last burst
   uint32_t _lastSpamMs  = 0;
   uint32_t _lastDrawMs  = 0;
   uint32_t _spamStartMs = 0;
