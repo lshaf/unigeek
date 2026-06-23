@@ -336,8 +336,12 @@ void CC1101Util::_sendRcSwitch(const Signal& sig) {
   } else if (sig.protocol.startsWith("Princeton")) {
     protoNum = 1;
   } else {
+    // RcSwitch protocol number stored as the preset string. Allow the full
+    // 1..23 table — capping at 12 silently dropped KeeLoq (proto 23) back to
+    // proto 1, so KeeLoq replay (incl. Replay +1) was transmitted without the
+    // KeeLoq preamble/sync and a real receiver would reject it.
     int n = sig.preset.toInt();
-    if (n >= 1 && n <= 12) protoNum = n;
+    if (n >= 1 && n <= 23) protoNum = n;
   }
 
   RCSwitchUtil sw;
