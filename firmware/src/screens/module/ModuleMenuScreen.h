@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ui/templates/ListScreen.h"
+#include "screens/module/ModuleRegistry.h"
 
 class ModuleMenuScreen : public ListScreen
 {
@@ -12,15 +13,9 @@ public:
   void onItemSelected(uint8_t index) override;
 
 private:
-  ListItem _items[9] = {
-    {"MFRC522 I2C"},
-    {"PN532 UART"},
-    {"PN532 I2C"},
-    {"GPS"},
-    {"IR Remote"},
-    {"Sub-GHz"},
-    {"M5 RF433"},
-    {"NRF24L01"},
-    {"Pin Setting"},
-  };
+  // Built fresh on each entry: only the modules not hidden in config are
+  // listed, with _ids mapping each visible row back to its ModuleRegistry id.
+  ListItem _items[ModuleRegistry::MOD_COUNT];
+  uint8_t  _ids[ModuleRegistry::MOD_COUNT];
+  uint8_t  _visibleCount = 0;
 };
