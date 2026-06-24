@@ -14,6 +14,7 @@
 #include "ui/actions/ShowStatusAction.h"
 #include "utils/Mascot.h"
 #include "screens/setting/PinSettingScreen.h"
+#include "screens/setting/HideModuleScreen.h"
 #include "screens/setting/DeviceStatusScreen.h"
 #include "screens/setting/AboutScreen.h"
 #ifdef DEVICE_HAS_TOUCH_NAV
@@ -325,6 +326,11 @@ void SettingScreen::onItemSelected(uint8_t index) {
 
     case SETT_PIN_SETTING: {
       Screen.push(new PinSettingScreen());
+      break;
+    }
+
+    case SETT_HIDE_MODULE: {
+      Screen.push(new HideModuleScreen());
       break;
     }
 

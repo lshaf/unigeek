@@ -12,7 +12,15 @@
 #include "screens/setting/PinSettingScreen.h"
 
 void ModuleMenuScreen::onInit() {
-  setItems(_items);
+  _visibleCount = 0;
+  for (uint8_t id = 0; id < ModuleRegistry::MOD_COUNT; id++) {
+    if (ModuleRegistry::isHidden(id)) continue;
+    _items[_visibleCount].label    = ModuleRegistry::LABELS[id];
+    _items[_visibleCount].sublabel = nullptr;
+    _ids[_visibleCount]            = id;
+    _visibleCount++;
+  }
+  setItems(_items, _visibleCount);
 }
 
 void ModuleMenuScreen::onBack() {
@@ -20,15 +28,16 @@ void ModuleMenuScreen::onBack() {
 }
 
 void ModuleMenuScreen::onItemSelected(uint8_t index) {
-  switch (index) {
-    case 0: Screen.push(new MFRC522Screen());     break;
-    case 1: Screen.push(new PN532UartScreen());   break;
-    case 2: Screen.push(new PN532I2cScreen());    break;
-    case 3: Screen.push(new GPSScreen());         break;
-    case 4: Screen.push(new IRScreen());          break;
-    case 5: Screen.push(new SubGHzScreen());      break;
-    case 6: Screen.push(new M5RF433Screen());     break;
-    case 7: Screen.push(new NRF24Screen());       break;
-    case 8: Screen.push(new PinSettingScreen());  break;
+  if (index >= _visibleCount) return;
+  switch (_ids[index]) {
+    case ModuleRegistry::MOD_MFRC522_I2C: Screen.push(new MFRC522Screen());    break;
+    case ModuleRegistry::MOD_PN532_UART:  Screen.push(new PN532UartScreen());  break;
+    case ModuleRegistry::MOD_PN532_I2C:   Screen.push(new PN532I2cScreen());   break;
+    case ModuleRegistry::MOD_GPS:         Screen.push(new GPSScreen());        break;
+    case ModuleRegistry::MOD_IR:          Screen.push(new IRScreen());         break;
+    case ModuleRegistry::MOD_SUBGHZ:      Screen.push(new SubGHzScreen());     break;
+    case ModuleRegistry::MOD_M5_RF433:    Screen.push(new M5RF433Screen());    break;
+    case ModuleRegistry::MOD_NRF24:       Screen.push(new NRF24Screen());      break;
+    case ModuleRegistry::MOD_PIN_SETTING: Screen.push(new PinSettingScreen()); break;
   }
 }

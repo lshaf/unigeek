@@ -56,6 +56,7 @@ private:
     SETT_SERIAL_FM,
     SETT_SCREEN_MIRROR,
     SETT_PIN_SETTING,
+    SETT_HIDE_MODULE,
     SETT_DEVICE_STATUS,
     SETT_ABOUT,
     SETT_COUNT
@@ -131,6 +132,7 @@ private:
     {"Serial File Manager", ""},
     {"Screen Mirror",    ""},
     {"Pin Setting"},
+    {"Hide Module"},
     {"Device Status"},
     {"About"},
   };
