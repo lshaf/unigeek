@@ -42,6 +42,7 @@ import run.xid.unigeek.ui.components.ProgressBar
 import run.xid.unigeek.ui.components.SectionLabel
 import run.xid.unigeek.ui.components.clickableNoRipple
 import run.xid.unigeek.ui.components.formatBytes
+import run.xid.unigeek.transport.TransportKind
 import run.xid.unigeek.ui.connection.ConnectionViewModel
 import run.xid.unigeek.ui.screens.FeatureUnavailable
 import run.xid.unigeek.ui.theme.Geek
@@ -55,8 +56,8 @@ fun FilesScreen(conn: ConnectionViewModel) {
     if (!conn.fmActive) {
         FeatureUnavailable(
             title = "File Manager",
-            reason = "Serial File Manager is turned off on the device.",
-            hint = "Enable it: Settings → Serial File Manager, then reconnect.",
+            reason = "The remote service is turned off on the device.",
+            hint = "Enable it: ${if (conn.kind == TransportKind.Ble) "Bluetooth → Remote Device" else "HID → USB Remote"}, then reconnect.",
         )
         return
     }

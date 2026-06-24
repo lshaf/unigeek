@@ -53,8 +53,6 @@ private:
     SETT_TOUCH_CAL,
 #endif
     SETT_WEB_PASSWORD,
-    SETT_SERIAL_FM,
-    SETT_SCREEN_MIRROR,
     SETT_PIN_SETTING,
     SETT_HIDE_MODULE,
     SETT_DEVICE_STATUS,
@@ -91,8 +89,6 @@ private:
   String _overlaySub;
 #endif
   String _webPwdSub;
-  String _serialFmSub;
-  String _screenMirrorSub;
 
   ListItem _items[SETT_COUNT] = {
     {"Name",             ""},
@@ -129,8 +125,6 @@ private:
     {"Touch Calibration"},
 #endif
     {"Web Password",     ""},
-    {"Serial File Manager", ""},
-    {"Screen Mirror",    ""},
     {"Pin Setting"},
     {"Hide Module"},
     {"Device Status"},

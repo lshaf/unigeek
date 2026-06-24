@@ -595,9 +595,11 @@ export default function FileManagerClient({ expectedVersion }) {
       const raw = err?.message || String(err);
       pushLog(`error: ${raw}`);
       // A timeout right after the port opened means nothing is answering FM
-      // commands — almost always the device setting is off.
+      // commands — almost always the device toggle is off.
       const msg = /timed out|timeout/i.test(raw)
-        ? 'No response from the device. Turn on “Serial File Manager” in the device Settings (Settings → Serial File Manager), then reconnect.'
+        ? (mode === 'bluetooth'
+            ? 'No response from the device. Turn on “Bluetooth → Remote Device” on the device, then reconnect.'
+            : 'No response from the device. Turn on “HID → USB Remote” on the device, then reconnect.')
         : raw;
       setErrorMsg(msg);
       setStatus(STATUS.ERROR);
@@ -997,11 +999,10 @@ export default function FileManagerClient({ expectedVersion }) {
 
       {supported && !isConnected && (
         <div className="fm-banner fm-banner-warn">
-          Connecting over <strong>USB</strong>? Make sure <strong>Settings &rarr; Serial File
-          Manager</strong> is <strong>On</strong> on the device &mdash; it&apos;s on by default,
-          but can be turned off to save memory, and USB won&apos;t respond while it&apos;s off
-          (toggling it needs a restart). For <strong>Bluetooth</strong>, open <strong>Bluetooth
-          &rarr; File Manager</strong> on the device so it starts advertising.
+          Connecting over <strong>USB</strong>? Turn on <strong>HID &rarr; USB Remote</strong> on the
+          device &mdash; it&apos;s off by default and won&apos;t respond until enabled. For
+          <strong> Bluetooth</strong>, turn on <strong>Bluetooth &rarr; Remote Device</strong> so it
+          starts advertising.
         </div>
       )}
 

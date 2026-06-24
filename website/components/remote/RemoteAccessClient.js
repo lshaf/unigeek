@@ -166,7 +166,7 @@ export default function RemoteAccessClient() {
   const seqRef    = useRef(10);
   const capsRef   = useRef({ touch: false, keyboard: false });
   const swapRef   = useRef(false);
-  const helloTimerRef = useRef(null); // detects a device with Screen Mirror off
+  const helloTimerRef = useRef(null); // detects a device with the remote service off
   const gotHelloRef   = useRef(false);
   const streamingRef = useRef(false);
 
@@ -280,7 +280,7 @@ export default function RemoteAccessClient() {
       if (!gotHelloRef.current) {
         setErrorMsg(kind === 'bluetooth'
           ? 'No response from the device. Turn on “Bluetooth → Remote Device” on the device, then reconnect.'
-          : 'No response from the device. Turn on “Screen Mirror” in the device Settings (Settings → Screen Mirror), then reconnect.');
+          : 'No response from the device. Turn on “HID → USB Remote” on the device, then reconnect.');
         disconnect();
       }
     }, 3000);

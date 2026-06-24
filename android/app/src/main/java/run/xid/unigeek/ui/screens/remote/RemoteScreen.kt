@@ -49,6 +49,7 @@ import androidx.compose.ui.unit.sp
 import run.xid.unigeek.feature.remote.BoardNav
 import run.xid.unigeek.feature.remote.BoardNavs
 import run.xid.unigeek.protocol.Proto
+import run.xid.unigeek.transport.TransportKind
 import run.xid.unigeek.ui.components.MonoLabel
 import run.xid.unigeek.ui.components.SectionLabel
 import run.xid.unigeek.ui.components.clickableNoRipple
@@ -65,8 +66,8 @@ fun RemoteScreen(conn: ConnectionViewModel) {
     if (!conn.mirrorActive) {
         FeatureUnavailable(
             title = "Remote",
-            reason = "Screen Mirror is turned off on the device.",
-            hint = "Enable it on the device: Settings → Screen Mirror, then reconnect.",
+            reason = "The remote service is turned off on the device.",
+            hint = "Enable it on the device: ${if (conn.kind == TransportKind.Ble) "Bluetooth → Remote Device" else "HID → USB Remote"}, then reconnect.",
         )
         return
     }

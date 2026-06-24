@@ -12,6 +12,11 @@ void UartFileManager::begin(bool fmEnabled, bool mirrorEnabled) {
   if (_started) return;
   _started = true;
   if (fmEnabled) {
+    // FM streams up to ~1 KB/frame, so grow the RX FIFO — setRxBufferSize is
+    // ignored once the driver is installed, so end + re-begin Serial first.
+    Serial.end();
+    Serial.setRxBufferSize(4096);
+    Serial.begin(115200);
     _fm = new FileManagerCore();
     _fm->setSender(_sendBytes);
   }
@@ -19,6 +24,13 @@ void UartFileManager::begin(bool fmEnabled, bool mirrorEnabled) {
     _scr = new ScreenStreamCore();
     _scr->setSender(_sendBytes);
   }
+}
+
+void UartFileManager::end() {
+  if (!_started) return;
+  if (_scr) { _scr->stop(); delete _scr; _scr = nullptr; } // stop mirror stream
+  if (_fm)  { _fm->reset();  delete _fm;  _fm  = nullptr; } // close dangling PUT/GET
+  _started = false;
 }
 
 void UartFileManager::poll() {

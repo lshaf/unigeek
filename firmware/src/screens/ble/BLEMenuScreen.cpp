@@ -10,8 +10,8 @@
 #include "screens/ble/chameleon/ChameleonMenuScreen.h"
 #include "screens/ble/ClaudeBuddyScreen.h"
 #include "core/ScreenMirror.h"
-#include "core/ConfigManager.h"
 #include "utils/uart/BleFileManager.h"
+#include "utils/uart/UartFileManager.h"
 
 void BLEMenuScreen::onInit()
 {
@@ -37,12 +37,12 @@ void BLEMenuScreen::onItemSelected(uint8_t index)
 // and Remote (screen-mirror) pages both connect to. Toggled here so it stays
 // discoverable and remoteable while you keep using the device; the main loop()
 // pumps BleFM. Screen mirroring needs the mirror master-gate on, so flip it with
-// the service and restore the configured boot state on the way out.
+// the service and leave it on if the USB Remote still uses it.
 void BLEMenuScreen::_toggleRemoteDevice()
 {
   if (BleFM.isActive()) {
     BleFM.end();
-    Mirror.setEnabled(Config.get(APP_CONFIG_SCREEN_MIRROR, APP_CONFIG_SCREEN_MIRROR_DEFAULT).toInt());
+    Mirror.setEnabled(UartFM.isActive());
   } else {
     Mirror.setEnabled(true);
     BleFM.begin();

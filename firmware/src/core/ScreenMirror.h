@@ -42,8 +42,9 @@ class ScreenMirror {
 public:
   using Sink = void (*)(void* ctx, uint8_t type, const uint8_t* data, uint32_t len);
 
-  // Master gate from APP_CONFIG_SCREEN_MIRROR. Off ⇒ start() refuses and every
-  // tap exits on this bool — no canvas, no work.
+  // Master gate, flipped on by the USB Remote / BLE Remote Device toggles while
+  // either is active. Off ⇒ start() refuses and every tap exits on this bool —
+  // no canvas, no work.
   void setEnabled(bool e) { _enabled = e; }
   bool enabled() const { return _enabled; }
   bool active()  const { return _sink != nullptr; } // started (canvas OR region mode)

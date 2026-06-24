@@ -179,7 +179,8 @@ class ConnectionViewModel(app: Application) : AndroidViewModel(app) {
 
         if (!fmActive && !mirrorActive) {
             disconnectInternal()
-            fail("Couldn't reach a UniGeek. Turn on Serial File Manager or Screen Mirror on the device, then reconnect. (A bare ESP32 can still be flashed from the Update screen.)")
+            val menu = if (kind == TransportKind.Ble) "Bluetooth → Remote Device" else "HID → USB Remote"
+            fail("Couldn't reach a UniGeek. Turn on $menu on the device, then reconnect. (A bare ESP32 can still be flashed from the Update screen.)")
             return
         }
         status = ConnStatus.Connected
