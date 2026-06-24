@@ -1,0 +1,19 @@
+# Unigotchi pwngrid spam names — one per line.
+#
+# Each non-comment line below is broadcast as the "name" field of a pwnagotchi
+# advertisement (pwngrid) beacon while Unigotchi runs in "Pwngrid spam" mode.
+# Other pwnagotchis / palnagotchis in range see these as nearby "friends".
+#
+# Lines starting with '#' and blank lines are ignored. Keep names short
+# (<= ~50 chars). Edit freely. If this file is missing, Unigotchi recreates it
+# with these defaults on first run.
+unigeek was here
+pwned by unigeek
+Free WiFi (not really)
+handshake hunter
+(o_o) hello there
+STOP DEAUTH SKIDZ!
+just here to make friends
+your beacons are mine
+nothing to see here
+beep boop pwnage

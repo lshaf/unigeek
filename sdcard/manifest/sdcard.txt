@@ -15,6 +15,7 @@ unigeek/wifi/beacon_dicts/aphorisms.txt
 unigeek/wifi/beacon_dicts/error.txt
 unigeek/wifi/beacon_dicts/help.txt
 unigeek/wifi/beacon_dicts/judging.txt
+unigeek/wifi/pwngrid.txt
 unigeek/utility/cctv/targets.txt
 unigeek/web/portals/google/index.htm
 unigeek/web/portals/google/style.css

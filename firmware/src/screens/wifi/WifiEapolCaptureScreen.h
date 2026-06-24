@@ -114,6 +114,7 @@ private:
     ACT_ATTACK_DWELL,
     ACT_MAX_DEAUTH,
     ACT_START,
+    ACT_UNIGOTCHI,
   };
 
   // Sentinel for _chanDwellUntil meaning "do not fire any more deauths"
@@ -136,7 +137,7 @@ private:
   Phase         _phase            = PHASE_MENU;
 
   // ── Menu items ────────────────────────────────────────────────────────────
-  static constexpr int MAX_MENU = 5;
+  static constexpr int MAX_MENU = 6;
   ListItem      _menuItems[MAX_MENU] = {};
   uint8_t       _menuCount       = 0;
   uint8_t       _menuMap[MAX_MENU] = {};   // each entry → action id (see _showMenu)

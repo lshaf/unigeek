@@ -3,6 +3,7 @@
 #include "core/ScreenManager.h"
 #include "core/AchievementManager.h"
 #include "screens/wifi/WifiMenuScreen.h"
+#include "screens/wifi/WifiUnigotchiScreen.h"
 #include "ui/actions/InputNumberAction.h"
 #include "ui/actions/ShowStatusAction.h"
 #include "utils/StorageUtil.h"
@@ -138,6 +139,7 @@ void WifiEapolCaptureScreen::_showMenu() {
   }
   add("Max Deauth", _deauthSub.c_str(), ACT_MAX_DEAUTH);
   add("Start",      nullptr,            ACT_START);
+  add("Unigotchi",  "auto pwn mode",    ACT_UNIGOTCHI);
 
   setItems(_menuItems, _menuCount);
 }
@@ -178,6 +180,9 @@ void WifiEapolCaptureScreen::onItemSelected(uint8_t index) {
     case ACT_MAX_DEAUTH:
       _maxDeauthAttempts = InputNumberAction::popup("Max Deauth Attempts", 5, 30, _maxDeauthAttempts);
       _showMenu();
+      break;
+    case ACT_UNIGOTCHI:
+      Screen.push(new WifiUnigotchiScreen());
       break;
     case ACT_START: {
       // Target mode requires a picked AP — _target.channel only goes non-zero

@@ -40,6 +40,7 @@ export const CATALOG = [
   { slug: "wifi-qrcode",          title: "WiFi QR Code",         category: "wifi",     summary: "Generate a QR code for the connected WiFi network to share credentials with other devices",                  hasDetail: false, stable: true },
   { slug: "world-clock",          title: "World Clock",         category: "wifi",     summary: "Display current time synced via NTP across multiple time zones",                                       hasDetail: false, stable: true },
   { slug: "wikipedia",            title: "Wikipedia",           category: "wifi",     summary: "Browse Wikipedia over WiFi — paged search, Random Article, On This Day, cached articles, and cross-language favorites; long-press for Open / Favorite / Share QR; 21 Latin-script editions transliterated to ASCII for the TFT", hasDetail: true,  stable: true },
+  { slug: "unigotchi",            title: "Unigotchi",           category: "wifi",     summary: "Launched from the EAPOL Capture menu — pwnagotchi-style auto handshake hunter with a mood face: passive sniff, active targeted deauth/disassoc capture (client enumeration + listen-for-reconnect), PMKID, and pwngrid spam from an SD name list; saves PCAPs to the EAPOL folder", hasDetail: true,  stable: true },
 
   // BLE
   { slug: "ble-detector",         title: "BLE Detector",        category: "ble",      summary: "Passive BLE scanner that detects Flipper Zero, AirTags, skimmers, BitChat users, and BLE spam",      hasDetail: true,  stable: true },
