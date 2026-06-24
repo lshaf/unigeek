@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import Flasher from './Flasher';
 import BoardInfo from './BoardInfo';
 import { toCaps, shortChip } from '@/content/board-caps';
-import { FIRMWARE_VERSION, FIRMWARE_PROXY } from '@/content/meta';
+import { FIRMWARE_VERSION, FIRMWARE_PROXY, REPO_URL } from '@/content/meta';
 
 const METHODS = [
   {
@@ -193,6 +193,34 @@ export default function InstallFlow({ boards, versions = [], latestVersion = FIR
         binUrl={binUrl}
         isOldVersion={isOldVersion}
       />
+
+      {/* ALTERNATIVE — flash from an Android phone (no desktop / WebSerial needed) */}
+      <div className="step-head" style={{ marginTop: 56 }}>
+        <div className="step-num">Alt</div>
+        <div className="step-title">No desktop? Flash from Android</div>
+        <div className="step-sub">USB-OTG · companion app</div>
+      </div>
+      <div style={{ border: '1px solid var(--line)', background: 'var(--bg-elev)', padding: 24 }}>
+        <div className="method-label">Android companion</div>
+        <div className="method-name" style={{ marginTop: 8 }}>Install firmware from your phone</div>
+        <p className="method-desc" style={{ marginTop: 8, maxWidth: 680 }}>
+          The UniGeek Android app flashes any board over a USB-OTG cable — handy when you don&rsquo;t have a
+          desktop with Chrome or Edge. The same app also gives you Remote control and the File Manager over
+          USB or Bluetooth.
+        </p>
+        <ol style={{ margin: '16px 0 0', paddingLeft: 18, fontSize: 13, lineHeight: 1.8, color: 'var(--ink-dim)' }}>
+          <li>Download and sideload the APK (allow &ldquo;install unknown apps&rdquo; when prompted).</li>
+          <li>Connect the board to your phone with a USB-C OTG cable.</li>
+          <li>Open the app, choose <strong style={{ color: 'var(--ink)' }}>Flash firmware</strong>, pick your board, and flash.</li>
+        </ol>
+        <a
+          className="btn btn-primary"
+          style={{ marginTop: 20 }}
+          href={`${REPO_URL}/releases/latest/download/unigeek-android.apk`}
+        >
+          Download Android app (.apk)
+        </a>
+      </div>
     </>
   );
 }
