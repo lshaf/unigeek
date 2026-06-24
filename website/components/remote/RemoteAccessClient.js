@@ -13,6 +13,13 @@ const USB_FILTERS = [
   { usbVendorId: 0x0403, usbProductId: 0x6001 }, // FT232R
 ];
 
+// Nordic UART Service UUIDs — same as the File Manager / firmware BleFileManager.
+// The BLE "Remote Device" link carries both ctx 'F' (files) and ctx 'S' (mirror).
+const NUS_SVC_UUID = '6e400001-b5a3-f393-e0a9-e50e24dcca9e';
+const NUS_RX_UUID  = '6e400002-b5a3-f393-e0a9-e50e24dcca9e'; // host -> device
+const NUS_TX_UUID  = '6e400003-b5a3-f393-e0a9-e50e24dcca9e'; // device -> host (notify)
+const BLE_WRITE_MAX = 180; // ATT_MTU - 3, conservative across browsers
+
 const SOF1 = 0xa5;
 const SOF2 = 0x5a;
 
@@ -113,8 +120,36 @@ function makeFrameParser(onFrame) {
 
 const rd16 = (p, o) => p[o] | (p[o + 1] << 8);
 
+// Web Bluetooth's gatt.connect() is flaky on Chrome — it rejects with
+// "Connection attempt failed" / NetworkError on the first try surprisingly
+// often (stale link, busy radio, prior session not yet released). A short
+// backoff + retry almost always succeeds on the 2nd or 3rd attempt.
+async function gattConnect(device, onLog, tries = 4) {
+  let lastErr;
+  for (let i = 0; i < tries; i++) {
+    try {
+      return await device.gatt.connect();
+    } catch (err) {
+      lastErr = err;
+      if (i < tries - 1) {
+        onLog?.(`gatt connect failed (${i + 1}/${tries}), retrying…`);
+        await new Promise((r) => setTimeout(r, 250 * (i + 1)));
+      }
+    }
+  }
+  throw lastErr;
+}
+
+// Status-dot palette — mirrors FileManagerClient's STATUS_COLOR.
+const STATUS_COLOR = {
+  idle:       'var(--ink-muted)',
+  connecting: 'var(--amber)',
+  connected:  'var(--accent)',
+  error:      'var(--danger)',
+};
+
 export default function RemoteAccessClient() {
-  const [supported, setSupported] = useState(true);
+  const [mounted, setMounted] = useState(false);
   const [status, setStatus] = useState('idle'); // idle | connecting | connected | error
   const [streaming, setStreaming] = useState(false);
   const [caps, setCaps] = useState({ touch: false, keyboard: false, w: 0, h: 0 });
@@ -124,9 +159,10 @@ export default function RemoteAccessClient() {
 
   const canvasRef = useRef(null);
   const ctx2dRef  = useRef(null);
-  const portRef   = useRef(null);
-  const readerRef = useRef(null);
-  const writerRef = useRef(null);
+  const writeBytesRef = useRef(null); // async (Uint8Array) => Promise — serial or BLE
+  const closeRef      = useRef(null); // async () => void — tear down the transport
+  const kindRef       = useRef(null); // 'serial' | 'bluetooth'
+  const sessionRef    = useRef(0);    // bumped per connect; ignores stale read-loop / gatt-drop
   const seqRef    = useRef(10);
   const capsRef   = useRef({ touch: false, keyboard: false });
   const swapRef   = useRef(false);
@@ -141,9 +177,10 @@ export default function RemoteAccessClient() {
   useEffect(() => { swapRef.current = swap; }, [swap]);
   useEffect(() => { streamingRef.current = streaming; }, [streaming]);
 
-  useEffect(() => {
-    setSupported(typeof navigator !== 'undefined' && 'serial' in navigator);
-  }, []);
+  useEffect(() => { setMounted(true); }, []);
+  const hasSerial    = mounted && typeof navigator !== 'undefined' && 'serial'    in navigator;
+  const hasBluetooth = mounted && typeof navigator !== 'undefined' && 'bluetooth' in navigator;
+  const supported    = !mounted || hasSerial || hasBluetooth;
 
   // ── Incoming frames → canvas ────────────────────────────────────────────────
   const onFrame = useCallback((ctx, type, seq, p) => {
@@ -198,9 +235,9 @@ export default function RemoteAccessClient() {
   // ── Outbound control ──────────────────────────────────────────────────────────
   const nextSeq = () => (seqRef.current = (seqRef.current + 1) & 0xff);
   const writeFrame = useCallback((type, payload) => {
-    const writer = writerRef.current;
-    if (!writer) return;
-    writer.write(buildFrame(CTX_SCR, type, nextSeq(), payload)).catch(() => {});
+    const writeBytes = writeBytesRef.current;
+    if (!writeBytes) return;
+    Promise.resolve(writeBytes(buildFrame(CTX_SCR, type, nextSeq(), payload))).catch(() => {});
   }, []);
   const sendDir = useCallback((dir, ev = 0) => writeFrame(C_INPUT, new Uint8Array([dir, ev])), [writeFrame]);
   const sendKey = useCallback((code) => writeFrame(C_KEY, new Uint8Array([code & 0xff])), [writeFrame]);
@@ -210,13 +247,12 @@ export default function RemoteAccessClient() {
   // ── Connection lifecycle ──────────────────────────────────────────────────────
   const disconnect = useCallback(async () => {
     if (helloTimerRef.current) { clearTimeout(helloTimerRef.current); helloTimerRef.current = null; }
+    sessionRef.current++; // invalidate any in-flight read loop / gatt-disconnect handler
     streamingRef.current = false;
     setStreaming(false);
-    try { if (writerRef.current) writeFrame(C_STOP, null); } catch (_) {}
-    try { await readerRef.current?.cancel(); } catch (_) {}
-    try { await writerRef.current?.close(); } catch (_) {}
-    try { await portRef.current?.close(); } catch (_) {}
-    readerRef.current = null; writerRef.current = null; portRef.current = null;
+    try { if (writeBytesRef.current) writeFrame(C_STOP, null); } catch (_) {}
+    try { if (closeRef.current) await closeRef.current(); } catch (_) {}
+    writeBytesRef.current = null; closeRef.current = null; kindRef.current = null;
     // Clear the mirrored screen so a stale frame doesn't linger after unplug.
     const ctx2d = ctx2dRef.current;
     if (ctx2d) ctx2d.clearRect(0, 0, ctx2d.canvas.width, ctx2d.canvas.height);
@@ -225,34 +261,46 @@ export default function RemoteAccessClient() {
     setStatus('idle');
   }, [writeFrame]);
 
-  const connect = useCallback(async () => {
-    setErrorMsg('');
-    if (!('serial' in navigator)) {
-      setSupported(false);
-      return;
-    }
-    setStatus('connecting');
-    let port;
-    try {
-      port = await navigator.serial.requestPort({ filters: USB_FILTERS });
-      await port.open({ baudRate: 115200, bufferSize: 64 * 1024 });
-    } catch (err) {
-      setStatus('idle');
-      const raw = err?.message || String(err);
-      if (!/No port selected|cancel/i.test(raw)) {
-        setErrorMsg(`${raw} — close any other program using this port (pio device monitor, another tab) and retry.`);
-      }
-      return;
-    }
-    portRef.current = port;
-    readerRef.current = port.readable.getReader();
-    writerRef.current = port.writable.getWriter();
-    const feed = makeFrameParser(onFrame);
+  // Shared post-open setup: start mirroring and watch for a silent device.
+  const _beginSession = useCallback((kind) => {
     setStatus('connected');
-    log('connected');
+    log(`connected · ${kind === 'bluetooth' ? 'BLE NUS' : 'USB 115200'}`);
+    // Begin mirroring immediately — the device replies with HELLO then frames.
+    gotHelloRef.current = false;
+    writeFrame(C_START, null);
+    streamingRef.current = true;
+    setStreaming(true);
+    log('stream started');
+    canvasRef.current?.focus();
 
+    // No HELLO ⇒ nothing is consuming the stream. Over USB that means Screen
+    // Mirror is off; over BLE it means the Remote Device service isn't on.
+    helloTimerRef.current = setTimeout(() => {
+      helloTimerRef.current = null;
+      if (!gotHelloRef.current) {
+        setErrorMsg(kind === 'bluetooth'
+          ? 'No response from the device. Turn on “Bluetooth → Remote Device” on the device, then reconnect.'
+          : 'No response from the device. Turn on “Screen Mirror” in the device Settings (Settings → Screen Mirror), then reconnect.');
+        disconnect();
+      }
+    }, 3000);
+  }, [log, writeFrame, disconnect]);
+
+  const _connectSerial = useCallback(async () => {
+    const port = await navigator.serial.requestPort({ filters: USB_FILTERS });
+    await port.open({ baudRate: 115200, bufferSize: 64 * 1024 });
+    const reader = port.readable.getReader();
+    const writer = port.writable.getWriter();
+    const feed   = makeFrameParser(onFrame);
+    const session = ++sessionRef.current;
+    writeBytesRef.current = (data) => writer.write(data);
+    closeRef.current = async () => {
+      try { await reader.cancel(); } catch (_) {}
+      try { await writer.close(); } catch (_) {}
+      try { await port.close();   } catch (_) {}
+    };
+    kindRef.current = 'serial';
     (async () => {
-      const reader = readerRef.current;
       try {
         // eslint-disable-next-line no-constant-condition
         while (true) {
@@ -263,30 +311,89 @@ export default function RemoteAccessClient() {
       } catch (_) {
         // reader cancelled on disconnect
       }
-      if (portRef.current === port) disconnect();
+      if (sessionRef.current === session) disconnect();
     })();
+    _beginSession('serial');
+  }, [onFrame, disconnect, _beginSession]);
 
-    // Begin mirroring immediately — the device replies with HELLO then frames.
-    gotHelloRef.current = false;
-    writeFrame(C_START, null);
-    streamingRef.current = true;
-    setStreaming(true);
-    log('stream started');
-    canvasRef.current?.focus();
+  const _connectBluetooth = useCallback(async () => {
+    const device = await navigator.bluetooth.requestDevice({
+      filters:          [{ services: [NUS_SVC_UUID] }],
+      optionalServices: [NUS_SVC_UUID],
+    });
+    log(`bluetooth device: ${device.name || '(unnamed)'}`);
+    const server  = await gattConnect(device, log);
+    const service = await server.getPrimaryService(NUS_SVC_UUID);
+    const rxChar  = await service.getCharacteristic(NUS_RX_UUID); // host -> device
+    const txChar  = await service.getCharacteristic(NUS_TX_UUID); // device -> host
+    const feed    = makeFrameParser(onFrame);
+    const session = ++sessionRef.current;
 
-    // No HELLO ⇒ the device has Screen Mirror (and likely Serial File Manager)
-    // turned off, so nothing is consuming the stream. Tell the user and bail.
-    helloTimerRef.current = setTimeout(() => {
-      helloTimerRef.current = null;
-      if (!gotHelloRef.current) {
-        setErrorMsg('No response from the device. Turn on “Screen Mirror” in the device Settings (Settings → Screen Mirror), then reconnect.');
-        disconnect();
+    const onValueChanged = (ev) => {
+      const dv = ev.target.value;
+      feed(new Uint8Array(dv.buffer, dv.byteOffset, dv.byteLength));
+    };
+    txChar.addEventListener('characteristicvaluechanged', onValueChanged);
+    await txChar.startNotifications();
+
+    const onDisconnected = () => {
+      log('bluetooth: gatt disconnected');
+      if (sessionRef.current === session) disconnect();
+    };
+    device.addEventListener('gattserverdisconnected', onDisconnected);
+
+    // Control frames are tiny, but chunk anyway to stay under ATT_MTU-3.
+    const useWithoutResponse = typeof rxChar.writeValueWithoutResponse === 'function';
+    writeBytesRef.current = async (data) => {
+      for (let off = 0; off < data.length; off += BLE_WRITE_MAX) {
+        const slice = data.subarray(off, Math.min(off + BLE_WRITE_MAX, data.length));
+        if (useWithoutResponse) await rxChar.writeValueWithoutResponse(slice);
+        else                    await rxChar.writeValue(slice);
       }
-    }, 3000);
-  }, [onFrame, log, disconnect, writeFrame]);
+    };
+    closeRef.current = async () => {
+      device.removeEventListener('gattserverdisconnected', onDisconnected);
+      txChar.removeEventListener('characteristicvaluechanged', onValueChanged);
+      try { await txChar.stopNotifications(); } catch (_) {}
+      try { device.gatt.disconnect(); } catch (_) {}
+    };
+    kindRef.current = 'bluetooth';
+    _beginSession('bluetooth');
+  }, [onFrame, log, disconnect, _beginSession]);
+
+  const connect = useCallback(async (mode) => {
+    setErrorMsg('');
+    const ok = mode === 'bluetooth'
+      ? (typeof navigator !== 'undefined' && 'bluetooth' in navigator)
+      : (typeof navigator !== 'undefined' && 'serial'    in navigator);
+    if (!ok) {
+      setErrorMsg(mode === 'bluetooth'
+        ? 'Web Bluetooth is not supported in this browser. Use Chrome / Edge on desktop or Chrome on Android.'
+        : 'Web Serial is not supported in this browser. Use Chrome or Edge on desktop.');
+      return;
+    }
+    setStatus('connecting');
+    try {
+      if (mode === 'bluetooth') await _connectBluetooth();
+      else                      await _connectSerial();
+    } catch (err) {
+      setStatus('idle');
+      const raw = err?.message || String(err);
+      if (!/No port selected|cancel|chooser|User cancelled/i.test(raw)) {
+        setErrorMsg(mode === 'bluetooth'
+          ? `${raw} — make sure “Bluetooth → Remote Device” is ON on the device and no other tab or app is already connected to it, then try again.`
+          : `${raw} — close any other program using this port (pio device monitor, another tab) and retry.`);
+      }
+      try { if (closeRef.current) await closeRef.current(); } catch (_) {}
+      writeBytesRef.current = null; closeRef.current = null; kindRef.current = null;
+    }
+  }, [_connectSerial, _connectBluetooth]);
+
+  const onConnectSerial    = useCallback(() => connect('serial'),    [connect]);
+  const onConnectBluetooth = useCallback(() => connect('bluetooth'), [connect]);
 
   const startStream = useCallback(() => {
-    if (!writerRef.current) return;
+    if (!writeBytesRef.current) return;
     writeFrame(C_START, null);
     streamingRef.current = true;
     setStreaming(true);
@@ -310,7 +417,7 @@ export default function RemoteAccessClient() {
     let enterTimer = null, enterHeld = false;
 
     const onKeyDown = (e) => {
-      if (!streamingRef.current || !writerRef.current) return;
+      if (!streamingRef.current || !writeBytesRef.current) return;
       const k = e.key;
       const hasKeyboard = capsRef.current.keyboard;
       if (k === 'ArrowUp')    { e.preventDefault(); return sendDir(DIR_UP); }
@@ -369,7 +476,8 @@ export default function RemoteAccessClient() {
   if (!supported) {
     return (
       <div className="fm-banner fm-banner-err">
-        Web Serial isn&rsquo;t available in this browser. Use Chrome or Edge on desktop.
+        Neither Web Serial nor Web Bluetooth is available in this browser. Use Chrome / Edge on
+        desktop, or Chrome on Android (Bluetooth only).
       </div>
     );
   }
@@ -378,31 +486,54 @@ export default function RemoteAccessClient() {
 
   return (
     <div className="ra">
-      <div className="ra-toolbar">
-        {!connected ? (
-          <button className="fm-btn fm-btn-primary" onClick={connect} disabled={status === 'connecting'}>
-            {status === 'connecting' ? 'Connecting…' : 'Connect device'}
-          </button>
-        ) : (
-          <>
-            {!streaming ? (
-              <button className="fm-btn fm-btn-primary" onClick={startStream}>Start stream</button>
-            ) : (
-              <button className="fm-btn" onClick={stopStream}>Stop stream</button>
-            )}
-            <button className="fm-btn fm-btn-ghost" onClick={disconnect}>Disconnect</button>
-            <label className="ra-swap">
-              <input type="checkbox" checked={swap} onChange={(e) => setSwap(e.target.checked)} />
-              Swap bytes
-            </label>
-          </>
-        )}
-        {connected && (
-          <span className="ra-caps">
-            {caps.w > 0 ? `${caps.w}×${caps.h}` : '—'}
-            {caps.touch ? ' · touch' : ''}{caps.keyboard ? ' · keyboard' : ''}
-          </span>
-        )}
+      <div className="fm-toolbar">
+        <div className="fm-toolbar-left">
+          {!connected ? (
+            <>
+              <button
+                type="button"
+                className="fm-btn fm-btn-primary"
+                onClick={onConnectSerial}
+                disabled={!hasSerial || status === 'connecting'}
+                title={hasSerial ? 'Connect over USB serial' : 'Web Serial not supported in this browser'}
+              >
+                {status === 'connecting' ? 'Connecting…' : 'Connect USB'}
+              </button>
+              <button
+                type="button"
+                className="fm-btn"
+                onClick={onConnectBluetooth}
+                disabled={!hasBluetooth || status === 'connecting'}
+                title={hasBluetooth ? 'Connect over Bluetooth (NUS)' : 'Web Bluetooth not supported in this browser'}
+              >
+                Connect Bluetooth
+              </button>
+            </>
+          ) : (
+            <>
+              {!streaming ? (
+                <button type="button" className="fm-btn fm-btn-primary" onClick={startStream}>Start stream</button>
+              ) : (
+                <button type="button" className="fm-btn" onClick={stopStream}>Stop stream</button>
+              )}
+              <button type="button" className="fm-btn fm-btn-ghost" onClick={disconnect}>Disconnect</button>
+              <label className="ra-swap">
+                <input type="checkbox" checked={swap} onChange={(e) => setSwap(e.target.checked)} />
+                Swap bytes
+              </label>
+            </>
+          )}
+        </div>
+        <div className="fm-toolbar-right">
+          {connected && (
+            <span className="ra-caps">
+              {caps.w > 0 ? `${caps.w}×${caps.h}` : '—'}
+              {caps.touch ? ' · touch' : ''}{caps.keyboard ? ' · keyboard' : ''}
+            </span>
+          )}
+          <span className="fm-status-dot" style={{ background: STATUS_COLOR[status] || 'var(--ink-muted)' }} />
+          <span className="fm-status-text">{status}</span>
+        </div>
       </div>
 
       {errorMsg && <div className="fm-banner fm-banner-err">{errorMsg}</div>}
@@ -418,7 +549,7 @@ export default function RemoteAccessClient() {
         />
         {!streaming && (
           <div className="ra-stage-hint">
-            {connected ? 'Click “Start stream” to mirror the screen.' : 'Connect a UniGeek over USB to begin.'}
+            {connected ? 'Click “Start stream” to mirror the screen.' : 'Connect a UniGeek over USB or Bluetooth to begin.'}
           </div>
         )}
       </div>
