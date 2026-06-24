@@ -15,6 +15,7 @@ extern "C" {
 #include "core/RtcManager.h"
 #include "core/RandomSeed.h"
 #include "utils/uart/UartFileManager.h"
+#include "utils/uart/BleFileManager.h"
 
 #include "screens/CharacterScreen.h"
 #ifdef DEVICE_HAS_TOUCH_NAV
@@ -250,6 +251,7 @@ void setup() {
 void loop() {
   Uni.update();
   UartFM.update();
+  BleFM.update();   // background BLE Remote Device (no-op while toggled off)
 
   // ── Power saving ──────────────────────────────────────────────────────────
   IScreen* _cur       = Screen.current();

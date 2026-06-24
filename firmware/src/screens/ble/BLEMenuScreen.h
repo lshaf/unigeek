@@ -11,6 +11,8 @@ public:
   void onBack() override;
 
 private:
+  void _toggleRemoteDevice();
+
   ListItem _items[8] = {
     {"BLE Analyzer"},
     {"BLE Beacon Spam"},
@@ -19,6 +21,6 @@ private:
     {"WhisperPair"},
     {"Chameleon Ultra"},
     {"Claude Buddy"},
-    {"File Manager"},
+    {"Remote Device"},
   };
 };

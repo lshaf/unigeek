@@ -9,10 +9,13 @@
 #include "screens/ble/WhisperPairScreen.h"
 #include "screens/ble/chameleon/ChameleonMenuScreen.h"
 #include "screens/ble/ClaudeBuddyScreen.h"
-#include "screens/ble/BleFileManagerScreen.h"
+#include "core/ScreenMirror.h"
+#include "core/ConfigManager.h"
+#include "utils/uart/BleFileManager.h"
 
 void BLEMenuScreen::onInit()
 {
+  _items[7].sublabel = BleFM.isActive() ? "ON" : "OFF";
   setItems(_items);
 }
 
@@ -26,8 +29,26 @@ void BLEMenuScreen::onItemSelected(uint8_t index)
     case 4: Screen.push(new WhisperPairScreen());       break;
     case 5: Screen.push(new ChameleonMenuScreen());     break;
     case 6: Screen.push(new ClaudeBuddyScreen());      break;
-    case 7: Screen.push(new BleFileManagerScreen());   break;
+    case 7: _toggleRemoteDevice();                     break;
   }
+}
+
+// Background BLE "Remote Device" service — one NUS link the website File Manager
+// and Remote (screen-mirror) pages both connect to. Toggled here so it stays
+// discoverable and remoteable while you keep using the device; the main loop()
+// pumps BleFM. Screen mirroring needs the mirror master-gate on, so flip it with
+// the service and restore the configured boot state on the way out.
+void BLEMenuScreen::_toggleRemoteDevice()
+{
+  if (BleFM.isActive()) {
+    BleFM.end();
+    Mirror.setEnabled(Config.get(APP_CONFIG_SCREEN_MIRROR, APP_CONFIG_SCREEN_MIRROR_DEFAULT).toInt());
+  } else {
+    Mirror.setEnabled(true);
+    BleFM.begin();
+  }
+  _items[7].sublabel = BleFM.isActive() ? "ON" : "OFF";
+  render();
 }
 
 void BLEMenuScreen::onBack()

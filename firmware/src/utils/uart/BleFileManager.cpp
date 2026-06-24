@@ -142,13 +142,20 @@ void BleFileManager::begin(const char* deviceName) {
   _connected = false;
   _inited = true;
   _active = true;
+  _wasConnected = false;
+  // Both codecs share the one BLE sender and parse the same byte stream in
+  // parallel, each acting only on its own context (the other's frames are
+  // dropped: FM frames exceed the screen codec's tiny RX cap, and the FM codec
+  // ignores ctx 'S').
   _core.setSender(_sendBytes);
+  _scr.setSender(_sendBytes);
   // Keep each GET frame within a single ATT notification (MTU-3 = 244 max
   // after MTU negotiation; aim for 220 to leave overhead for our 13-byte
   // frame header). One notify per frame avoids burst-exhausting the NimBLE
   // mbuf pool (typically 12 buffers).
   _core.setGetChunkSize(220);
   _core.reset();
+  _scr.resetParser();
 }
 
 void BleFileManager::end() {
@@ -161,7 +168,10 @@ void BleFileManager::end() {
   _rxHead = _rxTail = 0;
   _inited = false;
   _active = false;
+  _wasConnected = false;
   _core.reset(); // close any half-finished PUT
+  _scr.stop();   // tear down any active screen-mirror stream
+  _scr.resetParser();
 }
 
 bool BleFileManager::isAdvertising() const { return _active && !_connected; }
@@ -169,10 +179,19 @@ bool BleFileManager::isConnected()   const { return _active &&  _connected; }
 
 void BleFileManager::update() {
   if (!_active) return;
+  // Host dropped the link: close any half-finished transfer and stop streaming
+  // so a stale GET/PUT or live mirror doesn't dangle until the next connect.
+  if (_wasConnected && !_connected) {
+    _core.reset();
+    _scr.stop();
+    _scr.resetParser();
+  }
+  _wasConnected = _connected;
   while (_rxHead != _rxTail) {
     uint8_t b = _rxBuf[_rxTail];
     _rxTail = (uint16_t)((_rxTail + 1) % RX_RING);
-    _core.onByte(b);
+    _core.onByte(b);  // ctx 'F'
+    _scr.onByte(b);   // ctx 'S' (each codec ignores the other's frames)
   }
   // Only invite the core to emit another GET chunk if the TX queue has
   // room. Without this gate, pump() runs at main-loop rate and pumps a new
@@ -180,5 +199,6 @@ void BleFileManager::update() {
   // notifications start dropping.
   if (_txPending < TX_MAX_PENDING) {
     _core.pump();
+    _scr.pump(); // flush mirror dirty region (no-op in region mode / when idle)
   }
 }
