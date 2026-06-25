@@ -43,7 +43,8 @@ protected:
   bool _onRenderExtra()             override;
   bool _onBackExtra()               override;
   bool _inhibitExtra() const        override {
-    return _state == STATE_SCANNING || _state == STATE_WATERFALL;
+    return _state == STATE_SCANNING || _state == STATE_WATERFALL ||
+           _state == STATE_RECORD_RAW;
   }
 
 private:
@@ -52,14 +53,15 @@ private:
   int8_t _gdo0Pin = -1;
   bool   _rfDetectFired = false;  // achievement guard, resets each scan session
 
-  // Menu (7 items: Frequency | Detect Freq | Waterfall | Receive | Send |
-  //                Jammer | Mfcodes)
-  static constexpr uint8_t kMenuCount = 7;
+  // Menu (8 items: Frequency | Detect Freq | Waterfall | Receive | Record RAW |
+  //                Send | Jammer | Mfcodes)
+  static constexpr uint8_t kMenuCount = 8;
   ListItem _menuItems[kMenuCount] = {
     {"Frequency"},
     {"Detect Freq"},
     {"Waterfall"},
     {"Receive"},
+    {"Record RAW"},
     {"Send"},
     {"Jammer"},
     {"Mfcodes"},
@@ -70,6 +72,27 @@ private:
   void _selectFrequency();
   void _startScan();
   void _reloadMfcodes();
+
+  // ── Record RAW ──
+  // Dedicated state (not the capture list). While waiting, a sine wave plays;
+  // once a signal arrives, recording runs continuously and RSSI bars march
+  // across until the user presses OK to stop, then an options menu opens. The
+  // single recording is parked in the base's _capturedSignals[0] so the shared
+  // save/replay helpers apply.
+  static constexpr int STATE_RECORD_RAW = STATE_USER_BASE + 2;
+  bool     _recChrome   = false;   // recording-view header drawn once
+  bool     _recCleared  = false;   // plot area wiped on wave→bars transition
+  uint32_t _recAnimMs   = 0;       // sine-wave throttle
+  float    _wavePhase   = 0.0f;
+  float    _waveLastPhase = 6.2831853f;
+  uint32_t _recRssiMs   = 0;       // RSSI-bar sample throttle
+  int      _recBarX     = 0;       // current bar x (body-relative)
+  void _startRecordRaw();
+  bool _onUpdateRecordRaw();
+  bool _onRenderRecordRaw();
+  void _recordRawDrawWave();       // "Waiting for signal" sine wave
+  void _recordRawDrawBars();       // "Recording" RSSI bars
+  void _recordRawFinish();         // stop + Replay/Save/Discard/Exit options
 
   // ── Waterfall (RSSI spectrogram) ───────────────────────────────────────
   // A scrolling RSSI heat-map across a [start,end] MHz window, swept per pixel

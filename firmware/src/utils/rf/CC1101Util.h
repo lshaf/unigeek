@@ -72,6 +72,27 @@ public:
   void     setRxFilter(RxFilter f) { _rxFilter = f; }
   RxFilter getRxFilter() const     { return _rxFilter; }
 
+  // ── RAW recorder ─────
+  // Records raw GDO0 OOK transitions as signed durations (+HIGH / -LOW) into one
+  // accumulating buffer on the currently configured frequency. Recording opens
+  // on the first carrier and then runs CONTINUOUSLY until the caller stops it
+  // (or the buffer fills) — it does NOT auto-split into separate signals. Long
+  // silences are compressed into a single gap interval so the buffer holds
+  // signal content, not noise. The whole capture is one Signal{protocol="RAW"}.
+  //   1. beginRawRecord() once when entering record state
+  //   2. pollRawRecord() every frame (carrier detect + gap compression)
+  //   3. rawRecordStarted() flips false→true on the first signal (UI: wave→bars)
+  //   4. finishRawRecord(out) serializes the whole capture when the user stops
+  //   5. endRawRecord() when leaving record state
+  bool     beginRawRecord();
+  void     pollRawRecord();
+  bool     rawRecordStarted() const { return _rawStarted; }  // first signal seen
+  bool     rawRecordFull()    const { return s_rawCount >= kRawRecMax; }
+  uint16_t rawRecordCount()   const { return s_rawCount; }   // transitions so far
+  int      rawRecordRssi()    const { return _rawRssi; }      // last RSSI (live bar)
+  void     finishRawRecord(Signal& out);
+  void     endRawRecord();
+
   // Non-blocking frequency scan:
   //   1. call beginScan() once when entering scan state
   //   2. call stepScan() every frame — returns true when a signal is detected
@@ -140,6 +161,35 @@ private:
 
   RCSwitchUtil _sw;  // persistent receiver state for non-blocking polling
   RxFilter     _rxFilter = RX_FILTER_CODE;
+
+  // ── RAW recorder state ─────────────────────────────────────────────────
+  // Tuning: recording opens after the carrier persists kRawArmMs; once started
+  // it runs until the caller stops it. A carrier gap longer than kRawGapMs
+  // pauses storing (so idle noise isn't recorded) and is re-inserted as one
+  // compressed LOW interval when the signal returns.
+  static constexpr uint16_t kRawRecMax  = 8192;    // max transitions / capture
+  static constexpr uint32_t kRawArmMs   = 8;       // carrier must persist to start
+  static constexpr uint32_t kRawGapMs   = 25;      // carrier-gone → pause + gap mark
+  static constexpr int32_t  kRawClampUs = 300000;  // clamp a single interval
+
+  bool     _rawArmed         = false;  // begin/end lifecycle
+  bool     _rawStarted       = false;  // first carrier seen (recording live)
+  bool     _rawInGap         = false;  // storing paused, waiting for carrier
+  int      _rawRssi          = -120;
+  uint32_t _rawCarrierSinceMs = 0;     // when RSSI first crossed (0 = below)
+  uint32_t _rawLastCarrierMs = 0;
+  uint32_t _rawGapStartMs    = 0;
+
+  void _rawPushGap(uint32_t gapMs);    // insert one compressed LOW gap interval
+
+  // ISR-shared state (single active CC1101Util at a time — static like RCSwitch).
+  static void              _rawIsr();
+  static volatile bool          s_rawRec;     // ISR storing transitions
+  static volatile bool          s_rawResync;  // drop next edge, just resync clock
+  static volatile uint16_t      s_rawCount;
+  static volatile unsigned long s_rawLast;
+  static int32_t*               s_rawBuf;     // signed durations (internal RAM)
+  static int                    s_rawPin;
 
   // Scan status (updated during receive/scan)
   bool    _scanning = false;

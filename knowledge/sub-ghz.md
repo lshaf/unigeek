@@ -93,6 +93,30 @@ Capture RF signals on the configured frequency.
 9. Up to 15 signals can be captured per session
 10. Press **BACK** to stop receiving and return to the menu
 
+## Record RAW
+
+Record the raw RF waveform **continuously** on the configured frequency until you stop it — modeled on Bruce's "Read RAW". Unlike **Receive** (which decodes and lists up to 15 *separate* signals, each capped at 512 transitions and gated on a protocol matching), **Record RAW** is **one protocol-agnostic capture** of everything on the channel into a large buffer (up to **8192 transitions**). Use it for unknown, rolling-code, or unusual signals you just want to capture and replay byte-exact.
+
+Record RAW uses the **frequency configured in the menu** (via **Frequency** / **Detect Freq**) — it does **not** scan. Set the frequency first.
+
+### Flow
+
+1. Select **Record RAW** from the menu.
+2. **Waiting for signal** — an animated **sine wave** plays while the recorder listens. It is armed but not yet capturing: it waits for a real carrier on the listened frequency. The carrier must stay above the **−65 dBm** threshold for ~8 ms before recording opens, so brief noise spikes/transients don't trigger it.
+3. **Recording** — on the first signal, the sine wave is replaced by a "Recording: *XXX* MHz" header and **RSSI bars** that march left-to-right (sampled every ~100 ms, wrapping at the right edge). Capture now runs **continuously** — it does *not* split into separate signals.
+4. **Gap compression** — when the carrier disappears for longer than ~25 ms, storing pauses so idle noise isn't recorded; the silence is re-inserted as a single compressed gap interval when the signal returns. The buffer holds signal content, not noise.
+5. **Stop** — press **OK / PRESS** to stop. Recording also auto-stops if the buffer fills (8192 transitions). Press **BACK** (or **ESC** on keyboard devices) to **abort and discard**.
+6. **Options** — after stopping, a menu opens showing the pulse count (`RAW NNN pulses`):
+   - **Replay** — retransmit the captured waveform byte-exact on the same frequency.
+   - **Save** — write a single `.sub` file (`Protocol: RAW`, `RAW_Data: …`) to `/unigeek/rf/`.
+   - **Record again** — discard and start a fresh capture.
+   - **Exit** — return to the Sub-GHz menu.
+
+> [!note]
+> Record RAW is a separate code path from **Receive** — it has its own continuous recorder (a dedicated GDO0 transition ISR + RSSI squelch) and does not affect how Receive captures or decodes signals.
+
+The saved file is identical in format to a RAW capture from **Receive** (see [File Format](#file-format)) and round-trips through **Send** and Flipper Zero / Bruce.
+
 ## Brand / Manufacturer Decoders
 
 On every completed capture, an **authoritative decode engine** runs the raw pulse train through brand/manufacturer state machines before falling back to the generic RcSwitch table and then RAW. The decode order is:

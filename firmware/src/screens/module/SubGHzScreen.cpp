@@ -5,6 +5,7 @@
 #include "core/ScreenManager.h"
 #include "ui/actions/InputNumberAction.h"
 #include "ui/actions/InputSelectAction.h"
+#include "ui/actions/InputTextAction.h"
 #include "ui/actions/ShowStatusAction.h"
 #include "ui/views/ProgressView.h"
 #include "utils/rf/KeeloqKeystore.h"
@@ -102,7 +103,7 @@ void SubGHzScreen::_updateSublabels() {
   } else {
     _mfcodesSub = "not loaded";
   }
-  _menuItems[6].sublabel = _mfcodesSub.c_str();
+  _menuItems[7].sublabel = _mfcodesSub.c_str();
 }
 
 void SubGHzScreen::_reloadMfcodes() {
@@ -148,7 +149,11 @@ void SubGHzScreen::_onMenuSelected(uint8_t index) {
       _enterReceiveMode();
       return;
     }
-    case 4: { // Send
+    case 4: { // Record RAW
+      _startRecordRaw();
+      return;
+    }
+    case 5: { // Send
       if (_csPin < 0) {
         ShowStatusAction::show("Set CS pin first");
         render();
@@ -157,11 +162,11 @@ void SubGHzScreen::_onMenuSelected(uint8_t index) {
       _enterBrowseMode();
       return;
     }
-    case 6: { // Mfcodes — reload + status popup
+    case 7: { // Mfcodes — reload + status popup
       _reloadMfcodes();
       return;
     }
-    case 5: { // Jammer
+    case 6: { // Jammer
       if (_csPin < 0 || _gdo0Pin < 0) {
         ShowStatusAction::show("Set CS and GDO0 pins first");
         render();
@@ -234,7 +239,207 @@ void SubGHzScreen::_startScan() {
   render();
 }
 
+// ── Record RAW ────────
+// Waiting → sine-wave animation; first signal → continuous RSSI-bar recording
+// until OK; then a Replay/Save/Discard/Exit menu. The capture lives in the
+// base's _capturedSignals[0] so _saveSignal/_sendCapturedSignal apply.
+
+void SubGHzScreen::_startRecordRaw() {
+  if (_csPin < 0 || _gdo0Pin < 0) {
+    ShowStatusAction::show("Set CS and GDO0 pins first");
+    render();
+    return;
+  }
+  if (!_rf.begin(Uni.Spi, _csPin, _gdo0Pin)) {
+    ShowStatusAction::show("CC1101 not found");
+    render();
+    return;
+  }
+  if (!_rf.beginRawRecord()) {
+    ShowStatusAction::show("Record init failed");
+    render();
+    return;
+  }
+  _state        = STATE_RECORD_RAW;
+  _recChrome    = false;
+  _recCleared   = false;
+  _recAnimMs    = 0;
+  _recRssiMs    = 0;
+  _recBarX      = 0;
+  _wavePhase    = 0.0f;
+  _waveLastPhase = 6.2831853f;
+  snprintf(_titleBuf, sizeof(_titleBuf), "Record RAW");
+  render();
+}
+
+bool SubGHzScreen::_onUpdateRecordRaw() {
+  // Stop on OK, abort on BACK.
+  if (Uni.Nav->wasPressed()) {
+    auto dir = Uni.Nav->readDirection();
+    if (dir == INavigation::DIR_BACK) {
+      _rf.endRawRecord();
+      _rf.end();
+      _showMenu();
+      return true;
+    }
+    if (dir == INavigation::DIR_PRESS) {
+      if (_rf.rawRecordStarted()) { _recordRawFinish(); }
+      else { _rf.endRawRecord(); _rf.end(); _showMenu(); }  // nothing captured yet
+      return true;
+    }
+  }
+
+  _rf.pollRawRecord();
+
+  // Buffer full → auto-stop and offer the options.
+  if (_rf.rawRecordFull()) { _recordRawFinish(); return true; }
+
+  // Drive the animation: sine wave (~10 ms) while waiting, RSSI bars (~100 ms)
+  // once recording, matching Bruce's cadence.
+  if (!_rf.rawRecordStarted()) {
+    if (millis() - _recAnimMs >= 10) { _recAnimMs = millis(); render(); }
+  } else {
+    if (millis() - _recRssiMs >= 100) { _recRssiMs = millis(); render(); }
+  }
+  return true;
+}
+
+bool SubGHzScreen::_onRenderRecordRaw() {
+  auto& lcd = Uni.Lcd;
+
+  if (!_recChrome) {
+    lcd.fillRect(bodyX(), bodyY(), bodyW(), bodyH(), TFT_BLACK);
+    _recChrome = true;
+    _recBarX   = 0;
+  }
+
+  // Header text + control hint (top of the body).
+  lcd.setTextSize(1);
+  lcd.setTextDatum(TL_DATUM);
+  lcd.fillRect(bodyX(), bodyY(), bodyW(), 10, TFT_BLACK);
+  char hdr[32];
+  if (!_rf.rawRecordStarted()) {
+    lcd.setTextColor(Config.getThemeColor(), TFT_BLACK);
+    lcd.drawString("Waiting for signal...", bodyX() + 4, bodyY() + 1);
+  } else {
+    snprintf(hdr, sizeof(hdr), "Recording: %.2f MHz", _rf.getFrequency());
+    lcd.setTextColor(TFT_RED, TFT_BLACK);
+    lcd.drawString(hdr, bodyX() + 4, bodyY() + 1);
+  }
+  lcd.setTextDatum(TR_DATUM);
+  lcd.setTextColor(TFT_DARKGREY, TFT_BLACK);
+  #ifdef DEVICE_HAS_KEYBOARD
+    lcd.drawString(_rf.rawRecordStarted() ? "OK:stop" : "ESC:exit", bodyX() + bodyW() - 4, bodyY() + 1);
+  #else
+    lcd.drawString(_rf.rawRecordStarted() ? "OK:stop" : "<:exit", bodyX() + bodyW() - 4, bodyY() + 1);
+  #endif
+
+  if (!_rf.rawRecordStarted()) {
+    _recordRawDrawWave();
+  } else {
+    if (!_recCleared) {   // wipe the sine wave once, before the bars start
+      lcd.fillRect(bodyX(), bodyY() + 12, bodyW(), bodyH() - 12, TFT_BLACK);
+      _recCleared = true;
+    }
+    _recordRawDrawBars();
+  }
+  return true;
+}
+
+// Moving sine wave (Bruce sinewave_animation), erasing the previous phase.
+void SubGHzScreen::_recordRawDrawWave() {
+  auto& lcd = Uni.Lcd;
+  const int x0   = bodyX() + 12;
+  const int x1   = bodyX() + bodyW() - 12;
+  const int cy   = bodyY() + 12 + (bodyH() - 12) / 2;
+  const int amp  = (bodyH() - 12) / 2 - 8;
+  const int thick = 4;
+  if (amp < 4) return;
+
+  for (int x = x0; x < x1; x++) {
+    int lastY = cy + (int)(amp * sinf(_waveLastPhase + (x - x0) * 0.05f));
+    int y     = cy + (int)(amp * sinf(_wavePhase     + (x - x0) * 0.05f));
+    lcd.drawFastVLine(x, lastY, thick, TFT_BLACK);
+    lcd.drawFastVLine(x, y,     thick, Config.getThemeColor());
+  }
+  _waveLastPhase = _wavePhase;
+  _wavePhase += 0.15f;
+  if (_wavePhase >= 6.2831853f) _wavePhase = 0.0f;
+}
+
+// Marching RSSI bars (Bruce recording view), wrapping at the right edge.
+void SubGHzScreen::_recordRawDrawBars() {
+  auto& lcd = Uni.Lcd;
+  const int areaY = bodyY() + 12;
+  const int areaH = bodyH() - 12;
+  const int cy    = areaY + areaH / 2;
+  const int maxBar = areaH / 2 - 4;
+  if (maxBar < 4) return;
+
+  // Wrap: clear the plot area and restart from the left.
+  if (_recBarX >= bodyW() - 6) { lcd.fillRect(bodyX(), areaY, bodyW(), areaH, TFT_BLACK); _recBarX = 0; }
+
+  int rssi = _rf.rawRecordRssi();
+  int barH = map(constrain(rssi, -90, -45), -90, -45, 1, maxBar);
+  int x    = bodyX() + 4 + _recBarX;
+  lcd.drawFastVLine(x, cy - barH, barH * 2, Config.getThemeColor());
+  _recBarX += 3;
+}
+
+void SubGHzScreen::_recordRawFinish() {
+  // Harvest the whole capture into the base's slot 0, then offer options.
+  _rf.finishRawRecord(_capturedSignals[0]);
+  _rf.endRawRecord();
+  _capturedTimes[0] = _generateTimestampName();
+  _capturedSaved[0] = false;
+  _capturedCount    = 1;
+
+  int pulses = 0;
+  for (char c : _capturedSignals[0].rawData) if (c == ' ') pulses++;
+  if (_capturedSignals[0].rawData.length() > 0) pulses++;
+
+  int nA = Achievement.inc("rf_receive_first");
+  if (nA == 1) Achievement.unlock("rf_receive_first");
+
+  while (true) {
+    char info[32];
+    snprintf(info, sizeof(info), "RAW %d pulses", pulses);
+    InputSelectAction::Option opts[4] = {
+      {"Replay",       "replay"},
+      {"Save",         "save"},
+      {"Record again", "again"},
+      {"Exit",         "exit"},
+    };
+    const char* c = InputSelectAction::popup(info, opts, 4);
+    if (!c || strcmp(c, "exit") == 0) {
+      _rf.end();
+      _capturedCount = 0;
+      _showMenu();
+      return;
+    }
+    if (strcmp(c, "replay") == 0) {
+      ProgressView::init();
+      ProgressView::progress("Replaying RAW", 50);
+      if (!_rf.begin(Uni.Spi, _csPin, _gdo0Pin)) { ShowStatusAction::show("CC1101 not found"); continue; }
+      _rf.sendSignal(_capturedSignals[0]);
+      int n = Achievement.inc("rf_send_first");
+      if (n == 1) Achievement.unlock("rf_send_first");
+      ShowStatusAction::show("Replayed", 1000);
+    } else if (strcmp(c, "save") == 0) {
+      if (_capturedSaved[0]) { ShowStatusAction::show("Already saved"); continue; }
+      String name = InputTextAction::popup("Save As", _capturedTimes[0].c_str());
+      if (name.length() == 0) continue;
+      _saveSignal(0, name);
+    } else if (strcmp(c, "again") == 0) {
+      _capturedCount = 0;
+      _startRecordRaw();
+      return;
+    }
+  }
+}
+
 bool SubGHzScreen::_onUpdateExtra() {
+  if (_state == STATE_RECORD_RAW) return _onUpdateRecordRaw();
   if (_state == STATE_WATERFALL) return _onUpdateWaterfall();
   if (_state != STATE_SCANNING) return false;
   if (Uni.Nav->wasPressed()) {
@@ -258,6 +463,7 @@ bool SubGHzScreen::_onUpdateExtra() {
 }
 
 bool SubGHzScreen::_onRenderExtra() {
+  if (_state == STATE_RECORD_RAW) return _onRenderRecordRaw();
   if (_state == STATE_WATERFALL) return _onRenderWaterfall();
   if (_state != STATE_SCANNING) return false;
   auto& lcd = Uni.Lcd;
@@ -338,6 +544,12 @@ bool SubGHzScreen::_onRenderExtra() {
 }
 
 bool SubGHzScreen::_onBackExtra() {
+  if (_state == STATE_RECORD_RAW) {
+    _rf.endRawRecord();
+    _rf.end();
+    _showMenu();
+    return true;
+  }
   if (_state == STATE_WATERFALL) {
     _rf.endRssiSweep();
     _rf.end();
