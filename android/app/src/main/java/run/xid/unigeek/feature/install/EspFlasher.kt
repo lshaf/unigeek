@@ -28,13 +28,22 @@ class EspFlasher(
         const val FLASH_BEGIN = 0x02
         const val FLASH_DATA = 0x03
         const val FLASH_END = 0x04
+        const val MEM_BEGIN = 0x05
+        const val MEM_END = 0x06
+        const val MEM_DATA = 0x07
         const val SYNC = 0x08
         const val READ_REG = 0x0A
         const val SPI_ATTACH = 0x0D
         const val CHANGE_BAUD = 0x0F
 
         const val CHIP_DETECT_MAGIC_REG = 0x40001000
-        const val FLASH_BLOCK = 0x4000 // 16 KB ROM write block
+        // Stub-less ROM loader write block. The 0x4000 (16 KB) size is the *stub's*
+        // block — the ROM loader only buffers 0x400 (1 KB), and using the stub size
+        // here makes the seq/offset math disagree with FLASH_BEGIN, so blocks ACK but
+        // land wrong (flash "succeeds" yet the firmware never changes).
+        const val FLASH_BLOCK = 0x400 // 1 KB ROM write block (no stub)
+        const val STUB_FLASH_BLOCK = 0x4000 // 16 KB once the stub is running
+        const val RAM_BLOCK = 0x1800 // MEM_DATA block size when uploading the stub
         const val STATUS_LEN = 2
 
         val SYNC_PAYLOAD = byteArrayOf(0x07, 0x07, 0x12, 0x20) + ByteArray(32) { 0x55 }
@@ -42,6 +51,11 @@ class EspFlasher(
 
     private val rxQueue = ArrayDeque<Int>()
     private var chipName = "unknown"
+
+    // Flips to true once the esptool stub is running (S3 only). Drives the write-block
+    // size and skips ROM-only steps (SPI attach, the FLASH_BEGIN encrypted word).
+    private var isStub = false
+    private var flashBlock = FLASH_BLOCK
 
     // ── public entry ────────────────────────────────────────────────────────────
 
@@ -56,17 +70,24 @@ class EspFlasher(
             throw IOException("Wrong chip — board expects ${if (expectS3) "ESP32-S3" else "ESP32"}, found $chipName. Disconnect to avoid bricking.")
         }
 
-        maybeRaiseBaud(flashBaud)
-        spiAttach()
+        if (expectS3) {
+            // Native-USB S3 can't flash reliably stub-less — run the esptool stub and
+            // write through it (16 KB blocks, real erase, clean reboot), like the website.
+            runStub()
+        } else {
+            // ESP32-classic over a USB-UART bridge: the bare ROM loader works fine.
+            maybeRaiseBaud(flashBaud)
+            spiAttach()
+        }
 
         log("erasing flash …")
         flashBegin(image.size)
 
-        val blocks = (image.size + FLASH_BLOCK - 1) / FLASH_BLOCK
+        val blocks = (image.size + flashBlock - 1) / flashBlock
         for (seq in 0 until blocks) {
-            val start = seq * FLASH_BLOCK
-            val block = ByteArray(FLASH_BLOCK) { 0xFF.toByte() }
-            val len = minOf(FLASH_BLOCK, image.size - start)
+            val start = seq * flashBlock
+            val block = ByteArray(flashBlock) { 0xFF.toByte() }
+            val len = minOf(flashBlock, image.size - start)
             System.arraycopy(image, start, block, 0, len)
             flashData(block, seq)
             onProgress((seq + 1).toFloat() / blocks)
@@ -111,6 +132,49 @@ class EspFlasher(
         }
     }
 
+    // ── stub loader (S3) ──────────────────────────────────────────────────────────
+
+    /**
+     * Upload the esptool flasher stub into RAM and jump to it. After this the chip
+     * speaks the stub protocol: 16 KB write blocks, a reliable up-front erase, and a
+     * clean software reboot on FLASH_END — the only way native-USB S3 flashes correctly.
+     */
+    private fun runStub() {
+        log("uploading flasher stub …")
+        drainInput()
+        uploadMem(EspStub.text, EspStub.TEXT_START)
+        uploadMem(EspStub.data, EspStub.DATA_START)
+        // Jump to the stub. The ROM doesn't reliably ack MEM_END (our code is already
+        // running), so fire it without reading and wait for the stub's "OHAI" greeting.
+        writeCommand(MEM_END, le32(0) + le32(EspStub.ENTRY))
+        val deadline = System.nanoTime() + 5_000L * 1_000_000
+        while (true) {
+            val pkt = readPacket(deadline) ?: break
+            // "OHAI" = 0x4F 0x48 0x41 0x49
+            if (pkt.size >= 4 && (pkt[0].toInt() and 0xFF) == 0x4F && (pkt[1].toInt() and 0xFF) == 0x48 &&
+                (pkt[2].toInt() and 0xFF) == 0x41 && (pkt[3].toInt() and 0xFF) == 0x49) {
+                isStub = true
+                flashBlock = STUB_FLASH_BLOCK
+                log("stub running")
+                return
+            }
+        }
+        throw IOException("flasher stub did not start (no OHAI)")
+    }
+
+    /** Push [bytes] into RAM at [offset] via MEM_BEGIN/MEM_DATA (no trailing pad). */
+    private fun uploadMem(bytes: ByteArray, offset: Int) {
+        val blocks = (bytes.size + RAM_BLOCK - 1) / RAM_BLOCK
+        command(MEM_BEGIN, le32(bytes.size) + le32(blocks) + le32(RAM_BLOCK) + le32(offset), timeoutMs = 5000)
+        for (seq in 0 until blocks) {
+            val start = seq * RAM_BLOCK
+            val len = minOf(RAM_BLOCK, bytes.size - start)
+            val chunk = bytes.copyOfRange(start, start + len)
+            command(MEM_DATA, le32(chunk.size) + le32(seq) + le32(0) + le32(0) + chunk,
+                checksum = checksum(chunk), timeoutMs = 5000)
+        }
+    }
+
     // ── ROM commands ──────────────────────────────────────────────────────────────
 
     private fun readReg(addr: Int): Long {
@@ -125,11 +189,17 @@ class EspFlasher(
     }
 
     private fun flashBegin(size: Int) {
-        val blocks = (size + FLASH_BLOCK - 1) / FLASH_BLOCK
-        val fiveWords = chipName != "ESP32" // S2/S3/C3 ROM FLASH_BEGIN carries an encrypted flag
-        val data = le32(size) + le32(blocks) + le32(FLASH_BLOCK) + le32(0) +
+        val blocks = (size + flashBlock - 1) / flashBlock
+        // S2/S3/C3 ROM FLASH_BEGIN carries an encrypted flag; the stub never does.
+        val fiveWords = !isStub && chipName != "ESP32"
+        val data = le32(size) + le32(blocks) + le32(flashBlock) + le32(0) +
             (if (fiveWords) le32(0) else ByteArray(0))
-        command(FLASH_BEGIN, data, timeoutMs = 30000) // includes the erase
+        // The ROM erases the ENTIRE region synchronously inside FLASH_BEGIN and only
+        // replies once that finishes. esptool budgets ~30 s/MB; a flat 30 s bricks our
+        // ~2.8 MB images — the flash gets erased, the begin times out before the reply,
+        // nothing is written, and the board boots into blank flash. Scale generously.
+        val eraseTimeout = maxOf(30_000L, size.toLong() * 60_000L / (1024 * 1024))
+        command(FLASH_BEGIN, data, timeoutMs = eraseTimeout) // includes the erase
     }
 
     private fun flashData(block: ByteArray, seq: Int) {
@@ -138,8 +208,17 @@ class EspFlasher(
     }
 
     private fun flashEnd() {
-        // 1 = stay in loader (clean); we trigger the run via a hard reset.
-        command(FLASH_END, le32(1), timeoutMs = 3000, checkStatus = false)
+        // 0 = reboot into the freshly-flashed app. Native-USB ESP32-S3 boards can't be
+        // rebooted over the DTR/RTS lines, so we ask the ROM to reboot itself; the
+        // hardReset() below still covers UART-bridge boards.
+        //
+        // Best-effort: on the stub-less ROM loader, FLASH_END makes the chip *leave*
+        // download mode and it typically does NOT reply (only the stub acks this), so a
+        // missing reply is expected — never let it throw, or the hardReset() that boots
+        // UART-bridge boards would be skipped and the board would hang outside the loader.
+        try {
+            command(FLASH_END, le32(0), timeoutMs = 500, checkStatus = false)
+        } catch (_: Exception) { /* ROM exited without ack — expected */ }
     }
 
     private fun maybeRaiseBaud(target: Int) {
@@ -162,6 +241,17 @@ class EspFlasher(
 
     // ── SLIP command transport ──────────────────────────────────────────────────────
 
+    /** SLIP-frame and send a command, without waiting for any reply. */
+    private fun writeCommand(op: Int, data: ByteArray, checksum: Int = 0) {
+        val header = byteArrayOf(
+            0x00, op.toByte(),
+            (data.size and 0xFF).toByte(), ((data.size ushr 8) and 0xFF).toByte(),
+            (checksum and 0xFF).toByte(), ((checksum ushr 8) and 0xFF).toByte(),
+            ((checksum ushr 16) and 0xFF).toByte(), ((checksum ushr 24) and 0xFF).toByte(),
+        )
+        port.write(slipEncode(header + data), 2000)
+    }
+
     /** Send a command, return (value word, response body). Throws on error/timeout. */
     private fun command(
         op: Int,
@@ -170,13 +260,7 @@ class EspFlasher(
         timeoutMs: Long = 3000,
         checkStatus: Boolean = true,
     ): Pair<Long, ByteArray> {
-        val header = byteArrayOf(
-            0x00, op.toByte(),
-            (data.size and 0xFF).toByte(), ((data.size ushr 8) and 0xFF).toByte(),
-            (checksum and 0xFF).toByte(), ((checksum ushr 8) and 0xFF).toByte(),
-            ((checksum ushr 16) and 0xFF).toByte(), ((checksum ushr 24) and 0xFF).toByte(),
-        )
-        port.write(slipEncode(header + data), 2000)
+        writeCommand(op, data, checksum)
 
         val deadline = System.nanoTime() + timeoutMs * 1_000_000
         while (System.nanoTime() < deadline) {

@@ -44,7 +44,36 @@ enum class InstallStatus { Idle, Downloading, Flashing, Done, Error }
 
 data class DeviceInfo(val version: String?, val board: String?, val total: Long, val used: Long)
 data class Progress(val label: String, val value: Long, val total: Long)
-data class Viewer(val path: String, val name: String, val text: String)
+
+enum class ViewerMode { Text, Hex }
+
+/** A file opened for viewing. Holds the raw bytes plus a best-effort UTF-8 decode. */
+class Viewer(
+    val path: String,
+    val name: String,
+    val bytes: ByteArray,
+    val text: String,
+    val mode: ViewerMode,
+    val editable: Boolean,
+)
+
+/** Extensions that open in the text editor by default (when the bytes look textual). */
+private val TEXT_EXTENSIONS = setOf(
+    "txt", "md", "markdown", "json", "csv", "tsv", "log", "ini", "cfg", "conf", "config",
+    "lua", "js", "mjs", "ts", "html", "htm", "css", "xml", "svg", "yaml", "yml", "toml",
+    "sh", "bash", "c", "cc", "cpp", "h", "hpp", "py", "rb", "go", "rs", "java", "kt", "kts",
+    "gd", "ino", "pde", "properties", "env", "gitignore", "list", "m3u", "m3u8", "srt", "vtt",
+    "sql", "gcode", "nfo", "asc", "pem", "hex",
+)
+
+/** Extensions that always open in the hex viewer regardless of content. */
+private val HEX_EXTENSIONS = setOf(
+    "bin", "nfc", "dump", "dat", "raw", "img", "mfd", "eml", "pcap", "pcapng",
+    "png", "jpg", "jpeg", "gif", "bmp", "webp", "ico", "wav", "mp3", "ogg", "ttf", "bdf",
+)
+
+/** Largest file we load into memory for in-app viewing; bigger files are saved instead. */
+private const val MAX_VIEW_BYTES = 512 * 1024
 
 /**
  * Single app-wide connection. Owns the active transport and both protocol clients,
@@ -282,7 +311,7 @@ class ConnectionViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun refresh() = fsWork("refresh") { reload(cwd) }
-    fun open(entry: FileEntry) { if (entry.isDir) fsWork("open ${entry.name}") { reload(join(cwd, entry.name)) } else openText(entry) }
+    fun open(entry: FileEntry) { if (entry.isDir) fsWork("open ${entry.name}") { reload(join(cwd, entry.name)) } else openFile(entry) }
     fun goUp() { if (cwd != "/") fsWork("up") { reload(parent(cwd)) } }
     fun delete(entry: FileEntry) = fsWork("delete ${entry.name}") { fmClient.delete(join(cwd, entry.name)); reload(cwd) }
     fun rename(entry: FileEntry, newName: String) = fsWork("rename") { fmClient.rename(join(cwd, entry.name), join(cwd, newName)); reload(cwd) }
@@ -301,12 +330,23 @@ class ConnectionViewModel(app: Application) : AndroidViewModel(app) {
         fileError = "saved → $where"
     }
 
-    private fun openText(entry: FileEntry) = fsWork("open ${entry.name}") {
-        if (entry.size > 512 * 1024) { val w = withContext(Dispatchers.IO) { saveToDownloads(entry.name, collect(entry)) }; fileError = "large file saved → $w"; return@fsWork }
+    private fun openFile(entry: FileEntry) = fsWork("open ${entry.name}") {
+        if (entry.size > MAX_VIEW_BYTES) { val w = withContext(Dispatchers.IO) { saveToDownloads(entry.name, collect(entry)) }; fileError = "large file saved → $w"; return@fsWork }
         val data = collect(entry)
-        val nonText = data.count { it.toInt() == 0 }
-        if (nonText > 0) { val w = withContext(Dispatchers.IO) { saveToDownloads(entry.name, data) }; fileError = "binary saved → $w"; return@fsWork }
-        viewer = Viewer(join(cwd, entry.name), entry.name, String(data, Charsets.UTF_8))
+        val mode = pickViewerMode(entry.name, data)
+        viewer = Viewer(join(cwd, entry.name), entry.name, bytes = data, text = String(data, Charsets.UTF_8), mode = mode, editable = mode == ViewerMode.Text)
+    }
+
+    /** Choose Text vs Hex from the filename extension, falling back to content sniffing. */
+    private fun pickViewerMode(name: String, data: ByteArray): ViewerMode {
+        val ext = name.substringAfterLast('.', "").lowercase()
+        val hasNull = data.any { it.toInt() == 0 }
+        return when {
+            ext in HEX_EXTENSIONS -> ViewerMode.Hex
+            ext in TEXT_EXTENSIONS -> if (hasNull) ViewerMode.Hex else ViewerMode.Text
+            hasNull -> ViewerMode.Hex            // unknown extension, binary content
+            else -> ViewerMode.Text              // unknown extension, printable content
+        }
     }
 
     fun saveText(content: String) {
@@ -315,7 +355,9 @@ class ConnectionViewModel(app: Application) : AndroidViewModel(app) {
             val bytes = content.toByteArray(Charsets.UTF_8)
             progress = Progress("save ${v.name}", 0, bytes.size.toLong())
             fmClient.put(v.path, bytes) { sent -> progress = Progress("save ${v.name}", sent, bytes.size.toLong()) }
-            progress = null; viewer = v.copy(text = content); reload(cwd)
+            progress = null
+            viewer = Viewer(v.path, v.name, bytes = bytes, text = content, mode = ViewerMode.Text, editable = true)
+            reload(cwd)
         }
     }
 
