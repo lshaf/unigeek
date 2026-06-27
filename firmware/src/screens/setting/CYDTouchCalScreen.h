@@ -18,8 +18,12 @@ public:
   void onUpdate() override;
   void onRender() override;
 
+  static constexpr uint8_t kSamples = 3; // taps required to calibrate
+
 private:
   bool     _fromSettings = false;
   bool     _done    = false;
   uint32_t _doneAt  = 0;
+  uint8_t  _taps      = 0; // taps collected so far
+  uint8_t  _swapVotes = 0; // how many of those taps read as "swap needed"
 };

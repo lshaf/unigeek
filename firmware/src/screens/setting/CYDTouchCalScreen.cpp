@@ -16,8 +16,10 @@
 #include <Arduino.h>
 
 void CYDTouchCalScreen::onInit() {
-  _done  = false;
-  _doneAt = 0;
+  _done      = false;
+  _doneAt    = 0;
+  _taps      = 0;
+  _swapVotes = 0;
 }
 
 void CYDTouchCalScreen::onUpdate() {
@@ -37,7 +39,18 @@ void CYDTouchCalScreen::onUpdate() {
   if (Uni.Nav->wasPressed()) {
     Uni.Nav->readDirection();
     int16_t W = (int16_t)Uni.Lcd.width();
-    bool swapNeeded = (Uni.Nav->lastTouchX() >= W / 2);
+
+    // Each tap votes: reading X in the right half means the axes are swapped.
+    if (Uni.Nav->lastTouchX() >= W / 2) _swapVotes++;
+    _taps++;
+
+    if (_taps < kSamples) {
+      render(); // show progress, wait for more taps
+      return;
+    }
+
+    // Majority vote across all samples — one stray read can't flip the result.
+    bool swapNeeded = (_swapVotes * 2 > kSamples);
 
     Uni.Nav->setTouchSwapXY(swapNeeded);
     Config.set(APP_CONFIG_TOUCH_SWAP_XY,    swapNeeded ? "1" : "0");
@@ -75,7 +88,9 @@ void CYDTouchCalScreen::onRender() {
   lcd.drawString("to calibrate touch.", W / 2, 44);
 
   lcd.setTextColor(0x4208, TFT_BLACK);
-  lcd.drawString("One-time first-boot setup.", W / 2, 60);
+  char prog[20];
+  snprintf(prog, sizeof(prog), "Tap %u of %u", (unsigned)(_taps + 1), (unsigned)kSamples);
+  lcd.drawString(_done ? "One-time first-boot setup." : prog, W / 2, 60);
 
   // Arrow pointing toward circle
   lcd.setTextColor(theme, TFT_BLACK);
