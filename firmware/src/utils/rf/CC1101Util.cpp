@@ -26,6 +26,14 @@ static constexpr uint8_t kFreqCount = sizeof(kFreqList) / sizeof(kFreqList[0]);
 static constexpr int kRssiThreshold = CC1101Util::RSSI_THRESHOLD;
 static constexpr uint8_t kScanHits   = 1;  // lock to first frequency with signal
 
+// ── RAW recorder ISR-shared state ───────────────────────────────────────────
+volatile bool          CC1101Util::s_rawRec    = false;
+volatile bool          CC1101Util::s_rawResync = false;
+volatile uint16_t      CC1101Util::s_rawCount  = 0;
+volatile unsigned long CC1101Util::s_rawLast   = 0;
+int32_t*               CC1101Util::s_rawBuf     = nullptr;
+int                    CC1101Util::s_rawPin     = -1;
+
 // ── Init / End ───────────────────────────────────────────────────────────────
 
 bool CC1101Util::begin(ExtSpiClass* spi, int8_t csPin, int8_t gdo0Pin) {
@@ -67,6 +75,7 @@ bool CC1101Util::begin(ExtSpiClass* spi, int8_t csPin, int8_t gdo0Pin) {
 
 void CC1101Util::end() {
   endReceive();
+  if (_rawArmed || s_rawBuf) endRawRecord();  // detach ISR + free buffer if armed
   if (_initialized) {
     ELECHOUSE_cc1101.setSidle();
     _initialized = false;
@@ -221,6 +230,145 @@ bool CC1101Util::pollReceive(Signal& out) {
 
 void CC1101Util::endReceive() {
   _sw.disableReceive();
+}
+
+// ── RAW recorder ─────────────────────────────────────────────────────────────
+
+// GDO0 transition ISR. Mirrors the RCSwitchUtil ISR style (plain static method,
+// non-IRAM, calling micros()/digitalRead() — the proven path on this hardware):
+// stores one signed interval per edge while s_rawRec is set. The sign encodes
+// the level that just ENDED (+HIGH / -LOW), matching sendSignal()'s replay.
+void CC1101Util::_rawIsr() {
+  const unsigned long now = micros();
+  const unsigned long dur = now - s_rawLast;
+  s_rawLast = now;
+
+  if (!s_rawRec) return;
+  if (s_rawResync) { s_rawResync = false; return; }   // first edge: clock only
+  if (s_rawCount >= kRawRecMax) { s_rawRec = false; return; }  // buffer full
+
+  int32_t d = (int32_t)(dur > (unsigned long)kRawClampUs ? (unsigned long)kRawClampUs : dur);
+  // The edge just moved the pin to its NEW level, so the interval that elapsed
+  // was spent at the opposite level: new LOW → ended HIGH (+), new HIGH → (-).
+  if (digitalRead(s_rawPin) == LOW) s_rawBuf[s_rawCount++] = d;
+  else                              s_rawBuf[s_rawCount++] = -d;
+}
+
+bool CC1101Util::beginRawRecord() {
+  if (!_initialized) return false;
+  if (!s_rawBuf) {
+    // Internal RAM only — an ISR must never touch PSRAM (cache fault).
+    s_rawBuf = (int32_t*)malloc((size_t)kRawRecMax * sizeof(int32_t));
+    if (!s_rawBuf) return false;
+  }
+
+  ELECHOUSE_cc1101.setSidle();
+  _initRx();                       // OOK async, SetRx, GDO0 INPUT (uses _freq)
+
+  s_rawPin           = _gdo0Pin;
+  s_rawCount         = 0;
+  s_rawRec           = false;
+  s_rawResync        = false;
+  s_rawLast          = micros();
+  _rawArmed          = true;
+  _rawStarted        = false;
+  _rawInGap          = false;
+  _rawRssi           = -120;
+  _rawCarrierSinceMs = 0;
+  _rawLastCarrierMs  = 0;
+  _rawGapStartMs     = 0;
+
+  attachInterrupt(digitalPinToInterrupt(_gdo0Pin), _rawIsr, CHANGE);
+  return true;
+}
+
+// Push one synthetic LOW gap interval into the buffer (main loop only — called
+// while the ISR is paused, so the index write doesn't race).
+void CC1101Util::_rawPushGap(uint32_t gapMs) {
+  if (s_rawCount >= kRawRecMax) return;
+  int32_t us = (gapMs > (uint32_t)(kRawClampUs / 1000)) ? kRawClampUs
+                                                        : (int32_t)(gapMs * 1000);
+  if (us > 0) s_rawBuf[s_rawCount++] = -us;   // gap is a LOW interval
+}
+
+void CC1101Util::pollRawRecord() {
+  if (!_initialized || !_rawArmed) return;
+
+  const int rssi = ELECHOUSE_cc1101.getRssi();
+  _rawRssi = rssi;
+  const uint32_t now = millis();
+  const bool carrier = rssi > kRssiThreshold;
+
+  // ── Not started: wait for a real signal on the listened frequency. RSSI must
+  // stay above threshold for kRawArmMs (a single transient sample is ignored).
+  if (!_rawStarted) {
+    if (carrier) {
+      if (_rawCarrierSinceMs == 0) _rawCarrierSinceMs = now;
+      if (now - _rawCarrierSinceMs >= kRawArmMs) {
+        _rawStarted       = true;
+        _rawInGap         = false;
+        _rawLastCarrierMs = now;
+        s_rawResync       = true;     // ISR drops the first edge, syncs the clock
+        s_rawLast         = micros();
+        s_rawRec          = true;
+      }
+    } else {
+      _rawCarrierSinceMs = 0;
+    }
+    return;
+  }
+
+  // ── Recording (continuous until the caller stops). Storing pauses during long
+  // silences so idle noise isn't captured, and the gap is re-inserted as one
+  // compressed LOW interval when the signal comes back. ──────────────────────
+  if (s_rawCount >= kRawRecMax) { s_rawRec = false; return; }  // buffer full
+
+  if (carrier) {
+    _rawLastCarrierMs = now;
+    if (_rawInGap) {                          // signal returned → resume
+      _rawPushGap(now - _rawGapStartMs);
+      _rawInGap   = false;
+      s_rawResync = true;
+      s_rawLast   = micros();
+      s_rawRec    = true;
+    }
+  } else if (!_rawInGap && (now - _rawLastCarrierMs) > kRawGapMs) {
+    s_rawRec       = false;                   // carrier gone → pause storing
+    _rawInGap      = true;
+    _rawGapStartMs = _rawLastCarrierMs;
+  }
+}
+
+void CC1101Util::finishRawRecord(Signal& out) {
+  s_rawRec = false;                 // freeze the buffer before serializing
+  out = Signal();
+  out.frequency = _freq;
+  out.preset    = "0";              // generic OOK — matches the RX_FILTER_RAW path
+  out.protocol  = "RAW";
+
+  const uint16_t n = s_rawCount;
+  String s;
+  s.reserve((size_t)n * 6);
+  for (uint16_t i = 0; i < n; i++) {
+    if (i) s += ' ';
+    s += String((int)s_rawBuf[i]);
+  }
+  out.rawData = s;
+}
+
+void CC1101Util::endRawRecord() {
+  if (s_rawPin >= 0) {
+    detachInterrupt(digitalPinToInterrupt(s_rawPin));
+    s_rawPin = -1;
+  }
+  s_rawRec    = false;
+  s_rawCount  = 0;
+  _rawArmed   = false;
+  _rawStarted = false;
+  _rawInGap   = false;
+  _rawCarrierSinceMs = 0;
+  if (s_rawBuf) { free(s_rawBuf); s_rawBuf = nullptr; }
+  if (_initialized) ELECHOUSE_cc1101.setSidle();
 }
 
 // ── Non-blocking frequency scan ──────────────────────────────────────────────
