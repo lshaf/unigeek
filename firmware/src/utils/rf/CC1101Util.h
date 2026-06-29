@@ -83,7 +83,10 @@ public:
 
   // Fast RSSI sweep (Waterfall): put the chip in RX once, then read RSSI at an
   // arbitrary frequency per pixel. rssiAt() retunes + settles + reads.
-  void beginRssiSweep();
+  // `calibMhz` is the frequency the one-time VCO calibration is done at — pass the
+  // midpoint of the swept band so the sweep is calibrated for that band rather than
+  // the configured Frequency (otherwise distant pixels read the noise floor).
+  void beginRssiSweep(float calibMhz = 0);
   int  rssiAt(float mhz);
   void endRssiSweep();
 
@@ -149,12 +152,20 @@ private:
   int     _scanRssiMap[kScanFreqCount];
 
   // Frequency analyzer (peak detect + sample-hold)
-  static constexpr int     kAnalyzerTrigger = -75;  // dBm; coarse peak must exceed
-  static constexpr uint8_t kAnalyzerHold    = 16;   // frames to hold after signal stops
+  static constexpr int      kAnalyzerTrigger = -75;   // dBm; coarse peak must exceed
+  static constexpr uint8_t  kAnalyzerHold    = 16;    // frames to hold after signal stops
+  static constexpr uint16_t kSweepSettleUs   = 1500;  // µs RSSI settle after re-entering RX
   float   _peakFreq = 0;
   int     _peakRssi = -120;
   bool    _peakLive = false;
   uint8_t _holdCtr  = 0;
+
+  // Tune to `mhz`, force a fresh VCO calibration (SIDLE→SRX re-triggers FS_AUTOCAL
+  // at the new frequency) and return RSSI after the AGC has settled. Without this
+  // per-point recalibration a band sweep stays calibrated for whatever frequency
+  // was active when RX was entered — i.e. the configured Frequency — so it reads
+  // noise everywhere except near that frequency.
+  int   _tunedRssi(float mhz);
 
   float _scanForBestFreq(std::function<bool()> cancelCb);
   void  _initTx();

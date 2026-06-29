@@ -419,7 +419,7 @@ void SubGHzScreen::_runWaterfall() {
     render();
     return;
   }
-  _rf.beginRssiSweep();
+  _rf.beginRssiSweep((_wfStart + _wfEnd) * 0.5f);
 
   _wfLine      = 0;
   _wfMaxRssi   = -120;

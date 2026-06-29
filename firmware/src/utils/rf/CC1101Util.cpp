@@ -239,11 +239,9 @@ bool CC1101Util::beginScan() {
 bool CC1101Util::stepScan() {
   if (!_initialized || !_scanning) return false;
   float f = kFreqList[_scanIdx % kFreqCount];
-  ELECHOUSE_cc1101.setMHZ(f);
   _scanFreq = f;
   _scanIdx++;
-  delay(2);
-  int rssi = ELECHOUSE_cc1101.getRssi();
+  int rssi = _tunedRssi(f);   // recalibrates per point — independent of configured freq
   _scanRssi = rssi;
   uint8_t slot = (_scanIdx - 1) % kFreqCount;
   _scanRssiMap[slot] = rssi;
@@ -275,26 +273,34 @@ void CC1101Util::beginAnalyze() {
   _peakLive = false;
   _holdCtr  = 0;
   for (uint8_t i = 0; i < kFreqCount; i++) _scanRssiMap[i] = -120;
-  // Enter RX once and STAY in RX for the whole session (RxBW inherited from
-  // begin() = 256 kHz — the same proven path as beginScan/stepScan). Re-issuing
-  // SetRx() per frame would SIDLE→SRX and reset the AGC, pinning RSSI at the
-  // noise floor so nothing is ever detected.
+  // RxBW inherited from begin() = 256 kHz. RSSI is read per point via _tunedRssi(),
+  // which re-enters RX (SIDLE→SRX) at each frequency so the VCO recalibrates for
+  // that point — otherwise the sweep stays calibrated for the configured Frequency
+  // and reads noise elsewhere. The per-point kSweepSettleUs delay lets the AGC
+  // settle (a bare SetRx with no settle reads the noise floor).
   ELECHOUSE_cc1101.SetRx();
+}
+
+// Tune + recalibrate + settle, then read RSSI. See header for rationale.
+int CC1101Util::_tunedRssi(float mhz) {
+  ELECHOUSE_cc1101.setMHZ(mhz);   // FREQ registers + manual Calibrate()
+  ELECHOUSE_cc1101.SetRx();       // SIDLE→SRX → FS_AUTOCAL recalibrates at `mhz`
+  delayMicroseconds(kSweepSettleUs);
+  return ELECHOUSE_cc1101.getRssi();
 }
 
 bool CC1101Util::analyzeStep() {
   if (!_initialized || !_scanning) return false;
 
-  // ── Stage 1: coarse sweep — whole band, find the strongest channel. Stay in
-  // RX and only retune (setMHZ); this is the exact RF path stepScan uses. Also
-  // fills _scanRssiMap so the (optional) bar chart keeps updating.
+  // ── Stage 1: coarse sweep — whole band, find the strongest channel. Each point
+  // is read via _tunedRssi(), which recalibrates the VCO at that frequency so the
+  // sweep is independent of the configured Frequency. Also fills _scanRssiMap so
+  // the (optional) bar chart keeps updating.
   int   coarseRssi = -127;
   float coarseFreq = 0;
   for (uint8_t i = 0; i < kFreqCount; i++) {
     float f = kFreqList[i];
-    ELECHOUSE_cc1101.setMHZ(f);
-    delay(2);
-    int rssi = ELECHOUSE_cc1101.getRssi();
+    int rssi = _tunedRssi(f);
     _scanRssiMap[i] = rssi;
     _scanFreq = f;
     _scanRssi = rssi;
@@ -303,15 +309,13 @@ bool CC1101Util::analyzeStep() {
 
   // ── Stage 2: fine refine — ±0.3 MHz around the coarse peak in 20 kHz steps to
   // pin the exact carrier (a signal at e.g. 433.66, not on the coarse list, is
-  // located here). Same RX/BW path — just a denser retune sweep.
+  // located here). Recalibrates per point via _tunedRssi() — just a denser sweep.
   if (coarseRssi > kAnalyzerTrigger) {
     int   fineRssi = -127;
     float fineFreq = coarseFreq;
     for (float f = coarseFreq - 0.30f; f <= coarseFreq + 0.3001f; f += 0.02f) {
       if (!cc1101_freq_valid(f)) continue;
-      ELECHOUSE_cc1101.setMHZ(f);
-      delay(2);
-      int rssi = ELECHOUSE_cc1101.getRssi();
+      int rssi = _tunedRssi(f);
       if (rssi > fineRssi) { fineRssi = rssi; fineFreq = f; }
     }
     _peakFreq = fineFreq;
@@ -347,10 +351,16 @@ void CC1101Util::_initRx() {
 
 // ── Fast RSSI sweep (Waterfall) ──────────────────────────────────────────────
 
-void CC1101Util::beginRssiSweep() {
+void CC1101Util::beginRssiSweep(float calibMhz) {
   if (!_initialized) return;
   ELECHOUSE_cc1101.setRxBW(200);
+  // Calibrate the VCO at the swept band's midpoint, not the configured Frequency:
+  // SetRx() (SIDLE→SRX) triggers FS_AUTOCAL at whatever frequency is loaded, so
+  // retune there first. Per-pixel rssiAt() then relocks within the band without a
+  // fresh autocal, keeping the sweep fast.
+  if (calibMhz > 0) ELECHOUSE_cc1101.setMHZ(calibMhz);
   ELECHOUSE_cc1101.SetRx();
+  delayMicroseconds(kSweepSettleUs);  // let RSSI settle after the fresh calibration
 }
 
 int CC1101Util::rssiAt(float mhz) {
