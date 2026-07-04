@@ -23,7 +23,6 @@ static const float kFreqList[] = {
   906.400f, 915.000f, 925.000f, 928.000f,
 };
 static constexpr uint8_t kFreqCount = sizeof(kFreqList) / sizeof(kFreqList[0]);
-static constexpr int kRssiThreshold = CC1101Util::RSSI_THRESHOLD;
 static constexpr uint8_t kScanHits   = 1;  // lock to first frequency with signal
 
 // ── RAW recorder accumulator ────────────────────────────────────────────────
@@ -64,9 +63,27 @@ bool CC1101Util::begin(ExtSpiClass* spi, int8_t csPin, int8_t gdo0Pin) {
   ELECHOUSE_cc1101.setModulation(2); // ASK/OOK
   ELECHOUSE_cc1101.setDRate(50);
   ELECHOUSE_cc1101.setPktFormat(3);  // async serial
+  _applyOokRxRegs();                 // OOK sensitivity regs — Init() reset them to FSK defaults
   setFrequency(_freq);
 
   return true;
+}
+
+// Sub-GHz OOK RX sensitivity registers, ported from Bruce's
+// cc1101ApplyFixedFreqOokPreset() (src/modules/rf/rf_utils.cpp). The ELECHOUSE
+// Init() defaults are tuned for FSK packet RX and cap the receiver gain
+// (AGCCTRL2=0xC7 disables the 3 highest DVGA gain steps) — that is why weak OOK
+// signals were only decoded with the transmitter right on the antenna. These
+// values free the full gain, enable ADC retention (better sensitivity at narrow
+// RxBW) and select the SmartRF OOK front-end. They must be (re)applied after
+// every ELECHOUSE Init(); setModulation/setRxBW/setDRate/setMHZ never touch them.
+void CC1101Util::_applyOokRxRegs() {
+  ELECHOUSE_cc1101.SpiWriteReg(CC1101_FIFOTHR,  0x47);  // ADC_RETENTION=1
+  ELECHOUSE_cc1101.SpiWriteReg(CC1101_FREND1,   0xB6);  // RX front-end (SmartRF OOK)
+  ELECHOUSE_cc1101.SpiWriteReg(CC1101_FOCCFG,   0x18);  // freq-offset compensation
+  ELECHOUSE_cc1101.SpiWriteReg(CC1101_AGCCTRL2, 0x03);  // full DVGA gain (was 0xC7)
+  ELECHOUSE_cc1101.SpiWriteReg(CC1101_AGCCTRL1, 0x00);
+  ELECHOUSE_cc1101.SpiWriteReg(CC1101_AGCCTRL0, 0x40);  // OOK/ASK decision boundary
 }
 
 void CC1101Util::end() {
@@ -118,7 +135,7 @@ float CC1101Util::_scanForBestFreq(std::function<bool()> cancelCb) {
     int rssi = ELECHOUSE_cc1101.getRssi();
     _scanRssi = rssi;
 
-    if (rssi > kRssiThreshold) {
+    if (rssi > _rssiThreshold) {
       hits[hitCount++] = {f, rssi};
     }
     idx++;
@@ -180,7 +197,7 @@ bool CC1101Util::pollReceive(Signal& out) {
   if (!_initialized) return false;
 
   const int  rssi    = ELECHOUSE_cc1101.getRssi();
-  const bool carrier = rssi > kRssiThreshold;
+  const bool carrier = rssi > _rssiThreshold;
   const uint32_t now = millis();
 
   // Gate: turn the receiver on only once a real carrier persists; while idle the
@@ -409,7 +426,7 @@ bool CC1101Util::stepScan() {
   _scanRssi = rssi;
   uint8_t slot = (_scanIdx - 1) % kFreqCount;
   _scanRssiMap[slot] = rssi;
-  return rssi > kRssiThreshold;
+  return rssi > _rssiThreshold;
 }
 
 uint8_t CC1101Util::getScanCount()           const { return kFreqCount; }
@@ -474,7 +491,7 @@ bool CC1101Util::analyzeStep() {
   // ── Stage 2: fine refine — ±0.3 MHz around the coarse peak in 20 kHz steps to
   // pin the exact carrier (a signal at e.g. 433.66, not on the coarse list, is
   // located here). Recalibrates per point via _tunedRssi() — just a denser sweep.
-  if (coarseRssi > kAnalyzerTrigger) {
+  if (coarseRssi > _rssiThreshold) {
     int   fineRssi = -127;
     float fineFreq = coarseFreq;
     for (float f = coarseFreq - 0.30f; f <= coarseFreq + 0.3001f; f += 0.02f) {
@@ -508,6 +525,13 @@ void CC1101Util::endAnalyze() {
 
 void CC1101Util::_initRx() {
   ELECHOUSE_cc1101.setModulation(2);
+  // Fixed-frequency RX (Receive + Record RAW): narrow the RxBW and drop the data
+  // rate from the 256 kHz / 50 kBaud scan defaults set in begin(). A tighter
+  // channel lowers the noise floor and ~5 kBaud matches typical OOK remote timing
+  // (TE ~300-500 us), both improving weak-signal sensitivity. begin() restores
+  // the wide scan profile on the next mode entry, so this only affects RX.
+  ELECHOUSE_cc1101.setRxBW(135);
+  ELECHOUSE_cc1101.setDRate(5);
   ELECHOUSE_cc1101.setPktFormat(3);
   ELECHOUSE_cc1101.SetRx();
   pinMode(_gdo0Pin, INPUT);

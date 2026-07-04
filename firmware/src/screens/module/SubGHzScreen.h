@@ -70,6 +70,7 @@ private:
   String _mfcodesSub;
   void _updateSublabels();
   void _selectFrequency();
+  void _selectRssiThreshold();
   void _startScan();
   void _reloadMfcodes();
 

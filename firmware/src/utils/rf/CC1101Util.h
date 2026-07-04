@@ -59,6 +59,13 @@ public:
   bool setFrequency(float mhz);
   float getFrequency() const { return _freq; }
 
+  // RSSI carrier-detect threshold (dBm). Gates the Receive capture arming and the
+  // Detect Freq peak trigger — lower = more sensitive (weaker/farther signals).
+  // Record RAW does NOT use this: it runs an adaptive noise-floor gate instead.
+  // Defaults to RSSI_THRESHOLD; set at runtime and persists across begin()/end().
+  void setRssiThreshold(int dbm) { _rssiThreshold = dbm; }
+  int  getRssiThreshold() const  { return _rssiThreshold; }
+
   // Check if CC1101 is connected
   bool isConnected();
 
@@ -115,7 +122,7 @@ public:
   // ── Frequency analyzer (Flipper-style "peaky" peak detect) ────────────────
   // Call analyzeStep() once per frame. Each call runs a full coarse sweep
   // across the whole band (wide RxBW — also fills the RSSI map that drives the
-  // bar chart) then, if the strongest channel passes kAnalyzerTrigger, a fine
+  // bar chart) then, if the strongest channel passes _rssiThreshold, a fine
   // refine (narrow RxBW, ±0.3 MHz @ 20 kHz) to pin the exact frequency. The
   // last peak is held for kAnalyzerHold frames after the signal disappears so
   // it stays on screen instead of vanishing the instant the carrier drops.
@@ -169,6 +176,7 @@ private:
 
   RmtRf        _rmt;  // hardware RMT capture/replay (replaces the GDO0 ISRs)
   RxFilter     _rxFilter = RX_FILTER_CODE;
+  int          _rssiThreshold = RSSI_THRESHOLD;  // Receive gate + Detect trigger (runtime)
 
   // Scratch for one RMT frame, read out of the ring buffer each pollReceive().
   static constexpr uint16_t kRxFrameMax = 1024;
@@ -232,8 +240,8 @@ private:
   uint8_t _scanIdx  = 0;
   int     _scanRssiMap[kScanFreqCount];
 
-  // Frequency analyzer (peak detect + sample-hold)
-  static constexpr int      kAnalyzerTrigger = -75;   // dBm; coarse peak must exceed
+  // Frequency analyzer (peak detect + sample-hold). Coarse peak must exceed the
+  // runtime _rssiThreshold (shared with the Receive capture gate).
   static constexpr uint8_t  kAnalyzerHold    = 16;    // frames to hold after signal stops
   static constexpr uint16_t kSweepSettleUs   = 1500;  // µs RSSI settle after re-entering RX
   float   _peakFreq = 0;
@@ -251,6 +259,9 @@ private:
   float _scanForBestFreq(std::function<bool()> cancelCb);
   void  _initTx();
   void  _initRx();
+  // Write the OOK RX sensitivity registers (AGC full gain, ADC retention, SmartRF
+  // front-end) after ELECHOUSE Init(), whose FSK-packet defaults cap the gain.
+  void  _applyOokRxRegs();
   void  _sendRcSwitch(const Signal& sig);
   // Fill `out` from a decoded RcSwitch/KeeLoq frame (incl. KeeLoq proto-23 unpack).
   void  _fillRcSwitch(const RCSwitchUtil::Decoded& d, Signal& out);

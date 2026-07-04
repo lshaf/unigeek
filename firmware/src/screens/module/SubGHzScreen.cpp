@@ -91,8 +91,8 @@ void SubGHzScreen::_showMenu() {
 }
 
 void SubGHzScreen::_updateSublabels() {
-  char buf[12];
-  snprintf(buf, sizeof(buf), "%.2f MHz", _rf.getFrequency());
+  char buf[24];
+  snprintf(buf, sizeof(buf), "%.2f MHz / %d dBm", _rf.getFrequency(), _rf.getRssiThreshold());
   _freqSub = buf;
   _menuItems[0].sublabel = _freqSub.c_str();
 
@@ -194,13 +194,17 @@ void SubGHzScreen::_selectFrequency() {
     {"868 MHz",    "868"},
     {"915 MHz",    "915"},
     {"Custom",     "custom"},
+    {"RSSI Threshold", "rssi"},
   };
 
   char curBuf[12];
   snprintf(curBuf, sizeof(curBuf), "%.2f", _rf.getFrequency());
 
-  const char* choice = InputSelectAction::popup("Frequency", freqOpts, 9, curBuf);
+  const char* choice = InputSelectAction::popup("Frequency", freqOpts, 10, curBuf);
   if (!choice) { render(); return; }
+
+  // Carrier-detect sensitivity — governs Record RAW arming + Detect Freq trigger.
+  if (strcmp(choice, "rssi") == 0) { _selectRssiThreshold(); return; }
 
   float mhz;
   if (strcmp(choice, "custom") == 0) {
@@ -214,6 +218,32 @@ void SubGHzScreen::_selectFrequency() {
   if (!_rf.setFrequency(mhz)) {
     ShowStatusAction::show("Invalid frequency");
   }
+  _updateSublabels();
+  render();
+}
+
+// RSSI carrier-detect threshold. Lower (more negative) = more sensitive, so weak
+// / distant signals arm Record RAW and trip Detect Freq. Does not affect the
+// plain Receive path (which decodes whatever reaches GDO0). Mirrors Bruce's
+// scan sensitivity menu (rf_scan.cpp).
+void SubGHzScreen::_selectRssiThreshold() {
+  static constexpr InputSelectAction::Option rssiOpts[] = {
+    {"-55 dBm (closest)", "-55"},
+    {"-60 dBm",           "-60"},
+    {"-65 dBm (default)", "-65"},
+    {"-70 dBm",           "-70"},
+    {"-75 dBm",           "-75"},
+    {"-80 dBm",           "-80"},
+    {"-85 dBm (farthest)","-85"},
+  };
+
+  char curBuf[8];
+  snprintf(curBuf, sizeof(curBuf), "%d", _rf.getRssiThreshold());
+
+  const char* choice = InputSelectAction::popup("RSSI Threshold", rssiOpts, 7, curBuf);
+  if (!choice) { render(); return; }
+
+  _rf.setRssiThreshold(atoi(choice));
   _updateSublabels();
   render();
 }
