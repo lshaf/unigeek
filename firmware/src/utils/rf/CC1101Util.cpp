@@ -142,6 +142,7 @@ bool CC1101Util::beginReceive() {
   _rxCapturing      = false;
   _rxCarrierSinceMs = 0;
   _rxLastCarrierMs  = 0;
+  _captureGate      = _measureNoiseGate();   // adaptive gate (distance-sensitive)
   // The RMT receiver is installed on demand in pollReceive() once a real carrier
   // appears (RSSI gating) and uninstalled when it drops — no noise capture.
   return true;
@@ -180,7 +181,7 @@ bool CC1101Util::pollReceive(Signal& out) {
   if (!_initialized) return false;
 
   const int  rssi    = ELECHOUSE_cc1101.getRssi();
-  const bool carrier = rssi > kRssiThreshold;
+  const bool carrier = rssi > _captureGate;
   const uint32_t now = millis();
 
   // Gate: turn the receiver on only once a real carrier persists; while idle the
@@ -270,6 +271,7 @@ bool CC1101Util::beginRawRecord() {
   _rawLastFrameMs    = 0;
   _rawCarrierSinceMs = 0;
   _rawLastCarrierMs  = 0;
+  _captureGate       = _measureNoiseGate();   // adaptive gate (distance-sensitive)
 
   // Note: the RMT receiver is NOT installed here. pollRawRecord() installs it only
   // once a real carrier appears (RSSI) and uninstalls it when the carrier drops —
@@ -290,7 +292,7 @@ void CC1101Util::pollRawRecord() {
 
   const int  rssi    = ELECHOUSE_cc1101.getRssi();
   _rawRssi           = rssi;                    // live bar
-  const bool carrier = rssi > kRssiThreshold;
+  const bool carrier = rssi > _captureGate;
   const uint32_t now = millis();
 
   // ── Idle: wait for a real carrier before turning the receiver on. ──────────
@@ -497,6 +499,21 @@ void CC1101Util::_initRx() {
   pinMode(_gdo0Pin, INPUT);
 }
 
+int CC1101Util::_measureNoiseGate() {
+  // Peak RSSI over a short window with no signal ≈ the noise floor. Gate a few dB
+  // above it so weak/distant carriers still trigger while the floor doesn't.
+  int peak = -120;
+  for (int i = 0; i < 8; i++) {
+    int r = ELECHOUSE_cc1101.getRssi();
+    if (r > peak) peak = r;
+    delayMicroseconds(300);
+  }
+  int gate = peak + kCarrierMarginDb;
+  if (gate < kGateMin) gate = kGateMin;
+  if (gate > kGateMax) gate = kGateMax;
+  return gate;
+}
+
 // ── Fast RSSI sweep (Waterfall) ──────────────────────────────────────────────
 
 void CC1101Util::beginRssiSweep(float calibMhz) {
@@ -646,75 +663,60 @@ void CC1101Util::_initTx() {
 
 // ── File I/O ─────────────────────────────────────────────────────────────
 
-bool CC1101Util::loadFile(const String& content, Signal& out) {
-  out = Signal();
+// Parse one trimmed .sub line into `out`. RAW_Data is appended straight onto
+// out.rawData (no separate accumulator + final copy — that doubled the peak RAM
+// and OOM'd on long captures, silently emptying rawData → "invalid .sub").
+void CC1101Util::_parseSubLine(const String& line, Signal& out) {
+  if (line.startsWith("Filetype:") || line.startsWith("Version")) return;
 
-  String rawAccum;
-  // Reserve up front: a long RAW capture spans many RAW_Data lines, and letting
-  // rawAccum grow by doubling would spike memory (old buffer + new, ~2×) and can
-  // OOM — leaving rawAccum empty and the whole file wrongly rejected as invalid.
-  rawAccum.reserve(content.length());
-  int start = 0;
+  int colonIdx = line.indexOf(':');
+  if (colonIdx < 0) return;
 
-  while (start < (int)content.length()) {
-    int nl = content.indexOf('\n', start);
-    if (nl < 0) nl = content.length();
-    String line = content.substring(start, nl);
-    line.trim();
-    start = nl + 1;
+  String key = line.substring(0, colonIdx);
+  String val = line.substring(colonIdx + 1);
+  val.trim();
+  if (val.endsWith("\r")) val.remove(val.length() - 1);
 
-    if (line.startsWith("Filetype:") || line.startsWith("Version")) continue;
-
-    int colonIdx = line.indexOf(':');
-    if (colonIdx < 0) continue;
-
-    String key = line.substring(0, colonIdx);
-    String val = line.substring(colonIdx + 1);
-    val.trim();
-    if (val.endsWith("\r")) val.remove(val.length() - 1);
-
-    if (key == "Frequency") {
-      out.frequency = val.toFloat() / 1000000.0f;
-    } else if (key == "Preset") {
-      out.preset = val;
-    } else if (key == "Protocol") {
-      out.protocol = val;
-    } else if (key == "TE") {
-      out.te = val.toInt();
-    } else if (key == "Bit") {
-      out.bit = val.toInt();
-    } else if (key == "Key") {
-      // Accept "0xABCD", space-separated hex bytes "AA BB CC", or decimal
-      String clean = val;
-      clean.replace(" ", "");
-      if (clean.startsWith("0x") || clean.startsWith("0X")) {
-        out.key = strtoull(clean.c_str() + 2, nullptr, 16);
-      } else {
-        // Try hex first (Flipper byte-string without 0x), then decimal
-        bool allHex = true;
-        for (char c : clean) {
-          if (!isxdigit(c)) { allHex = false; break; }
-        }
-        out.key = strtoull(clean.c_str(), nullptr, allHex ? 16 : 10);
+  if (key == "Frequency") {
+    out.frequency = val.toFloat() / 1000000.0f;
+  } else if (key == "Preset") {
+    out.preset = val;
+  } else if (key == "Protocol") {
+    out.protocol = val;
+  } else if (key == "TE") {
+    out.te = val.toInt();
+  } else if (key == "Bit") {
+    out.bit = val.toInt();
+  } else if (key == "Key") {
+    // Accept "0xABCD", space-separated hex bytes "AA BB CC", or decimal
+    String clean = val;
+    clean.replace(" ", "");
+    if (clean.startsWith("0x") || clean.startsWith("0X")) {
+      out.key = strtoull(clean.c_str() + 2, nullptr, 16);
+    } else {
+      bool allHex = true;
+      for (char c : clean) {
+        if (!isxdigit(c)) { allHex = false; break; }
       }
-    } else if (key == "RAW_Data" || key == "Data_RAW") {
-      if (rawAccum.length() > 0) rawAccum += ' ';
-      rawAccum += val;
-    } else if (key == "Manufacturer") {
-      out.mf_name = val;
-    } else if (key == "Serial") {
-      String clean = val;
-      if (clean.startsWith("0x") || clean.startsWith("0X")) clean.remove(0, 2);
-      out.serial = (uint32_t)strtoul(clean.c_str(), nullptr, 16);
-    } else if (key == "Button") {
-      out.btn = (uint8_t)val.toInt();
-    } else if (key == "Counter") {
-      out.cnt = (uint16_t)val.toInt();
+      out.key = strtoull(clean.c_str(), nullptr, allHex ? 16 : 10);
     }
+  } else if (key == "RAW_Data" || key == "Data_RAW") {
+    if (out.rawData.length() > 0) out.rawData += ' ';
+    out.rawData += val;
+  } else if (key == "Manufacturer") {
+    out.mf_name = val;
+  } else if (key == "Serial") {
+    String clean = val;
+    if (clean.startsWith("0x") || clean.startsWith("0X")) clean.remove(0, 2);
+    out.serial = (uint32_t)strtoul(clean.c_str(), nullptr, 16);
+  } else if (key == "Button") {
+    out.btn = (uint8_t)val.toInt();
+  } else if (key == "Counter") {
+    out.cnt = (uint16_t)val.toInt();
   }
+}
 
-  out.rawData = rawAccum;
-
+bool CC1101Util::_finalizeSub(Signal& out) {
   // KeeLoq: always unpack structured fields from the captured Key. If the
   // .sub came from a peer device that already had mf_name resolved, those
   // file-supplied values win; otherwise try the local keystore now.
@@ -732,6 +734,38 @@ bool CC1101Util::loadFile(const String& content, Signal& out) {
   if (out.frequency <= 0) return false;
   if (out.protocol == "RAW") return out.rawData.length() > 0;
   return out.key != 0 || out.bit > 0;
+}
+
+bool CC1101Util::loadFile(const String& content, Signal& out) {
+  out = Signal();
+  out.rawData.reserve(content.length());   // one alloc; no doubling spike
+
+  int start = 0;
+  while (start < (int)content.length()) {
+    int nl = content.indexOf('\n', start);
+    if (nl < 0) nl = content.length();
+    String line = content.substring(start, nl);
+    line.trim();
+    start = nl + 1;
+    if (line.length()) _parseSubLine(line, out);
+  }
+  return _finalizeSub(out);
+}
+
+// Streaming loader: parses the .sub straight off the file, one line at a time,
+// so only rawData (not a second full-file copy) is ever resident. This is what
+// lets large multi-line RAW captures load without OOM. `sizeHint` (file size)
+// pre-reserves rawData to avoid reallocation.
+bool CC1101Util::loadFromStream(Stream& f, Signal& out, size_t sizeHint) {
+  out = Signal();
+  if (sizeHint) out.rawData.reserve(sizeHint);
+
+  while (f.available()) {
+    String line = f.readStringUntil('\n');
+    line.trim();
+    if (line.length()) _parseSubLine(line, out);
+  }
+  return _finalizeSub(out);
 }
 
 String CC1101Util::saveToString(const Signal& sig) {

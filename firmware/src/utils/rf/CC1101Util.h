@@ -146,6 +146,10 @@ public:
 
   // File I/O — Bruce SubGhz .sub format
   static bool loadFile(const String& content, Signal& out);
+  // Streaming parse straight off an open file — use for on-SD .sub files so a
+  // large RAW capture doesn't need the whole file resident (avoids OOM). Pass
+  // the file size as `sizeHint` to pre-reserve rawData.
+  static bool loadFromStream(Stream& f, Signal& out, size_t sizeHint = 0);
   static String saveToString(const Signal& sig);
 
   // Display helpers
@@ -175,6 +179,13 @@ private:
   static constexpr uint32_t kRxArmMs = 6;    // carrier must persist to start
   static constexpr uint32_t kRxGapMs = 80;   // carrier-gone hold (> RMT idle) so
                                              // the final frame is drained first
+  // The carrier gate is adaptive: measured a few dB above the noise floor at
+  // begin, so a weak/distant transmitter still triggers (a fixed threshold
+  // needed the remote almost touching the antenna).
+  static constexpr int kCarrierMarginDb = 8;   // gate = measured floor + this
+  static constexpr int kGateMin         = -98; // clamp (never gate on pure noise)
+  static constexpr int kGateMax         = -55;
+  int      _captureGate      = RSSI_THRESHOLD;
   bool     _rxCapturing      = false;
   uint32_t _rxCarrierSinceMs = 0;
   uint32_t _rxLastCarrierMs  = 0;
@@ -237,4 +248,12 @@ private:
   void  _fillRcSwitch(const RCSwitchUtil::Decoded& d, Signal& out);
   // Serialize the last captured RMT frame (_rxFrame) as signed-duration text.
   String _frameToString(uint16_t n) const;
+
+  // .sub parsing shared by loadFile() and loadFromStream().
+  static void _parseSubLine(const String& line, Signal& out);
+  static bool _finalizeSub(Signal& out);   // KeeLoq unpack + validity check
+
+  // Sample the RSSI noise floor and return the adaptive carrier gate (floor +
+  // margin, clamped). Call once the chip is in RX and no signal is expected.
+  int _measureNoiseGate();
 };

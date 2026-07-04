@@ -520,14 +520,18 @@ void RfCaptureScreen::_loadBrowseDir(const String& path) {
 
 void RfCaptureScreen::_sendBrowseFile(uint8_t index) {
   const auto& e = _browser.entry(index);
-  String content = Uni.Storage->readFile(e.path.c_str());
-  if (content.length() == 0) {
+  // Stream the file (parse line-by-line) instead of slurping it into a String —
+  // long RAW captures are tens of KB and two full copies (content + rawData) OOM.
+  fs::File f = Uni.Storage->open(e.path.c_str(), "r");
+  if (!f) {
     ShowStatusAction::show("Failed to read file");
     render();
     return;
   }
   Signal sig;
-  if (!CC1101Util::loadFile(content, sig)) {
+  bool ok = CC1101Util::loadFromStream(f, sig, f.size());
+  f.close();
+  if (!ok) {
     ShowStatusAction::show("Invalid .sub file");
     render();
     return;
@@ -546,9 +550,11 @@ void RfCaptureScreen::_sendBrowseFile(uint8_t index) {
 }
 
 void RfCaptureScreen::_showBrowseFileInfo(uint8_t index) {
-  String content = Uni.Storage->readFile(_browser.entry(index).path.c_str());
+  fs::File f = Uni.Storage->open(_browser.entry(index).path.c_str(), "r");
   Signal sig;
-  if (!CC1101Util::loadFile(content, sig)) {
+  bool ok = f && CC1101Util::loadFromStream(f, sig, f.size());
+  if (f) f.close();
+  if (!ok) {
     ShowStatusAction::show("Invalid .sub file");
     render();
     return;
