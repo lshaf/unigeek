@@ -47,6 +47,7 @@ Create a new firmware release. Usage: `/release <version>` (e.g. `/release 1.3.0
    - Do NOT mention fixes or improvements for features that are NEW in this release cycle
    - Do NOT mention intermediate upgrades to features that were built during this cycle
    - Do NOT mention CI/workflow/docs-only changes
+   - **Contributors** — collect every external contributor whose PR merged this cycle. Derive from the merge commits: `git log <prev_tag>..HEAD --merges --format="%s"` (each `Merge pull request #N from <user>/…` names the author's fork) and cross-check `git log <prev_tag>..HEAD --no-merges --format="%an <%ae>" | sort | uniq -c`. **Always exclude the repo owner/maintainer** (`lshaf` / `ads.shaf@gmail.com` / `L Shaf`) — never credit the person running the release. If there are no external contributors, omit the Contributors section entirely.
 
 7. **Get the current supported boards list** from the release workflow matrix in `.github/workflows/release.yml`. Exclude any commented-out boards.
 
@@ -95,7 +96,8 @@ Create a new firmware release. Usage: `/release <version>` (e.g. `/release 1.3.0
     - First line: `# UniGeek <version>`
     - Second line: `*YYYY-MM-DD*` (parser strips this; the date shown on the site comes from the git tag)
     - Then a 1–2 sentence preamble paragraph (rendered as the section intro)
-    - Then the H2 sections in this order: New Features, Improvements, Bug Fixes, Install
+    - Then the H2 sections in this order: New Features, Improvements, Bug Fixes, Contributors, Install
+    - **Contributors** section (`## Contributors` — a parser-recognised bucket) — one `- ` bullet per external contributor, GitHub `@handle` first with optional real name, e.g. `- **@vnxdtzip** (Vinicius Pereira) — Responder/SOCKS4, Sub-GHz suite`. List everyone whose PR merged this cycle **except the repo maintainer** (`lshaf` — never credit the release runner). Omit the whole section if there were no external contributors.
     - Final italic line: *Built for security research and education. Use responsibly.*
 
     Style rules:
@@ -108,6 +110,7 @@ Create a new firmware release. Usage: `/release <version>` (e.g. `/release 1.3.0
     - First line: `Release <version>`
     - Blank line
     - Then bullet sections: New Features, Improvements, Bug Fixes — short one-liners per item
+    - End with a `Contributors:` line crediting external PR authors by `@handle` (exclude the maintainer `lshaf`); omit if none
     - Use the same temp file approach to avoid shell escaping issues
 
 12. **Do NOT** push until the user explicitly confirms.
