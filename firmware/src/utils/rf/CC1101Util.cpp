@@ -26,13 +26,9 @@ static constexpr uint8_t kFreqCount = sizeof(kFreqList) / sizeof(kFreqList[0]);
 static constexpr int kRssiThreshold = CC1101Util::RSSI_THRESHOLD;
 static constexpr uint8_t kScanHits   = 1;  // lock to first frequency with signal
 
-// ── RAW recorder ISR-shared state ───────────────────────────────────────────
-volatile bool          CC1101Util::s_rawRec    = false;
-volatile bool          CC1101Util::s_rawResync = false;
-volatile uint16_t      CC1101Util::s_rawCount  = 0;
-volatile unsigned long CC1101Util::s_rawLast   = 0;
-int32_t*               CC1101Util::s_rawBuf     = nullptr;
-int                    CC1101Util::s_rawPin     = -1;
+// ── RAW recorder accumulator ────────────────────────────────────────────────
+uint16_t  CC1101Util::s_rawCount = 0;
+int32_t*  CC1101Util::s_rawBuf   = nullptr;
 
 // ── Init / End ───────────────────────────────────────────────────────────────
 
@@ -141,26 +137,41 @@ float CC1101Util::_scanForBestFreq(std::function<bool()> cancelCb) {
 bool CC1101Util::beginReceive() {
   if (!_initialized) return false;
   ELECHOUSE_cc1101.setSidle();
-  _initRx();
-  _sw.enableReceive(_gdo0Pin);
-  _sw.resetAvailable();
+  _initRx();                              // OOK async RX; GDO0 carries the data
+
+  _rxCapturing      = false;
+  _rxCarrierSinceMs = 0;
+  _rxLastCarrierMs  = 0;
+  // The RMT receiver is installed on demand in pollReceive() once a real carrier
+  // appears (RSSI gating) and uninstalled when it drops — no noise capture.
   return true;
 }
 
-void CC1101Util::_fillRcSwitch(Signal& out) {
-  uint64_t val = _sw.getReceivedValue();
+// Serialize the last RMT frame as signed durations (+HIGH / -LOW µs) — the exact
+// format sendSignal() replays and loadFile()/saveToString() use.
+String CC1101Util::_frameToString(uint16_t n) const {
+  String s;
+  s.reserve((size_t)n * 6);
+  for (uint16_t i = 0; i < n; i++) {
+    if (i) s += ' ';
+    s += String((int)_rxFrame[i]);
+  }
+  return s;
+}
+
+void CC1101Util::_fillRcSwitch(const RCSwitchUtil::Decoded& d, Signal& out) {
   out.frequency = _freq;
-  out.key       = val;
-  out.preset    = String(_sw.getReceivedProtocol());
+  out.key       = d.value;
+  out.preset    = String(d.proto);
   out.protocol  = "RcSwitch";
-  out.te        = (int)_sw.getReceivedDelay();
-  out.bit       = (int)_sw.getReceivedBitlength();
+  out.te        = (int)d.delay;
+  out.bit       = (int)d.bits;
   out.rawData   = "";
   // KeeLoq auto-decode: protocol 23 frames carry fix+encrypted+btn+serial packed
   // into a 64-bit value. Unpack the structured fields, then try the manufacturer
   // keystore (no-op if /unigeek/mfcodes is missing).
-  if (_sw.getReceivedProtocol() == 23) {
-    KeeloqUtil::unpack(val, out.fix, out.encrypted, out.btn, out.serial);
+  if (d.proto == 23) {
+    KeeloqUtil::unpack(d.value, out.fix, out.encrypted, out.btn, out.serial);
     KeeloqUtil::identify(out);
   }
 }
@@ -168,96 +179,82 @@ void CC1101Util::_fillRcSwitch(Signal& out) {
 bool CC1101Util::pollReceive(Signal& out) {
   if (!_initialized) return false;
 
-  // KeeLoq (RcSwitch proto 23) stays on the fast path: it's a rolling protocol
-  // that needs the manufacturer keystore and has no brand decoder of its own.
-  // Emitting it here also stops the brand decoders from ever mis-grabbing a
-  // KeeLoq frame.
-  if (_sw.available() && _sw.getReceivedValue() != 0 &&
-      _sw.getReceivedProtocol() == 23) {
-    _fillRcSwitch(out);
-    _sw.resetAvailable();
-    return true;
+  const int  rssi    = ELECHOUSE_cc1101.getRssi();
+  const bool carrier = rssi > kRssiThreshold;
+  const uint32_t now = millis();
+
+  // Gate: turn the receiver on only once a real carrier persists; while idle the
+  // RMT stays paused so squelch noise is never captured (and can't overflow it).
+  if (!_rxCapturing) {
+    if (carrier) {
+      if (_rxCarrierSinceMs == 0) _rxCarrierSinceMs = now;
+      if (now - _rxCarrierSinceMs >= kRxArmMs) {
+        _rmt.beginRx((gpio_num_t)_gdo0Pin);   // default idle (multi-repeat framing)
+        _rxCapturing     = true;
+        _rxLastCarrierMs = now;
+      }
+    } else {
+      _rxCarrierSinceMs = 0;
+    }
+    return false;
   }
 
-  // Everything else is decided on the COMPLETED raw frame so the brand decoders
-  // are AUTHORITATIVE: they identify the real protocol (CAME, Holtek, Linear,
-  // ...) and win over the generic RcSwitch table for overlapping protocols.
-  // RcSwitch is the fallback when no brand decoder matches; generic RAW is last.
-  if (_sw.RAWavailable()) {
-    delay(400); // let the full repeating signal land in the buffer
-    unsigned int* raw = _sw.getRAWReceivedRawdata();
-    uint16_t n = 0;
-    while (raw[n] != 0 && n < 1024) n++;
-
-    String rawStr;
+  // Capturing: pull one completed frame and try to decode it.
+  const uint16_t n = _rmt.readFrame(_rxFrame, kRxFrameMax);
+  if (n >= 8) {
+    // The decoders take unsigned durations; build the magnitude view once.
+    static unsigned int mag[kRxFrameMax];
     for (uint16_t i = 0; i < n; i++) {
-      if (i > 0) rawStr += ' ';
-      int sign = (i % 2 == 0) ? 1 : -1;
-      rawStr += String(sign * (int)raw[i]);
+      const int32_t v = _rxFrame[i];
+      mag[i] = (unsigned int)(v < 0 ? -v : v);
     }
 
-    // 1) Brand/manufacturer decoders — authoritative, both filter modes. The raw
-    //    stream is kept on the Signal so it can still be replayed.
-    if (n >= 8 && SubGhzDecoders::decode(raw, n, out)) {
+    // 1) Brand/manufacturer decoders — AUTHORITATIVE. They self-sync on their own
+    //    headers and win over the generic RcSwitch table (CAME, Holtek, Linear).
+    if (SubGhzDecoders::decode(mag, n, out)) {
       out.frequency = _freq;
-      out.rawData   = rawStr;
-      _sw.resetAvailable();
+      out.rawData   = _frameToString(n);
       return true;
     }
-
-    // 2) RcSwitch table decode (if the ISR recognised one of its 23 protocols).
-    if (_sw.available() && _sw.getReceivedValue() != 0) {
-      _fillRcSwitch(out);
-      _sw.resetAvailable();
+    // 2) RcSwitch table + KeeLoq (proto 23) from the same frame (KeeLoq tried
+    //    first inside decodeStream() so it is never mis-grabbed).
+    RCSwitchUtil::Decoded d;
+    if (RCSwitchUtil::decodeStream(_rxFrame, n, d)) {
+      _fillRcSwitch(d, out);
       return true;
     }
-
     // 3) Generic RAW capture — only when the user enabled raw capture.
-    if (_rxFilter == RX_FILTER_RAW && rawStr.length() > 0) {
+    if (_rxFilter == RX_FILTER_RAW) {
+      out = Signal();
       out.frequency = _freq;
       out.preset    = "0";
       out.protocol  = "RAW";
-      out.rawData   = rawStr;
-      out.key = 0; out.te = 0; out.bit = 0;
-      _sw.resetAvailable();
+      out.rawData   = _frameToString(n);
       return true;
     }
-    _sw.resetAvailable();
   }
 
+  // Carrier gone → uninstall the receiver again (kRxGapMs > RMT idle, so the
+  // burst's final frame has already been drained above before we uninstall).
+  if (carrier) {
+    _rxLastCarrierMs = now;
+  } else if (now - _rxLastCarrierMs > kRxGapMs) {
+    _rmt.end();
+    _rxCapturing      = false;
+    _rxCarrierSinceMs = 0;
+  }
   return false;
 }
 
 void CC1101Util::endReceive() {
-  _sw.disableReceive();
+  _rmt.end();
 }
 
 // ── RAW recorder ─────────────────────────────────────────────────────────────
 
-// GDO0 transition ISR. Mirrors the RCSwitchUtil ISR style (plain static method,
-// non-IRAM, calling micros()/digitalRead() — the proven path on this hardware):
-// stores one signed interval per edge while s_rawRec is set. The sign encodes
-// the level that just ENDED (+HIGH / -LOW), matching sendSignal()'s replay.
-void CC1101Util::_rawIsr() {
-  const unsigned long now = micros();
-  const unsigned long dur = now - s_rawLast;
-  s_rawLast = now;
-
-  if (!s_rawRec) return;
-  if (s_rawResync) { s_rawResync = false; return; }   // first edge: clock only
-  if (s_rawCount >= kRawRecMax) { s_rawRec = false; return; }  // buffer full
-
-  int32_t d = (int32_t)(dur > (unsigned long)kRawClampUs ? (unsigned long)kRawClampUs : dur);
-  // The edge just moved the pin to its NEW level, so the interval that elapsed
-  // was spent at the opposite level: new LOW → ended HIGH (+), new HIGH → (-).
-  if (digitalRead(s_rawPin) == LOW) s_rawBuf[s_rawCount++] = d;
-  else                              s_rawBuf[s_rawCount++] = -d;
-}
-
 bool CC1101Util::beginRawRecord() {
   if (!_initialized) return false;
   if (!s_rawBuf) {
-    // Internal RAM only — an ISR must never touch PSRAM (cache fault).
     s_rawBuf = (int32_t*)malloc((size_t)kRawRecMax * sizeof(int32_t));
     if (!s_rawBuf) return false;
   }
@@ -265,25 +262,22 @@ bool CC1101Util::beginRawRecord() {
   ELECHOUSE_cc1101.setSidle();
   _initRx();                       // OOK async, SetRx, GDO0 INPUT (uses _freq)
 
-  s_rawPin           = _gdo0Pin;
   s_rawCount         = 0;
-  s_rawRec           = false;
-  s_rawResync        = false;
-  s_rawLast          = micros();
   _rawArmed          = true;
   _rawStarted        = false;
-  _rawInGap          = false;
+  _rawCapturing      = false;
   _rawRssi           = -120;
+  _rawLastFrameMs    = 0;
   _rawCarrierSinceMs = 0;
   _rawLastCarrierMs  = 0;
-  _rawGapStartMs     = 0;
 
-  attachInterrupt(digitalPinToInterrupt(_gdo0Pin), _rawIsr, CHANGE);
+  // Note: the RMT receiver is NOT installed here. pollRawRecord() installs it only
+  // once a real carrier appears (RSSI) and uninstalls it when the carrier drops —
+  // so squelch noise is never captured and can never overflow the RMT buffer.
   return true;
 }
 
-// Push one synthetic LOW gap interval into the buffer (main loop only — called
-// while the ISR is paused, so the index write doesn't race).
+// Push one synthetic LOW gap interval into the buffer between two captured frames.
 void CC1101Util::_rawPushGap(uint32_t gapMs) {
   if (s_rawCount >= kRawRecMax) return;
   int32_t us = (gapMs > (uint32_t)(kRawClampUs / 1000)) ? kRawClampUs
@@ -294,23 +288,22 @@ void CC1101Util::_rawPushGap(uint32_t gapMs) {
 void CC1101Util::pollRawRecord() {
   if (!_initialized || !_rawArmed) return;
 
-  const int rssi = ELECHOUSE_cc1101.getRssi();
-  _rawRssi = rssi;
-  const uint32_t now = millis();
+  const int  rssi    = ELECHOUSE_cc1101.getRssi();
+  _rawRssi           = rssi;                    // live bar
   const bool carrier = rssi > kRssiThreshold;
+  const uint32_t now = millis();
 
-  // ── Not started: wait for a real signal on the listened frequency. RSSI must
-  // stay above threshold for kRawArmMs (a single transient sample is ignored).
-  if (!_rawStarted) {
+  // ── Idle: wait for a real carrier before turning the receiver on. ──────────
+  if (!_rawCapturing) {
     if (carrier) {
       if (_rawCarrierSinceMs == 0) _rawCarrierSinceMs = now;
-      if (now - _rawCarrierSinceMs >= kRawArmMs) {
-        _rawStarted       = true;
-        _rawInGap         = false;
+      if (now - _rawCarrierSinceMs >= kRawArmMs && s_rawCount < kRawRecMax) {
+        _rawStarted = true;
+        // Short idle so per-repeat frames complete and drain (no overflow).
+        _rmt.beginRx((gpio_num_t)_gdo0Pin, kRawIdleUs);
+        _rawCapturing     = true;
         _rawLastCarrierMs = now;
-        s_rawResync       = true;     // ISR drops the first edge, syncs the clock
-        s_rawLast         = micros();
-        s_rawRec          = true;
+        _rawLastFrameMs   = now;
       }
     } else {
       _rawCarrierSinceMs = 0;
@@ -318,29 +311,42 @@ void CC1101Util::pollRawRecord() {
     return;
   }
 
-  // ── Recording (continuous until the caller stops). Storing pauses during long
-  // silences so idle noise isn't captured, and the gap is re-inserted as one
-  // compressed LOW interval when the signal comes back. ──────────────────────
-  if (s_rawCount >= kRawRecMax) { s_rawRec = false; return; }  // buffer full
+  // ── Capturing: drain every completed (per-repeat) frame. ───────────────────
+  if (s_rawCount < kRawRecMax) {
+    static int32_t frame[kRxFrameMax];
+    uint16_t n;
+    while ((n = _rmt.readFrame(frame, kRxFrameMax)) > 0) {
+      // Each frame is one repeat, delimited by the RMT idle gap. Re-insert that
+      // silence as a LOW interval so the stream stays HIGH/LOW-alternating and
+      // the inter-repeat spacing survives replay (frames end HIGH, start HIGH —
+      // without this the two would fuse into one bogus long pulse).
+      if (s_rawCount > 0) _rawPushGap(kRawIdleUs / 1000);
+      for (uint16_t i = 0; i < n && s_rawCount < kRawRecMax; i++) {
+        int32_t d = frame[i];
+        if (d >  kRawClampUs) d =  kRawClampUs;
+        else if (d < -kRawClampUs) d = -kRawClampUs;
+        s_rawBuf[s_rawCount++] = d;
+      }
+      _rawLastFrameMs = now;
+    }
+  }
 
+  // Carrier gone (or buffer full) → uninstall the receiver so it doesn't sit on
+  // noise. The final per-repeat frame has already been drained above.
   if (carrier) {
     _rawLastCarrierMs = now;
-    if (_rawInGap) {                          // signal returned → resume
-      _rawPushGap(now - _rawGapStartMs);
-      _rawInGap   = false;
-      s_rawResync = true;
-      s_rawLast   = micros();
-      s_rawRec    = true;
-    }
-  } else if (!_rawInGap && (now - _rawLastCarrierMs) > kRawGapMs) {
-    s_rawRec       = false;                   // carrier gone → pause storing
-    _rawInGap      = true;
-    _rawGapStartMs = _rawLastCarrierMs;
+  } else if (now - _rawLastCarrierMs > kRawGapMs) {
+    _rmt.end();
+    _rawCapturing      = false;
+    _rawCarrierSinceMs = 0;
+  }
+  if (s_rawCount >= kRawRecMax) {
+    _rmt.end();
+    _rawCapturing = false;
   }
 }
 
 void CC1101Util::finishRawRecord(Signal& out) {
-  s_rawRec = false;                 // freeze the buffer before serializing
   out = Signal();
   out.frequency = _freq;
   out.preset    = "0";              // generic OOK — matches the RX_FILTER_RAW path
@@ -357,16 +363,10 @@ void CC1101Util::finishRawRecord(Signal& out) {
 }
 
 void CC1101Util::endRawRecord() {
-  if (s_rawPin >= 0) {
-    detachInterrupt(digitalPinToInterrupt(s_rawPin));
-    s_rawPin = -1;
-  }
-  s_rawRec    = false;
+  _rmt.end();
   s_rawCount  = 0;
   _rawArmed   = false;
   _rawStarted = false;
-  _rawInGap   = false;
-  _rawCarrierSinceMs = 0;
   if (s_rawBuf) { free(s_rawBuf); s_rawBuf = nullptr; }
   if (_initialized) ELECHOUSE_cc1101.setSidle();
 }
@@ -571,26 +571,33 @@ void CC1101Util::sendSignal(const Signal& sig) {
   // Brand-decoded signals (CAME, Holtek, ...) keep their captured raw pulse
   // train and are replayed from it — we decode these protocols but have no
   // dedicated encoder, so RCSwitch re-encoding would transmit the wrong timing.
-  // Only true RcSwitch protocols go through the RCSwitch library.
+  // Only true RcSwitch protocols go through the RCSwitch encoder.
   if (sig.protocol != "RcSwitch" && sig.rawData.length() > 0) {
+    // Parse the signed-duration stream and clock it out over RMT — hardware
+    // timing, immune to WiFi/interrupt jitter (unlike the old digitalWrite +
+    // delayMicroseconds loop). Count tokens first for an exact allocation.
     const String& data = sig.rawData;
-    int start = 0;
-    for (int i = 0; i <= (int)data.length(); i++) {
-      if (i == (int)data.length() || data[i] == ' ') {
-        if (i > start) {
-          int32_t val = data.substring(start, i).toInt();
-          if (val > 0) {
-            digitalWrite(_gdo0Pin, HIGH);
-            delayMicroseconds((uint32_t)val);
-          } else if (val < 0) {
-            digitalWrite(_gdo0Pin, LOW);
-            delayMicroseconds((uint32_t)(-val));
+    uint16_t count = data.length() ? 1 : 0;
+    for (int i = 0; i < (int)data.length(); i++) if (data[i] == ' ') count++;
+
+    int32_t* tx = (int32_t*)malloc((size_t)count * sizeof(int32_t));
+    if (tx) {
+      uint16_t k = 0;
+      int start = 0;
+      for (int i = 0; i <= (int)data.length() && k < count; i++) {
+        if (i == (int)data.length() || data[i] == ' ') {
+          if (i > start) {
+            int32_t val = data.substring(start, i).toInt();
+            if (val != 0) tx[k++] = val;
           }
+          start = i + 1;
         }
-        start = i + 1;
       }
+      _rmt.beginTx((gpio_num_t)_gdo0Pin);
+      _rmt.sendDurations(tx, k);
+      _rmt.end();
+      free(tx);
     }
-    digitalWrite(_gdo0Pin, LOW);
 
   } else {
     _sendRcSwitch(sig);
@@ -617,18 +624,22 @@ void CC1101Util::_sendRcSwitch(const Signal& sig) {
   }
 
   RCSwitchUtil sw;
-  sw.enableTransmit(_gdo0Pin);
   sw.setProtocol(protoNum);
   if (sig.te > 0) sw.setPulseLength(sig.te);
   sw.setRepeatTransmit(10);
-  sw.send(sig.key, (unsigned int)sig.bit);
-  sw.disableTransmit();
+
+  // Encode the waveform to durations, then transmit over RMT (hardware-timed).
+  // Bound: 10 repeats × (~24 preamble + 2×64 bits + trailer) fits comfortably.
+  static int32_t tx[2048];
+  const uint16_t k = sw.encodeToDurations(sig.key, (unsigned int)sig.bit, tx, 2048);
+  _rmt.beginTx((gpio_num_t)_gdo0Pin);
+  _rmt.sendDurations(tx, k);
+  _rmt.end();
 }
 
 void CC1101Util::_initTx() {
   ELECHOUSE_cc1101.setModulation(2);
   ELECHOUSE_cc1101.setPktFormat(3);
-  pinMode(_gdo0Pin, OUTPUT);
   ELECHOUSE_cc1101.setPA(12);
   ELECHOUSE_cc1101.SetTx();
 }
@@ -639,6 +650,10 @@ bool CC1101Util::loadFile(const String& content, Signal& out) {
   out = Signal();
 
   String rawAccum;
+  // Reserve up front: a long RAW capture spans many RAW_Data lines, and letting
+  // rawAccum grow by doubling would spike memory (old buffer + new, ~2×) and can
+  // OOM — leaving rawAccum empty and the whole file wrongly rejected as invalid.
+  rawAccum.reserve(content.length());
   int start = 0;
 
   while (start < (int)content.length()) {

@@ -8,6 +8,7 @@
 #include <functional>
 #include "core/ExtSpiClass.h"
 #include "RCSwitchUtil.h"
+#include "RmtRf.h"
 
 class CC1101Util {
 public:
@@ -162,37 +163,48 @@ private:
   float  _freq = DEFAULT_FREQ;
   bool   _initialized = false;
 
-  RCSwitchUtil _sw;  // persistent receiver state for non-blocking polling
+  RmtRf        _rmt;  // hardware RMT capture/replay (replaces the GDO0 ISRs)
   RxFilter     _rxFilter = RX_FILTER_CODE;
 
-  // ── RAW recorder state ─────────────────────────────────────────────────
-  // Tuning: recording opens after the carrier persists kRawArmMs; once started
-  // it runs until the caller stops it. A carrier gap longer than kRawGapMs
-  // pauses storing (so idle noise isn't recorded) and is re-inserted as one
-  // compressed LOW interval when the signal returns.
-  static constexpr uint16_t kRawRecMax  = 8192;    // max transitions / capture
-  static constexpr uint32_t kRawArmMs   = 8;       // carrier must persist to start
-  static constexpr uint32_t kRawGapMs   = 25;      // carrier-gone → pause + gap mark
-  static constexpr int32_t  kRawClampUs = 300000;  // clamp a single interval
+  // Scratch for one RMT frame, read out of the ring buffer each pollReceive().
+  static constexpr uint16_t kRxFrameMax = 1024;
+  int32_t _rxFrame[kRxFrameMax];
 
-  bool     _rawArmed         = false;  // begin/end lifecycle
-  bool     _rawStarted       = false;  // first carrier seen (recording live)
-  bool     _rawInGap         = false;  // storing paused, waiting for carrier
-  int      _rawRssi          = -120;
+  // Receive carrier gating (RSSI) — the RMT receiver stays paused until a real
+  // carrier appears, so squelch noise is never captured (and can't overflow it).
+  static constexpr uint32_t kRxArmMs = 6;    // carrier must persist to start
+  static constexpr uint32_t kRxGapMs = 80;   // carrier-gone hold (> RMT idle) so
+                                             // the final frame is drained first
+  bool     _rxCapturing      = false;
+  uint32_t _rxCarrierSinceMs = 0;
+  uint32_t _rxLastCarrierMs  = 0;
+
+  // ── RAW recorder state ─────────────────────────────────────────────────
+  // Continuous capture over RMT: each completed frame (burst) is appended to one
+  // accumulating buffer, and the real silence between frames — measured by wall
+  // clock — is re-inserted as a single compressed LOW gap so the buffer holds
+  // signal content, not idle noise. Runs until the caller stops it or fills up.
+  static constexpr uint16_t kRawRecMax  = 4096;    // max transitions / capture
+                                                   // (keeps the .sub + its String
+                                                   // reassembly within RAM budget)
+  static constexpr int32_t  kRawClampUs = 300000;  // clamp a single interval
+  static constexpr uint16_t kRawIdleUs  = 5000;    // RMT idle → close per-repeat frames
+  static constexpr uint32_t kRawArmMs   = 6;       // carrier must persist to start
+  static constexpr uint32_t kRawGapMs   = 30;      // carrier-gone → pause + gap mark
+
+  bool     _rawArmed          = false; // begin/end lifecycle
+  bool     _rawStarted        = false; // first frame captured (recording live)
+  bool     _rawCapturing      = false; // RMT actively receiving (carrier present)
+  int      _rawRssi           = -120;  // last RSSI (live bar)
+  uint32_t _rawLastFrameMs    = 0;     // millis() of the last appended frame
   uint32_t _rawCarrierSinceMs = 0;     // when RSSI first crossed (0 = below)
-  uint32_t _rawLastCarrierMs = 0;
-  uint32_t _rawGapStartMs    = 0;
+  uint32_t _rawLastCarrierMs  = 0;     // last time carrier was present
 
   void _rawPushGap(uint32_t gapMs);    // insert one compressed LOW gap interval
 
-  // ISR-shared state (single active CC1101Util at a time — static like RCSwitch).
-  static void              _rawIsr();
-  static volatile bool          s_rawRec;     // ISR storing transitions
-  static volatile bool          s_rawResync;  // drop next edge, just resync clock
-  static volatile uint16_t      s_rawCount;
-  static volatile unsigned long s_rawLast;
-  static int32_t*               s_rawBuf;     // signed durations (internal RAM)
-  static int                    s_rawPin;
+  // Accumulator (main-loop only now — RMT does the timing, no ISR).
+  static uint16_t  s_rawCount;
+  static int32_t*  s_rawBuf;           // signed durations (internal RAM)
 
   // Scan status (updated during receive/scan)
   bool    _scanning = false;
@@ -221,6 +233,8 @@ private:
   void  _initTx();
   void  _initRx();
   void  _sendRcSwitch(const Signal& sig);
-  // Fill `out` from the current RCSwitch decode (incl. KeeLoq proto-23 unpack).
-  void  _fillRcSwitch(Signal& out);
+  // Fill `out` from a decoded RcSwitch/KeeLoq frame (incl. KeeLoq proto-23 unpack).
+  void  _fillRcSwitch(const RCSwitchUtil::Decoded& d, Signal& out);
+  // Serialize the last captured RMT frame (_rxFrame) as signed-duration text.
+  String _frameToString(uint16_t n) const;
 };
