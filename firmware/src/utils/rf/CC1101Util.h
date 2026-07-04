@@ -179,12 +179,16 @@ private:
   static constexpr uint32_t kRxArmMs = 6;    // carrier must persist to start
   static constexpr uint32_t kRxGapMs = 80;   // carrier-gone hold (> RMT idle) so
                                              // the final frame is drained first
-  // The carrier gate is adaptive: measured a few dB above the noise floor at
-  // begin, so a weak/distant transmitter still triggers (a fixed threshold
-  // needed the remote almost touching the antenna).
-  static constexpr int kCarrierMarginDb = 8;   // gate = measured floor + this
-  static constexpr int kGateMin         = -98; // clamp (never gate on pure noise)
-  static constexpr int kGateMax         = -55;
+  // The carrier gate is adaptive: measured just above the average noise floor at
+  // begin, so a weak/distant transmitter still triggers — nearly as sensitive as
+  // the raw data slicer the old RCSwitch ISR read directly (it had no RSSI gate).
+  static constexpr int      kCarrierMarginDb = 4;   // gate = avg floor + this
+  static constexpr int      kGateMin         = -100;// clamp (never gate on floor)
+  static constexpr int      kGateMax         = -55;
+  static constexpr uint32_t kMaxCaptureMs    = 600; // safety: no frame drained for
+                                                    // this long → stuck on noise;
+                                                    // tear down (idle poll re-adapts
+                                                    // the gate) before RMT overflow
   int      _captureGate      = RSSI_THRESHOLD;
   bool     _rxCapturing      = false;
   uint32_t _rxCarrierSinceMs = 0;
@@ -199,7 +203,9 @@ private:
                                                    // (keeps the .sub + its String
                                                    // reassembly within RAM budget)
   static constexpr int32_t  kRawClampUs = 300000;  // clamp a single interval
-  static constexpr uint16_t kRawIdleUs  = 5000;    // RMT idle → close per-repeat frames
+  static constexpr uint16_t kRawIdleUs  = 6000;    // RMT idle → close per-repeat
+                                                   // frames (> KeeLoq's 4 ms intra
+                                                   // sync, < inter-repeat gaps)
   static constexpr uint32_t kRawArmMs   = 6;       // carrier must persist to start
   static constexpr uint32_t kRawGapMs   = 30;      // carrier-gone → pause + gap mark
 
@@ -210,6 +216,8 @@ private:
   uint32_t _rawLastFrameMs    = 0;     // millis() of the last appended frame
   uint32_t _rawCarrierSinceMs = 0;     // when RSSI first crossed (0 = below)
   uint32_t _rawLastCarrierMs  = 0;     // last time carrier was present
+  uint32_t _rawCaptureStartMs = 0;     // when the current RMT capture opened
+  int      _rawFloor          = -100;  // rolling noise-floor estimate (RAW record)
 
   void _rawPushGap(uint32_t gapMs);    // insert one compressed LOW gap interval
 
@@ -253,7 +261,11 @@ private:
   static void _parseSubLine(const String& line, Signal& out);
   static bool _finalizeSub(Signal& out);   // KeeLoq unpack + validity check
 
-  // Sample the RSSI noise floor and return the adaptive carrier gate (floor +
-  // margin, clamped). Call once the chip is in RX and no signal is expected.
-  int _measureNoiseGate();
+  // Average RSSI over a short window ≈ the noise floor (seed for the rolling
+  // estimate). Call once the chip is in RX and no signal is expected.
+  int _measureNoiseFloor();
+  // Advance a rolling noise-floor estimate by one RSSI sample and return the
+  // resulting carrier gate (floor + margin, clamped). Adapts up and down, so a
+  // rising floor can't latch the gate high and kill sensitivity.
+  int _updateGate(int& floor, int rssi) const;
 };

@@ -142,7 +142,6 @@ bool CC1101Util::beginReceive() {
   _rxCapturing      = false;
   _rxCarrierSinceMs = 0;
   _rxLastCarrierMs  = 0;
-  _captureGate      = _measureNoiseGate();   // adaptive gate (distance-sensitive)
   // The RMT receiver is installed on demand in pollReceive() once a real carrier
   // appears (RSSI gating) and uninstalled when it drops — no noise capture.
   return true;
@@ -181,7 +180,7 @@ bool CC1101Util::pollReceive(Signal& out) {
   if (!_initialized) return false;
 
   const int  rssi    = ELECHOUSE_cc1101.getRssi();
-  const bool carrier = rssi > _captureGate;
+  const bool carrier = rssi > kRssiThreshold;
   const uint32_t now = millis();
 
   // Gate: turn the receiver on only once a real carrier persists; while idle the
@@ -271,7 +270,8 @@ bool CC1101Util::beginRawRecord() {
   _rawLastFrameMs    = 0;
   _rawCarrierSinceMs = 0;
   _rawLastCarrierMs  = 0;
-  _captureGate       = _measureNoiseGate();   // adaptive gate (distance-sensitive)
+  _rawFloor          = _measureNoiseFloor();   // seed the rolling gate
+  _captureGate       = _rawFloor + kCarrierMarginDb;
 
   // Note: the RMT receiver is NOT installed here. pollRawRecord() installs it only
   // once a real carrier appears (RSSI) and uninstalls it when the carrier drops —
@@ -297,15 +297,18 @@ void CC1101Util::pollRawRecord() {
 
   // ── Idle: wait for a real carrier before turning the receiver on. ──────────
   if (!_rawCapturing) {
-    if (carrier) {
+    // Adapt the gate to the noise floor every idle poll (up AND down — no latch).
+    _captureGate = _updateGate(_rawFloor, rssi);
+    if (rssi > _captureGate) {
       if (_rawCarrierSinceMs == 0) _rawCarrierSinceMs = now;
       if (now - _rawCarrierSinceMs >= kRawArmMs && s_rawCount < kRawRecMax) {
         _rawStarted = true;
         // Short idle so per-repeat frames complete and drain (no overflow).
         _rmt.beginRx((gpio_num_t)_gdo0Pin, kRawIdleUs);
-        _rawCapturing     = true;
-        _rawLastCarrierMs = now;
-        _rawLastFrameMs   = now;
+        _rawCapturing      = true;
+        _rawLastCarrierMs  = now;
+        _rawLastFrameMs    = now;
+        _rawCaptureStartMs = now;
       }
     } else {
       _rawCarrierSinceMs = 0;
@@ -329,8 +332,19 @@ void CC1101Util::pollRawRecord() {
         else if (d < -kRawClampUs) d = -kRawClampUs;
         s_rawBuf[s_rawCount++] = d;
       }
-      _rawLastFrameMs = now;
+      _rawLastFrameMs    = now;
+      _rawCaptureStartMs = now;   // frames are landing → not stuck on noise
     }
+  }
+
+  // Safety: no frame drained for this long while "capturing" means the RMT is
+  // sitting on non-idling noise (floor rose above the gate) — tear it down before
+  // it overflows the buffer (→ crash). The idle branch re-adapts the gate next.
+  if (now - _rawCaptureStartMs > kMaxCaptureMs) {
+    _rmt.end();
+    _rawCapturing      = false;
+    _rawCarrierSinceMs = 0;
+    return;
   }
 
   // Carrier gone (or buffer full) → uninstall the receiver so it doesn't sit on
@@ -499,16 +513,24 @@ void CC1101Util::_initRx() {
   pinMode(_gdo0Pin, INPUT);
 }
 
-int CC1101Util::_measureNoiseGate() {
-  // Peak RSSI over a short window with no signal ≈ the noise floor. Gate a few dB
-  // above it so weak/distant carriers still trigger while the floor doesn't.
-  int peak = -120;
-  for (int i = 0; i < 8; i++) {
-    int r = ELECHOUSE_cc1101.getRssi();
-    if (r > peak) peak = r;
+int CC1101Util::_measureNoiseFloor() {
+  // Average RSSI over a short window with no signal ≈ the noise floor. Seeds the
+  // rolling estimate so gating is right from the first poll.
+  long sum = 0;
+  const int samples = 16;
+  for (int i = 0; i < samples; i++) {
+    sum += ELECHOUSE_cc1101.getRssi();
     delayMicroseconds(300);
   }
-  int gate = peak + kCarrierMarginDb;
+  return (int)(sum / samples);
+}
+
+int CC1101Util::_updateGate(int& floor, int rssi) const {
+  // Leaky follower toward the current RSSI (EMA, α≈1/8). Only called while idle,
+  // where RSSI is the noise floor — so `floor` tracks it up AND down and the gate
+  // sits a small margin above it, staying sensitive without latching high.
+  floor = (floor * 7 + rssi) / 8;
+  int gate = floor + kCarrierMarginDb;
   if (gate < kGateMin) gate = kGateMin;
   if (gate > kGateMax) gate = kGateMax;
   return gate;
