@@ -39,6 +39,7 @@ void SubGHzScreen::onInit() {
     return;
   }
   _rf.end();
+  ProgressView::finish();
 
   _showMenu();
 }
@@ -422,6 +423,7 @@ void SubGHzScreen::_recordRawFinish() {
       ProgressView::progress("Replaying RAW", 50);
       if (!_rf.begin(Uni.Spi, _csPin, _gdo0Pin)) { ShowStatusAction::show("CC1101 not found"); continue; }
       _rf.sendSignal(_capturedSignals[0]);
+      ProgressView::finish();
       int n = Achievement.inc("rf_send_first");
       if (n == 1) Achievement.unlock("rf_send_first");
       ShowStatusAction::show("Replayed", 1000);

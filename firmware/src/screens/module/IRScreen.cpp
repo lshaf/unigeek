@@ -202,6 +202,7 @@ void IRScreen::onItemSelected(uint8_t index) {
         _ir.startTvBGone(region, _tvbProgressCb, _tvbCancelCb);
 
         _ir.end();
+        ProgressView::finish();
         _activeInstance = nullptr;
 
         if (_tvbCancelled) {

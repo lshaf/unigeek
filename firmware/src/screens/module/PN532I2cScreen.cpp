@@ -248,6 +248,7 @@ bool PN532I2cScreen::_initModule() {
       _fwSup =  fw        & 0xFF;
       _wire    = Uni.ExI2C;
       _busName = "ExI2C";
+      ProgressView::finish();
       _ready   = true;
       int n = Achievement.inc("pn532_i2c_first_use");
       if (n == 1) Achievement.unlock("pn532_i2c_first_use");
@@ -270,6 +271,7 @@ bool PN532I2cScreen::_initModule() {
       _fwSup =  fw        & 0xFF;
       _wire    = Uni.InI2C;
       _busName = "InI2C";
+      ProgressView::finish();
       _ready   = true;
       int n = Achievement.inc("pn532_i2c_first_use");
       if (n == 1) Achievement.unlock("pn532_i2c_first_use");
@@ -508,6 +510,7 @@ void PN532I2cScreen::_doAuthenticate() {
     }
   }
 
+  ProgressView::finish();
   _goMifare();
 }
 
@@ -583,6 +586,7 @@ void PN532I2cScreen::_doDumpMemory() {
   int n = Achievement.inc("nfc_dump_memory");
   if (n == 1) Achievement.unlock("nfc_dump_memory");
 
+  ProgressView::finish();
   _scrollView.setRows(_rows, _rowCount);
   render();
 }
@@ -691,6 +695,7 @@ void PN532I2cScreen::_doDictionaryAttackWithFile(uint8_t fileIndex) {
     }
   }
 
+  ProgressView::finish();
   if (recovered > 0) {
     int n = Achievement.inc("nfc_dict_attack");
     if (n == 1) Achievement.unlock("nfc_dict_attack");
@@ -728,6 +733,7 @@ void PN532I2cScreen::_doUltralightDump() {
     if (!_nfc->mifareultralight_ReadPage(page, data)) break;
     _pushRow("P" + String(page), _hexBlock(data, 4));
   }
+  ProgressView::finish();
   _scrollView.setRows(_rows, _rowCount);
   render();
 }

@@ -119,6 +119,7 @@ void NRF24Screen::onInit() {
     return;
   }
   _radioEnd();
+  ProgressView::finish();
 
   _specScanCh = 0;
   _showMenu();

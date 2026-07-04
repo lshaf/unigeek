@@ -388,6 +388,7 @@ void RfCaptureScreen::_sendCapturedSignal(uint8_t index) {
   ProgressView::init();
   ProgressView::progress(("Replaying " + _capturedTimes[index]).c_str(), 50);
   _radioSendCaptured(_capturedSignals[index]);
+  ProgressView::finish();
   int n = Achievement.inc("rf_send_first");
   if (n == 1) Achievement.unlock("rf_send_first");
   ShowStatusAction::show("Replayed", 1000);
@@ -409,6 +410,7 @@ void RfCaptureScreen::_replayStepKeeloqSignal(uint8_t index) {
   snprintf(buf, sizeof(buf), "Replay %s cnt=%u", sig.mf_name.c_str(), sig.cnt);
   ProgressView::progress(buf, 50);
   _radioSendCaptured(sig);
+  ProgressView::finish();
   _rebuildCapturedItems();
 
   int nk = Achievement.inc("rf_keeloq_step_replay");
@@ -539,6 +541,7 @@ void RfCaptureScreen::_sendBrowseFile(uint8_t index) {
     render();
     return;
   }
+  ProgressView::finish();
   int n = Achievement.inc("rf_send_first");
   if (n == 1) Achievement.unlock("rf_send_first");
   ShowStatusAction::show(("Sent: " + e.name).c_str(), 1000);

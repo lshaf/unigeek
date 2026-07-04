@@ -68,6 +68,7 @@ void PortScannerScreen::_scan() {
 
   ProgressView::init();
   _resultCount = PortScanUtil::scan(_targetIp.c_str(), _results, PortScanUtil::MAX_RESULTS);
+  ProgressView::finish();
 
   if (_resultCount == 0) {
     _resultItems[0] = {"No ports open"};

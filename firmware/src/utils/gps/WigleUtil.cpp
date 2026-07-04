@@ -126,6 +126,7 @@ uint8_t WigleUtil::fetchStats(ScrollListView::Row* rows, uint8_t maxRows) {
   if (r < maxRows) rows[r++] = {"First Upload",   jsonVal(statsBody, "first")};
   if (r < maxRows) rows[r++] = {"Last Upload",    jsonVal(statsBody, "last")};
 
+  ProgressView::finish();
   return r;
 }
 
@@ -241,6 +242,7 @@ bool WigleUtil::uploadFile(IStorage* storage, const String& fileName) {
     if (n > 0) { tmp[n] = '\0'; response += tmp; }
   }
   client.stop();
+  ProgressView::finish();
 
   if (response.indexOf("\"success\":true") >= 0 || response.indexOf("200") >= 0) {
     // Mark as uploaded by renaming
