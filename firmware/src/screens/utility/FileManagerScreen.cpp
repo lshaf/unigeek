@@ -5,6 +5,8 @@
 #include "screens/utility/UtilityMenuScreen.h"
 #include "screens/utility/FileViewerScreen.h"
 #include "screens/utility/FileHexViewerScreen.h"
+#include "screens/module/IRScreen.h"
+#include "screens/module/SubGHzScreen.h"
 #include "ui/actions/InputTextAction.h"
 #include "ui/actions/ShowStatusAction.h"
 
@@ -118,6 +120,14 @@ void FileManagerScreen::_openMenu(uint8_t fileIdx)
   };
 
   if (isFile) {
+    // Protocol files get a transmit shortcut at the top of the menu.
+    String name = _browser.entry(fileIdx).name;
+    name.toLowerCase();
+    if (name.endsWith(".ir")) {
+      addMenu(ACT_IR_SEND, "Send", "Infrared");
+    } else if (name.endsWith(".sub")) {
+      addMenu(ACT_SUB_REPLAY, "Replay", "Sub-GHz");
+    }
     addMenu(ACT_VIEW, "View");
     addMenu(ACT_VIEW_HEX, "View HEX");
   }
@@ -179,6 +189,14 @@ void FileManagerScreen::_handleMenuAction(uint8_t index)
 
     case ACT_VIEW_HEX:
       Screen.push(new FileHexViewerScreen(targetPath));
+      return;
+
+    case ACT_IR_SEND:
+      Screen.push(new IRScreen(targetPath));
+      return;
+
+    case ACT_SUB_REPLAY:
+      Screen.push(new SubGHzScreen(targetPath));
       return;
 
     case ACT_NEW_FOLDER: {

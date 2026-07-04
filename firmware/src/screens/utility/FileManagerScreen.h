@@ -20,11 +20,12 @@ private:
   enum State { STATE_FILE, STATE_MENU } _state = STATE_FILE;
 
   enum MenuAction {
-    ACT_VIEW, ACT_VIEW_HEX, ACT_NEW_FOLDER, ACT_RENAME, ACT_DELETE,
+    ACT_VIEW, ACT_VIEW_HEX, ACT_IR_SEND, ACT_SUB_REPLAY,
+    ACT_NEW_FOLDER, ACT_RENAME, ACT_DELETE,
     ACT_COPY, ACT_CUT, ACT_PASTE, ACT_CANCEL_CLIP, ACT_CLOSE_MENU, ACT_EXIT,
   };
 
-  static constexpr uint8_t kMaxMenu      = 11;
+  static constexpr uint8_t kMaxMenu      = 13;
   static constexpr uint8_t kMaxPathDepth = 8;
 
   // File browser

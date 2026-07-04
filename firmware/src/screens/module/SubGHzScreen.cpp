@@ -40,7 +40,43 @@ void SubGHzScreen::onInit() {
   }
   _rf.end();
 
+  if (_pendingReplayFile.length() > 0) {
+    _replayPendingFile();
+    return;
+  }
+
   _showMenu();
+}
+
+// Launched from the File Manager: transmit a specific .sub file once, then pop
+// back to the caller. Radio presence was already verified in onInit().
+void SubGHzScreen::_replayPendingFile() {
+  String file = _pendingReplayFile;
+  _pendingReplayFile = "";
+
+  String content = Uni.Storage ? Uni.Storage->readFile(file.c_str()) : String();
+  Signal sig;
+  if (content.length() == 0 || !CC1101Util::loadFile(content, sig)) {
+    ShowStatusAction::show("Invalid .sub file");
+    Screen.goBack();
+    return;
+  }
+
+  int slash = file.lastIndexOf('/');
+  String name = (slash >= 0) ? file.substring(slash + 1) : file;
+
+  ProgressView::init();
+  ProgressView::progress(("Replaying " + name).c_str(), 50);
+  if (!_radioSendFromBrowse(sig)) {
+    ShowStatusAction::show("Send failed");
+    Screen.goBack();
+    return;
+  }
+  ProgressView::finish();
+  int n = Achievement.inc("rf_send_first");
+  if (n == 1) Achievement.unlock("rf_send_first");
+  ShowStatusAction::show(("Sent: " + name).c_str(), 1200);
+  Screen.goBack();
 }
 
 // ── Radio adapter (chip lifecycle gated per operation) ──────────────────────
