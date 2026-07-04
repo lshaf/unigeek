@@ -38,7 +38,11 @@ private:
   uint8_t     _scannedCount = 0;
   ListItem    _scannedItems[WifiUtility::MAX_WIFI];
 
+#ifdef HAS_NET_TOOLS
+  ListItem _menuItems[16] = {
+#else
   ListItem _menuItems[14] = {
+#endif
     {"Information"},
     {"WiFi QRCode"},
     {"World Clock"},
@@ -53,6 +57,10 @@ private:
     {"Cast Bomb"},
     {"Bonjour Spam"},
     {"Printer Prank"},
+#ifdef HAS_NET_TOOLS
+    {"Responder"},
+    {"SOCKS4 Proxy"},
+#endif
   };
 
   void   _showMenu();

@@ -18,6 +18,10 @@
 #include "screens/wifi/network/CastBombScreen.h"
 #include "screens/wifi/network/BonjourSpamScreen.h"
 #include "screens/wifi/network/PrinterPrankScreen.h"
+#ifdef HAS_NET_TOOLS
+#include "screens/wifi/network/ResponderScreen.h"
+#include "screens/wifi/network/Socks4ProxyScreen.h"
+#endif
 #include "ui/actions/ShowStatusAction.h"
 #include "ui/actions/ShowQRCodeAction.h"
 #include <WiFi.h>
@@ -75,6 +79,10 @@ void NetworkMenuScreen::onItemSelected(uint8_t index) {
       case 11: Screen.push(new CastBombScreen()); break;
       case 12: Screen.push(new BonjourSpamScreen()); break;
       case 13: Screen.push(new PrinterPrankScreen()); break;
+#ifdef HAS_NET_TOOLS
+      case 14: Screen.push(new ResponderScreen()); break;
+      case 15: Screen.push(new Socks4ProxyScreen()); break;
+#endif
     }
   } else if (_state == STATE_INFORMATION) {
     _showMenu();
