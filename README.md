@@ -35,12 +35,12 @@ firmware menu, so it never drifts:
 
 - 📶 **Wi-Fi Attacks** — Evil Twin, Karma, beacon/SSID flood, deauther, EAPOL (WPA2) capture & offline crack, captive portals, packet monitor
 - 🔵 **BLE Attacks** — device/beacon spam (Fast Pair, Continuity, Samsung), passive detector (Flipper/AirTag/skimmer), WhisperPair (CVE-2025-36911), BLE analyzer
-- 📡 **Sub-GHz (CC1101)** — capture / replay / jam, peak frequency detector, 38 brand protocol decoders, KeeLoq auto-decode + rolling-code Replay +1
+- 📡 **Sub-GHz (CC1101)** — capture / replay / jam, peak frequency detector, 38 brand protocol decoders, continuous RAW recorder, KeeLoq auto-decode + rolling-code Replay +1
 - 🛰️ **RF & GPS** — NRF24 spectrum / jammer / MouseJack, M5 RF433, GPS wardriving with Wigle export and on-device map
 - 🪪 **NFC** — MIFARE Classic key recovery (dictionary, nested, darkside), PN532 / PN532Killer, Chameleon Ultra BLE client
 - 📺 **IR** — capture, replay, TV-B-Gone, Flipper-IRDB compatible
 - ⌨️ **HID** — USB & BLE keyboard, DuckyScript 3.0, mouse jiggle, WebAuthn/FIDO2 passkey, USB mass storage
-- 🌐 **Network** — MITM, CCTV sniffer, cast bomb, printer prank, mDNS spam, web/BLE file manager, Wikipedia browser
+- 🌐 **Network** — MITM, Responder (NetNTLMv2 capture), SOCKS4 proxy, CCTV sniffer, cast bomb, printer prank, mDNS spam, web/BLE file manager, Wikipedia browser
 - 🧰 **Utility & Games** — QR/barcode, TOTP, UART terminal, password manager, Lua runner, achievements, and several on-device games
 
 > Each item links to step-by-step docs on the [features site](https://unigeek.xid.run/features/).
@@ -87,6 +87,16 @@ pio device monitor            # serial monitor
 Common environments: `m5stickcplus_11`, `m5stickcplus_2`, `t_lora_pager`, `m5_cardputer`,
 `m5_cardputer_adv`, `t_display`, `t_display_s3`, `t_embed_cc1101`, `m5_cores3_unified`,
 `m5sticks3`, `diy_smoochie`, `cyd_2432s028`, `cyd_3248s035c` … (see `platformio.ini` for the full list).
+
+---
+
+## Companion app
+
+Two companion clients talk to the device over the same wire protocol — enable
+**HID → USB Remote** (USB) or **Bluetooth → Remote Device** (BLE) on the device first:
+
+- **Web** — `https://unigeek.xid.run/app/` for the screen-mirror remote, file manager, and browser flasher (Web Serial / Web Bluetooth).
+- **Android** — the [UniGeek companion app](android/) (Kotlin + Compose): remote control, file manager, and on-device firmware flashing over USB-OTG or BLE. APK published with each release.
 
 ---
 
@@ -145,3 +155,5 @@ Built with inspiration and reference from these projects — thank you:
 - [claude-desktop-buddy](https://github.com/anthropics/claude-desktop-buddy) — Claude Buddy BLE desk pet
 - [pico-fido](https://github.com/polhenarejos/pico-fido) (AGPLv3) — WebAuthn / FIDO2 CTAP 2.1 reference
 - [LilyGoLib](https://github.com/Xinyuan-LilyGO/LilyGoLib) & [M5Unified](https://github.com/m5stack/M5Unified) — hardware references
+
+<!-- README last synced at commit: 3275a16 -->

@@ -6,24 +6,23 @@ The **same web page** (`https://unigeek.xid.run/app/files/`) also connects over 
 
 ## Start it on the device
 
-1. Go to **Bluetooth > File Manager**
-2. The device begins advertising as **`UniGeek FM`** and shows the connection URL
-3. The screen status reads **Advertising** until a browser connects, then **Connected**
-4. Press **BACK** to stop advertising and free the radio
+1. Go to **Bluetooth → Remote Device** and switch it **On**
+2. The device advertises as **`UniGeek Remote`**
+3. The toggle is **live (no restart)** — leave it on and keep using the device
 
 > [!note]
-> The on-device screen only advertises and shows status — all browsing, viewing, and editing happens in the browser. The device just serves files over the link.
+> **Remote Device** is one background service: the same BLE link serves both this File Manager page and the [Remote](remote-access) screen-mirror page. There is no separate on-device file browser — all browsing, viewing, and editing happens in the browser.
 
 ## Connect from the browser
 
 1. Open `https://unigeek.xid.run/app/files/` in a browser that supports Web Bluetooth (Chrome / Edge on desktop or Android)
-2. Click **Connect** and pick **`UniGeek FM`** from the pairing dialog
+2. Click **Connect** and pick **`UniGeek Remote`** from the pairing dialog
 3. Browse the device storage once connected
 
-For a wired connection instead, plug the board in over USB and the same page connects over Web Serial — no on-device screen needed, but the **Serial File Manager** must be enabled (see below).
+For a wired connection instead, plug the board in over USB and the same page connects over Web Serial — no Bluetooth needed, but the **USB Remote** service must be enabled (see below).
 
 > [!warn]
-> The USB-serial transport is gated by **Settings → Serial File Manager**. It's **Off** by default (to save memory on no-PSRAM boards), so the device won't respond over USB until you switch it on **and restart** — the toggle is applied at boot. The BLE transport is unaffected: it's started on demand from **Bluetooth → File Manager**.
+> The USB-serial transport is gated by **HID → USB Remote** — also a live toggle (no restart). Turn it on and the same link serves the File Manager and Remote screen-mirror pages over USB. The BLE transport is independent: it's started from **Bluetooth → Remote Device**.
 
 ## What you can do
 
@@ -36,7 +35,7 @@ For a wired connection instead, plug the board in over USB and the same page con
 
 ## Transports at a glance
 
-| | BLE File Manager | Web File Manager | USB serial |
+| | Remote Device (BLE) | Web File Manager | USB Remote |
 |---|---|---|---|
 | Link | Bluetooth LE (NUS) | WiFi (HTTP :8080) | USB (Web Serial) |
 | Page | `https://unigeek.xid.run/app/files/` | served by device | `https://unigeek.xid.run/app/files/` |
@@ -47,4 +46,4 @@ For a wired connection instead, plug the board in over USB and the same page con
 > BLE transfers are framed with flow control, so large files move reliably but slower than USB serial. For bulk transfers, prefer the cable; for quick edits without plugging in, use BLE.
 
 > [!warn]
-> Anyone in BLE range who connects to `UniGeek FM` can read and write device storage while the screen is active — there is no password on this link. Stop the screen (BACK) when you're done.
+> Anyone in BLE range who connects to `UniGeek Remote` can read and write device storage while the service is on — there is no password on this link. Switch **Bluetooth → Remote Device** off when you're done.
