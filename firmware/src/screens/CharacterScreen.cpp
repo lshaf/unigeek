@@ -199,17 +199,6 @@ void CharacterScreen::onUpdate()
       _enterMainMenu();
       return;
     }
-    // ── debug preview: cycle mascot / level without touching saved state ──
-    if (dir == INavigation::DIR_UP) {
-      _dbgMascot = (int8_t)((_dbgMascot + 1) % Mascot::count());
-      // The head size can change between mascots, which moves the bubble — full
-      // repaint so the bubble reflows and any old frame is cleared.
-      _firstRender = true;
-      _dirtyMask   = 0xFF;
-    } else if (dir == INavigation::DIR_DOWN) {
-      _dbgRank = (int8_t)((_dbgRank + 1) % 5);
-      _dirtyMask |= DIRTY_HEAD | DIRTY_TOP;   // rank changes colours, not size
-    }
   }
 
   unsigned long now = millis();
@@ -300,8 +289,7 @@ void CharacterScreen::onRender()
   const int halfW = (W - PAD * 2 - gap) / 2;
 
   // Mascot head art is configurable (see utils/Mascot.h); hacker is the default.
-  // _dbgMascot (UP key) forces a mascot for preview without changing config.
-  const Mascot& mascot = _dbgMascot >= 0 ? Mascot::at((uint8_t)_dbgMascot) : Mascot::current();
+  const Mascot& mascot = Mascot::current();
   const int headW = mascot.w * ps;
   const int headH = mascot.h * ps;
   const int headX = PAD + scale * 4;
@@ -328,8 +316,7 @@ void CharacterScreen::onRender()
 
   // ── data ─────────────────────────────────────────────────────────────
   int      exp      = Achievement.getExp();
-  // _dbgRank (DOWN key) forces a level for preview without changing exp.
-  RankInfo ri       = _dbgRank >= 0 ? hackerRankByIndex(_dbgRank) : hackerGetRank(exp);
+  RankInfo ri       = hackerGetRank(exp);
   int      hp       = _clampPct(Uni.Power.getBatteryPercentage());
   bool     chg      = Uni.Power.isCharging();
   if (hp == 0 && !chg) hp = 100;

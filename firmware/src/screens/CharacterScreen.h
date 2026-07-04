@@ -48,10 +48,5 @@ public:
   bool          _firstRender = true;
   uint8_t       _dirtyMask   = 0xFF;
 
-  // debug preview (home screen): UP cycles mascot, DOWN cycles level.
-  // -1 = follow the real config / exp; >=0 = forced override for previewing.
-  int8_t        _dbgMascot   = -1;
-  int8_t        _dbgRank     = -1;
-
   void _enterMainMenu();
 };
