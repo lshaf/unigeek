@@ -151,6 +151,22 @@ public:
   // Send a signal (handles RAW and RcSwitch/Princeton protocols)
   void sendSignal(const Signal& sig);
 
+  // ── Brute force ──────────────────────────────────────────────────────────
+  // Sweep the code space of a fixed-code protocol. The transmitter and RMT TX
+  // channel stay open across many codes so a full sweep isn't stalled by
+  // per-code radio setup.
+  //   1. beginBruteTx(freq) once
+  //   2. sendBruteCode(proto, key, bits, te, repeat) per code — te <= 0 uses the
+  //      protocol's own pulse length
+  //   3. endBruteTx() when done or cancelled
+  bool beginBruteTx(float freq);
+  void sendBruteCode(int protoNum, uint64_t key, int bits, int te, int repeat);
+  // Transmit a pre-built signed-duration waveform (+HIGH / -LOW µs) over the open
+  // brute TX channel — for protocols encoded from an explicit timing table rather
+  // than the RcSwitch registry.
+  void sendBruteRaw(const int32_t* dur, uint16_t n);
+  void endBruteTx();
+
   // File I/O — Bruce SubGhz .sub format
   static bool loadFile(const String& content, Signal& out);
   // Streaming parse straight off an open file — use for on-SD .sub files so a
