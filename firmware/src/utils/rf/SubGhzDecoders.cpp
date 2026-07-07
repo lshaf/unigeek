@@ -1513,6 +1513,295 @@ static bool decode_honeywell(const unsigned int* dur, uint16_t n, uint8_t phase,
   return false;
 }
 
+// ── Nice FloR-S ─────────────────────────────────────────────────────────────
+// 52-bit rolling code, PWM. The frame value is a rolling ciphertext, so the
+// match is identification only (serial/counter live encrypted inside it).
+static bool decode_nice_flor_s(const unsigned int* dur, uint16_t n, uint8_t phase,
+                               SubGhzDecoders::Match& m) {
+  const uint32_t te_short = 500, te_long = 1000, te_delta = 300;
+  enum { Reset, CheckHeader, FoundHeader, SaveDur, CheckDur };
+  uint32_t step = Reset, te_last = 0;
+  uint64_t data = 0;
+  uint8_t  cnt = 0;
+
+  for (uint16_t i = 0; i < n; i++) {
+    bool     level    = sampleLevel(i, phase);
+    uint32_t duration = dur[i];
+    switch (step) {
+      case Reset:
+        if (!level && DDIFF(duration, te_short * 38) < te_delta * 38) step = CheckHeader;
+        break;
+      case CheckHeader:
+        if (level && DDIFF(duration, te_short * 3) < te_delta * 3) step = FoundHeader;
+        else step = Reset;
+        break;
+      case FoundHeader:
+        if (!level && DDIFF(duration, te_short * 3) < te_delta * 3) {
+          step = SaveDur; data = 0; cnt = 0;
+        } else step = Reset;
+        break;
+      case SaveDur:
+        if (level) {
+          if (DDIFF(duration, te_short * 3) < te_delta) step = Reset;   // stop bit
+          else { te_last = duration; step = CheckDur; }
+        }
+        break;
+      case CheckDur:
+        if (!level) {
+          if (DDIFF(te_last, te_short) < te_delta && DDIFF(duration, te_long) < te_delta) {
+            data = data << 1 | 0; cnt++; step = SaveDur;
+          } else if (DDIFF(te_last, te_long) < te_delta && DDIFF(duration, te_short) < te_delta) {
+            data = data << 1 | 1; cnt++; step = SaveDur;
+          } else step = Reset;
+        } else step = Reset;
+        if (cnt == 52) {
+          m.name = "Nice FloR-S"; m.key = data; m.bits = 52; m.te = (uint16_t)te_short;
+          return true;
+        }
+        break;
+    }
+  }
+  return false;
+}
+
+// ── FAAC SLH ────────────────────────────────────────────────────────────────
+// 64-bit rolling (SLH). Identification only — the second half is encrypted.
+static bool decode_faac_slh(const unsigned int* dur, uint16_t n, uint8_t phase,
+                            SubGhzDecoders::Match& m) {
+  const uint32_t te_short = 255, te_long = 595, te_delta = 100;
+  enum { Reset, FoundPre, SaveDur, CheckDur };
+  uint32_t step = Reset, te_last = 0;
+  uint64_t data = 0;
+  uint8_t  cnt = 0;
+
+  for (uint16_t i = 0; i < n; i++) {
+    bool     level    = sampleLevel(i, phase);
+    uint32_t duration = dur[i];
+    switch (step) {
+      case Reset:
+        if (level && DDIFF(duration, te_long * 2) < te_delta * 3) step = FoundPre;
+        break;
+      case FoundPre:
+        if (!level && DDIFF(duration, te_long * 2) < te_delta * 3) {
+          step = SaveDur; data = 0; cnt = 0;
+        } else step = Reset;
+        break;
+      case SaveDur:
+        if (level) {
+          if (duration >= te_short * 3 + te_delta) {
+            step = FoundPre;
+            if (cnt == 64) {
+              m.name = "FAAC SLH"; m.key = data; m.bits = 64; m.te = (uint16_t)te_short;
+              return true;
+            }
+            data = 0; cnt = 0;
+          } else { te_last = duration; step = CheckDur; }
+        } else step = Reset;
+        break;
+      case CheckDur:
+        if (!level) {
+          if (DDIFF(te_last, te_short) < te_delta && DDIFF(duration, te_long) < te_delta) {
+            data = data << 1 | 0; cnt++; step = SaveDur;
+          } else if (DDIFF(te_last, te_long) < te_delta && DDIFF(duration, te_short) < te_delta) {
+            data = data << 1 | 1; cnt++; step = SaveDur;
+          } else step = Reset;
+        } else step = Reset;
+        break;
+    }
+  }
+  return false;
+}
+
+// ── Ditec GOL4 ──────────────────────────────────────────────────────────────
+// 54-bit rolling code, PWM with a long preamble and trailing gap terminator.
+static bool decode_ditec_gol4(const unsigned int* dur, uint16_t n, uint8_t phase,
+                              SubGhzDecoders::Match& m) {
+  const uint32_t te_short = 400, te_long = 1100, te_delta = 200;
+  enum { Reset, StartBit, SaveDur, CheckDur };
+  uint32_t step = Reset, te_last = 0;
+  uint64_t data = 0;
+  uint8_t  cnt = 0;
+
+  for (uint16_t i = 0; i < n; i++) {
+    bool     level    = sampleLevel(i, phase);
+    uint32_t duration = dur[i];
+    switch (step) {
+      case Reset:
+        if (!level && DDIFF(duration, te_long * 22) < te_long * 4) {
+          data = 0; cnt = 0; step = StartBit;
+        }
+        break;
+      case StartBit:
+        if (level && DDIFF(duration, te_short * 2) < te_delta) step = SaveDur;
+        else step = Reset;
+        break;
+      case SaveDur:
+        if (!level) { te_last = duration; step = CheckDur; }
+        else step = Reset;
+        break;
+      case CheckDur:
+        if (level) {
+          if (DDIFF(te_last, te_short) < te_delta && DDIFF(duration, te_long) < te_delta) {
+            data = data << 1 | 1; cnt++; step = SaveDur;
+          } else if (DDIFF(te_last, te_long) < te_delta && DDIFF(duration, te_short) < te_delta) {
+            data = data << 1 | 0; cnt++; step = SaveDur;
+          }
+        } else {
+          if (DDIFF(te_last, te_long * 20) < te_long * 3) {
+            if (cnt == 54) {
+              m.name = "Ditec GOL4"; m.key = data; m.bits = 54; m.te = (uint16_t)te_short;
+              return true;
+            }
+            data = 0; cnt = 0; step = Reset;
+          } else step = Reset;
+        }
+        break;
+    }
+  }
+  return false;
+}
+
+// ── Phoenix V2 ──────────────────────────────────────────────────────────────
+// 52-bit code, PWM, long preamble + start bit.
+static bool decode_phoenix_v2(const unsigned int* dur, uint16_t n, uint8_t phase,
+                              SubGhzDecoders::Match& m) {
+  const uint32_t te_short = 427, te_long = 853, te_delta = 100;
+  enum { Reset, FoundStart, SaveDur, CheckDur };
+  uint32_t step = Reset, te_last = 0;
+  uint64_t data = 0;
+  uint8_t  cnt = 0;
+
+  for (uint16_t i = 0; i < n; i++) {
+    bool     level    = sampleLevel(i, phase);
+    uint32_t duration = dur[i];
+    switch (step) {
+      case Reset:
+        if (!level && DDIFF(duration, te_short * 60) < te_delta * 30) step = FoundStart;
+        break;
+      case FoundStart:
+        if (level && DDIFF(duration, te_short * 6) < te_delta * 4) {
+          step = SaveDur; data = 0; cnt = 0;
+        } else step = Reset;
+        break;
+      case SaveDur:
+        if (!level) {
+          if (duration >= te_short * 10 + te_delta) {
+            step = FoundStart;
+            if (cnt == 52) {
+              m.name = "Phoenix V2"; m.key = data; m.bits = 52; m.te = (uint16_t)te_short;
+              return true;
+            }
+            data = 0; cnt = 0;
+          } else { te_last = duration; step = CheckDur; }
+        }
+        break;
+      case CheckDur:
+        if (level) {
+          if (DDIFF(te_last, te_short) < te_delta && DDIFF(duration, te_long) < te_delta * 3) {
+            data = data << 1 | 1; cnt++; step = SaveDur;
+          } else if (DDIFF(te_last, te_long) < te_delta * 3 && DDIFF(duration, te_short) < te_delta) {
+            data = data << 1 | 0; cnt++; step = SaveDur;
+          } else step = Reset;
+        } else step = Reset;
+        break;
+    }
+  }
+  return false;
+}
+
+// ── iDo ─────────────────────────────────────────────────────────────────────
+// 48-bit rolling code, PWM (short-high, variable-low).
+static bool decode_ido(const unsigned int* dur, uint16_t n, uint8_t phase,
+                       SubGhzDecoders::Match& m) {
+  const uint32_t te_short = 450, te_long = 1450, te_delta = 150;
+  enum { Reset, FoundPre, SaveDur, CheckDur };
+  uint32_t step = Reset, te_last = 0;
+  uint64_t data = 0;
+  uint8_t  cnt = 0;
+
+  for (uint16_t i = 0; i < n; i++) {
+    bool     level    = sampleLevel(i, phase);
+    uint32_t duration = dur[i];
+    switch (step) {
+      case Reset:
+        if (level && DDIFF(duration, te_short * 10) < te_delta * 5) step = FoundPre;
+        break;
+      case FoundPre:
+        if (!level && DDIFF(duration, te_short * 10) < te_delta * 5) {
+          step = SaveDur; data = 0; cnt = 0;
+        } else step = Reset;
+        break;
+      case SaveDur:
+        if (level) {
+          if (duration >= te_short * 5 + te_delta) {
+            step = FoundPre;
+            if (cnt >= 48) {
+              m.name = "iDo"; m.key = data; m.bits = cnt; m.te = (uint16_t)te_short;
+              return true;
+            }
+            data = 0; cnt = 0;
+          } else { te_last = duration; step = CheckDur; }
+        } else step = Reset;
+        break;
+      case CheckDur:
+        if (!level) {
+          if (DDIFF(te_last, te_short) < te_delta && DDIFF(duration, te_long) < te_delta * 3) {
+            data = data << 1 | 0; cnt++; step = SaveDur;
+          } else if (DDIFF(te_last, te_short) < te_delta * 3 && DDIFF(duration, te_short) < te_delta) {
+            data = data << 1 | 1; cnt++; step = SaveDur;
+          } else step = Reset;
+        } else step = Reset;
+        break;
+    }
+  }
+  return false;
+}
+
+// ── Hay21 ───────────────────────────────────────────────────────────────────
+// 21-bit code, PWM framed by a long gap before and after the key.
+static bool decode_hay21(const unsigned int* dur, uint16_t n, uint8_t phase,
+                         SubGhzDecoders::Match& m) {
+  const uint32_t te_short = 300, te_long = 700, te_delta = 150;
+  enum { Reset, SaveDur, CheckDur };
+  uint32_t step = Reset, te_last = 0;
+  uint64_t data = 0;
+  uint8_t  cnt = 0;
+
+  for (uint16_t i = 0; i < n; i++) {
+    bool     level    = sampleLevel(i, phase);
+    uint32_t duration = dur[i];
+    switch (step) {
+      case Reset:
+        if (!level && DDIFF(duration, te_long * 6) < te_delta * 3) {
+          data = 0; cnt = 0; step = SaveDur;
+        }
+        break;
+      case SaveDur:
+        if (level) { te_last = duration; step = CheckDur; }
+        else step = Reset;
+        break;
+      case CheckDur:
+        if (!level) {
+          if (DDIFF(te_last, te_long) < te_delta && DDIFF(duration, te_short) < te_delta) {
+            data = data << 1 | 1; cnt++; step = SaveDur;
+          } else if (DDIFF(te_last, te_short) < te_delta && DDIFF(duration, te_long) < te_delta) {
+            data = data << 1 | 0; cnt++; step = SaveDur;
+          } else if (DDIFF(duration, te_long * 6) < te_delta * 2) {   // trailing gap
+            if (DDIFF(te_last, te_long)  < te_delta) { data = data << 1 | 1; cnt++; }
+            if (DDIFF(te_last, te_short) < te_delta) { data = data << 1 | 0; cnt++; }
+            if (cnt == 21) {
+              m.name = "Hay21"; m.key = data; m.bits = 21; m.te = (uint16_t)te_short;
+              return true;
+            }
+            data = 0; cnt = 0; step = Reset;
+          } else step = Reset;
+        } else step = Reset;
+        break;
+    }
+  }
+  return false;
+}
+
 // ── Engine ──────────────────────────────────────────────────────────────────
 
 typedef bool (*DecoderFn)(const unsigned int*, uint16_t, uint8_t, SubGhzDecoders::Match&);
@@ -1525,8 +1814,13 @@ static const DecoderFn kDecoders[] = {
   decode_honeywell,      // 64-bit Manchester (FSK)
   decode_power_smart,    // 64-bit Manchester, header
   decode_revers_rb2,     // 64-bit Manchester
+  decode_faac_slh,       // 64-bit rolling
   decode_came_twee,      // 54-bit Manchester
+  decode_ditec_gol4,     // 54-bit rolling
+  decode_nice_flor_s,    // 52-bit rolling
+  decode_phoenix_v2,     // 52-bit
   decode_marantec,       // 49-bit Manchester (FSK)
+  decode_ido,            // 48-bit rolling
   decode_honeywell_wdb,  // 48-bit, parity
   decode_nero_radio,     // 56-bit
   decode_hormann,        // 44-bit, header mask
@@ -1549,14 +1843,18 @@ static const DecoderFn kDecoders[] = {
   decode_gate_tx,        // 24-bit
   decode_megacode,       // 24-bit, PPM
   decode_smc5326,        // 25-bit, double-frame
+  decode_holtek_ht12x,   // 12-bit, double-frame — before CAME: identical 320/640 bit
+                         //   timing, separated only by its shorter preamble (~9 ms vs
+                         //   ~18 ms), so it must win its own frames before CAME's wide
+                         //   preamble window swallows them
   decode_came,           // 12/24-bit family
   decode_nice_flo,       // 12-bit
-  decode_holtek_ht12x,   // 12-bit, double-frame
   decode_chamberlain,    // 7/8/9-DIP symbol code
   decode_clemsa,         // 18-bit
   decode_bett,           // 18-bit
   decode_elplast,        // 18-bit
   decode_legrand,        // 18-bit, double-frame
+  decode_hay21,          // 21-bit, gap-framed
   decode_ansonic,        // 12-bit
   decode_linear_delta3,  // 8-bit, double-frame
   decode_linear,         // 10-bit, loose tolerance — last
