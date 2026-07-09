@@ -11,8 +11,17 @@ public:
   ~WifiAttackUtil();
   esp_err_t deauthenticate(const MacAddr bssid, uint8_t channel);
   esp_err_t deauthenticate(const MacAddr ap, const MacAddr bssid, uint8_t channel);
-  esp_err_t beaconSpam(const char* ssid, uint8_t channel);
+  // wpa2 = true advertises an RSN (WPA2-PSK/CCMP) IE so clients that only
+  // remember a *secured* network are enticed; false beacons an open network.
+  // srcMac = fake AP BSSID/source. nullptr → randomize a locally-administered
+  // MAC per call; pass a stable MAC so the advertised network keeps one BSSID
+  // (looks like a real AP, which clients treat more reliably).
+  esp_err_t beaconSpam(const char* ssid, uint8_t channel, bool wpa2 = true, const uint8_t* srcMac = nullptr);
   esp_err_t beaconFlood(const uint8_t* bssid, const char* ssid, uint8_t channel);
+  // Directed probe response: answers a client's probe request as if `ssid`
+  // exists nearby, so a device that has the network saved will try to connect.
+  // dst = the probing client's MAC. wpa2 mirrors the beacon RSN mimicry.
+  esp_err_t probeResponse(const char* ssid, const MacAddr dst, uint8_t channel, bool wpa2 = true, const uint8_t* srcMac = nullptr);
   esp_err_t setChannel(uint8_t channel);
 
 private:

