@@ -1,6 +1,5 @@
 //
 // NRF24L01+ module — spectrum, jammer, MouseJack
-// Reference: Bruce firmware NRF24 module (nrf_spectrum, nrf_jammer, nrf_mousejack)
 //
 
 #include "NRF24Screen.h"
@@ -11,47 +10,64 @@
 #include "core/PinConfigManager.h"
 #include "screens/module/ModuleMenuScreen.h"
 #include "ui/actions/ShowStatusAction.h"
-#include "ui/actions/InputNumberAction.h"
 #include "ui/actions/InputTextAction.h"
 #include "ui/views/ProgressView.h"
+#include <esp_random.h>
 
 // ══════════════════════════════════════════════════════════════
 // ═══════════════ CHANNEL LISTS (jammer) ═══════════════════
 // ══════════════════════════════════════════════════════════════
 
+static const uint8_t kChTest[] = {
+  50, 52, 54, 56, 58, 60, 62, 64, 66, 68, 70, 72, 74, 76, 78, 80, 2,  4,  6,  8,
+  10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 34, 36, 38, 40, 42, 44, 46, 48
+};
 static const uint8_t kChWifi[] = {
-  1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23,
-  26, 28, 30, 32, 34, 36, 38, 40, 42,
-  51, 53, 55, 57, 59, 61, 63, 65, 67, 69, 71, 73
+  2, 7, 12, 17, 22, 27, 32, 37, 42, 47, 52, 57, 62, 67, 72, 77
 };
 static const uint8_t kChBle[] = {
-  2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28,
-  30, 32, 34, 36, 38, 40, 42, 44, 46, 48, 50, 52, 54, 56,
-  58, 60, 62, 64, 66, 68, 70, 72, 74, 76, 78, 80
+  2,  3,  4,  5,  6,  7,  8,  9,  10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21,
+  22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41
 };
-static const uint8_t kChBleAdv[]    = { 2, 26, 80 };
+static const uint8_t kChBleAdv[]    = { 37, 38, 39, 1, 2, 3, 25, 26, 27, 79, 80, 81 };
 static const uint8_t kChBt[]        = {
-  2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
-  17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30,
-  31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44,
-  45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58,
-  59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72,
-  73, 74, 75, 76, 77, 78, 79, 80
+  2,  3,  4,  5,  6,  7,  8,  9,  10, 11, 12, 13, 14, 15, 16, 17,
+  18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33,
+  34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49,
+  50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65,
+  66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80
 };
-static const uint8_t kChUsb[]       = { 40, 50, 60 };
-static const uint8_t kChVideo[]     = { 70, 75, 80 };
-static const uint8_t kChRc[]        = { 1, 3, 5, 7 };
+static const uint8_t kChUsb[]       = {
+  32, 34, 36, 38, 40, 42, 44, 46, 48, 50, 52, 54, 56, 58, 60, 62, 64, 66, 68, 70
+};
+static const uint8_t kChVideo[]     = {
+  60, 62, 64, 66,  68,  70,  72,  74,  76,  78,  80,  82,  84,  86,  88,  90, 92,
+  94, 96, 98, 100, 102, 104, 106, 108, 110, 112, 114, 116, 118, 120, 122, 124
+};
+static const uint8_t kChRc[]        = {
+  1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29, 31, 33, 35, 37, 39
+};
 static const uint8_t kChZigbee[]    = {
-  4,5,6, 9,10,11, 14,15,16, 19,20,21, 24,25,26,
-  29,30,31, 34,35,36, 39,40,41, 44,45,46, 49,50,51,
-  54,55,56, 59,60,61, 64,65,66, 69,70,71, 74,75,76, 79,80,81
+  4,  5,  6,  9,  10, 11, 14, 15, 16, 19, 20, 21, 24, 25, 26, 29, 30, 31,
+  34, 35, 36, 39, 40, 41, 44, 45, 46, 49, 50, 51, 54, 55, 56, 59, 60, 61,
+  64, 65, 66, 69, 70, 71, 74, 75, 76, 79, 80, 81
+};
+static const uint8_t kChFull[]      = {
+  1,   2,   3,   4,   5,   6,   7,   8,   9,   10,  11,  12,  13,  14,  15,  16,
+  17,  18,  19,  20,  21,  22,  23,  24,  25,  26,  27,  28,  29,  30,  31,  32,
+  33,  34,  35,  36,  37,  38,  39,  40,  41,  42,  43,  44,  45,  46,  47,  48,
+  49,  50,  51,  52,  53,  54,  55,  56,  57,  58,  59,  60,  61,  62,  63,  64,
+  65,  66,  67,  68,  69,  70,  71,  72,  73,  74,  75,  76,  77,  78,  79,  80,
+  81,  82,  83,  84,  85,  86,  87,  88,  89,  90,  91,  92,  93,  94,  95,  96,
+  97,  98,  99,  100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112,
+  113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124
 };
 
 static const uint8_t* const kChLists[] = {
-  nullptr, kChWifi, kChBle, kChBleAdv, kChBt, kChUsb, kChVideo, kChRc, kChZigbee, nullptr
+  kChTest, kChWifi, kChBle, kChBleAdv, kChBt, kChUsb, kChVideo, kChRc, kChZigbee, kChFull
 };
 static const int kChCounts[] = {
-  0,
+  (int)sizeof(kChTest),
   (int)sizeof(kChWifi),
   (int)sizeof(kChBle),
   (int)sizeof(kChBleAdv),
@@ -60,18 +76,12 @@ static const int kChCounts[] = {
   (int)sizeof(kChVideo),
   (int)sizeof(kChRc),
   (int)sizeof(kChZigbee),
-  0
+  (int)sizeof(kChFull)
 };
 
 static const char* const kJamModeNames[] = {
-  "Full Spectrum", "WiFi 2.4GHz", "BLE Data", "BLE Adv",
-  "BT Classic", "USB Dongles", "Video/FPV", "RC Ctrl",
-  "Zigbee", "Drone FHSS"
-};
-static const char* const kJamModeShort[] = {
-  "Full Spec", "WiFi 2.4", "BLE Data", "BLE Adv",
-  "BT Cls", "USB", "Video", "RC",
-  "Zigbee", "Drone"
+  "Test", "WiFi", "BLE", "BLE Adv Pri", "Bluetooth",
+  "USB", "Video Stream", "RC", "Zigbee", "Full"
 };
 
 // ══════════════════════════════════════════════════════════════
@@ -126,11 +136,10 @@ void NRF24Screen::onInit() {
 }
 
 bool NRF24Screen::inhibitPowerSave() {
-  return _state != STATE_MENU && _state != STATE_JAMMER_MENU;
+  return _state != STATE_MENU;
 }
 bool NRF24Screen::inhibitPowerOff() {
-  return _state == STATE_JAMMER_RUNNING || _state == STATE_CH_JAMMER ||
-         _state == STATE_HOPPER_RUN     || _state == STATE_SPECTRUM  ||
+  return _state == STATE_JAMMER_RUNNING || _state == STATE_SPECTRUM ||
          _state == STATE_MJ_SCAN;
 }
 
@@ -142,15 +151,6 @@ void NRF24Screen::_showMenu() {
   _state = STATE_MENU;
   snprintf(_titleBuf, sizeof(_titleBuf), "NRF24L01");
   setItems(_mainItems);
-}
-
-void NRF24Screen::_showJammerMenu() {
-  _state = STATE_JAMMER_MENU;
-  snprintf(_titleBuf, sizeof(_titleBuf), "NRF Jammer");
-  static const char* const kExtraLabels[] = {"Single CH", "CH Hopper"};
-  for (int i = 0; i < kJamModes; i++) _jamMenuItems[i] = {kJamModeNames[i], nullptr};
-  for (int i = 0; i < 2; i++)         _jamMenuItems[kJamModes + i] = {kExtraLabels[i], nullptr};
-  setItems(_jamMenuItems, 12);
 }
 
 bool NRF24Screen::_radioBegin() {
@@ -197,65 +197,12 @@ void NRF24Screen::onItemSelected(uint8_t index) {
       if (Achievement.inc("nrf24_spectrum") == 1) Achievement.unlock("nrf24_spectrum");
 
     } else if (index == 1) {
-      // ── Jammer menu ───────────────────────────────────────
-      _radioEnd();
-      _showJammerMenu();
+      // ── Jammer ────────────────────────────────────────────
+      _startJammer();
 
     } else if (index == 2) {
       // ── MouseJack ─────────────────────────────────────────
       _setupMjScan();
-    }
-    return;
-  }
-
-  if (_state == STATE_JAMMER_MENU) {
-    if (index < kJamModes) {
-      // Preset jammer mode
-      _jamMode   = index;
-      _jamHopIdx = 0;
-      _radioBegin();
-      _initCW(0);
-      _lastHopMs   = millis();
-      _lastRender  = millis();
-      _chromeDrawn = false;
-      _state = STATE_JAMMER_RUNNING;
-      snprintf(_titleBuf, sizeof(_titleBuf), "Jammer");
-      if (Achievement.inc("nrf24_jammer") == 1) Achievement.unlock("nrf24_jammer");
-      render();
-
-    } else if (index == kJamModes) {
-      // Single CH jammer
-      _radioBegin();
-      _chJamCh     = 50;
-      _chJamPaused = false;
-      _initCW(_chJamCh);
-      _chromeDrawn = false;
-      _state = STATE_CH_JAMMER;
-      snprintf(_titleBuf, sizeof(_titleBuf), "Single CH");
-      if (Achievement.inc("nrf24_jammer") == 1) Achievement.unlock("nrf24_jammer");
-      render();
-
-    } else if (index == kJamModes + 1) {
-      // CH Hopper — collect config via popups then start
-      _radioEnd();
-      int start = InputNumberAction::popup("Start CH (0-124)", 0, 124, 0);
-      if (InputNumberAction::wasCancelled()) { _radioBegin(); render(); return; }
-      int stop  = InputNumberAction::popup("Stop CH (0-124)",  0, 124, 80);
-      if (InputNumberAction::wasCancelled()) { _radioBegin(); render(); return; }
-      int step  = InputNumberAction::popup("Step (1-10)",      1, 10,  2);
-      if (InputNumberAction::wasCancelled()) { _radioBegin(); render(); return; }
-      _radioBegin();
-      _hopStart    = start;
-      _hopStop     = stop;
-      _hopStep     = step;
-      _hopCh       = start;
-      _initCW(_hopCh);
-      _lastHopMs   = millis();
-      _chromeDrawn = false;
-      _state = STATE_HOPPER_RUN;
-      snprintf(_titleBuf, sizeof(_titleBuf), "CH Hopper");
-      if (Achievement.inc("nrf24_jammer") == 1) Achievement.unlock("nrf24_jammer");
-      render();
     }
     return;
   }
@@ -309,66 +256,35 @@ void NRF24Screen::onUpdate() {
         r->stopConstCarrier();
         r->powerDown();
         _radioEnd();
-        _showJammerMenu();
+        _showMenu();
         return;
       }
+      if (dir == INavigation::DIR_RIGHT || dir == INavigation::DIR_DOWN) {
+        // Next mode
+        _jamModeIndex = (_jamModeIndex + 1) % kJamModes;
+        _jamHopIndex  = 0;
+        _jamReshuffle = true;
+        _chromeDrawn  = false;
+        render();
+      } else if (dir == INavigation::DIR_LEFT || dir == INavigation::DIR_UP) {
+        // Prev mode
+        _jamModeIndex = (_jamModeIndex + kJamModes - 1) % kJamModes;
+        _jamHopIndex  = 0;
+        _jamReshuffle = true;
+        _chromeDrawn  = false;
+        render();
+      } else if (dir == INavigation::DIR_PRESS) {
+        // Toggle hop mode: sequential <-> random (FHSS)
+        _jamHopMode   = (_jamHopMode + 1) & 1;
+        _jamHopIndex  = 0;
+        _jamReshuffle = true;
+        _chromeDrawn  = false;
+        render();
+      }
     }
-    // Jam as fast as possible (match Bruce: tight SPI hop loop)
+    // Jam in a tight SPI hop loop for ~10 ms, then service input/render.
     uint32_t deadline = millis() + 10;
     while (millis() < deadline) _jamStep();
-    if (millis() - _lastRender >= 1000) {
-      _lastRender = millis();
-      render();
-    }
-    return;
-  }
-
-  if (_state == STATE_CH_JAMMER) {
-    if (Uni.Nav->wasPressed()) {
-      auto dir = Uni.Nav->readDirection();
-      if (dir == INavigation::DIR_BACK) {
-        _nrf.radio()->stopConstCarrier();
-        _radioEnd();
-        _showJammerMenu();
-        return;
-      }
-      if (dir == INavigation::DIR_PRESS) {
-        _chJamPaused = !_chJamPaused;
-        if (_chJamPaused) _nrf.radio()->stopConstCarrier();
-        else              _initCW(_chJamCh);
-        render();
-      }
-      if (dir == INavigation::DIR_UP || dir == INavigation::DIR_RIGHT) {
-        _chJamCh = (_chJamCh + 1) % 126;
-        if (!_chJamPaused) _nrf.radio()->setChannel(_chJamCh);
-        render();
-      }
-      if (dir == INavigation::DIR_DOWN || dir == INavigation::DIR_LEFT) {
-        _chJamCh = (_chJamCh + 125) % 126;
-        if (!_chJamPaused) _nrf.radio()->setChannel(_chJamCh);
-        render();
-      }
-    }
-    return;
-  }
-
-  if (_state == STATE_HOPPER_RUN) {
-    if (Uni.Nav->wasPressed()) {
-      auto dir = Uni.Nav->readDirection();
-      if (dir == INavigation::DIR_BACK) {
-        _nrf.radio()->stopConstCarrier();
-        _radioEnd();
-        _showJammerMenu();
-        return;
-      }
-    }
-    // Tight hop loop — same as Bruce's CH hopper
-    uint32_t deadline = millis() + 10;
-    while (millis() < deadline) {
-      _hopCh += _hopStep;
-      if (_hopCh > _hopStop) _hopCh = _hopStart;
-      _nrf.radio()->setChannel(_hopCh);
-    }
     if (millis() - _lastRender >= 1000) {
       _lastRender = millis();
       render();
@@ -415,8 +331,6 @@ void NRF24Screen::onUpdate() {
 void NRF24Screen::onRender() {
   if (_state == STATE_SPECTRUM)       { _renderSpectrum();     return; }
   if (_state == STATE_JAMMER_RUNNING) { _renderJammerStatus(); return; }
-  if (_state == STATE_CH_JAMMER)      { _renderChJammer();     return; }
-  if (_state == STATE_HOPPER_RUN)     { _renderHopper();       return; }
   if (_state == STATE_MJ_SCAN)        { _renderMjScan();       return; }
   ListScreen::onRender();
 }
@@ -431,9 +345,6 @@ void NRF24Screen::onBack() {
       _radioEnd();
       Screen.goBack();
       break;
-    case STATE_JAMMER_MENU:
-      _showMenu();
-      break;
     case STATE_SPECTRUM:
       _radioEnd();
       _showMenu();
@@ -441,17 +352,7 @@ void NRF24Screen::onBack() {
     case STATE_JAMMER_RUNNING:
       _nrf.radio()->stopConstCarrier();
       _radioEnd();
-      _showJammerMenu();
-      break;
-    case STATE_CH_JAMMER:
-      _nrf.radio()->stopConstCarrier();
-      _radioEnd();
-      _showJammerMenu();
-      break;
-    case STATE_HOPPER_RUN:
-      _nrf.radio()->stopConstCarrier();
-      _radioEnd();
-      _showJammerMenu();
+      _showMenu();
       break;
     case STATE_MJ_SCAN:
       _radioEnd();
@@ -560,134 +461,100 @@ void NRF24Screen::_renderSpectrum() {
 // ═══════════════ JAMMER ═══════════════════════════════════════
 // ══════════════════════════════════════════════════════════════
 
-const uint8_t* NRF24Screen::_jamChannels(int mode, int& count) {
-  if (mode < 0 || mode >= kJamModes || !kChLists[mode]) {
-    count = 0;
-    return nullptr;
+// Fisher-Yates shuffle of an index table via the hardware RNG.
+static void shuffleChannels(uint8_t* arr, size_t count) {
+  for (size_t i = count - 1; i > 0; i--) {
+    size_t j = esp_random() % (i + 1);
+    uint8_t tmp = arr[i];
+    arr[i] = arr[j];
+    arr[j] = tmp;
   }
-  count = kChCounts[mode];
-  return kChLists[mode];
 }
 
-void NRF24Screen::_initCW(int ch) {
+void NRF24Screen::_startJammer() {
+  if (!_radioBegin()) {
+    ShowStatusAction::show("NRF24 not found!");
+    render();
+    return;
+  }
   auto* r = _nrf.radio();
-  r->powerUp();
-  delay(5);
+
   r->setPALevel(RF24_PA_MAX);
-  r->startConstCarrier(RF24_PA_MAX, ch);
+  r->startConstCarrier(RF24_PA_MAX, 50);
   r->setAddressWidth(5);
   r->setPayloadSize(2);
-  r->setDataRate(RF24_2MBPS);
+  if (!r->setDataRate(RF24_2MBPS)) {
+    if (!r->setDataRate(RF24_1MBPS)) {
+      r->setDataRate(RF24_250KBPS);
+    }
+  }
+
+  _jamModeIndex = 0;
+  _jamHopIndex  = 0;
+  _jamHopMode   = 0;
+  _jamReshuffle = true;
+  _lastRender   = millis();
+  _chromeDrawn  = false;
+  _state = STATE_JAMMER_RUNNING;
+  snprintf(_titleBuf, sizeof(_titleBuf), "NRF Jammer");
+  if (Achievement.inc("nrf24_jammer") == 1) Achievement.unlock("nrf24_jammer");
+  render();
 }
 
+// A single carrier hop, following the active mode's channel list. In random
+// mode the index table is reshuffled on each full pass so the order keeps
+// changing — harder for an adaptive target to dodge.
 void NRF24Screen::_jamStep() {
-  int count = 0;
-  const uint8_t* chList = _jamChannels(_jamMode, count);
-  if (count > 0 && chList) {
-    _jamHopIdx = (_jamHopIdx + 1) % count;
-    _hopCh = chList[_jamHopIdx];
-  } else {
-    _jamHopIdx = (_jamHopIdx + 1) % 125;
-    _hopCh = _jamHopIdx;
+  const uint8_t* channels = kChLists[_jamModeIndex];
+  int count = kChCounts[_jamModeIndex];
+
+  _jamHopIndex++;
+  if (_jamHopIndex >= count) {
+    _jamHopIndex  = 0;
+    _jamReshuffle = true;
   }
-  _nrf.radio()->setChannel(_hopCh);
+
+  uint8_t idx;
+  if (_jamHopMode == 1) {
+    if (_jamReshuffle) {
+      for (int i = 0; i < count; i++) _jamShuffled[i] = (uint8_t)i;
+      shuffleChannels(_jamShuffled, count);
+      _jamReshuffle = false;
+    }
+    idx = _jamShuffled[_jamHopIndex];
+  } else {
+    idx = (uint8_t)_jamHopIndex;
+  }
+
+  _nrf.radio()->setChannel(channels[idx]);
 }
 
 void NRF24Screen::_renderJammerStatus() {
   auto& lcd = Uni.Lcd;
   int bx = bodyX(), by = bodyY(), bw = bodyW(), bh = bodyH();
 
-  // Static chrome — drawn once
+  // Static chrome — redrawn when mode / hop change (via _chromeDrawn = false)
   if (!_chromeDrawn) {
     lcd.fillRect(bx, by, bw, bh, TFT_BLACK);
     lcd.setTextSize(1);
     lcd.setTextDatum(TL_DATUM);
+
     lcd.setTextColor(TFT_GREEN, TFT_BLACK);
-    lcd.drawString(kJamModeShort[_jamMode], bx + 4, by + 4, 1);
+    lcd.drawString("JAMMING", bx + 4, by + 4, 1);
+
+    char line[28];
+    lcd.setTextColor(TFT_YELLOW, TFT_BLACK);
+    snprintf(line, sizeof(line), "MODE: %s", kJamModeNames[_jamModeIndex]);
+    lcd.drawString(line, bx + 4, by + 4 + bh / 5, 1);
+
     lcd.setTextColor(TFT_DARKGREY, TFT_BLACK);
-    lcd.drawString("CW  RF24_PA_MAX", bx + 4, by + 4 + bh / 5 * 2, 1);
-    lcd.drawString("< Stop", bx + 4, by + bh - 12, 1);
+    snprintf(line, sizeof(line), "HOP : %s", _jamHopMode == 0 ? "Sequential" : "FHSS");
+    lcd.drawString(line, bx + 4, by + 4 + bh / 5 * 2, 1);
+
+    lcd.drawString("</>: Mode  OK: Hop", bx + 4, by + bh - 22, 1);
+    lcd.drawString("<: Stop",            bx + 4, by + bh - 12, 1);
     _chromeDrawn = true;
   }
-
-  // Dynamic: channel — per-region sprite
-  char buf[24];
-  snprintf(buf, sizeof(buf), "CH:%-3d  %4dMHz", _hopCh, 2400 + _hopCh);
-  Sprite sp(&lcd);
-  sp.createSprite(bw - 8, 12);
-  sp.fillSprite(TFT_BLACK);
-  sp.setTextDatum(TL_DATUM);
-  sp.setTextColor(TFT_YELLOW, TFT_BLACK);
-  sp.drawString(buf, 2, 0, 1);
-  sp.pushSprite(bx + 4, by + 4 + bh / 5);
-  sp.deleteSprite();
-}
-
-void NRF24Screen::_renderChJammer() {
-  auto& lcd = Uni.Lcd;
-  int bx = bodyX(), by = bodyY(), bw = bodyW(), bh = bodyH();
-  int midX = bx + bw / 2, dynY = by + bh / 3;
-
-  // Static chrome — drawn once
-  if (!_chromeDrawn) {
-    lcd.fillRect(bx, by, bw, bh, TFT_BLACK);
-    lcd.setTextSize(1);
-    lcd.setTextColor(TFT_DARKGREY, TFT_BLACK);
-    #ifdef DEVICE_HAS_KEYBOARD
-      lcd.drawString("</> CH  OK Pause  Esc Stop", bx + 4, by + bh - 12, 1);
-    #else
-      lcd.drawString("UP/DN:CH  OK:Pause  <:Stop", bx + 4, by + bh - 12, 1);
-    #endif
-    _chromeDrawn = true;
-  }
-
-  // Dynamic: channel + status — per-region sprite
-  Sprite sp(&lcd);
-  char buf[28];
-  snprintf(buf, sizeof(buf), "CH: %d  (%d MHz)", _chJamCh, 2400 + _chJamCh);
-  sp.createSprite(bw, 14);
-  sp.fillSprite(TFT_BLACK);
-  sp.setTextColor(TFT_YELLOW, TFT_BLACK);
-  sp.drawCentreString(buf, bw / 2, 1, 1);
-  sp.pushSprite(bx, dynY);
-  sp.deleteSprite();
-
-  sp.createSprite(bw, 14);
-  sp.fillSprite(TFT_BLACK);
-  sp.setTextColor(_chJamPaused ? TFT_RED : TFT_GREEN, TFT_BLACK);
-  sp.drawCentreString(_chJamPaused ? "PAUSED" : "JAMMING", bw / 2, 1, 1);
-  sp.pushSprite(bx, dynY + 16);
-  sp.deleteSprite();
-}
-
-void NRF24Screen::_renderHopper() {
-  auto& lcd = Uni.Lcd;
-  int bx = bodyX(), by = bodyY(), bw = bodyW(), bh = bodyH();
-  int midX = bx + bw / 2;
-
-  // Static chrome — drawn once
-  if (!_chromeDrawn) {
-    lcd.fillRect(bx, by, bw, bh, TFT_BLACK);
-    lcd.setTextSize(1);
-    char buf[32];
-    snprintf(buf, sizeof(buf), "%d - %d  step %d", _hopStart, _hopStop, _hopStep);
-    lcd.setTextColor(TFT_GREEN, TFT_BLACK);
-    lcd.drawCentreString(buf, midX, by + 8, 1);
-    lcd.setTextColor(TFT_DARKGREY, TFT_BLACK);
-    lcd.drawCentreString("< Stop", midX, by + bh - 12, 1);
-    _chromeDrawn = true;
-  }
-
-  // Dynamic: current channel — per-region sprite
-  char buf[28];
-  snprintf(buf, sizeof(buf), "CH: %d  (%d MHz)", _hopCh, 2400 + _hopCh);
-  Sprite sp(&lcd);
-  sp.createSprite(bw, 14);
-  sp.fillSprite(TFT_BLACK);
-  sp.setTextColor(TFT_YELLOW, TFT_BLACK);
-  sp.drawCentreString(buf, bw / 2, 1, 1);
-  sp.pushSprite(bx, by + 26);
-  sp.deleteSprite();
 }
 
 // ══════════════════════════════════════════════════════════════
