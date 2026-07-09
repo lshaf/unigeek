@@ -11,6 +11,11 @@
 class IRScreen : public ListScreen
 {
 public:
+  IRScreen() = default;
+  // Open straight into the Send signal-list for a specific .ir file (used by the
+  // File Manager "Send" action on a long-pressed .ir file).
+  explicit IRScreen(const String& sendFile) : _pendingSendFile(sendFile) {}
+
   const char* title() override { return _titleBuf; }
 
   void onInit() override;
@@ -69,6 +74,8 @@ private:
   String _sendFilePath;
   bool _sendDirty = false;
   bool _holdFired = false;
+  String _pendingSendFile;  // set via ctor: jump into Send list for this file
+  void _openPendingSendFile();
   void _loadAndShowSignals(const String& filePath);
   void _refreshSendList();
   void _onSendItemAction(uint8_t index);

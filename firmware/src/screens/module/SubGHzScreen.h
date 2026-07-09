@@ -11,6 +11,11 @@
 
 class SubGHzScreen : public RfCaptureScreen {
 public:
+  SubGHzScreen() = default;
+  // Transmit a specific .sub file immediately on entry, then return (used by the
+  // File Manager "Replay" action on a long-pressed .sub file).
+  explicit SubGHzScreen(const String& replayFile) : _pendingReplayFile(replayFile) {}
+
   void onInit() override;
 
 protected:
@@ -52,6 +57,8 @@ private:
   int8_t _csPin   = -1;
   int8_t _gdo0Pin = -1;
   bool   _rfDetectFired = false;  // achievement guard, resets each scan session
+  String _pendingReplayFile;      // set via ctor: transmit this .sub then goBack
+  void _replayPendingFile();
 
   // Menu (8 items: Frequency | Detect Freq | Waterfall | Receive | Record RAW |
   //                Send | Jammer | Mfcodes)
