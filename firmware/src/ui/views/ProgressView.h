@@ -159,10 +159,22 @@ private:
     if (!_chromeDrawn) return;
     auto& lcd = Uni.Lcd;
     int innerW = _barW - 2;
+    // Sweep the remaining fill up to 100% in a few short steps so the bar is
+    // always seen completing, even when the caller immediately redraws the body
+    // (menu, status overlay) right after the operation finishes.
     if (_lastFillW < innerW) {
-      lcd.fillRect(_barX + 1 + _lastFillW, _barY + 1, innerW - _lastFillW, BAR_H - 2, _barColor);
-      _lastFillW = innerW;
+      const int steps = 6;
+      int start = _lastFillW;
+      for (int s = 1; s <= steps; s++) {
+        int target = start + (innerW - start) * s / steps;
+        if (target > _lastFillW) {
+          lcd.fillRect(_barX + 1 + _lastFillW, _barY + 1, target - _lastFillW, BAR_H - 2, _barColor);
+          _lastFillW = target;
+        }
+        delay(18);
+      }
     }
+    _lastFillW = innerW;
     _chromeDrawn = false;
   }
 };

@@ -214,6 +214,7 @@ bool PN532UartScreen::_initModule() {
   _isKiller = _pn->isPN532Killer(killer);
   _killerCode = killer;
 
+  ProgressView::finish();
   _ready = true;
   int n = Achievement.inc("pn532_first_use");
   if (n == 1) Achievement.unlock("pn532_first_use");
@@ -507,6 +508,7 @@ void PN532UartScreen::_doAuthenticate() {
     }
   }
 
+  ProgressView::finish();
   _goMifare();
 }
 
@@ -574,6 +576,7 @@ void PN532UartScreen::_doDumpMemory() {
     if (blk < 64) memcpy(&_dumpImg[blk * 16], data, 16);
   }
 
+  ProgressView::finish();
   char summary[32];
   snprintf(summary, sizeof(summary), "%d/%d blocks", readCount, (int)totalBlocks);
   _pushRow("Read", summary);
@@ -692,6 +695,7 @@ void PN532UartScreen::_doDictionaryAttackWithFile(uint8_t fileIndex) {
     }
   }
 
+  ProgressView::finish();
   if (recovered > 0) {
     int n = Achievement.inc("nfc_dict_attack");
     if (n == 1) Achievement.unlock("nfc_dict_attack");
@@ -732,6 +736,7 @@ void PN532UartScreen::_doUltralightDump() {
       _pushRow(label, _hexBlock(&data[i * 4], 4));
     }
   }
+  ProgressView::finish();
   _scrollView.setRows(_rows, _rowCount);
   render();
 }
@@ -928,6 +933,7 @@ void PN532UartScreen::_doEmulate() {
     return;
   }
 
+  ProgressView::finish();
   int n = Achievement.inc("pn532_emulate");
   if (n == 1) Achievement.unlock("pn532_emulate");
 
@@ -997,6 +1003,7 @@ void PN532UartScreen::_doLoadAndEmulate(uint8_t fileIndex) {
   bool modeOk = _pn->killerSetWorkMode(PN532::KILLER_EMULATOR, PN532::KILLER_MFC1K, 0);
   if (!modeOk) { ShowStatusAction::show("Mode switch failed"); _goMain(); return; }
 
+  ProgressView::finish();
   int n = Achievement.inc("pn532_emulate");
   if (n == 1) Achievement.unlock("pn532_emulate");
 

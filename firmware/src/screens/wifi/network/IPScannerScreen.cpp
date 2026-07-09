@@ -94,6 +94,7 @@ void IPScannerScreen::_scanIP() {
     _foundIPs, MAX_FOUND, true,
     [](uint8_t pct) { ProgressView::progress("IP scanning...", pct); }
   );
+  ProgressView::finish();
 
   if (_foundCount == 0) {
     _foundItems[0] = {"No devices found"};
@@ -123,6 +124,7 @@ void IPScannerScreen::_scanPort(const char* ip) {
 
   ProgressView::init();
   _openCount = PortScanUtil::scan(ip, _openPorts, PortScanUtil::MAX_RESULTS);
+  ProgressView::finish();
 
   if (_openCount == 0) {
     _openItems[0] = {"No ports open"};

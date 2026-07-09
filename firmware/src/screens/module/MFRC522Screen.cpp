@@ -212,6 +212,7 @@ void MFRC522Screen::_initModule() {
   _moduleReady = true;
   delay(200);
 
+  ProgressView::finish();
   _goMainMenu();
 }
 
@@ -624,6 +625,7 @@ void MFRC522Screen::_callMemoryReader() {
     _rowCount++;
   }
 
+  ProgressView::finish();
   _scrollView.setRows(_rows, _rowCount);
   int nd = Achievement.inc("nfc_dump_memory");
   if (nd == 1) Achievement.unlock("nfc_dump_memory");
@@ -784,6 +786,7 @@ void MFRC522Screen::_callDictAttackWithFile(uint8_t fileIndex) {
     }
   }
 
+  ProgressView::finish();
   if (recovered > 0) {
     int n = Achievement.inc("nfc_dict_attack");
     if (n == 1) Achievement.unlock("nfc_dict_attack");
@@ -1133,6 +1136,7 @@ void MFRC522Screen::_callDarksideAttack() {
     });
 
   _module->PCD_Init();
+  ProgressView::finish();
 
   if (result.success) {
     uint8_t kb[6];
