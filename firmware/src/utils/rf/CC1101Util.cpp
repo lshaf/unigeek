@@ -707,6 +707,35 @@ void CC1101Util::_initTx() {
   ELECHOUSE_cc1101.SetTx();
 }
 
+// ── Brute force ──────────────────────────────────────────────────────────────
+
+bool CC1101Util::beginBruteTx(float freq) {
+  if (!_initialized) return false;
+  if (freq > 0) setFrequency(freq);
+  _initTx();                                   // OOK carrier, PA, SetTx
+  return _rmt.beginTx((gpio_num_t)_gdo0Pin);   // RMT clocks out the async data on GDO0
+}
+
+void CC1101Util::sendBruteCode(int protoNum, uint64_t key, int bits, int te, int repeat) {
+  if (!_rmt.active() || bits <= 0) return;
+  static int32_t tx[512];   // 24-bit x several repeats fits comfortably
+  RCSwitchUtil sw;
+  sw.setProtocol(protoNum);
+  if (te > 0) sw.setPulseLength(te);
+  sw.setRepeatTransmit(repeat > 0 ? repeat : 1);
+  uint16_t k = sw.encodeToDurations((unsigned long long)key, (unsigned int)bits, tx, 512);
+  if (k) _rmt.sendDurations(tx, k);
+}
+
+void CC1101Util::sendBruteRaw(const int32_t* dur, uint16_t n) {
+  if (_rmt.active() && n) _rmt.sendDurations(dur, n);
+}
+
+void CC1101Util::endBruteTx() {
+  _rmt.end();
+  if (_initialized) ELECHOUSE_cc1101.setSidle();
+}
+
 // ── File I/O ─────────────────────────────────────────────────────────────
 
 // Parse one trimmed .sub line into `out`. RAW_Data is appended straight onto
