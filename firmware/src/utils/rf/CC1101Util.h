@@ -8,6 +8,7 @@
 #include <functional>
 #include "core/ExtSpiClass.h"
 #include "RCSwitchUtil.h"
+#include "RmtRf.h"
 
 class CC1101Util {
 public:
@@ -57,6 +58,13 @@ public:
   // Set frequency in MHz (280–928, valid sub-bands only)
   bool setFrequency(float mhz);
   float getFrequency() const { return _freq; }
+
+  // RSSI carrier-detect threshold (dBm). Gates the Receive capture arming and the
+  // Detect Freq peak trigger — lower = more sensitive (weaker/farther signals).
+  // Record RAW does NOT use this: it runs an adaptive noise-floor gate instead.
+  // Defaults to RSSI_THRESHOLD; set at runtime and persists across begin()/end().
+  void setRssiThreshold(int dbm) { _rssiThreshold = dbm; }
+  int  getRssiThreshold() const  { return _rssiThreshold; }
 
   // Check if CC1101 is connected
   bool isConnected();
@@ -114,7 +122,7 @@ public:
   // ── Frequency analyzer (Flipper-style "peaky" peak detect) ────────────────
   // Call analyzeStep() once per frame. Each call runs a full coarse sweep
   // across the whole band (wide RxBW — also fills the RSSI map that drives the
-  // bar chart) then, if the strongest channel passes kAnalyzerTrigger, a fine
+  // bar chart) then, if the strongest channel passes _rssiThreshold, a fine
   // refine (narrow RxBW, ±0.3 MHz @ 20 kHz) to pin the exact frequency. The
   // last peak is held for kAnalyzerHold frames after the signal disappears so
   // it stays on screen instead of vanishing the instant the carrier drops.
@@ -145,6 +153,10 @@ public:
 
   // File I/O — Bruce SubGhz .sub format
   static bool loadFile(const String& content, Signal& out);
+  // Streaming parse straight off an open file — use for on-SD .sub files so a
+  // large RAW capture doesn't need the whole file resident (avoids OOM). Pass
+  // the file size as `sizeHint` to pre-reserve rawData.
+  static bool loadFromStream(Stream& f, Signal& out, size_t sizeHint = 0);
   static String saveToString(const Signal& sig);
 
   // Display helpers
@@ -162,37 +174,64 @@ private:
   float  _freq = DEFAULT_FREQ;
   bool   _initialized = false;
 
-  RCSwitchUtil _sw;  // persistent receiver state for non-blocking polling
+  RmtRf        _rmt;  // hardware RMT capture/replay (replaces the GDO0 ISRs)
   RxFilter     _rxFilter = RX_FILTER_CODE;
+  int          _rssiThreshold = RSSI_THRESHOLD;  // Receive gate + Detect trigger (runtime)
+
+  // Scratch for one RMT frame, read out of the ring buffer each pollReceive().
+  static constexpr uint16_t kRxFrameMax = 1024;
+  int32_t _rxFrame[kRxFrameMax];
+
+  // Receive carrier gating (RSSI) — the RMT receiver stays paused until a real
+  // carrier appears, so squelch noise is never captured (and can't overflow it).
+  static constexpr uint32_t kRxArmMs = 6;    // carrier must persist to start
+  static constexpr uint32_t kRxGapMs = 80;   // carrier-gone hold (> RMT idle) so
+                                             // the final frame is drained first
+  // The carrier gate is adaptive: measured just above the average noise floor at
+  // begin, so a weak/distant transmitter still triggers — nearly as sensitive as
+  // the raw data slicer the old RCSwitch ISR read directly (it had no RSSI gate).
+  static constexpr int      kCarrierMarginDb = 4;   // gate = avg floor + this
+  static constexpr int      kGateMin         = -100;// clamp (never gate on floor)
+  static constexpr int      kGateMax         = -55;
+  static constexpr uint32_t kMaxCaptureMs    = 600; // safety: no frame drained for
+                                                    // this long → stuck on noise;
+                                                    // tear down (idle poll re-adapts
+                                                    // the gate) before RMT overflow
+  int      _captureGate      = RSSI_THRESHOLD;
+  bool     _rxCapturing      = false;
+  uint32_t _rxCarrierSinceMs = 0;
+  uint32_t _rxLastCarrierMs  = 0;
 
   // ── RAW recorder state ─────────────────────────────────────────────────
-  // Tuning: recording opens after the carrier persists kRawArmMs; once started
-  // it runs until the caller stops it. A carrier gap longer than kRawGapMs
-  // pauses storing (so idle noise isn't recorded) and is re-inserted as one
-  // compressed LOW interval when the signal returns.
-  static constexpr uint16_t kRawRecMax  = 8192;    // max transitions / capture
-  static constexpr uint32_t kRawArmMs   = 8;       // carrier must persist to start
-  static constexpr uint32_t kRawGapMs   = 25;      // carrier-gone → pause + gap mark
+  // Continuous capture over RMT: each completed frame (burst) is appended to one
+  // accumulating buffer, and the real silence between frames — measured by wall
+  // clock — is re-inserted as a single compressed LOW gap so the buffer holds
+  // signal content, not idle noise. Runs until the caller stops it or fills up.
+  static constexpr uint16_t kRawRecMax  = 4096;    // max transitions / capture
+                                                   // (keeps the .sub + its String
+                                                   // reassembly within RAM budget)
   static constexpr int32_t  kRawClampUs = 300000;  // clamp a single interval
+  static constexpr uint16_t kRawIdleUs  = 6000;    // RMT idle → close per-repeat
+                                                   // frames (> KeeLoq's 4 ms intra
+                                                   // sync, < inter-repeat gaps)
+  static constexpr uint32_t kRawArmMs   = 6;       // carrier must persist to start
+  static constexpr uint32_t kRawGapMs   = 30;      // carrier-gone → pause + gap mark
 
-  bool     _rawArmed         = false;  // begin/end lifecycle
-  bool     _rawStarted       = false;  // first carrier seen (recording live)
-  bool     _rawInGap         = false;  // storing paused, waiting for carrier
-  int      _rawRssi          = -120;
+  bool     _rawArmed          = false; // begin/end lifecycle
+  bool     _rawStarted        = false; // first frame captured (recording live)
+  bool     _rawCapturing      = false; // RMT actively receiving (carrier present)
+  int      _rawRssi           = -120;  // last RSSI (live bar)
+  uint32_t _rawLastFrameMs    = 0;     // millis() of the last appended frame
   uint32_t _rawCarrierSinceMs = 0;     // when RSSI first crossed (0 = below)
-  uint32_t _rawLastCarrierMs = 0;
-  uint32_t _rawGapStartMs    = 0;
+  uint32_t _rawLastCarrierMs  = 0;     // last time carrier was present
+  uint32_t _rawCaptureStartMs = 0;     // when the current RMT capture opened
+  int      _rawFloor          = -100;  // rolling noise-floor estimate (RAW record)
 
   void _rawPushGap(uint32_t gapMs);    // insert one compressed LOW gap interval
 
-  // ISR-shared state (single active CC1101Util at a time — static like RCSwitch).
-  static void              _rawIsr();
-  static volatile bool          s_rawRec;     // ISR storing transitions
-  static volatile bool          s_rawResync;  // drop next edge, just resync clock
-  static volatile uint16_t      s_rawCount;
-  static volatile unsigned long s_rawLast;
-  static int32_t*               s_rawBuf;     // signed durations (internal RAM)
-  static int                    s_rawPin;
+  // Accumulator (main-loop only now — RMT does the timing, no ISR).
+  static uint16_t  s_rawCount;
+  static int32_t*  s_rawBuf;           // signed durations (internal RAM)
 
   // Scan status (updated during receive/scan)
   bool    _scanning = false;
@@ -201,8 +240,8 @@ private:
   uint8_t _scanIdx  = 0;
   int     _scanRssiMap[kScanFreqCount];
 
-  // Frequency analyzer (peak detect + sample-hold)
-  static constexpr int      kAnalyzerTrigger = -75;   // dBm; coarse peak must exceed
+  // Frequency analyzer (peak detect + sample-hold). Coarse peak must exceed the
+  // runtime _rssiThreshold (shared with the Receive capture gate).
   static constexpr uint8_t  kAnalyzerHold    = 16;    // frames to hold after signal stops
   static constexpr uint16_t kSweepSettleUs   = 1500;  // µs RSSI settle after re-entering RX
   float   _peakFreq = 0;
@@ -220,7 +259,24 @@ private:
   float _scanForBestFreq(std::function<bool()> cancelCb);
   void  _initTx();
   void  _initRx();
+  // Write the OOK RX sensitivity registers (AGC full gain, ADC retention, SmartRF
+  // front-end) after ELECHOUSE Init(), whose FSK-packet defaults cap the gain.
+  void  _applyOokRxRegs();
   void  _sendRcSwitch(const Signal& sig);
-  // Fill `out` from the current RCSwitch decode (incl. KeeLoq proto-23 unpack).
-  void  _fillRcSwitch(Signal& out);
+  // Fill `out` from a decoded RcSwitch/KeeLoq frame (incl. KeeLoq proto-23 unpack).
+  void  _fillRcSwitch(const RCSwitchUtil::Decoded& d, Signal& out);
+  // Serialize the last captured RMT frame (_rxFrame) as signed-duration text.
+  String _frameToString(uint16_t n) const;
+
+  // .sub parsing shared by loadFile() and loadFromStream().
+  static void _parseSubLine(const String& line, Signal& out);
+  static bool _finalizeSub(Signal& out);   // KeeLoq unpack + validity check
+
+  // Average RSSI over a short window ≈ the noise floor (seed for the rolling
+  // estimate). Call once the chip is in RX and no signal is expected.
+  int _measureNoiseFloor();
+  // Advance a rolling noise-floor estimate by one RSSI sample and return the
+  // resulting carrier gate (floor + margin, clamped). Adapts up and down, so a
+  // rising floor can't latch the gate high and kill sensitivity.
+  int _updateGate(int& floor, int rssi) const;
 };

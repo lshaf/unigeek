@@ -37,16 +37,7 @@ static constexpr int kNumProto = sizeof(kProto) / sizeof(kProto[0]);
 
 // ── Static storage ────────────────────────────────────────────────────────
 
-volatile unsigned long long RCSwitchUtil::_rxValue      = 0;
-volatile unsigned int       RCSwitchUtil::_rxBits        = 0;
-volatile unsigned int       RCSwitchUtil::_rxDelay       = 0;
-volatile unsigned int       RCSwitchUtil::_rxProto       = 0;
-int                         RCSwitchUtil::_rxTolerance   = 60;
-int                         RCSwitchUtil::_rxPin         = -1;
-unsigned int  RCSwitchUtil::_timings[RCSwitchUtil::kMaxChanges]  = {};
-unsigned int  RCSwitchUtil::_rawTimings[RCSwitchUtil::kRawMax]   = {};
-unsigned long RCSwitchUtil::_lastMicros    = 0;
-unsigned int  RCSwitchUtil::_rawTransitions= 0;
+int RCSwitchUtil::_rxTolerance = 60;
 
 // ── Constructor ───────────────────────────────────────────────────────────
 
@@ -61,11 +52,6 @@ void RCSwitchUtil::setProtocol(int n) {
   _proto = kProto[n - 1];
 }
 
-void RCSwitchUtil::setProtocol(int n, int pulseLength) {
-  setProtocol(n);
-  _proto.pulseLength = (uint16_t)pulseLength;
-}
-
 void RCSwitchUtil::setPulseLength(int us) {
   _proto.pulseLength = (uint16_t)us;
 }
@@ -74,198 +60,119 @@ void RCSwitchUtil::setRepeatTransmit(int n) {
   _nRepeat = n;
 }
 
-// ── Transmit ──────────────────────────────────────────────────────────────
+// ── Transmit (encode only) ──────────────────────────────────────────────────
 
-void RCSwitchUtil::enableTransmit(int pin) {
-  _txPin = pin;
-  pinMode(pin, OUTPUT);
-}
+// Encode the RcSwitch waveform as a signed-duration stream (+HIGH / -LOW µs) for
+// hardware-timed RMT transmit. Returns the number of durations written.
+uint16_t RCSwitchUtil::encodeToDurations(unsigned long long code, unsigned int bits,
+                                         int32_t* out, uint16_t maxLen) {
+  const bool     keeloq = (_proto.syncFactor.high == 0);
+  const uint32_t pl     = _proto.pulseLength;
+  const int32_t  sHi    = _proto.invertedSignal ? -1 : 1;   // level of the 'high' part
+  const int32_t  sLo    = _proto.invertedSignal ?  1 : -1;  // level of the 'low' part
 
-void RCSwitchUtil::disableTransmit() {
-  _txPin = -1;
-}
+  uint16_t k = 0;
+  auto emit = [&](uint8_t high, uint8_t low) {
+    if (high && k < maxLen) out[k++] = sHi * (int32_t)(pl * high);
+    if (low  && k < maxLen) out[k++] = sLo * (int32_t)(pl * low);
+  };
 
-void RCSwitchUtil::_transmit(HighLow pulses) {
-  uint8_t hi = _proto.invertedSignal ? LOW : HIGH;
-  uint8_t lo = _proto.invertedSignal ? HIGH : LOW;
-
-  if (pulses.high) {
-    digitalWrite(_txPin, hi);
-    uint32_t us = (uint32_t)_proto.pulseLength * pulses.high;
-    delay(us / 1000);
-    delayMicroseconds(us % 1000);
-  }
-  if (pulses.low) {
-    digitalWrite(_txPin, lo);
-    uint32_t us = (uint32_t)_proto.pulseLength * pulses.low;
-    delay(us / 1000);
-    delayMicroseconds(us % 1000);
-  }
-}
-
-void RCSwitchUtil::send(unsigned long long code, unsigned int bits) {
-  if (_txPin < 0) return;
-
-  bool keeloq = (_proto.syncFactor.high == 0);
-
-  for (int rep = 0; rep < _nRepeat; rep++) {
+  for (int rep = 0; rep < _nRepeat && k < maxLen; rep++) {
     if (keeloq) {
-      for (int i = 0; i < 11; i++) _transmit({ 1, 1 });
-      _transmit({ 1, 10 });
+      for (int i = 0; i < 11; i++) emit(1, 1);
+      emit(1, 10);
     }
-
     for (int i = (int)bits - 1; i >= 0; i--) {
-      if (code & (1ULL << i))
-        _transmit(_proto.one);
-      else
-        _transmit(_proto.zero);
+      if (code & (1ULL << i)) emit(_proto.one.high,  _proto.one.low);
+      else                    emit(_proto.zero.high, _proto.zero.low);
     }
-
     if (!keeloq) {
-      _transmit(_proto.syncFactor);
+      emit(_proto.syncFactor.high, _proto.syncFactor.low);
     } else {
-      _transmit(_proto.one);
-      _transmit({ 1, 0 });
-      _transmit({ 0, 40 });
+      emit(_proto.one.high, _proto.one.low);
+      emit(1, 0);
+      emit(0, 40);
     }
   }
-
-  digitalWrite(_txPin, LOW);
+  return k;
 }
 
-// ── Receive ───────────────────────────────────────────────────────────────
+// ── Pure decode (from an RMT-captured frame) ───────────────────────────────
 
-void RCSwitchUtil::enableReceive(int pin) {
-  _rxPin = pin;
-  _rxValue = 0;
-  _rxBits  = 0;
-  attachInterrupt(digitalPinToInterrupt(pin), _isr, CHANGE);
-}
-
-void RCSwitchUtil::disableReceive() {
-  if (_rxPin >= 0) {
-    detachInterrupt(digitalPinToInterrupt(_rxPin));
-    _rxPin = -1;
-  }
-}
-
-void RCSwitchUtil::resetAvailable() {
-  _rawTransitions = 0;
-  _rxValue = 0;
-  memset(_rawTimings, 0, sizeof(_rawTimings));
-  _lastMicros = micros() + 10000; // 10ms settle
-}
-
-bool RCSwitchUtil::available() {
-  return _rxValue != 0;
-}
-
-bool RCSwitchUtil::RAWavailable() {
-  return _rawTransitions > 10 && (micros() - _lastMicros) > 100000;
-}
-
-// ── Protocol decoder (called from ISR) ────────────────────────────────────
-
-bool RCSwitchUtil::_receiveProtocol(int p, unsigned int changeCount) {
+// Matches one protocol `p` against a caller-supplied `timings` buffer
+// (magnitudes; timings[0] = leading separator gap) and writes into `out`.
+// Requires a real bit count so RMT noise bursts don't match with zero payload.
+bool RCSwitchUtil::_matchProtocol(int p, const unsigned int* timings,
+                                  unsigned int changeCount, Decoded& out) {
   const Protocol& pro = kProto[p - 1];
 
   unsigned long long code = 0;
   const unsigned int syncLen = (pro.syncFactor.low > pro.syncFactor.high)
                                ? pro.syncFactor.low : pro.syncFactor.high;
-  unsigned int te  = _timings[0] / syncLen;
+  unsigned int te  = syncLen ? timings[0] / syncLen : 0;
   unsigned int tol = te * _rxTolerance / 100;
 
-  // Protocol 23 (KeeLoq): fixed timing
-  if (p == 23) { te = 400; tol = 400 * _rxTolerance / 100; }
+  if (p == 23) { te = 400; tol = 400 * _rxTolerance / 100; }   // KeeLoq fixed te
+  if (te == 0) return false;
 
   unsigned int firstData = pro.invertedSignal ? 2u : 1u;
   if (p == 23) firstData = 25;
+  if (changeCount <= firstData + 1) return false;
 
   unsigned int numBits = 0;
   for (unsigned int i = firstData; i < changeCount - 1 && numBits < 64; i += 2, numBits++) {
     code <<= 1ULL;
-    if (abs((int)_timings[i]     - (int)(te * pro.zero.high)) < (int)tol &&
-        abs((int)_timings[i + 1] - (int)(te * pro.zero.low))  < (int)tol) {
+    if (abs((int)timings[i]     - (int)(te * pro.zero.high)) < (int)tol &&
+        abs((int)timings[i + 1] - (int)(te * pro.zero.low))  < (int)tol) {
       // zero — no change
-    } else if (abs((int)_timings[i]     - (int)(te * pro.one.high)) < (int)tol &&
-               abs((int)_timings[i + 1] - (int)(te * pro.one.low))  < (int)tol) {
+    } else if (abs((int)timings[i]     - (int)(te * pro.one.high)) < (int)tol &&
+               abs((int)timings[i + 1] - (int)(te * pro.one.low))  < (int)tol) {
       code |= 1ULL;
     } else {
       return false;
     }
   }
 
-  if (changeCount > 7) {
-    _rxValue = code;
-    _rxBits  = numBits;
-    _rxDelay = te;
-    _rxProto = (unsigned int)p;
+  if (numBits >= 8) {
+    out.value = code;
+    out.bits  = numBits;
+    out.delay = te;
+    out.proto = (unsigned int)p;
     return true;
   }
   return false;
 }
 
-// ── ISR ───────────────────────────────────────────────────────────────────
+bool RCSwitchUtil::decodeStream(const int32_t* dur, uint16_t n, Decoded& out) {
+  if (n < 8) return false;
 
-void RCSwitchUtil::_isr() {
-  static unsigned int changeCount    = 0;
-  static unsigned int changeRAWCount = 0;
-  static unsigned long lastTime      = 0;
-  static unsigned int repeatCount    = 0;
+  static unsigned int timings[kMaxChanges];
 
-  static unsigned long rawPreBuff[kRawPreSize] = {};
-  static unsigned int  rawPreCount = 0;
+  // Protocol try-order: KeeLoq (23) first so it is labelled correctly and never
+  // stolen by an earlier generic protocol; then 1..22.
+  auto tryAll = [&](unsigned int cc) -> bool {
+    if (_matchProtocol(23, timings, cc, out)) return true;
+    for (int p = 1; p < kNumProto; p++)
+      if (_matchProtocol(p, timings, cc, out)) return true;
+    return false;
+  };
 
-  const unsigned long now      = micros();
-  const unsigned int  duration = (unsigned int)(now - lastTime);
+  int prevSep = -1;
+  for (uint16_t i = 0; i < n; i++) {
+    const unsigned int mag = (unsigned int)(dur[i] < 0 ? -dur[i] : dur[i]);
+    if (mag <= kSepLimit) continue;            // not a separator
 
-  if (duration > kSepLimit) {
-    if (repeatCount == 0 ||
-        (unsigned int)abs((int)duration - (int)_timings[0]) < 200) {
-      repeatCount++;
-      if (repeatCount == 2) {
-        for (int i = 1; i <= kNumProto; i++) {
-          if (_receiveProtocol(i, changeCount)) break;
+    if (prevSep >= 0) {
+      unsigned int cc = (unsigned int)(i - prevSep);   // timings[0] = separator
+      if (cc >= 6 && cc <= kMaxChanges) {
+        for (unsigned int j = 0; j < cc; j++) {
+          const int32_t v = dur[prevSep + j];
+          timings[j] = (unsigned int)(v < 0 ? -v : v);
         }
-        repeatCount = 0;
+        if (tryAll(cc)) return true;
       }
     }
-    changeCount = 0;
+    prevSep = i;
   }
-
-  if (changeCount >= kMaxChanges) {
-    changeCount  = 0;
-    repeatCount  = 0;
-  }
-  _timings[changeCount++] = duration;
-
-  // RAW capture — reset on very long gaps (>400ms)
-  if (duration > 400000) {
-    changeRAWCount = 0;
-    memset(_rawTimings, 0, sizeof(_rawTimings));
-    memset(rawPreBuff,  0, sizeof(rawPreBuff));
-    rawPreCount = 0;
-    lastTime = now;
-    return;
-  }
-
-  // Sliding-window noise filter: require sum of last kRawPreSize durations >= threshold
-  rawPreCount = rawPreCount + duration - rawPreBuff[0];
-  for (unsigned int i = 0; i < kRawPreSize - 1; i++) rawPreBuff[i] = rawPreBuff[i + 1];
-  rawPreBuff[kRawPreSize - 1] = duration;
-
-  if (rawPreCount >= kRawPreSize * kNoiseThresh) {
-    if (changeRAWCount >= kRawMax) changeRAWCount = 0;
-    if (duration > kNoiseThresh) {
-      _rawTimings[changeRAWCount++] = duration;
-      if (changeRAWCount == 15) {
-        _rawTransitions = 15;
-        _lastMicros     = now;
-      }
-    }
-  } else {
-    changeRAWCount = 0;
-  }
-
-  lastTime = now;
+  return false;
 }

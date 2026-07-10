@@ -1,6 +1,6 @@
 //
 // M5 RF433 Utility — send/receive raw RF signals on M5 RF433T/R
-// (single-pin OOK TX + ISR-based RX, fixed 433.92 MHz).
+// (OOK TX + RX over the RMT peripheral, fixed 433.92 MHz).
 //
 // Mirrors CC1101Util's surface so screens can reuse the same Signal type
 // and the same .sub file format. Hardware is purely GPIO bit-bang:
@@ -45,7 +45,7 @@ private:
   int8_t _txPin = -1;
   int8_t _rxPin = -1;
   bool   _initialized = false;
-  RCSwitchUtil _sw;
+  RmtRf    _rmt;   // hardware RMT capture/replay (separate TX + RX GPIOs)
   RxFilter _rxFilter = RX_FILTER_RAW;
 
   void _sendRaw(const String& rawData);
