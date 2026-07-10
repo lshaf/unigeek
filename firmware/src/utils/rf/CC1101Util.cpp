@@ -206,7 +206,7 @@ bool CC1101Util::pollReceive(Signal& out) {
     if (carrier) {
       if (_rxCarrierSinceMs == 0) _rxCarrierSinceMs = now;
       if (now - _rxCarrierSinceMs >= kRxArmMs) {
-        _rmt.beginRx((gpio_num_t)_gdo0Pin);   // default idle (multi-repeat framing)
+        _rmt.beginRx((gpio_num_t)_gdo0Pin, kRxIdleUs);  // idle > largest brand guard
         _rxCapturing     = true;
         _rxLastCarrierMs = now;
       }

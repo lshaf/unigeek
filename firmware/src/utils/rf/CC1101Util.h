@@ -201,8 +201,14 @@ private:
   // Receive carrier gating (RSSI) — the RMT receiver stays paused until a real
   // carrier appears, so squelch noise is never captured (and can't overflow it).
   static constexpr uint32_t kRxArmMs = 6;    // carrier must persist to start
-  static constexpr uint32_t kRxGapMs = 80;   // carrier-gone hold (> RMT idle) so
+  static constexpr uint32_t kRxGapMs = 80;   // carrier-gone hold (> kRxIdleUs) so
                                              // the final frame is drained first
+  // RMT end-of-frame idle. Must exceed the largest inter-repeat guard / preamble
+  // of any brand decoder so it stays inside the frame the decoder self-syncs on
+  // instead of slicing it (Phoenix ≈ 25.6 ms, Nice FLO ≈ 25.2 ms, Ditec ≈ 24.2 ms,
+  // Linear ≈ 21 ms); otherwise those fall through to RAW. Under the 32.767 ms
+  // single-interval ceiling so the guard is still captured as one interval.
+  static constexpr uint16_t kRxIdleUs = 30000;
   // The carrier gate is adaptive: measured just above the average noise floor at
   // begin, so a weak/distant transmitter still triggers — nearly as sensitive as
   // the raw data slicer the old RCSwitch ISR read directly (it had no RSSI gate).
