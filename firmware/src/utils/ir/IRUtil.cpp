@@ -301,40 +301,40 @@ String IRUtil::signalLabel(const Signal& sig) {
 
 #include "TVBGoneData.h"
 
-void IRUtil::startTvBGone(uint8_t region, void (*progressCb)(uint8_t, uint8_t),
-                           bool (*cancelCb)()) {
-  if (!_sender) return;
+namespace {
 
-  const IrCode* const* codes;
-  uint8_t numCodes;
+// Gap between codes: long enough for an IR receiver to register each burst,
+// short enough to keep the full sweep brisk (~25% faster than the original
+// 200 ms). Below ~100 ms some slow receivers start missing codes.
+constexpr uint32_t kTvbGap = 130;
 
-  if (region == 1) { // NA
-    codes = NApowerCodes;
-    numCodes = sizeof(NApowerCodes) / sizeof(NApowerCodes[0]);
-  } else { // EU
-    codes = EUpowerCodes;
-    numCodes = sizeof(EUpowerCodes) / sizeof(EUpowerCodes[0]);
+// Report cumulative progress across the whole sweep, throttled to keep UI
+// overhead down. `overall`/`total` stay < 255 (≈200 codes worst case).
+inline void tvbProgress(void (*progressCb)(uint8_t, uint8_t), uint16_t overall,
+                        uint16_t total) {
+  if (progressCb && (overall % 3 == 0 || overall == total)) {
+    progressCb((uint8_t)overall, (uint8_t)total);
   }
+}
 
+// Send a batch of parsed (bit-compressed) codes — times are stored /10, so
+// each pair is multiplied back by 10 before transmit. Returns false if the
+// user cancelled mid-batch.
+bool tvbSendParsedBatch(IRsend* sender, const IrCode* const* codes, uint8_t count,
+                        uint16_t doneBefore, uint16_t total,
+                        void (*progressCb)(uint8_t, uint8_t), bool (*cancelCb)()) {
   uint16_t rawData[300];
-
-  for (uint8_t i = 0; i < numCodes; i++) {
-    if (cancelCb && cancelCb()) break;
+  for (uint8_t i = 0; i < count; i++) {
+    if (cancelCb && cancelCb()) return false;
 
     const IrCode* powerCode = codes[i];
     uint8_t freq = powerCode->timer_val;
     uint8_t numpairs = powerCode->numpairs;
     uint8_t bitcompression = powerCode->bitcompression;
 
-    // Decode compressed data
-    uint8_t bitsleft = 0;
-    uint8_t bits = 0;
-    uint8_t codePtr = 0;
-
+    uint8_t bitsleft = 0, bits = 0, codePtr = 0;
     for (uint8_t k = 0; k < numpairs; k++) {
-      // Read bits
-      uint8_t tmp = 0;
-      uint8_t remaining = bitcompression;
+      uint8_t tmp = 0, remaining = bitcompression;
       while (remaining--) {
         if (bitsleft == 0) {
           bits = powerCode->codes[codePtr++];
@@ -347,18 +347,72 @@ void IRUtil::startTvBGone(uint8_t region, void (*progressCb)(uint8_t, uint8_t),
       rawData[k * 2 + 1] = powerCode->times[ti + 1] * 10;
     }
 
-    _sender->sendRaw(rawData, numpairs * 2, freq);
+    sender->sendRaw(rawData, numpairs * 2, freq);
+    tvbProgress(progressCb, doneBefore + i + 1, total);
+    delay(kTvbGap);
+  }
+  return true;
+}
 
-    if (progressCb && (i % 3 == 0 || i == numCodes - 1)) {
-      progressCb(i + 1, numCodes);
+// Send a batch of raw codes — times are 32-bit microseconds, sent as-is (no
+// ×10). Values > 65535 truncate to uint16_t, matching the raw-IR loader.
+bool tvbSendRawBatch(IRsend* sender, const RawIrCode* const* codes, uint8_t count,
+                     uint16_t doneBefore, uint16_t total,
+                     void (*progressCb)(uint8_t, uint8_t), bool (*cancelCb)()) {
+  uint16_t rawData[300];
+  for (uint8_t i = 0; i < count; i++) {
+    if (cancelCb && cancelCb()) return false;
+
+    const RawIrCode* powerCode = codes[i];
+    uint8_t freq = powerCode->timer_val;
+    uint8_t numpairs = powerCode->numpairs;
+
+    for (uint8_t k = 0; k < numpairs; k++) {
+      rawData[k * 2] = (uint16_t)powerCode->times[k * 2];
+      rawData[k * 2 + 1] = (uint16_t)powerCode->times[k * 2 + 1];
     }
 
-    // Gap between codes: long enough for a TV's IR receiver to register each
-    // burst, short enough to keep the full sweep brisk (~25% faster than the
-    // original 200 ms). Below ~100 ms some slow receivers start missing codes.
-    delay(130);
+    sender->sendRaw(rawData, numpairs * 2, freq);
+    tvbProgress(progressCb, doneBefore + i + 1, total);
+    delay(kTvbGap);
+  }
+  return true;
+}
+
+}  // namespace
+
+void IRUtil::startTvBGone(uint8_t region, void (*progressCb)(uint8_t, uint8_t),
+                           bool (*cancelCb)()) {
+  if (!_sender) return;
+
+  const IrCode* const* regionCodes;
+  uint8_t numRegion;
+  if (region == 1) { // NA
+    regionCodes = NApowerCodes;
+    numRegion = sizeof(NApowerCodes) / sizeof(NApowerCodes[0]);
+  } else { // EU
+    regionCodes = EUpowerCodes;
+    numRegion = sizeof(EUpowerCodes) / sizeof(EUpowerCodes[0]);
   }
 
-  if (progressCb) progressCb(numCodes, numCodes);
+  // Three sequential sweeps: region-specific first, then the universal parsed
+  // codes, then the universal raw codes (projectors / streaming sticks / etc).
+  // Progress runs cumulatively across all three so the bar fills 0 -> total.
+  const uint16_t total =
+      (uint16_t)numRegion + num_UniversalParsedCodes + num_UniversalRawCodes;
+
+  bool ok = tvbSendParsedBatch(_sender, regionCodes, numRegion,
+                               0, total, progressCb, cancelCb);
+  if (ok) {
+    ok = tvbSendParsedBatch(_sender, UniversalParsedCodes, num_UniversalParsedCodes,
+                            numRegion, total, progressCb, cancelCb);
+  }
+  if (ok) {
+    ok = tvbSendRawBatch(_sender, UniversalRawCodes, num_UniversalRawCodes,
+                         (uint16_t)numRegion + num_UniversalParsedCodes,
+                         total, progressCb, cancelCb);
+  }
+
+  if (progressCb) progressCb((uint8_t)total, (uint8_t)total);
   digitalWrite(_txPin, LOW);
 }
