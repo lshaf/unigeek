@@ -464,7 +464,7 @@ export default function AppStoreClient({ expectedVersion, rawBase, repo }) {
               <button type="button" className="fm-modal-close" onClick={closeDetails} aria-label="Close">×</button>
             </div>
             <div className="fm-modal-body as-modal-body">
-              {docState !== 'ready' && appImageUrl(selected, rawBase) && (
+              {appImageUrl(selected, rawBase) && (
                 /* eslint-disable-next-line @next/next/no-img-element */
                 <img className="as-modal-cover" src={appImageUrl(selected, rawBase)} alt={selected.title} />
               )}

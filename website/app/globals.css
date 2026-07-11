@@ -3018,7 +3018,8 @@ button { font: inherit; color: inherit; background: transparent; border: 0; }
   width: 100%; height: 100%;
   object-fit: cover;
   display: block;
-  image-rendering: pixelated;
+  /* App covers are photos — render smooth, not the pixel-art default. */
+  image-rendering: auto;
 }
 /* No cover image → no thumbnail area at all; show the category as a small inline
    tag at the top of the card body instead. */
@@ -3122,7 +3123,7 @@ button { font: inherit; color: inherit; background: transparent; border: 0; }
   height: auto;
   max-height: 55vh;
   object-fit: contain;
-  image-rendering: pixelated;
+  image-rendering: auto;
   border: 1px solid var(--line);
   border-radius: var(--radius);
   margin-bottom: 1rem;
@@ -3154,7 +3155,7 @@ button { font: inherit; color: inherit; background: transparent; border: 0; }
   overflow-x: auto;
 }
 .as-doc pre code { background: none; padding: 0; }
-.as-doc img { max-width: 100%; height: auto; border-radius: var(--radius); border: 1px solid var(--line); }
+.as-doc img { max-width: 100%; height: auto; border-radius: var(--radius); border: 1px solid var(--line); image-rendering: auto; }
 .as-doc table { width: 100%; border-collapse: collapse; margin: 0.75rem 0; font-size: 0.85rem; }
 .as-doc th, .as-doc td { border: 1px solid var(--line); padding: 0.35rem 0.55rem; text-align: left; }
 .as-doc th { color: var(--ink); background: var(--bg-elev-2); }
