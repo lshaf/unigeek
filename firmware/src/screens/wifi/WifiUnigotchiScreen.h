@@ -34,6 +34,10 @@ public:
   enum Mode : uint8_t { MODE_PASSIVE = 0, MODE_ACTIVE = 1, MODE_PWNGRID = 2 };
   void applyMode(uint8_t m);
 
+  // Display style: the pwnagotchi face, or a plain scrolling text log (same
+  // engine underneath — only the centre body render differs).
+  enum DisplayStyle : uint8_t { STYLE_GOTCHI = 0, STYLE_TEXT = 1 };
+
   // ── Shared capture types (static promiscuous cb needs access) ──────────────
   using MacAddr = std::array<uint8_t, 6>;
   struct MacHash {
@@ -103,6 +107,13 @@ private:
   static const uint8_t     HOP_ORDER[HOP_COUNT];
 
   Mode _mode = MODE_PASSIVE;
+  DisplayStyle _style = STYLE_GOTCHI;
+
+  // Rolling event log for the text display style — fed by every _say() phrase.
+  static constexpr int LOG_LINES = 16;
+  String  _log[LOG_LINES];
+  uint8_t _logCount = 0;
+  void    _pushLog(const String& line);
 
   // ── Auto-attack state machine ──────────────────────────────────────────────
   enum AutoState : uint8_t { ST_RECON, ST_LOCK, ST_ATTACK, ST_WAIT };
@@ -174,10 +185,13 @@ private:
   void _stopRadio();
 
   // ── UI ─────────────────────────────────────────────────────────────────────
+  void _openOptionsMenu();
   void _openModeMenu();
+  void _openStyleMenu();
   void _say(MoodFace::Mood mood, uint16_t faceColor, const String& phrase);
   String _statusSentence();
   void _drawTop(int bx, int by, int bw);
   void _drawBody(int bx, int by, int bw, int h);
+  void _drawBodyText(int bx, int by, int bw, int h);
   void _drawStats(int bx, int by, int bw);
 };

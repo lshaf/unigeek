@@ -54,6 +54,8 @@
 #define APP_CONFIG_MASCOT_DEFAULT               "hacker"
 #define APP_CONFIG_HIDDEN_MODULES               "hidden_modules"
 #define APP_CONFIG_HIDDEN_MODULES_DEFAULT       "0"
+#define APP_CONFIG_UNIGOTCHI_STYLE              "unigotchi_style"
+#define APP_CONFIG_UNIGOTCHI_STYLE_DEFAULT      "gotchi"
 
 class ConfigManager
 {

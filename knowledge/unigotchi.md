@@ -10,10 +10,15 @@ them unchanged.
 ## Setup
 
 1. Go to **WiFi > EAPOL Capture** and select **Unigotchi** at the bottom of the menu.
-2. It starts in **Passive** mode. Press **OK** to open the mode box and pick one:
-   - **Passive Mode** *(default)* — listen only.
-   - **Active Mode** — hunt with deauth.
-   - **Pwngrid spam** — broadcast pwnagotchi advertisement beacons.
+2. It starts in **Passive** mode. Press **OK** to open the **Options** box:
+   - **Set Mode** — pick what the engine does:
+     - **Passive Mode** *(default)* — listen only.
+     - **Active Mode** — hunt with deauth.
+     - **Pwngrid spam** — broadcast pwnagotchi advertisement beacons.
+   - **Display Style** — pick how it's drawn (the capture engine is identical either way):
+     - **Gotchi (face)** *(default)* — the animated hacker-head face + speech bubble.
+     - **Text (log)** — a plain scrolling terminal-style event log.
+     The choice is saved and restored on the next run.
 3. Press **BACK** to leave.
 
 The hacker-head face (its rank reflects your EXP, exactly like the home screen)

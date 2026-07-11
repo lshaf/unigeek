@@ -85,6 +85,9 @@ void WifiUnigotchiScreen::onInit() {
   _apCount = 0; _ringHead = _ringTail = 0; _cHead = _cTail = 0;
   _handshakes = _pmkids = _deauths = _disassocs = _pwngridTx = 0;
   _mode = MODE_PASSIVE; _auto = ST_RECON; _targetIdx = -1;
+  _style = (Config.get(APP_CONFIG_UNIGOTCHI_STYLE, APP_CONFIG_UNIGOTCHI_STYLE_DEFAULT) == "text")
+             ? STYLE_TEXT : STYLE_GOTCHI;
+  _logCount = 0;
   _hopIdx = 0; _channel = HOP_ORDER[0];
   for (int i = 1; i < 6; i++) _spoofMac[i] = (uint8_t)random(256);
   _spoofMac[0] = 0x02;   // locally-administered, unicast
@@ -103,6 +106,7 @@ void WifiUnigotchiScreen::onInit() {
   _faceMood = MoodFace::HAPPY; _faceVariant = 0;
   strncpy(_curMsg, "Hi! I'm Unigotchi!", sizeof(_curMsg) - 1);
   _curMsg[sizeof(_curMsg) - 1] = '\0';
+  _pushLog("Hi! I'm Unigotchi!");
   _firstRender = true; _dirty = D_ALL;
 
   _startRadio();
@@ -142,7 +146,7 @@ void WifiUnigotchiScreen::onUpdate() {
   if (Uni.Nav->wasPressed()) {
     auto dir = Uni.Nav->readDirection();
     if (dir == INavigation::DIR_BACK) { Screen.goBack(); return; }
-    if (dir == INavigation::DIR_PRESS) { _openModeMenu(); return; }
+    if (dir == INavigation::DIR_PRESS) { _openOptionsMenu(); return; }
   }
 
   if (_mode == MODE_PWNGRID) {
@@ -169,6 +173,18 @@ void WifiUnigotchiScreen::onUpdate() {
   if (_dirty) onRender();
 }
 
+// PRESS opens this top-level options list; each entry drills into its own
+// select box (Mode = what the engine does, Display = how it's drawn).
+void WifiUnigotchiScreen::_openOptionsMenu() {
+  static const InputSelectAction::Option opts[] = {
+    {"Set Mode", "mode"}, {"Display Style", "style"} };
+  const char* r = InputSelectAction::popup("Options", opts, 2, nullptr);
+  if (r && strcmp(r, "mode") == 0)  { _openModeMenu();  return; }
+  if (r && strcmp(r, "style") == 0) { _openStyleMenu(); return; }
+  _firstRender = true; _dirty = D_ALL;
+  render();   // repaint chrome + body over the dismissed box
+}
+
 void WifiUnigotchiScreen::_openModeMenu() {
   static const InputSelectAction::Option opts[] = {
     {"Passive Mode", "0"}, {"Active Mode", "1"}, {"Pwngrid spam", "2"} };
@@ -177,6 +193,22 @@ void WifiUnigotchiScreen::_openModeMenu() {
   if (r) applyMode((uint8_t)atoi(r));
   _firstRender = true; _dirty = D_ALL;
   render();   // repaint chrome + body over the dismissed box
+}
+
+// Switch between the pwnagotchi face and the plain text log. Persisted so the
+// preference sticks across sessions.
+void WifiUnigotchiScreen::_openStyleMenu() {
+  static const InputSelectAction::Option opts[] = {
+    {"Gotchi (face)", "0"}, {"Text (log)", "1"} };
+  char cur[2]; snprintf(cur, sizeof(cur), "%d", (int)_style);
+  const char* r = InputSelectAction::popup("Display Style", opts, 2, cur);
+  if (r) {
+    _style = (DisplayStyle)atoi(r);
+    Config.set(APP_CONFIG_UNIGOTCHI_STYLE, _style == STYLE_TEXT ? "text" : "gotchi");
+    if (Uni.Storage) Config.save(Uni.Storage);
+  }
+  _firstRender = true; _dirty = D_ALL;
+  render();
 }
 
 // ── State machine ─────────────────────────────────────────────────────────────
@@ -726,7 +758,20 @@ void WifiUnigotchiScreen::_say(MoodFace::Mood mood, uint16_t faceColor, const St
   strncpy(_curMsg, phrase.c_str(), sizeof(_curMsg) - 1);
   _curMsg[sizeof(_curMsg) - 1] = '\0';
   _lastMoodMs = millis();
+  _pushLog(phrase);
   _dirty |= D_BODY;
+}
+
+// Append a line to the rolling log; drop the oldest when full. Only the text
+// display style renders it, but we keep it fed in both styles so a mid-session
+// switch shows recent history.
+void WifiUnigotchiScreen::_pushLog(const String& line) {
+  if (_logCount < LOG_LINES) {
+    _log[_logCount++] = line;
+  } else {
+    for (int i = 1; i < LOG_LINES; i++) _log[i - 1] = _log[i];
+    _log[LOG_LINES - 1] = line;
+  }
 }
 
 // Pwnagotchi-flavoured status line built from the live counters.
@@ -781,7 +826,11 @@ void WifiUnigotchiScreen::onRender() {
   if (_firstRender) { lcd.fillRect(bx, by, bw, bh, TFT_BLACK); _firstRender = false; _dirty = D_ALL; }
 
   if (_dirty & D_TOP)   { _drawTop(bx, by, bw);        _dirty &= ~D_TOP; }
-  if (_dirty & D_BODY)  { _drawBody(bx, by0, bw, bh0); _dirty &= ~D_BODY; }
+  if (_dirty & D_BODY)  {
+    if (_style == STYLE_TEXT) _drawBodyText(bx, by0, bw, bh0);
+    else                      _drawBody(bx, by0, bw, bh0);
+    _dirty &= ~D_BODY;
+  }
   if (_dirty & D_STATS) { _drawStats(bx, statY, bw);   _dirty &= ~D_STATS; }
 }
 
@@ -847,6 +896,32 @@ void WifiUnigotchiScreen::_drawBody(int bx, int by, int bw, int h) {
 
   lcd.setTextSize(ts); lcd.setTextColor(UG_INK, TFT_BLACK);
   for (int i = 0; i < nLines; i++) lcd.drawString(lines[i].c_str(), bx, y + i * lineH);
+}
+
+// Text display style: a scrolling terminal-like log of engine events, filling
+// the same centre body the face would occupy. The top status line and the
+// bottom counters are already plain text and shared with the gotchi style.
+void WifiUnigotchiScreen::_drawBodyText(int bx, int by, int bw, int h) {
+  auto& lcd = Uni.Lcd;
+  const int ts = bw < 320 ? 1 : 2, lineH = ts * 9;
+  lcd.fillRect(bx, by, bw, h, TFT_BLACK);
+  lcd.setTextSize(ts);
+  lcd.setTextColor(UG_INK, TFT_BLACK);
+  lcd.setTextDatum(TL_DATUM);
+
+  int maxLines = h / lineH;
+  if (maxLines < 1) maxLines = 1;
+  const int show  = (_logCount < maxLines) ? _logCount : maxLines;
+  const int first = _logCount - show;   // newest `show` lines, oldest drawn first
+
+  int y = by;
+  for (int i = 0; i < show; i++) {
+    String ln = _log[first + i];
+    // clip to the body width so a long phrase can't overrun into the margin
+    while (ln.length() && lcd.textWidth(ln.c_str()) > bw) ln.remove(ln.length() - 1);
+    lcd.drawString(ln.c_str(), bx, y);
+    y += lineH;
+  }
 }
 
 // Bottom: counters (left) + mode (right). Plain white.
