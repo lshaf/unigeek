@@ -353,7 +353,10 @@ void IRUtil::startTvBGone(uint8_t region, void (*progressCb)(uint8_t, uint8_t),
       progressCb(i + 1, numCodes);
     }
 
-    delay(200);
+    // Gap between codes: long enough for a TV's IR receiver to register each
+    // burst, short enough to keep the full sweep brisk (~25% faster than the
+    // original 200 ms). Below ~100 ms some slow receivers start missing codes.
+    delay(130);
   }
 
   if (progressCb) progressCb(numCodes, numCodes);
