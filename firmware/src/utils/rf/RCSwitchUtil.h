@@ -1,7 +1,10 @@
 //
-// RCSwitchUtil — RC switch encode/decode for CC1101
-// Derived from RCSwitch by Suat Özgür (LGPL v2.1)
-// Stripped to send + interrupt-based receive only.
+// RCSwitchUtil — RC switch protocol table + encode/decode.
+// Derived from RCSwitch by Suat Özgür (LGPL v2.1).
+//
+// Timing now comes from the RMT peripheral (see RmtRf): transmit encodes a
+// waveform to signed durations for hardware-timed replay, and receive decodes a
+// captured frame with decodeStream(). No interrupt-driven capture or bit-bang.
 //
 
 #pragma once
@@ -21,55 +24,41 @@ public:
 
   RCSwitchUtil();
 
-  // ── Transmit ──────────────────────────────────────────────────────────────
-  void enableTransmit(int pin);
-  void disableTransmit();
+  // ── Transmit (encode only — RmtRf clocks it out) ───────────────────────────
   void setProtocol(int n);
-  void setProtocol(int n, int pulseLength);
   void setPulseLength(int us);
   void setRepeatTransmit(int n);
-  void send(unsigned long long code, unsigned int bits);
+  // Encode the RcSwitch waveform as signed durations (+HIGH / -LOW µs) for RMT TX.
+  uint16_t encodeToDurations(unsigned long long code, unsigned int bits,
+                             int32_t* out, uint16_t maxLen);
 
-  // ── Receive ───────────────────────────────────────────────────────────────
-  void enableReceive(int pin);
-  void disableReceive();
-  void resetAvailable();
+  // ── Decode (pure — from an RMT-captured frame) ─────────────────────────────
+  // Result of decoding one of the kProto protocols out of a raw pulse train.
+  struct Decoded {
+    unsigned long long value = 0;
+    unsigned int       bits  = 0;
+    unsigned int       delay = 0;   // te (µs)
+    unsigned int       proto = 0;   // 1..kNumProto, 0 = no match
+  };
 
-  bool available();
-  bool RAWavailable();
-
-  unsigned long long getReceivedValue()    { return _rxValue; }
-  unsigned int       getReceivedBitlength(){ return _rxBits;  }
-  unsigned int       getReceivedDelay()    { return _rxDelay; }
-  unsigned int       getReceivedProtocol() { return _rxProto; }
-  unsigned int*      getRAWReceivedRawdata(){ return _rawTimings; }
+  // Decode a completed frame captured by RMT: `dur` holds signed durations
+  // (+HIGH / -LOW µs) alternating. The frame is split on separator gaps
+  // (> kSepLimit) into per-repeat segments; each segment is matched against the
+  // protocol table (KeeLoq/proto-23 first so it is never mis-grabbed). Returns
+  // true and fills `out` on the first match. Pure/reentrant — no ISR state.
+  static bool decodeStream(const int32_t* dur, uint16_t n, Decoded& out);
 
 private:
-  int      _txPin    = -1;
   int      _nRepeat  = 10;
   Protocol _proto;
 
-  void _transmit(HighLow pulses);
+  // Pure protocol matcher used by decodeStream(): matches one protocol `p`
+  // against `timings` (magnitudes, timings[0] = leading separator gap).
+  static bool _matchProtocol(int p, const unsigned int* timings,
+                             unsigned int changeCount, Decoded& out);
 
-  static void _isr();
-  static bool           _receiveProtocol(int p, unsigned int changeCount);
+  static int _rxTolerance;   // % timing tolerance for decode
 
-  // shared ISR state
-  static volatile unsigned long long _rxValue;
-  static volatile unsigned int       _rxBits;
-  static volatile unsigned int       _rxDelay;
-  static volatile unsigned int       _rxProto;
-  static int                         _rxTolerance;
-  static int                         _rxPin;
-
-  static constexpr unsigned int kSepLimit    = 4300;
-  static constexpr unsigned int kMaxChanges  = 157;
-  static constexpr unsigned int kRawMax      = 512;
-  static constexpr unsigned int kNoiseThresh = 50;
-  static constexpr unsigned int kRawPreSize  = 5;
-
-  static unsigned int  _timings[kMaxChanges];
-  static unsigned int  _rawTimings[kRawMax];
-  static unsigned long _lastMicros;
-  static unsigned int  _rawTransitions;
+  static constexpr unsigned int kSepLimit   = 4300;   // gap that separates repeats
+  static constexpr unsigned int kMaxChanges = 157;    // max edges per segment
 };

@@ -21,6 +21,37 @@ static uint16_t detectStrengthColor(int rssi) {
   return TFT_RED;
 }
 
+// Fixed-code protocols offered for brute force. `bits` is the code length swept.
+// Two encoders are used: entries with rcProto >= 1 go through the RcSwitch
+// registry (its table supplies the pulse length); entries with rcProto < 0 are
+// built from the explicit signed timings below (+HIGH / -LOW µs) — pilot and
+// stop are omitted when {0,0}. Kept to short codes (<=24 bit) that are actually
+// sweepable in reasonable time. For a full sweep the bit order/convention is
+// irrelevant: every real code is covered regardless.
+struct BruteProto {
+  const char* label;
+  uint8_t     bits;
+  int8_t      rcProto;   // >=1: RcSwitch registry; <0: explicit timings below
+  int16_t     zero[2];   // {first, second} signed µs; used when rcProto < 0
+  int16_t     one[2];
+  int16_t     pilot[2];  // pre-frame ({0,0} = none)
+  int16_t     stop[2];   // post-frame ({0,0} = none)
+};
+static const BruteProto kBruteProtos[] = {
+  // RcSwitch-registry protocols (encoder shared with replay)
+  {"CAME 12bit",      12, 20, {0, 0},      {0, 0},      {0, 0},        {0, 0}       },
+  {"NICE 12bit",      12, 22, {0, 0},      {0, 0},      {0, 0},        {0, 0}       },
+  {"FAAC 12bit",      12, 21, {0, 0},      {0, 0},      {0, 0},        {0, 0}       },
+  {"HT12E 12bit",     12, 11, {0, 0},      {0, 0},      {0, 0},        {0, 0}       },
+  {"Princeton 24bit", 24,  1, {0, 0},      {0, 0},      {0, 0},        {0, 0}       },
+  // Explicit-timing protocols (te-derived; +HIGH / -LOW µs)
+  {"Ansonic 12bit",   12, -1, {-1111, 555}, {-555, 1111}, {-19425, 555}, {0, 0}      },
+  {"Holtek 12bit",    12, -1, {-870, 430},  {-430, 870},  {-15480, 430}, {0, 0}      },
+  {"Linear 10bit",    10, -1, {500, -1500}, {1500, -500}, {0, 0},        {500, -21500}},
+  {"Chamberlain 9bit", 9, -1, {-870, 430},  {-430, 870},  {0, 0},        {-3000, 1000}},
+};
+static constexpr uint8_t kBruteProtoCount = sizeof(kBruteProtos) / sizeof(kBruteProtos[0]);
+
 void SubGHzScreen::onInit() {
   _csPin   = PinConfig.get(PIN_CONFIG_CC1101_CS,   PIN_CONFIG_CC1101_CS_DEFAULT).toInt();
   _gdo0Pin = PinConfig.get(PIN_CONFIG_CC1101_GDO0, PIN_CONFIG_CC1101_GDO0_DEFAULT).toInt();
@@ -39,8 +70,45 @@ void SubGHzScreen::onInit() {
     return;
   }
   _rf.end();
+  ProgressView::finish();
+
+  if (_pendingReplayFile.length() > 0) {
+    _replayPendingFile();
+    return;
+  }
 
   _showMenu();
+}
+
+// Launched from the File Manager: transmit a specific .sub file once, then pop
+// back to the caller. Radio presence was already verified in onInit().
+void SubGHzScreen::_replayPendingFile() {
+  String file = _pendingReplayFile;
+  _pendingReplayFile = "";
+
+  String content = Uni.Storage ? Uni.Storage->readFile(file.c_str()) : String();
+  Signal sig;
+  if (content.length() == 0 || !CC1101Util::loadFile(content, sig)) {
+    ShowStatusAction::show("Invalid .sub file");
+    Screen.goBack();
+    return;
+  }
+
+  int slash = file.lastIndexOf('/');
+  String name = (slash >= 0) ? file.substring(slash + 1) : file;
+
+  ProgressView::init();
+  ProgressView::progress(("Replaying " + name).c_str(), 50);
+  if (!_radioSendFromBrowse(sig)) {
+    ShowStatusAction::show("Send failed");
+    Screen.goBack();
+    return;
+  }
+  ProgressView::finish();
+  int n = Achievement.inc("rf_send_first");
+  if (n == 1) Achievement.unlock("rf_send_first");
+  ShowStatusAction::show(("Sent: " + name).c_str(), 1200);
+  Screen.goBack();
 }
 
 // ── Radio adapter (chip lifecycle gated per operation) ──────────────────────
@@ -91,8 +159,8 @@ void SubGHzScreen::_showMenu() {
 }
 
 void SubGHzScreen::_updateSublabels() {
-  char buf[12];
-  snprintf(buf, sizeof(buf), "%.2f MHz", _rf.getFrequency());
+  char buf[24];
+  snprintf(buf, sizeof(buf), "%.2f MHz / %d dBm", _rf.getFrequency(), _rf.getRssiThreshold());
   _freqSub = buf;
   _menuItems[0].sublabel = _freqSub.c_str();
 
@@ -103,7 +171,7 @@ void SubGHzScreen::_updateSublabels() {
   } else {
     _mfcodesSub = "not loaded";
   }
-  _menuItems[7].sublabel = _mfcodesSub.c_str();
+  _menuItems[8].sublabel = _mfcodesSub.c_str();
 }
 
 void SubGHzScreen::_reloadMfcodes() {
@@ -162,11 +230,11 @@ void SubGHzScreen::_onMenuSelected(uint8_t index) {
       _enterBrowseMode();
       return;
     }
-    case 7: { // Mfcodes — reload + status popup
+    case 8: { // Mfcodes — reload + status popup
       _reloadMfcodes();
       return;
     }
-    case 6: { // Jammer
+    case 7: { // Jammer
       if (_csPin < 0 || _gdo0Pin < 0) {
         ShowStatusAction::show("Set CS and GDO0 pins first");
         render();
@@ -178,6 +246,10 @@ void SubGHzScreen::_onMenuSelected(uint8_t index) {
         return;
       }
       _enterJammingMode();
+      return;
+    }
+    case 6: { // Brute Force
+      _startBruteForce();
       return;
     }
   }
@@ -194,13 +266,17 @@ void SubGHzScreen::_selectFrequency() {
     {"868 MHz",    "868"},
     {"915 MHz",    "915"},
     {"Custom",     "custom"},
+    {"RSSI Threshold", "rssi"},
   };
 
   char curBuf[12];
   snprintf(curBuf, sizeof(curBuf), "%.2f", _rf.getFrequency());
 
-  const char* choice = InputSelectAction::popup("Frequency", freqOpts, 9, curBuf);
+  const char* choice = InputSelectAction::popup("Frequency", freqOpts, 10, curBuf);
   if (!choice) { render(); return; }
+
+  // Carrier-detect sensitivity — governs Record RAW arming + Detect Freq trigger.
+  if (strcmp(choice, "rssi") == 0) { _selectRssiThreshold(); return; }
 
   float mhz;
   if (strcmp(choice, "custom") == 0) {
@@ -214,6 +290,32 @@ void SubGHzScreen::_selectFrequency() {
   if (!_rf.setFrequency(mhz)) {
     ShowStatusAction::show("Invalid frequency");
   }
+  _updateSublabels();
+  render();
+}
+
+// RSSI carrier-detect threshold. Lower (more negative) = more sensitive, so weak
+// / distant signals arm Record RAW and trip Detect Freq. Does not affect the
+// plain Receive path (which decodes whatever reaches GDO0). Mirrors Bruce's
+// scan sensitivity menu (rf_scan.cpp).
+void SubGHzScreen::_selectRssiThreshold() {
+  static constexpr InputSelectAction::Option rssiOpts[] = {
+    {"-55 dBm (closest)", "-55"},
+    {"-60 dBm",           "-60"},
+    {"-65 dBm (default)", "-65"},
+    {"-70 dBm",           "-70"},
+    {"-75 dBm",           "-75"},
+    {"-80 dBm",           "-80"},
+    {"-85 dBm (farthest)","-85"},
+  };
+
+  char curBuf[8];
+  snprintf(curBuf, sizeof(curBuf), "%d", _rf.getRssiThreshold());
+
+  const char* choice = InputSelectAction::popup("RSSI Threshold", rssiOpts, 7, curBuf);
+  if (!choice) { render(); return; }
+
+  _rf.setRssiThreshold(atoi(choice));
   _updateSublabels();
   render();
 }
@@ -422,6 +524,7 @@ void SubGHzScreen::_recordRawFinish() {
       ProgressView::progress("Replaying RAW", 50);
       if (!_rf.begin(Uni.Spi, _csPin, _gdo0Pin)) { ShowStatusAction::show("CC1101 not found"); continue; }
       _rf.sendSignal(_capturedSignals[0]);
+      ProgressView::finish();
       int n = Achievement.inc("rf_send_first");
       if (n == 1) Achievement.unlock("rf_send_first");
       ShowStatusAction::show("Replayed", 1000);
@@ -438,9 +541,185 @@ void SubGHzScreen::_recordRawFinish() {
   }
 }
 
+// ── Brute force (STATE_BRUTEFORCE) ───────────────────────────────────────────
+
+// Protocol picker — highlights the current selection; sets _bruteSel.
+void SubGHzScreen::_pickBruteProto() {
+  static const char* idxVal[] = {"0", "1", "2", "3", "4", "5", "6", "7", "8", "9"};
+  InputSelectAction::Option opts[kBruteProtoCount];
+  for (uint8_t i = 0; i < kBruteProtoCount; i++) {
+    opts[i].label = kBruteProtos[i].label;
+    opts[i].value = idxVal[i];
+  }
+  const char* c = InputSelectAction::popup("Protocol", opts, kBruteProtoCount, idxVal[_bruteSel]);
+  if (!c) return;
+  _bruteSel = (uint8_t)atoi(c);
+  if (_bruteSel >= kBruteProtoCount) _bruteSel = 0;
+}
+
+// Repeats picker (1-5).
+void SubGHzScreen::_pickBruteRepeats() {
+  static const InputSelectAction::Option opts[] = {
+    {"1", "1"}, {"2", "2"}, {"3", "3"}, {"4", "4"}, {"5", "5"},
+  };
+  char cur[4];
+  snprintf(cur, sizeof(cur), "%d", _bruteRepeat);
+  const char* c = InputSelectAction::popup("Repeats", opts, 5, cur);
+  if (!c) return;
+  int n = atoi(c);
+  _bruteRepeat = (n >= 1 && n <= 5) ? (uint8_t)n : 3;
+}
+
+void SubGHzScreen::_startBruteForce() {
+  if (_csPin < 0 || _gdo0Pin < 0) {
+    ShowStatusAction::show("Set CS and GDO0 pins first");
+    render();
+    return;
+  }
+
+  // Config menu: adjust protocol / repeats, then Start. The frequency is the one
+  // configured in the module's Frequency menu (_rf keeps it). InputSelectAction
+  // appends its own Cancel entry, so we don't add one. Labels live in local
+  // buffers that outlive the (blocking) popup.
+  while (true) {
+    char protoL[36], repL[16];
+    snprintf(protoL, sizeof(protoL), "Protocol: %s", kBruteProtos[_bruteSel].label);
+    snprintf(repL,   sizeof(repL),   "Repeats: %d",  _bruteRepeat);
+    InputSelectAction::Option opts[] = {
+      {"Start", "start"},
+      {protoL,  "proto"},
+      {repL,    "rep"},
+    };
+    const char* c = InputSelectAction::popup("Brute Force", opts, 3);
+    if (!c) { render(); return; }   // Cancel
+    if (strcmp(c, "proto") == 0) { _pickBruteProto();   continue; }
+    if (strcmp(c, "rep")   == 0) { _pickBruteRepeats(); continue; }
+    if (strcmp(c, "start") == 0) break;
+  }
+
+  _bruteBits  = kBruteProtos[_bruteSel].bits;
+  _bruteTotal = (_bruteBits >= 32) ? 0xFFFFFFFFu : (1u << _bruteBits);
+  _bruteKey   = 0;
+
+  if (!_rf.begin(Uni.Spi, _csPin, _gdo0Pin)) {
+    ShowStatusAction::show("CC1101 not found");
+    render();
+    return;
+  }
+  if (!_rf.beginBruteTx(_rf.getFrequency())) {
+    ShowStatusAction::show("TX init failed");
+    _rf.end();
+    render();
+    return;
+  }
+
+  _state         = STATE_BRUTEFORCE;
+  _bruteChrome   = false;
+  _bruteRenderMs = 0;
+  snprintf(_titleBuf, sizeof(_titleBuf), "Brute Force");
+  render();
+}
+
+// Encode one code and transmit it — RcSwitch registry when rcProto >= 1, else
+// build the waveform from the protocol's explicit timing table.
+void SubGHzScreen::_bruteTransmit(uint32_t code) {
+  const BruteProto& p = kBruteProtos[_bruteSel];
+  if (p.rcProto >= 1) {
+    _rf.sendBruteCode(p.rcProto, code, _bruteBits, 0, _bruteRepeat);
+    return;
+  }
+  int32_t dur[520];
+  uint16_t k = 0;
+  for (int r = 0; r < _bruteRepeat && k < 512; r++) {
+    if (p.pilot[0] || p.pilot[1]) { dur[k++] = p.pilot[0]; dur[k++] = p.pilot[1]; }
+    for (int j = (int)p.bits - 1; j >= 0 && k < 512; j--) {
+      const int16_t* t = ((code >> j) & 1u) ? p.one : p.zero;
+      dur[k++] = t[0];
+      dur[k++] = t[1];
+    }
+    if (p.stop[0] || p.stop[1]) { dur[k++] = p.stop[0]; dur[k++] = p.stop[1]; }
+  }
+  _rf.sendBruteRaw(dur, k);
+}
+
+bool SubGHzScreen::_onUpdateBruteForce() {
+  // Stop on OK or BACK.
+  if (Uni.Nav->wasPressed()) {
+    auto dir = Uni.Nav->readDirection();
+    if (dir == INavigation::DIR_BACK || dir == INavigation::DIR_PRESS) {
+      _rf.endBruteTx();
+      _rf.end();
+      _showMenu();
+      return true;
+    }
+  }
+
+  // Whole space swept → done.
+  if (_bruteKey >= _bruteTotal) {
+    _rf.endBruteTx();
+    _rf.end();
+    ShowStatusAction::show("Brute force done", 1500);
+    _showMenu();
+    return true;
+  }
+
+  // Transmit a small batch this tick (each send blocks on the RMT flush).
+  for (uint8_t i = 0; i < kBruteBatch && _bruteKey < _bruteTotal; i++) {
+    _bruteTransmit(_bruteKey);
+    _bruteKey++;
+  }
+
+  if (millis() - _bruteRenderMs >= 80) { _bruteRenderMs = millis(); render(); }
+  return true;
+}
+
+bool SubGHzScreen::_onRenderBruteForce() {
+  auto& lcd = Uni.Lcd;
+  lcd.setTextSize(1);
+
+  if (!_bruteChrome) {
+    lcd.fillRect(bodyX(), bodyY(), bodyW(), bodyH(), TFT_BLACK);
+    lcd.setTextDatum(TL_DATUM);
+    char h[40];
+    lcd.setTextColor(Config.getThemeColor(), TFT_BLACK);
+    snprintf(h, sizeof(h), "Brute: %s", kBruteProtos[_bruteSel].label);
+    lcd.drawString(h, bodyX() + 4, bodyY() + 2);
+    snprintf(h, sizeof(h), "%.2f MHz  %d bit", _rf.getFrequency(), _bruteBits);
+    lcd.setTextColor(TFT_DARKGREY, TFT_BLACK);
+    lcd.drawString(h, bodyX() + 4, bodyY() + 14);
+    lcd.setTextDatum(TR_DATUM);
+    #ifdef DEVICE_HAS_KEYBOARD
+      lcd.drawString("ESC:stop", bodyX() + bodyW() - 4, bodyY() + 2);
+    #else
+      lcd.drawString("<:stop", bodyX() + bodyW() - 4, bodyY() + 2);
+    #endif
+    _bruteChrome = true;
+  }
+
+  // Dynamic region: current code + counter + progress bar.
+  const int dy = bodyY() + 28;
+  lcd.fillRect(bodyX(), dy, bodyW(), 34, TFT_BLACK);
+  lcd.setTextDatum(TL_DATUM);
+  char line[40];
+  lcd.setTextColor(TFT_WHITE, TFT_BLACK);
+  snprintf(line, sizeof(line), "Code: 0x%lX", (unsigned long)_bruteKey);
+  lcd.drawString(line, bodyX() + 4, dy);
+  lcd.setTextColor(TFT_DARKGREY, TFT_BLACK);
+  snprintf(line, sizeof(line), "%lu / %lu", (unsigned long)_bruteKey, (unsigned long)_bruteTotal);
+  lcd.drawString(line, bodyX() + 4, dy + 12);
+
+  const int barY = dy + 26, barW = bodyW() - 8, barH = 7;
+  lcd.drawRect(bodyX() + 4, barY, barW, barH, TFT_DARKGREY);
+  uint32_t fill = _bruteTotal ? (uint32_t)((uint64_t)_bruteKey * (barW - 2) / _bruteTotal) : 0;
+  if (fill > (uint32_t)(barW - 2)) fill = barW - 2;
+  lcd.fillRect(bodyX() + 5, barY + 1, fill, barH - 2, Config.getThemeColor());
+  return true;
+}
+
 bool SubGHzScreen::_onUpdateExtra() {
   if (_state == STATE_RECORD_RAW) return _onUpdateRecordRaw();
   if (_state == STATE_WATERFALL) return _onUpdateWaterfall();
+  if (_state == STATE_BRUTEFORCE) return _onUpdateBruteForce();
   if (_state != STATE_SCANNING) return false;
   if (Uni.Nav->wasPressed()) {
     auto dir = Uni.Nav->readDirection();
@@ -465,6 +744,7 @@ bool SubGHzScreen::_onUpdateExtra() {
 bool SubGHzScreen::_onRenderExtra() {
   if (_state == STATE_RECORD_RAW) return _onRenderRecordRaw();
   if (_state == STATE_WATERFALL) return _onRenderWaterfall();
+  if (_state == STATE_BRUTEFORCE) return _onRenderBruteForce();
   if (_state != STATE_SCANNING) return false;
   auto& lcd = Uni.Lcd;
 
@@ -546,6 +826,12 @@ bool SubGHzScreen::_onRenderExtra() {
 bool SubGHzScreen::_onBackExtra() {
   if (_state == STATE_RECORD_RAW) {
     _rf.endRawRecord();
+    _rf.end();
+    _showMenu();
+    return true;
+  }
+  if (_state == STATE_BRUTEFORCE) {
+    _rf.endBruteTx();
     _rf.end();
     _showMenu();
     return true;

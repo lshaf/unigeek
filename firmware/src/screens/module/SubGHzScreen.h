@@ -11,6 +11,11 @@
 
 class SubGHzScreen : public RfCaptureScreen {
 public:
+  SubGHzScreen() = default;
+  // Transmit a specific .sub file immediately on entry, then return (used by the
+  // File Manager "Replay" action on a long-pressed .sub file).
+  explicit SubGHzScreen(const String& replayFile) : _pendingReplayFile(replayFile) {}
+
   void onInit() override;
 
 protected:
@@ -44,7 +49,7 @@ protected:
   bool _onBackExtra()               override;
   bool _inhibitExtra() const        override {
     return _state == STATE_SCANNING || _state == STATE_WATERFALL ||
-           _state == STATE_RECORD_RAW;
+           _state == STATE_RECORD_RAW || _state == STATE_BRUTEFORCE;
   }
 
 private:
@@ -52,10 +57,12 @@ private:
   int8_t _csPin   = -1;
   int8_t _gdo0Pin = -1;
   bool   _rfDetectFired = false;  // achievement guard, resets each scan session
+  String _pendingReplayFile;      // set via ctor: transmit this .sub then goBack
+  void _replayPendingFile();
 
-  // Menu (8 items: Frequency | Detect Freq | Waterfall | Receive | Record RAW |
-  //                Send | Jammer | Mfcodes)
-  static constexpr uint8_t kMenuCount = 8;
+  // Menu (9 items: Frequency | Detect Freq | Waterfall | Receive | Record RAW |
+  //                Send | Brute Force | Jammer | Mfcodes)
+  static constexpr uint8_t kMenuCount = 9;
   ListItem _menuItems[kMenuCount] = {
     {"Frequency"},
     {"Detect Freq"},
@@ -63,6 +70,7 @@ private:
     {"Receive"},
     {"Record RAW"},
     {"Send"},
+    {"Brute Force"},
     {"Jammer"},
     {"Mfcodes"},
   };
@@ -70,6 +78,7 @@ private:
   String _mfcodesSub;
   void _updateSublabels();
   void _selectFrequency();
+  void _selectRssiThreshold();
   void _startScan();
   void _reloadMfcodes();
 
@@ -93,6 +102,26 @@ private:
   void _recordRawDrawWave();       // "Waiting for signal" sine wave
   void _recordRawDrawBars();       // "Recording" RSSI bars
   void _recordRawFinish();         // stop + Replay/Save/Discard/Exit options
+
+  // ── Brute force (STATE_BRUTEFORCE) ─────────────────────────────────────
+  // Sweeps the code space of a fixed-code protocol (picked from a curated list),
+  // transmitting each code over RMT until the space is exhausted or the user
+  // stops. Progress + current code are shown live.
+  static constexpr int     STATE_BRUTEFORCE = STATE_USER_BASE + 3;
+  static constexpr uint8_t kBruteBatch      = 4;   // codes sent per update tick
+  uint8_t  _bruteSel      = 0;     // index into the protocol table (see .cpp)
+  uint8_t  _bruteBits     = 12;    // code length swept
+  uint8_t  _bruteRepeat   = 3;     // frame repeats per code (1-5, configurable)
+  uint32_t _bruteKey      = 0;     // next code to transmit
+  uint32_t _bruteTotal    = 0;     // 1 << bits
+  uint32_t _bruteRenderMs = 0;     // render throttle
+  bool     _bruteChrome   = false; // static header drawn once
+  void _startBruteForce();         // config menu (protocol/freq/repeats) then run
+  void _pickBruteProto();
+  void _pickBruteRepeats();
+  void _bruteTransmit(uint32_t code);  // encode one code + send (registry or table)
+  bool _onUpdateBruteForce();
+  bool _onRenderBruteForce();
 
   // ── Waterfall (RSSI spectrogram) ───────────────────────────────────────
   // A scrolling RSSI heat-map across a [start,end] MHz window, swept per pixel

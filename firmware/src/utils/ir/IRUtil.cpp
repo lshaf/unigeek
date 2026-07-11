@@ -304,8 +304,9 @@ String IRUtil::signalLabel(const Signal& sig) {
 namespace {
 
 // Gap between codes: long enough for an IR receiver to register each burst,
-// short enough to keep the full sweep brisk.
-constexpr uint32_t kTvbGap = 200;
+// short enough to keep the full sweep brisk (~25% faster than the original
+// 200 ms). Below ~100 ms some slow receivers start missing codes.
+constexpr uint32_t kTvbGap = 130;
 
 // Report cumulative progress across the whole sweep, throttled to keep UI
 // overhead down. `overall`/`total` stay < 255 (≈200 codes worst case).

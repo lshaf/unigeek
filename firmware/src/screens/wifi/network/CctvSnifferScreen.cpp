@@ -252,6 +252,7 @@ void CctvSnifferScreen::_scanLAN()
     [](uint8_t pct) { ProgressView::progress("Ping scanning...", pct * 40 / 100); });
 
   if (hostCount == 0) {
+    ProgressView::finish();
     _log.addLine("[!] No hosts found");
     return;
   }
@@ -269,6 +270,7 @@ void CctvSnifferScreen::_scanLAN()
     ProgressView::progress("Scanning...", 40 + i * 60 / hostCount);
   }
 
+  ProgressView::finish();
   snprintf(buf, sizeof(buf), "[*] %d host(s) on network", hostCount);
   _log.addLine(buf);
 }

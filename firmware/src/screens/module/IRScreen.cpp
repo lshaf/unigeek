@@ -33,7 +33,39 @@ IRScreen* IRScreen::_activeInstance = nullptr;
 void IRScreen::onInit() {
   _txPin = (int8_t)PinConfig.getInt(PIN_CONFIG_IR_TX, PIN_CONFIG_IR_TX_DEFAULT);
   _rxPin = (int8_t)PinConfig.getInt(PIN_CONFIG_IR_RX, PIN_CONFIG_IR_RX_DEFAULT);
+  if (_pendingSendFile.length() > 0) {
+    _openPendingSendFile();
+    return;
+  }
   _showMenu();
+}
+
+// Launched from the File Manager: skip the menu and open the Send signal-list
+// for a specific .ir file, ready to fire each command.
+void IRScreen::_openPendingSendFile() {
+  String file = _pendingSendFile;
+  _pendingSendFile = "";
+
+  if (_txPin < 0) {
+    ShowStatusAction::show("Set TX pin first");
+    Screen.goBack();
+    return;
+  }
+  #if defined(DEVICE_M5STICK_S3)
+  if (_txPin == IR_TX_PIN) Uni.Power.setExtOutput(true);
+  _irAmpEnable(true);
+  #endif
+  _ir.beginTx(_txPin);
+
+  // Parent folder so BACK from the send-list returns to a browse of that dir.
+  int slash = file.lastIndexOf('/');
+  _browsePath = (slash > 0) ? file.substring(0, slash) : String(kRootPath);
+
+  _loadAndShowSignals(file);
+  if (_state != STATE_SEND_LIST) {   // read/parse failed — bounce back
+    _ir.end();
+    Screen.goBack();
+  }
 }
 
 void IRScreen::_showMenu() {
@@ -202,6 +234,7 @@ void IRScreen::onItemSelected(uint8_t index) {
         _ir.startTvBGone(region, _tvbProgressCb, _tvbCancelCb);
 
         _ir.end();
+        ProgressView::finish();
         _activeInstance = nullptr;
 
         if (_tvbCancelled) {

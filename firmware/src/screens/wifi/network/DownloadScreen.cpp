@@ -297,6 +297,7 @@ void DownloadScreen::_downloadSampleData() {
     }
   }
 
+  ProgressView::finish();
   if (downloaded > 0) {
     int nd = Achievement.inc("wifi_download_first");
     if (nd == 1)  Achievement.unlock("wifi_download_first");
@@ -365,6 +366,7 @@ void DownloadScreen::_showIRCategories() {
     return;
   }
 
+  ProgressView::finish();
   _state = STATE_IR_CATEGORIES;
   strcpy(_titleBuf, "Infrared Files");
   setItems(_catItems, _catCount);
@@ -454,6 +456,7 @@ void DownloadScreen::_downloadIRCategory(uint8_t index) {
     }
   }
 
+  ProgressView::finish();
   if (downloaded > 0) {
     int nir = Achievement.inc("wifi_download_ir");
     if (nir == 1) Achievement.unlock("wifi_download_ir");
@@ -538,6 +541,7 @@ void DownloadScreen::_showBadUSBOS() {
     _badusbAllFolders[_badusbAllCount++] = line;
   }
 
+  ProgressView::finish();
   _showBadUSBOSFromCache();
 }
 
@@ -687,6 +691,7 @@ void DownloadScreen::_downloadBadUSBCategory(uint8_t index) {
     }
   }
 
+  ProgressView::finish();
   if (downloaded > 0) {
     int n = Achievement.inc("wifi_download_badusb");
     if (n == 1) Achievement.unlock("wifi_download_badusb");
