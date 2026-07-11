@@ -1,29 +1,17 @@
 #pragma once
 
-#include "ui/templates/BaseScreen.h"
-#include <NimBLEDevice.h>
+#include "ui/templates/ListScreen.h"
+#include "utils/ble/BleSpamUtil.h"
 
-class BLESpamScreen : public BaseScreen {
+// Top-level BLE Spam menu: pick an attack type, or open Settings.
+class BLESpamScreen : public ListScreen {
 public:
-  const char* title()    override { return "BLE Beacon Spam"; }
-  bool inhibitPowerOff() override { return true; }
+  const char* title() override { return "BLE Spam"; }
 
-  ~BLESpamScreen() override;
-  void onInit()   override;
-  void onUpdate() override;
-  void onRender() override;
+  void onInit() override;
+  void onItemSelected(uint8_t index) override;
+  void onBack() override;
 
 private:
-  static constexpr const char* _spinner = "-\\|/";
-  uint8_t  _spinIdx      = 0;
-  uint32_t _lastSpamMs   = 0;
-  uint32_t _lastDrawMs   = 0;
-  uint32_t _spamStartMs  = 0;
-  bool     _spam1minFired = false;
-  bool     _chromeDrawn   = false;
-
-  NimBLEAdvertising* _pAdv = nullptr;
-
-  void _spam();
-  void _stop();
+  ListItem _items[BleSpamUtil::ATTACK_COUNT];
 };
