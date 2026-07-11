@@ -44,6 +44,13 @@ Validated handshakes (beacon + M1 + M2) are saved as PCAP files to `/unigeek/wif
 - Cannot run simultaneously with other WiFi features (Evil Twin, Karma, etc.) since they share the radio
 - Press **BACK** to stop and return to the WiFi menu
 
+### Unigotchi
+
+The bottom of the EAPOL Capture menu has a **Unigotchi** entry — a hands-off,
+pwnagotchi-style auto-hunter (mood face + passive/active/pwngrid modes) that
+saves handshakes to the same `/unigeek/wifi/eapol/` folder. See
+[Unigotchi](unigotchi.md) for details.
+
 ---
 
 ## EAPOL Brute Force
