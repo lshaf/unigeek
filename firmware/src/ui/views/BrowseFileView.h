@@ -51,10 +51,22 @@ struct BrowseFileView {
   };
 
   struct Entry {
-    String name;
+    String name;   // raw filename — used to build path / selection
+    String label;  // display label — defaults to name; TITLE style prettifies files
     String path;
     bool   isDir = false;
   };
+
+  // Display label style for file rows (directories always show their name).
+  //   NAME  — show the raw filename (default; unchanged behavior)
+  //   TITLE — show prettifyTitle(name): strip extension, dashes/underscores to
+  //           spaces, Title Case. e.g. "hacker-news.lua" -> "Hacker News".
+  enum LabelStyle { NAME, TITLE };
+
+  // Filename -> friendly title. Static so other screens (e.g. the remote Lua
+  // browser) can reuse the exact same mapping. Keep in sync with the website
+  // catalog generator's prettify().
+  static String prettifyTitle(const String& filename);
 
   // Subtree the picker is confined to. ".." inserts only below this path and
   // never resolves above it. Default "/" = no confinement (filesystem root).
@@ -75,7 +87,8 @@ struct BrowseFileView {
   // the selected dir's path). The copy keeps the input stable.
   uint8_t load(BaseScreen* host, String dir,
                Mode        mode         = {},
-               const char* fileSublabel = nullptr);
+               const char* fileSublabel = nullptr,
+               LabelStyle  style        = NAME);
 
   uint8_t        count()          const { return _count; }
   const Entry&   entry(uint8_t i) const { return _entries[i]; }

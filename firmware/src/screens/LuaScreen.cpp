@@ -11,7 +11,7 @@ void LuaScreen::_loadDir(const String& path) {
   // _browser.root confines the picker to ROOT_DIR — ".." appears below but
   // never resolves above /unigeek/lua.
   _browser.root = ROOT_DIR;
-  _browser.load(this, path, ".lua");
+  _browser.load(this, path, ".lua", nullptr, BrowseFileView::TITLE);
   setItems(_browser.items(), _browser.count());
 }
 

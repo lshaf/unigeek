@@ -6,6 +6,7 @@
 #include "utils/network/WebFileManager.h"
 #include "ui/actions/ShowStatusAction.h"
 #include "ui/views/ProgressView.h"
+#include "ui/views/BrowseFileView.h"
 #include <WiFi.h>
 #include <HTTPClient.h>
 #include <WiFiClientSecure.h>
@@ -810,8 +811,8 @@ bool DownloadScreen::_populateLuaLevel(const String& path) {
     if (rest.length() == 0) continue;
 
     _luaIsFolder[_luaCount] = false;
-    _luaNames[_luaCount]    = rest;
-    _luaLabels[_luaCount]   = rest;
+    _luaNames[_luaCount]    = rest;                              // raw name → download path
+    _luaLabels[_luaCount]   = BrowseFileView::prettifyTitle(rest); // display title only
     _luaItems[_luaCount]    = {_luaLabels[_luaCount].c_str()};
     _luaCount++;
   }
