@@ -2,13 +2,52 @@
 
 Karma exploits the way devices automatically search for saved WiFi networks. When a phone or laptop has WiFi on but isn't connected, it broadcasts **probe requests** — announcing the names of networks it has connected to before. Karma listens for these probes, then creates a fake AP with that exact name.
 
-There are two attack screens and one companion screen:
+All of the Karma tools live under one menu entry: **WiFi > Karma Attack**.
 
 | Screen | Purpose |
 |--------|---------|
+| **Active Karma** | Answer directed probes as a fake AP, beacon a live SSID pool, and optionally raise a real open AP a victim can join |
 | **Karma Captive** | Respond to probes with an open fake AP and serve a phishing portal to capture credentials |
 | **Karma EAPOL** | Respond to probes with a WPA2 fake AP (random password) to capture the 4-way handshake for offline cracking |
+| **Karma Detector** | Defensive — spot a rogue Karma AP nearby (unchanged) |
 | **Karma Support** | Runs on a second device; receives deploy commands from Karma EAPOL over ESP-NOW and hosts the fake WPA2 AP |
+
+---
+
+## Active Karma
+
+The active engine. Beyond passively waiting for probes it can **answer** a client's directed probe as a fake AP (the defining "karma" behavior), actively **beacon** a pool of SSIDs (harvested live + an optional file list), and push clients off nearby APs with integrated deauth. It starts running as soon as you open it — every setting and control lives in the in-run **options menu** (open with **Press/OK**).
+
+### Modes
+
+| Mode | Behavior |
+|------|----------|
+| Passive | Listen + answer directed probes (karma responses only) |
+| Broadcast | Actively beacon the SSID pool |
+| Full | Both of the above |
+
+### Options menu (Press/OK)
+
+- **Rotate MAC Now** / **Pause–Resume**
+- **Set Mode** — Passive / Broadcast / Full
+- **Channel Control** — next/prev channel, Auto Hop on/off, hop interval (500/1000/2000/3000 ms)
+- **Attack Settings** — Auto Karma, Beaconing, Deauth, Security (WPA2 RSN mimicry / open)
+- **Attack Strategy** — response prioritization (tiers), beacon speed (200/300/500 ms)
+- **Broadcast Control** — start/stop, speed, stats
+- **Evil AP (Real)** — bring up a genuine **open soft-AP** for a chosen SSID so a victim can actually connect (beacon spam alone can't complete association)
+- **Show Stats**, **Save Probes**, **Clear Probes**, **Stop**
+
+The menu keeps the cursor on the item you just changed, so a setting can be toggled repeatedly.
+
+> [!note]
+> The WPA2 beacons are **advertisement only** — there is no real AP behind them, so no password will connect. Their RSN IE is cosmetic, to entice devices that only remember secured networks. **Evil AP (Real)** is the one network a device can truly join, and it is **open** (no password).
+
+### Details
+
+- Uses a **stable, rotatable BSSID** so advertised networks keep a consistent identity (rotated periodically or on demand via *Rotate MAC Now*).
+- Directed probe responses are queued from the promiscuous callback and transmitted from the main loop, so no blocking TX happens in callback context.
+- **Response-based prioritization** front-loads SSIDs that got the most probe responses; **client fingerprinting** counts unique clients across MAC randomization.
+- The live dashboard shows unique clients, SSID pool size, karma responses sent, channel, and the current mode (or `EVIL-AP` / `PAUSED`).
 
 ---
 

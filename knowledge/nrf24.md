@@ -12,25 +12,32 @@ Live 126-channel 2.4 GHz spectrum sweep. Each channel is scanned in turn; receiv
 
 ## Jammer
 
-Transmits continuous-wave noise on the configured channel set to disrupt nearby 2.4 GHz receivers. Three entry points:
+Drives the radio as a **constant carrier at PA_MAX** and hops it across a mode's channel list as fast as the SPI bus allows, flooding the target band. Selecting **Jammer** starts immediately — there is no sub-menu; the jam method is switched on the fly.
 
-- **Preset modes (10 total)** — select a named channel list and start immediately:
+**Controls (while running):**
 
-  | Mode | Targets |
-  |------|---------|
-  | Full Spectrum | All 126 channels |
-  | WiFi 2.4GHz | 2.4 GHz WiFi channels (1–13 + 5 GHz overlap) |
-  | BLE Data | All 40 BLE data channels |
-  | BLE Adv | BLE advertising channels 37, 38, 39 (ch 2/26/80) |
-  | BT Classic | All Bluetooth Classic hop channels |
-  | USB Dongles | Unifying/USB dongle channels (40, 50, 60) |
-  | Video/FPV | FPV video channels (70, 75, 80) |
-  | RC Control | RC control channels (1, 3, 5, 7) |
-  | Zigbee | Zigbee channel overlaps |
-  | Drone FHSS | Drone frequency-hopping sequence |
+| Key | Action |
+|-----|--------|
+| Next / Prev | Cycle the active jam mode |
+| OK (Press) | Toggle hop order: **Sequential** ↔ **FHSS** (random, reshuffled each pass) |
+| Back | Stop the carrier and exit |
 
-- **Single Channel** — enter a specific channel (0–125) and jam only that frequency; press SELECT to pause/resume.
-- **Channel Hopper** — configure start, stop, and step; device hops continuously within the defined range.
+**Modes (10 total)** — each with its own curated channel list:
+
+| Mode | Targets |
+|------|---------|
+| Test | Broad 40-channel sweep |
+| WiFi | 2.4 GHz WiFi channel centers |
+| BLE | All 40 BLE data channels |
+| BLE Adv Pri | BLE advertising priority (37/38/39 + neighbours) |
+| Bluetooth | All Bluetooth Classic hop channels |
+| USB | Unifying / USB dongle channels |
+| Video Stream | FPV / analog video channels |
+| RC | RC control channels |
+| Zigbee | Zigbee channel overlaps |
+| Full | Every channel, 1–124 |
+
+The carrier is configured once (`startConstCarrier` at PA_MAX, 2 Mbps with automatic fallback to 1 Mbps / 250 kbps). In **FHSS** mode the channel index table is reshuffled with the hardware RNG on each full pass, so the hop order keeps changing — harder for an adaptive receiver to dodge.
 
 > [!danger]
 > 2.4 GHz jamming disrupts WiFi, Bluetooth, Zigbee, and most RC systems in range. Use only on hardware you own or have explicit permission to test — intentional RF interference is illegal in most jurisdictions.

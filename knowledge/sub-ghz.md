@@ -79,7 +79,7 @@ Capture RF signals on the configured frequency.
 1. Set the desired frequency first via **Detect Freq** (reference) and **Frequency** (set)
 2. Select **Receive**
 3. The device listens on the configured frequency. The footer shows the current Receive Filter:
-   - **Filter: Code** (default) — drop raw captures; only emit signals that a decoder recognised — either a brand/manufacturer decoder (38 static protocols, see [Brand / Manufacturer Decoders](#brand--manufacturer-decoders)) or the RcSwitch table (Princeton, HT6P20B, CAME, NICE, KeeLoq, …). Cuts noise when hunting a fixed-code remote.
+   - **Filter: Code** (default) — drop raw captures; only emit signals that a decoder recognised — either a brand/manufacturer decoder (44 static protocols, see [Brand / Manufacturer Decoders](#brand--manufacturer-decoders)) or the RcSwitch table (Princeton, HT6P20B, CAME, NICE, KeeLoq, …). Cuts noise when hunting a fixed-code remote.
    - **Filter: RAW** — capture both RCSwitch-decoded protocols **and** raw pulse streams that no protocol matched. Best for unknown remotes and unusual signals.
 4. Toggle between RAW / Code live without leaving the screen — the footer label updates immediately. Setting is session-only.
    - **4-way devices** (Cardputer, Cardputer ADV, DIY Smoochie, DIY Marauder, sticks in Encoder mode): press **LEFT** or **RIGHT**.
@@ -117,19 +117,49 @@ Record RAW uses the **frequency configured in the menu** (via **Frequency** / **
 
 The saved file is identical in format to a RAW capture from **Receive** (see [File Format](#file-format)) and round-trips through **Send** and Flipper Zero / Bruce.
 
+## Brute Force
+
+Sweeps **every possible key** for a chosen fixed-code protocol on the configured frequency, transmitting each code in turn via the ESP32 **RMT** peripheral. Use it against fixed-code (non-rolling) gates and remotes where the full key space is small enough to exhaust.
+
+### Flow
+
+1. Set the frequency first (**Frequency** / **Detect Freq**).
+2. Select **Brute Force**, then pick a protocol from the picker.
+3. The device transmits sequentially through the key space and shows progress; press **BACK** to stop.
+
+### Protocols
+
+| Protocol | Bits | Key space |
+|----------|------|-----------|
+| CAME | 12 | 4096 |
+| NICE | 12 | 4096 |
+| FAAC | 12 | 4096 |
+| HT12E | 12 | 4096 |
+| Ansonic | 12 | 4096 |
+| Holtek | 12 | 4096 |
+| Linear | 10 | 1024 |
+| Chamberlain | 9 | 512 |
+| Princeton | 24 | 16.7 M (long sweep) |
+
+> [!warn]
+> Only sweep gates/remotes you own or are authorized to test. A full 24-bit Princeton sweep is very long; the 9–12 bit protocols finish in seconds to minutes.
+
 ## Brand / Manufacturer Decoders
 
 On every completed capture, an **authoritative decode engine** runs the raw pulse train through brand/manufacturer state machines before falling back to the generic RcSwitch table and then RAW. The decode order is:
 
-1. **Brand decoders** — 38 static (non-rolling) protocols
+1. **Brand decoders** — 44 brand/manufacturer protocols
 2. **RcSwitch table** — generic fixed-code protocols 1–23
 3. **RAW** — unrecognised pulse streams (kept only when the filter is `RAW`)
 
 Because the capture phase is unknown, each frame is tried at **both parities** and every decoder self-syncs on its own header. The decoded protocol name and fields appear in the capture list and the **Info** view; the raw pulses are retained so brand signals still replay and round-trip to `.sub`.
 
-### Supported static protocols (38)
+### Supported protocols (44)
 
-CAME (+ TWEE), Princeton, Nice FLO, Holtek (+ HT12X), Linear (+ Delta3), Ansonic, BETT, Clemsa, Dickert, Doitrand, Dooya, Elplast, Feron, GateTX, Hormann, Intertechno V3, KeyFinder, Legrand, Marantec (24-bit), Mastercode, MegaCode, Nero Radio / Sketch, Roger, SMC5326, Treadmill37, GangQi, Hollarm, Honeywell (WDB / Sec), Cham_Code, Magellan, Power Smart, Revers_RB2.
+CAME (+ TWEE), Princeton, Nice FLO (+ FloR-S), Holtek (+ HT12X), Linear (+ Delta3), Ansonic, BETT, Clemsa, Dickert, Doitrand, Dooya, Elplast, Feron, GateTX, Hormann, Intertechno V3, KeyFinder, Legrand, Marantec (24-bit), Mastercode, MegaCode, Nero Radio / Sketch, Roger, SMC5326, Treadmill37, GangQi, Hollarm, Honeywell (WDB / Sec), Cham_Code, Magellan, Power Smart, Revers_RB2, Airforce, Ditec GOL4, FAAC SLH, Phoenix V2, Prastel, Hay21, iDo.
+
+> [!note]
+> **HT12X vs CAME fix** — Holtek HT12-series frames are now disambiguated from CAME. Previously an HT12X code could be misdecoded as CAME because their timing overlaps; the decoder now checks the HT12X framing first so both classify correctly.
 
 > [!note]
 > **KeeLoq (RcSwitch protocol 23)** stays on the fast path — it's a rolling-code protocol handled by the `mfcodes` keystore (see [KeeLoq auto-decode](#keeloq-auto-decode)), so the brand decoders never claim it.

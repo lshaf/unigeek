@@ -33,9 +33,9 @@ firmware menu, so it never drifts:
 
 ### Highlights
 
-- 📶 **Wi-Fi Attacks** — Evil Twin, Karma, beacon/SSID flood, deauther, EAPOL (WPA2) capture & offline crack, captive portals, packet monitor
-- 🔵 **BLE Attacks** — device/beacon spam (Fast Pair, Continuity, Samsung), passive detector (Flipper/AirTag/skimmer), WhisperPair (CVE-2025-36911), BLE analyzer
-- 📡 **Sub-GHz (CC1101)** — capture / replay / jam, peak frequency detector, 38 brand protocol decoders, continuous RAW recorder, KeeLoq auto-decode + rolling-code Replay +1
+- 📶 **Wi-Fi Attacks** — Evil Twin, Karma (Active Karma engine + captive/EAPOL), beacon/SSID flood, deauther, EAPOL (WPA2) capture & offline crack, captive portals, packet monitor, analyzer with per-AP client sniffer
+- 🔵 **BLE Attacks** — unified BLE Spam (Apple/Android/Windows/Samsung + beacon), passive detector (Flipper/AirTag/skimmer), WhisperPair (CVE-2025-36911), BLE analyzer
+- 📡 **Sub-GHz (CC1101)** — capture / replay / jam, fixed-code brute-force sweep, peak frequency detector, 44 brand protocol decoders, continuous RAW recorder, KeeLoq auto-decode + rolling-code Replay +1
 - 🛰️ **RF & GPS** — NRF24 spectrum / jammer / MouseJack, M5 RF433, GPS wardriving with Wigle export and on-device map
 - 🪪 **NFC** — MIFARE Classic key recovery (dictionary, nested, darkside), PN532 / PN532Killer, Chameleon Ultra BLE client
 - 📺 **IR** — capture, replay, TV-B-Gone, Flipper-IRDB compatible
