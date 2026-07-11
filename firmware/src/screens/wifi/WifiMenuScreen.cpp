@@ -17,7 +17,7 @@
 #include "WifiCiwZeroclickScreen.h"
 #include "WifiEapolBruteForceScreen.h"
 #include "WifiEvilTwinScreen.h"
-#include "WifiKarmaMenuScreen.h"
+#include "karma/WifiKarmaMenuScreen.h"
 
 void WifiMenuScreen::onInit() {
   setItems(_items);
