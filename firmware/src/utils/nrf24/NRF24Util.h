@@ -1,6 +1,5 @@
 //
 // NRF24L01+ radio utility — initialization and lifecycle management
-// Reference: Bruce firmware NRF24 module (nrf_common.cpp)
 //
 
 #pragma once
