@@ -264,17 +264,15 @@ void WifiKarmaCaptiveScreen::_onProbe(const char* ssid)
 
 void WifiKarmaCaptiveScreen::_startSniffing()
 {
+  // Keep the WiFi driver initialized across the whole session. Tearing it down
+  // (esp_wifi_deinit/init) on every AP cycle churns and leaks heap — during a
+  // probe burst that drives memory to exhaustion and reboots. Instead just drop
+  // any active soft-AP by switching to STA and toggle promiscuous back on.
   esp_wifi_set_promiscuous(false);
-  esp_wifi_stop();
-  esp_wifi_set_promiscuous_rx_cb(NULL);
-  esp_wifi_deinit();
-  delay(200);
-
-  wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
-  esp_wifi_init(&cfg);
-  esp_wifi_start();
+  WiFi.mode(WIFI_MODE_STA);
   esp_wifi_set_promiscuous(true);
   esp_wifi_set_promiscuous_rx_cb(&_promiscuousCb);
+  esp_wifi_set_channel(1, WIFI_SECOND_CHAN_NONE);
 
   _log.addLine("[*] Sniffing probes...");
 }
@@ -311,7 +309,9 @@ void WifiKarmaCaptiveScreen::_deployAP(const char* ssid, unsigned long now)
 void WifiKarmaCaptiveScreen::_teardownAP()
 {
   _portal.stop();
-  WiFi.softAPdisconnect(true);
+  // Keep WiFi powered (false) — _startSniffing() switches the mode back to STA.
+  // Fully powering off here would force a heavier bring-up on the next cycle.
+  WiFi.softAPdisconnect(false);
   _startSniffing();
   _apActive        = false;
   _clientConnected = false;

@@ -17,10 +17,7 @@
 #include "WifiCiwZeroclickScreen.h"
 #include "WifiEapolBruteForceScreen.h"
 #include "WifiEvilTwinScreen.h"
-#include "WifiKarmaDetectorScreen.h"
-#include "WifiKarmaCaptiveScreen.h"
-#include "WifiKarmaEapolScreen.h"
-#include "WifiKarmaSupportScreen.h"
+#include "karma/WifiKarmaMenuScreen.h"
 
 void WifiMenuScreen::onInit() {
   setItems(_items);
@@ -31,19 +28,16 @@ void WifiMenuScreen::onItemSelected(uint8_t index) {
     case 0:  Screen.push(new NetworkMenuScreen());        break;
     case 1:  Screen.push(new WifiAPScreen());             break;
     case 2:  Screen.push(new WifiEvilTwinScreen());        break;
-    case 3:  Screen.push(new WifiKarmaDetectorScreen());   break;
-    case 4:  Screen.push(new WifiKarmaCaptiveScreen());    break;
-    case 5:  Screen.push(new WifiKarmaEapolScreen());      break;
-    case 6:  Screen.push(new WifiKarmaSupportScreen());    break;
-    case 7:  Screen.push(new WifiAnalyzerScreen());        break;
-    case 8:  Screen.push(new WifiPacketMonitorScreen());   break;
-    case 9:  Screen.push(new WifiDeautherScreen());        break;
-    case 10: Screen.push(new WifiWatchdogScreen());        break;
-    case 11: Screen.push(new WifiBeaconAttackScreen());    break;
-    case 12: Screen.push(new WifiCiwZeroclickScreen());    break;
-    case 13: Screen.push(new WifiESPNowChatScreen());      break;
-    case 14: Screen.push(new WifiEapolCaptureScreen());    break;
-    case 15: Screen.push(new WifiEapolBruteForceScreen()); break;
+    case 3:  Screen.push(new WifiKarmaMenuScreen());       break;
+    case 4:  Screen.push(new WifiAnalyzerScreen());        break;
+    case 5:  Screen.push(new WifiPacketMonitorScreen());   break;
+    case 6:  Screen.push(new WifiDeautherScreen());        break;
+    case 7:  Screen.push(new WifiWatchdogScreen());        break;
+    case 8:  Screen.push(new WifiBeaconAttackScreen());    break;
+    case 9:  Screen.push(new WifiCiwZeroclickScreen());    break;
+    case 10: Screen.push(new WifiESPNowChatScreen());      break;
+    case 11: Screen.push(new WifiEapolCaptureScreen());    break;
+    case 12: Screen.push(new WifiEapolBruteForceScreen()); break;
   }
 }
 
