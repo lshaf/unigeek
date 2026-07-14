@@ -11,6 +11,7 @@
 #include <WiFi.h>
 #include <cstring>
 #include <cstdio>
+#include <cstdlib>
 
 // ── Static definitions ────────────────────────────────────────────────────────
 
@@ -84,6 +85,7 @@ void WifiUnigotchiScreen::onInit() {
   _eapolMap.clear(); _ssidMap.clear(); _pending.clear(); _beaconStore.clear();
   _apCount = 0; _ringHead = _ringTail = 0; _cHead = _cTail = 0;
   _handshakes = _pmkids = _deauths = _disassocs = _pwngridTx = 0;
+  _resetPeers();
   _mode = MODE_PASSIVE; _auto = ST_RECON; _targetIdx = -1;
   _style = (Config.get(APP_CONFIG_UNIGOTCHI_STYLE, APP_CONFIG_UNIGOTCHI_STYLE_DEFAULT) == "text")
              ? STYLE_TEXT : STYLE_GOTCHI;
@@ -116,9 +118,18 @@ void WifiUnigotchiScreen::onRestore() { _firstRender = true; _dirty = D_ALL; ren
 
 void WifiUnigotchiScreen::applyMode(uint8_t m) {
   _mode = (Mode)m;
-  esp_wifi_set_promiscuous(_mode != MODE_PWNGRID);
+  // Every mode except pure spam needs the receiver on (handshake capture, or
+  // pwngrid peer detection). Spam only transmits.
+  esp_wifi_set_promiscuous(_mode != MODE_PWNSPAM);
   _auto = ST_RECON; _targetIdx = -1;
-  if (_mode == MODE_PWNGRID) { _loadPwnNames(); _say(MoodFace::HAPPY, TFT_CYAN, "Let's make friends!"); }
+  if (_mode == MODE_PWNGRID) {
+    _resetPeers(); _loadPwnNames();
+    _say(MoodFace::HAPPY, TFT_CYAN, "Let's make friends!");
+  }
+  else if (_mode == MODE_PWNSPAM) {
+    _loadPwnNames();
+    _say(MoodFace::EXCITED, TFT_CYAN, "Spamming the grid!");
+  }
   else if (_mode == MODE_ACTIVE) _say(MoodFace::LOOKING, TFT_CYAN, "Hunting handshakes!");
   else _say(MoodFace::LOOKING, TFT_CYAN, MoodMsg::looking());
   _dirty |= D_TOP | D_STATS;
@@ -150,7 +161,18 @@ void WifiUnigotchiScreen::onUpdate() {
   }
 
   if (_mode == MODE_PWNGRID) {
-    if (now >= _chanHopUntil) { _hopNext(); _pwngridAdvertise(_channel); }
+    _drainPwngrid();   // parse peer advertisements captured by the promiscuous cb
+    if (now >= _chanHopUntil) { _hopNext(); _pwngridAdvertise(_channel, false); }
+    // Idle status reflects how many friends are currently nearby.
+    if (now - _lastMoodMs > 6000) {
+      char s[48];
+      if (_friendsTot > 0) snprintf(s, sizeof(s), "%u friend%s nearby!",
+                                    _friendsTot, _friendsTot == 1 ? "" : "s");
+      else                 strcpy(s, "Looking for friends...");
+      _say(_friendsTot > 0 ? MoodFace::HAPPY : MoodFace::LOOKING, TFT_CYAN, s);
+    }
+  } else if (_mode == MODE_PWNSPAM) {
+    if (now >= _chanHopUntil) { _hopNext(); _pwngridAdvertise(_channel, true); }
   } else {
     _runHunt();
   }
@@ -162,8 +184,10 @@ void WifiUnigotchiScreen::onUpdate() {
     _dirty |= D_BODY;
   }
 
-  // Idle: refresh the plain-text pwnagotchi status sentence.
-  if (_mode != MODE_PWNGRID && _auto == ST_RECON && now - _lastMoodMs > 7000)
+  // Idle: refresh the plain-text pwnagotchi status sentence (hunting modes only;
+  // pwngrid and spam drive their own messages).
+  if ((_mode == MODE_PASSIVE || _mode == MODE_ACTIVE) &&
+      _auto == ST_RECON && now - _lastMoodMs > 7000)
     _say(MoodFace::LOOKING, TFT_CYAN, _statusSentence());
 
   // Uptime ticks on the top line.
@@ -187,9 +211,10 @@ void WifiUnigotchiScreen::_openOptionsMenu() {
 
 void WifiUnigotchiScreen::_openModeMenu() {
   static const InputSelectAction::Option opts[] = {
-    {"Passive Mode", "0"}, {"Active Mode", "1"}, {"Pwngrid spam", "2"} };
+    {"Passive Mode", "0"}, {"Active Mode", "1"},
+    {"Pwngrid (friends)", "2"}, {"Pwngrid Spam", "3"} };
   char cur[2]; snprintf(cur, sizeof(cur), "%d", (int)_mode);
-  const char* r = InputSelectAction::popup("Mode", opts, 3, cur);
+  const char* r = InputSelectAction::popup("Mode", opts, 4, cur);
   if (r) applyMode((uint8_t)atoi(r));
   _firstRender = true; _dirty = D_ALL;
   render();   // repaint chrome + body over the dismissed box
@@ -219,7 +244,8 @@ void WifiUnigotchiScreen::_hopNext() {
   if (_attacker) _attacker->setChannel(_channel);
   // Passive has no deauth, so it must dwell long enough to catch an organic
   // handshake; active scans fast (it locks once a target appears); pwngrid sprays.
-  unsigned long dwell = (_mode == MODE_PASSIVE) ? 2500 : (_mode == MODE_PWNGRID) ? 300 : 600;
+  unsigned long dwell = (_mode == MODE_PASSIVE) ? 2500
+                      : (_mode == MODE_PWNGRID || _mode == MODE_PWNSPAM) ? 300 : 600;
   _chanHopUntil = millis() + dwell;
   _dirty |= D_TOP;   // CH is shown in the top line
 }
@@ -390,7 +416,7 @@ void WifiUnigotchiScreen::_probePmkid() {
   }
 }
 
-// ── Pwngrid spam from SD .txt (Bruce-style) ─────────────────────────────────
+// ── Pwngrid: advertise our identity + detect nearby pwnagotchis ─────────────
 
 void WifiUnigotchiScreen::_loadPwnNames() {
   _pwnNames.clear(); _pwnIdx = 0;
@@ -406,16 +432,14 @@ void WifiUnigotchiScreen::_loadPwnNames() {
   }
   if (_pwnNames.empty()) {
     // Seed a default file the user can edit on the SD card, then use it.
-    static const char* def[] = {
-      "unigeek was here", "pwned by unigeek", "Free WiFi (not really)",
-      "handshake hunter", "(o_o) hello there", "STOP DEAUTH SKIDZ!" };
+    static const char* def[] = { "unigeek" };
     if (Uni.Storage && Uni.Storage->isAvailable()) {
       Uni.Storage->makeDir("/unigeek/wifi");
       fs::File w = Uni.Storage->open(PWN_FILE, FILE_WRITE);
       if (w) {
-        w.print("# Unigotchi pwngrid spam names — one per line.\n");
-        w.print("# Each line is broadcast as the 'name' of a pwnagotchi advertisement\n");
-        w.print("# beacon. Lines starting with # and blank lines are ignored.\n");
+        w.print("# Unigotchi pwngrid name — the first non-comment line below is\n");
+        w.print("# advertised as this unit's name so other pwnagotchis see you as\n");
+        w.print("# a friend. Lines starting with # and blank lines are ignored.\n");
         for (auto s : def) { w.print(s); w.print('\n'); }
         w.close();
       }
@@ -425,7 +449,7 @@ void WifiUnigotchiScreen::_loadPwnNames() {
   _pwnLoaded = true;
 }
 
-void WifiUnigotchiScreen::_pwngridAdvertise(uint8_t ch) {
+void WifiUnigotchiScreen::_pwngridAdvertise(uint8_t ch, bool spam) {
   if (!_pwnLoaded) _loadPwnNames();
   static const uint8_t hdr[] = {
     0x80, 0x00, 0x00, 0x00, 0xff,0xff,0xff,0xff,0xff,0xff,
@@ -433,9 +457,12 @@ void WifiUnigotchiScreen::_pwngridAdvertise(uint8_t ch) {
     0x40,0x43, 0,0,0,0,0,0,0,0, 0x64,0x00, 0x11,0x04 };
   static const char* faces[] = { "(o_o)", "(>_<)", "(^_^)", "(-_-)", "(x_x)" };
 
+  // Friends mode: one stable name/identity so peers count us as a single friend.
+  // Spam mode: cycle through every name in the SD list to flood the grid.
   String name = _pwnNames.empty() ? String("unigeek")
-                                   : _pwnNames[_pwnIdx % _pwnNames.size()];
-  const char* face = faces[_pwnIdx % 5];
+              : spam              ? _pwnNames[_pwnIdx % _pwnNames.size()]
+                                  : _pwnNames[0];
+  const char* face = faces[_pwnIdx % 5];   // face still cycles for a little life
   _pwnIdx++;
 
   // JSON-escape the name (quotes/backslashes) so the beacon payload stays valid.
@@ -467,9 +494,154 @@ void WifiUnigotchiScreen::_pwngridAdvertise(uint8_t ch) {
   esp_wifi_80211_tx(WIFI_IF_AP, frame, n, false);
   _pwngridTx++;
 
-  char buf[40]; snprintf(buf, sizeof(buf), "TX: %s", name.c_str());
-  if (millis() - _lastMoodMs > 1500) _say(MoodFace::HAPPY, TFT_CYAN, buf);
+  if (spam) {
+    char buf[40]; snprintf(buf, sizeof(buf), "TX: %s", name.c_str());
+    if (millis() - _lastMoodMs > 1500) _say(MoodFace::HAPPY, TFT_CYAN, buf);
+  }
   _dirty |= D_STATS;
+}
+
+// ── Pwngrid peer detection (real mesh protocol) ─────────────────────────────
+
+void WifiUnigotchiScreen::_resetPeers() {
+  for (auto& p : _peers) p.used = false;
+  _peerCount = 0; _friendsTot = 0; _lastFriend[0] = '\0'; _lastPeerScan = 0;
+}
+
+// Pull a string value ("key":"value") out of a flat JSON payload — no library.
+bool WifiUnigotchiScreen::_jsonStr(const char* json, const char* key, char* out, size_t outSz) {
+  char pat[40]; snprintf(pat, sizeof(pat), "\"%s\"", key);
+  const char* p = strstr(json, pat);
+  if (!p) return false;
+  p = strchr(p + strlen(pat), ':');
+  if (!p) return false;
+  p++;
+  while (*p == ' ' || *p == '\t') p++;
+  if (*p != '"') return false;
+  p++;
+  size_t o = 0;
+  while (*p && *p != '"' && o < outSz - 1) {
+    if (*p == '\\' && p[1]) p++;   // skip the escape, copy the escaped char
+    out[o++] = *p++;
+  }
+  out[o] = '\0';
+  return true;
+}
+
+// Pull a numeric value ("key":number) out of a flat JSON payload.
+long WifiUnigotchiScreen::_jsonInt(const char* json, const char* key) {
+  char pat[40]; snprintf(pat, sizeof(pat), "\"%s\"", key);
+  const char* p = strstr(json, pat);
+  if (!p) return -1;
+  p = strchr(p + strlen(pat), ':');
+  if (!p) return -1;
+  p++;
+  while (*p == ' ' || *p == '\t') p++;
+  return atol(p);
+}
+
+// Decode a pwnagotchi advertisement beacon and register/refresh the peer.
+void WifiUnigotchiScreen::_parsePwnBeacon(const uint8_t* data, uint16_t len, int8_t rssi) {
+  if (len <= 38) return;
+
+  // Payload sits after the beacon header (offset 36) + AC element header.
+  // Keep only printable ASCII — this also drops the 0xDE/length AC markers that
+  // are interleaved every 255 bytes, leaving clean JSON text.
+  char json[384];
+  size_t j = 0;
+  for (uint16_t i = 38; i < len && j < sizeof(json) - 1; i++) {
+    uint8_t c = data[i];
+    if (c >= 0x20 && c < 0x7F) json[j++] = (char)c;
+  }
+  json[j] = '\0';
+
+  const char* start = strchr(json, '{');
+  if (!start) return;
+
+  char identity[65] = {0}, name[24] = {0}, face[12] = {0};
+  if (!_jsonStr(start, "identity", identity, sizeof(identity))) {
+    // Some units omit identity — fall back to the name as the dedupe key.
+    if (!_jsonStr(start, "name", identity, sizeof(identity))) return;
+  }
+  _jsonStr(start, "name", name, sizeof(name));
+  _jsonStr(start, "face", face, sizeof(face));
+  long pt = _jsonInt(start, "pwnd_tot");
+
+  _addPeer(identity, name[0] ? name : "?", face, pt < 0 ? 0 : (uint32_t)pt, rssi);
+}
+
+void WifiUnigotchiScreen::_addPeer(const char* identity, const char* name,
+                                   const char* face, uint32_t pwndTot, int8_t rssi) {
+  const unsigned long now = millis();
+
+  // Known peer — refresh liveness and stats.
+  for (int i = 0; i < _peerCount; i++) {
+    if (_peers[i].used && strcmp(_peers[i].identity, identity) == 0) {
+      _peers[i].lastPing = now;
+      _peers[i].rssi     = rssi;
+      _peers[i].pwndTot  = pwndTot;
+      strncpy(_peers[i].name, name, sizeof(_peers[i].name) - 1);
+      strncpy(_peers[i].face, face, sizeof(_peers[i].face) - 1);
+      return;
+    }
+  }
+
+  // New friend — claim a free slot.
+  int slot = -1;
+  for (int i = 0; i < MAX_PEERS; i++) if (!_peers[i].used) { slot = i; break; }
+  if (slot < 0) return;
+
+  PwnPeer& p = _peers[slot];
+  memset(&p, 0, sizeof(p));
+  strncpy(p.identity, identity, sizeof(p.identity) - 1);
+  strncpy(p.name,     name,     sizeof(p.name)     - 1);
+  strncpy(p.face,     face,     sizeof(p.face)     - 1);
+  p.pwndTot  = pwndTot;
+  p.rssi     = rssi;
+  p.lastPing = now;
+  p.used     = true;
+  if (slot >= _peerCount) _peerCount = slot + 1;
+  _friendsTot++;
+  strncpy(_lastFriend, name, sizeof(_lastFriend) - 1);
+
+  if (Uni.Speaker) Uni.Speaker->playNotification();
+  char msg[64];
+  snprintf(msg, sizeof(msg), "New friend: %s %s", name, face[0] ? face : "");
+  _say(MoodFace::EXCITED, TFT_MAGENTA, msg);
+  _dirty |= D_STATS;
+}
+
+void WifiUnigotchiScreen::_expirePeers() {
+  const unsigned long now = millis();
+  bool changed = false;
+  for (int i = 0; i < _peerCount; i++) {
+    if (_peers[i].used && (now - _peers[i].lastPing) > PEER_AWAY_MS) {
+      _peers[i].used = false;
+      if (_friendsTot) _friendsTot--;
+      changed = true;
+    }
+  }
+  if (changed) {
+    int hi = 0;
+    for (int i = 0; i < MAX_PEERS; i++) if (_peers[i].used) hi = i + 1;
+    _peerCount = hi;
+    _dirty |= D_STATS;
+  }
+}
+
+// Drain the shared capture ring, parsing only pwnagotchi advertisement beacons
+// (source MAC de:ad:be:ef:de:ad). Runs in pwngrid mode in place of _flush().
+void WifiUnigotchiScreen::_drainPwngrid() {
+  static const uint8_t sig[6] = {0xde, 0xad, 0xbe, 0xef, 0xde, 0xad};
+  while (_ringTail != _ringHead) {
+    const RawCapture& cap = _ring[_ringTail];
+    _ringTail = (_ringTail + 1) % RING_SIZE;
+    if (!cap.isBeacon || cap.len < 39) continue;
+    if (memcmp(cap.data + 10, sig, 6) != 0) continue;   // addr2 = source MAC
+    _parsePwnBeacon(cap.data, cap.len, cap.rssi);
+  }
+  const unsigned long now = millis();
+  if (now - _lastPeerScan > 3000) { _lastPeerScan = now; _expirePeers(); }
 }
 
 // ── Capture engine ────────────────────────────────────────────────────────────
@@ -934,9 +1106,16 @@ void WifiUnigotchiScreen::_drawStats(int bx, int by, int bw) {
   lcd.setTextSize(ts);
   lcd.setTextColor(UG_INK, TFT_BLACK);
   char b[40];
-  snprintf(b, sizeof(b), "HS %lu PM %lu DE %lu", (unsigned long)_handshakes,
-           (unsigned long)_pmkids, (unsigned long)_deauths);
+  if (_mode == MODE_PWNGRID)
+    snprintf(b, sizeof(b), "FRIENDS %u  TX %lu", _friendsTot, (unsigned long)_pwngridTx);
+  else if (_mode == MODE_PWNSPAM)
+    snprintf(b, sizeof(b), "SPAM TX %lu", (unsigned long)_pwngridTx);
+  else
+    snprintf(b, sizeof(b), "HS %lu PM %lu DE %lu", (unsigned long)_handshakes,
+             (unsigned long)_pmkids, (unsigned long)_deauths);
   lcd.setTextDatum(TL_DATUM); lcd.drawString(b, bx, ty);
-  const char* nm = _mode == MODE_ACTIVE ? "ACTIVE" : _mode == MODE_PWNGRID ? "PWNGRID" : "PASSIVE";
+  const char* nm = _mode == MODE_ACTIVE  ? "ACTIVE"
+                 : _mode == MODE_PWNGRID ? "PWNGRID"
+                 : _mode == MODE_PWNSPAM ? "SPAM" : "PASSIVE";
   lcd.setTextDatum(TR_DATUM); lcd.drawString(nm, bx + bw, ty);
 }

@@ -31,7 +31,7 @@ public:
   void onRender()  override;
   void onRestore() override;
 
-  enum Mode : uint8_t { MODE_PASSIVE = 0, MODE_ACTIVE = 1, MODE_PWNGRID = 2 };
+  enum Mode : uint8_t { MODE_PASSIVE = 0, MODE_ACTIVE = 1, MODE_PWNGRID = 2, MODE_PWNSPAM = 3 };
   void applyMode(uint8_t m);
 
   // Display style: the pwnagotchi face, or a plain scrolling text log (same
@@ -101,7 +101,7 @@ public:
 private:
   static constexpr int MAX_PENDING = 8;
   static const char*   SAVE_DIR;
-  static const char*   PWN_FILE;   // SD .txt of names to spam (Bruce-style)
+  static const char*   PWN_FILE;   // SD .txt — first line is our advertised name
 
   static constexpr uint8_t HOP_COUNT = 13;
   static const uint8_t     HOP_ORDER[HOP_COUNT];
@@ -139,10 +139,39 @@ private:
 
   uint32_t _handshakes = 0, _pmkids = 0, _deauths = 0, _disassocs = 0, _pwngridTx = 0;
 
-  // ── Pwngrid spam names (from SD .txt) ──────────────────────────────────────
+  // ── Pwngrid advertise name (from SD .txt) ──────────────────────────────────
   std::vector<String> _pwnNames;
   uint16_t            _pwnIdx    = 0;
   bool                _pwnLoaded = false;
+
+  // ── Pwngrid peers — the real mesh protocol: detect nearby pwnagotchis by
+  // parsing their advertisement beacons (source MAC de:ad:be:ef:de:ad) and
+  // track them as friends, aging them out when they go silent. ───────────────
+  static constexpr int           MAX_PEERS    = 32;
+  static constexpr unsigned long PEER_AWAY_MS = 120000;   // drop a friend after 2 min
+  struct PwnPeer {
+    char          identity[65];   // pubkey fingerprint — dedupe key
+    char          name[24];
+    char          face[12];
+    uint32_t      pwndTot;
+    int8_t        rssi;
+    unsigned long lastPing;
+    bool          used;
+  };
+  PwnPeer       _peers[MAX_PEERS] = {};
+  int           _peerCount    = 0;
+  uint8_t       _friendsTot   = 0;
+  char          _lastFriend[24] = {};
+  unsigned long _lastPeerScan = 0;
+
+  void _drainPwngrid();
+  void _parsePwnBeacon(const uint8_t* data, uint16_t len, int8_t rssi);
+  void _addPeer(const char* identity, const char* name, const char* face,
+                uint32_t pwndTot, int8_t rssi);
+  void _expirePeers();
+  void _resetPeers();
+  static bool _jsonStr(const char* json, const char* key, char* out, size_t outSz);
+  static long _jsonInt(const char* json, const char* key);
 
   // ── Pwnagotchi-style UI (SVG face bitmap + plain text) ─────────────────────
   enum : uint8_t { D_TOP = 1, D_BODY = 2, D_STATS = 4, D_ALL = 7 };
@@ -178,7 +207,7 @@ private:
   void _sendAssocRequest(const uint8_t* bssid, const char* ssid, uint8_t ssidLen);
   void _probePmkid();
   void _loadPwnNames();
-  void _pwngridAdvertise(uint8_t ch);
+  void _pwngridAdvertise(uint8_t ch, bool spam);
 
   // ── Radio ──────────────────────────────────────────────────────────────────
   void _startRadio();
