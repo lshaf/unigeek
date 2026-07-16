@@ -32,6 +32,9 @@ protected:
   bool        _radioStartJam()                    override;
   void        _radioStopJam()                     override;
   void        _radioJamBurst()                    override;
+  const char* _radioJamModeName()                 override { return CC1101Util::jamModeName(_jamMode); }
+  // BACK from jamming reopens the mode menu instead of the Sub-GHz menu.
+  bool        _onJamStopped()                      override { return _beginJammer(); }
   RxFilter    _radioGetRxFilter()                 override { return _rf.getRxFilter(); }
   void        _radioSetRxFilter(RxFilter f)       override { _rf.setRxFilter(f); }
   void        _radioFreqLabel(char* buf, size_t n) override {
@@ -56,6 +59,12 @@ private:
   CC1101Util _rf;
   int8_t _csPin   = -1;
   int8_t _gdo0Pin = -1;
+  CC1101Util::JamMode _jamMode = CC1101Util::JAM_FULL;
+  // Mode-select popup shown when entering Jammer; returns -1 on cancel.
+  int  _selectJammerMode();
+  // Show the mode popup then start jamming; true if jamming began, false on
+  // cancel / no radio. Shared by the menu entry and the BACK-from-jam path.
+  bool _beginJammer();
   bool   _rfDetectFired = false;  // achievement guard, resets each scan session
   String _pendingReplayFile;      // set via ctor: transmit this .sub then goBack
   void _replayPendingFile();

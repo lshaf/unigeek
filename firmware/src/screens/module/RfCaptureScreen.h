@@ -98,6 +98,12 @@ protected:
   virtual bool _onBackExtra()               { return false; }
   virtual bool _onItemSelectedExtra(uint8_t /*idx*/) { return false; }
   virtual bool _inhibitExtra() const        { return false; }
+  // Active jammer mode name, shown under "Jamming..." — nullptr hides the line.
+  virtual const char* _radioJamModeName()   { return nullptr; }
+  // Called after the jam is stopped by BACK. Return true if the derived screen
+  // took over navigation (e.g. reopened its mode menu); false lets the base fall
+  // back to the main menu. Radio is already stopped when this runs.
+  virtual bool _onJamStopped()              { return false; }
 
   // ── Shared helpers (called by base + reusable by derived) ──────────────
   void   _enterReceiveMode();

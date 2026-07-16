@@ -596,6 +596,191 @@ void CC1101Util::startTx() {
   pinMode(_gdo0Pin, OUTPUT);
 }
 
+// ── Multi-mode jammer ───────────────────────────────────────────────────────
+
+const char* CC1101Util::jamModeName(JamMode m) {
+  switch (m) {
+    case JAM_FULL:  return "Full Power";
+    case JAM_ITMT:  return "Intermittent";
+    case JAM_NOISE: return "Noise Storm";
+    case JAM_SWEEP: return "Freq Sweep";
+    default:        return "Jammer";
+  }
+}
+
+void CC1101Util::startJam(JamMode mode) {
+  if (!_initialized) return;
+  _jamMode    = mode;
+  _jamPulses  = 0;
+  _jamSweeps  = 0;
+  _jamStartMs = millis();
+
+  switch (mode) {
+    case JAM_NOISE:
+      // CC1101 PN9 pseudo-random TX — the chip generates continuous modulated
+      // noise. High data rate widens the occupied bandwidth; PA at max.
+      ELECHOUSE_cc1101.setSidle();
+      ELECHOUSE_cc1101.setPktFormat(2);    // PN9 random TX mode
+      ELECHOUSE_cc1101.setDRate(800);      // wider occupied bandwidth
+      ELECHOUSE_cc1101.setModulation(2);   // start on ASK/OOK
+      ELECHOUSE_cc1101.setDeviation(47.6); // max deviation for the FSK legs
+      ELECHOUSE_cc1101.setRxBW(812);
+      ELECHOUSE_cc1101.setPA(12);
+      ELECHOUSE_cc1101.SetTx();
+      _jamNoiseMod = 0;
+      break;
+
+    case JAM_SWEEP:
+      // OOK carrier keyed over GDO0, retuned +/-5 MHz each tick.
+      _jamBaseFreq  = _freq;
+      _jamSweepFreq = _freq - 5.0f;
+      _jamSweepFwd  = true;
+      ELECHOUSE_cc1101.setModulation(2);
+      ELECHOUSE_cc1101.setPktFormat(3);
+      ELECHOUSE_cc1101.setPA(12);
+      ELECHOUSE_cc1101.setMHZ(_jamSweepFreq);
+      ELECHOUSE_cc1101.SetTx();
+      pinMode(_gdo0Pin, OUTPUT);
+      break;
+
+    default:  // JAM_FULL, JAM_ITMT — carrier keyed over GDO0 at the fixed freq
+      ELECHOUSE_cc1101.setPA(12);
+      ELECHOUSE_cc1101.setModulation(2);
+      ELECHOUSE_cc1101.setPktFormat(3);
+      ELECHOUSE_cc1101.SetTx();
+      pinMode(_gdo0Pin, OUTPUT);
+      break;
+  }
+}
+
+void CC1101Util::jamTick() {
+  if (!_initialized) return;
+
+  switch (_jamMode) {
+    case JAM_FULL: {
+      // Max duty-cycle carrier keying — rotate through three attack phases every
+      // 100 ms for the widest spectral pollution around the centre frequency.
+      uint8_t phase = ((millis() - _jamStartMs) / 100) % 3;
+      if (phase == 0) {
+        // Ultra-rapid micro-glitches (3 us HIGH / 1 us LOW).
+        for (int i = 0; i < 100; i++) {
+          digitalWrite(_gdo0Pin, HIGH); delayMicroseconds(3);
+          digitalWrite(_gdo0Pin, LOW);  delayMicroseconds(1);
+          _jamPulses++;
+        }
+      } else if (phase == 1) {
+        // Variable-width bursts (2-20 us).
+        for (int i = 0; i < 50; i++) {
+          uint32_t w = 2 + (micros() % 18);
+          digitalWrite(_gdo0Pin, HIGH); delayMicroseconds(w);
+          digitalWrite(_gdo0Pin, LOW);  delayMicroseconds(1);
+          _jamPulses++;
+        }
+      } else {
+        // Sustained carrier with periodic hard cuts.
+        digitalWrite(_gdo0Pin, HIGH); delayMicroseconds(80);
+        digitalWrite(_gdo0Pin, LOW);  delayMicroseconds(2);
+        digitalWrite(_gdo0Pin, HIGH); delayMicroseconds(80);
+        digitalWrite(_gdo0Pin, LOW);
+        _jamPulses += 2;
+      }
+      break;
+    }
+
+    case JAM_ITMT: {
+      // One forward sweep of pulse widths (10 -> 500 us) plus a random noise
+      // burst, for a chirp-like intermittent disruption.
+      for (uint32_t seq = 0; seq < 50; seq++) {
+        _jamSendPulse(10 * (seq + 1));
+        _jamPulses++;
+      }
+      _jamRandomBurst(120);
+      _jamPulses += 120;
+      break;
+    }
+
+    case JAM_NOISE: {
+      // Hardware drives the PN9 TX on its own; here we just cycle the modulation
+      // scheme every 3 s (ASK -> 2-FSK -> MSK) for spectral diversity.
+      uint32_t now = millis();
+      uint8_t newMod = ((now - _jamStartMs) / 3000) % 3;
+      if (newMod != _jamNoiseMod) {
+        static const uint8_t schemes[] = {2, 0, 1}; // ASK/OOK, 2-FSK, MSK
+        _jamNoiseMod = newMod;
+        ELECHOUSE_cc1101.setSidle();
+        ELECHOUSE_cc1101.setModulation(schemes[newMod]);
+        ELECHOUSE_cc1101.SetTx();
+      }
+      _jamPulses = (now - _jamStartMs) / 1000;  // seconds on air
+      delay(20);  // hardware handles TX — keep CPU cool but stay responsive
+      break;
+    }
+
+    case JAM_SWEEP: {
+      ELECHOUSE_cc1101.setMHZ(_jamSweepFreq);
+      // Tight TX burst at the current step.
+      for (int b = 0; b < 40; b++) {
+        digitalWrite(_gdo0Pin, HIGH); delayMicroseconds(30);
+        digitalWrite(_gdo0Pin, LOW);  delayMicroseconds(5);
+        _jamPulses++;
+      }
+      // Bidirectional sweep across +/-5 MHz in 50 kHz steps.
+      const float lo = _jamBaseFreq - 5.0f;
+      const float hi = _jamBaseFreq + 5.0f;
+      if (_jamSweepFwd) {
+        _jamSweepFreq += 0.05f;
+        if (_jamSweepFreq > hi) { _jamSweepFreq = hi; _jamSweepFwd = false; _jamSweeps++; }
+      } else {
+        _jamSweepFreq -= 0.05f;
+        if (_jamSweepFreq < lo) { _jamSweepFreq = lo; _jamSweepFwd = true; _jamSweeps++; }
+      }
+      break;
+    }
+
+    default: break;
+  }
+}
+
+void CC1101Util::stopJam() {
+  if (!_initialized) return;
+  digitalWrite(_gdo0Pin, LOW);
+
+  if (_jamMode == JAM_NOISE) {
+    // Restore the async-serial defaults the rest of the driver expects.
+    ELECHOUSE_cc1101.setSidle();
+    ELECHOUSE_cc1101.setPktFormat(3);
+    ELECHOUSE_cc1101.setDRate(50);
+  } else if (_jamMode == JAM_SWEEP) {
+    ELECHOUSE_cc1101.setMHZ(_jamBaseFreq);
+  }
+  ELECHOUSE_cc1101.setSidle();
+}
+
+void CC1101Util::_jamSendPulse(uint32_t width) {
+  // Aggressive HIGH phase: rapid micro-interruptions every 6 us create wideband
+  // harmonic content around the centre frequency, then a sustained tail.
+  for (uint32_t i = 0; i < width; i += 6) {
+    digitalWrite(_gdo0Pin, HIGH); delayMicroseconds(5);
+    digitalWrite(_gdo0Pin, LOW);  delayMicroseconds(1);
+  }
+  digitalWrite(_gdo0Pin, HIGH); delayMicroseconds(width / 3);
+  digitalWrite(_gdo0Pin, LOW);
+  uint32_t lowPeriod = width / 4;   // minimal dead time — maximise duty cycle
+  if (lowPeriod > 0) delayMicroseconds(lowPeriod);
+}
+
+void CC1101Util::_jamRandomBurst(int numPulses) {
+  uint32_t start = millis();
+  for (int i = 0; i < numPulses; i++) {
+    uint32_t pulseWidth = 1 + (micros() % 60);
+    digitalWrite(_gdo0Pin, HIGH); delayMicroseconds(pulseWidth);
+    digitalWrite(_gdo0Pin, LOW);
+    uint32_t spaceWidth = 1 + (micros() % 8);
+    delayMicroseconds(spaceWidth);
+    if (millis() - start > 20) break;  // bounded chunk — keep BACK responsive
+  }
+}
+
 // ── Send ──────────────────────────────────────────────────────────────────
 
 void CC1101Util::sendSignal(const Signal& sig) {
