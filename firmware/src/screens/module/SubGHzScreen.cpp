@@ -130,22 +130,17 @@ void SubGHzScreen::_radioSendCaptured(const Signal& sig) {
 
 bool SubGHzScreen::_radioStartJam() {
   if (!_rf.begin(Uni.Spi, _csPin, _gdo0Pin)) return false;
-  _rf.startTx();
+  _rf.startJam(_jamMode);
   return true;
 }
 
 void SubGHzScreen::_radioStopJam() {
-  digitalWrite(_gdo0Pin, LOW);
+  _rf.stopJam();
   _rf.end();
 }
 
 void SubGHzScreen::_radioJamBurst() {
-  for (int i = 0; i < 50; i++) {
-    uint32_t pw  = 5 + (micros() % 46);
-    uint32_t gap = 5 + (micros() % 96);
-    digitalWrite(_gdo0Pin, HIGH); delayMicroseconds(pw);
-    digitalWrite(_gdo0Pin, LOW);  delayMicroseconds(gap);
-  }
+  _rf.jamTick();
 }
 
 // ── Menu ────────────────────────────────────────────────────────────────────
@@ -240,12 +235,7 @@ void SubGHzScreen::_onMenuSelected(uint8_t index) {
         render();
         return;
       }
-      if (!_radioStartJam()) {
-        ShowStatusAction::show("CC1101 not found");
-        render();
-        return;
-      }
-      _enterJammingMode();
+      if (!_beginJammer()) render();  // cancelled → back to Sub-GHz menu
       return;
     }
     case 6: { // Brute Force
@@ -253,6 +243,33 @@ void SubGHzScreen::_onMenuSelected(uint8_t index) {
       return;
     }
   }
+}
+
+bool SubGHzScreen::_beginJammer() {
+  int mode = _selectJammerMode();
+  if (mode < 0) return false;  // cancelled
+  _jamMode = (CC1101Util::JamMode)mode;
+  if (!_radioStartJam()) {
+    ShowStatusAction::show("CC1101 not found");
+    return false;
+  }
+  _enterJammingMode();
+  return true;
+}
+
+int SubGHzScreen::_selectJammerMode() {
+  static constexpr InputSelectAction::Option modeOpts[] = {
+    {"Full Power",   "0"},  // max duty-cycle continuous TX
+    {"Intermittent", "1"},  // varied pulse patterns + bursts
+    {"Noise Storm",  "2"},  // CC1101 PN9 hardware random noise
+    {"Freq Sweep",   "3"},  // sweep +/-5 MHz around target
+  };
+  char curBuf[4];
+  snprintf(curBuf, sizeof(curBuf), "%d", (int)_jamMode);
+  const char* choice = InputSelectAction::popup("Jammer Mode", modeOpts,
+                                                CC1101Util::JAM_MODE_COUNT, curBuf);
+  if (!choice) return -1;
+  return atoi(choice);
 }
 
 void SubGHzScreen::_selectFrequency() {

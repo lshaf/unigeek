@@ -99,7 +99,7 @@ void RfCaptureScreen::onUpdate() {
       auto dir = Uni.Nav->readDirection();
       if (dir == INavigation::DIR_BACK || dir == INavigation::DIR_PRESS) {
         _radioStopJam();
-        _showMenu();
+        if (!_onJamStopped()) _showMenu();
         return;
       }
     }
@@ -167,8 +167,19 @@ void RfCaptureScreen::onRender() {
 
     char freqStr[24];
     _radioFreqLabel(freqStr, sizeof(freqStr));
-    lcd.drawString(freqStr, bodyX() + bodyW() / 2, bodyY() + bodyH() / 2 - 20);
-    lcd.drawString("Jamming...", bodyX() + bodyW() / 2, bodyY() + bodyH() / 2);
+
+    const char* modeName = _radioJamModeName();
+    int cy = bodyY() + bodyH() / 2;
+    if (modeName) {
+      lcd.drawString(freqStr, bodyX() + bodyW() / 2, cy - 30);
+      lcd.setTextColor(Config.getThemeColor(), TFT_BLACK);
+      lcd.drawString(modeName, bodyX() + bodyW() / 2, cy - 12);
+      lcd.setTextColor(TFT_WHITE, TFT_BLACK);
+      lcd.drawString("Jamming...", bodyX() + bodyW() / 2, cy + 8);
+    } else {
+      lcd.drawString(freqStr, bodyX() + bodyW() / 2, cy - 20);
+      lcd.drawString("Jamming...", bodyX() + bodyW() / 2, cy);
+    }
 
     #ifdef DEVICE_HAS_KEYBOARD
       lcd.drawString("BACK: Stop", bodyX() + bodyW() / 2, bodyY() + bodyH() - 10);
@@ -208,7 +219,7 @@ void RfCaptureScreen::onBack() {
     _showMenu();
   } else if (_state == STATE_JAMMING) {
     _radioStopJam();
-    _showMenu();
+    if (!_onJamStopped()) _showMenu();
   } else if (_state == STATE_SEND_BROWSE) {
     if (_browsePath == kRootPath) {
       _showMenu();

@@ -26,6 +26,19 @@ public:
     RX_FILTER_RAW,
   };
 
+  // Jammer modes — selectable when entering the Jammer screen.
+  //   JAM_FULL  : max duty-cycle carrier keyed over GDO0 (multi-phase glitching)
+  //   JAM_ITMT  : intermittent — swept pulse widths + random noise bursts
+  //   JAM_NOISE : CC1101 PN9 hardware random TX, cycling ASK/2-FSK/MSK
+  //   JAM_SWEEP : hop +/-5 MHz around the target in 50 kHz steps, burst per step
+  enum JamMode : uint8_t {
+    JAM_FULL = 0,
+    JAM_ITMT,
+    JAM_NOISE,
+    JAM_SWEEP,
+    JAM_MODE_COUNT
+  };
+
   struct Signal {
     float frequency = 0;     // MHz
     String preset = "0";     // modulation preset name or RcSwitch protocol number
@@ -147,6 +160,20 @@ public:
 
   // Start TX mode (for jammer — caller controls GDO0 directly)
   void startTx();
+
+  // ── Multi-mode jammer ──────────────────────────────────────────────────────
+  // Non-blocking: startJam() configures the radio for the chosen mode, then the
+  // screen calls jamTick() every frame (each call does one bounded chunk of work
+  // so BACK stays responsive) and stopJam() when leaving. Live stats are read via
+  // jamPulses()/jamSweeps()/jamSweepFreq() for the status line.
+  void     startJam(JamMode mode);
+  void     jamTick();
+  void     stopJam();
+  JamMode  jamMode()      const { return _jamMode; }
+  uint32_t jamPulses()    const { return _jamPulses; }
+  uint32_t jamSweeps()    const { return _jamSweeps; }
+  float    jamSweepFreq() const { return _jamSweepFreq; }
+  static const char* jamModeName(JamMode m);
 
   // Send a signal (handles RAW and RcSwitch/Princeton protocols)
   void sendSignal(const Signal& sig);
@@ -281,6 +308,18 @@ private:
   float _scanForBestFreq(std::function<bool()> cancelCb);
   void  _initTx();
   void  _initRx();
+
+  // ── Jammer state ──────────────────────────────────────────────────────────
+  JamMode  _jamMode      = JAM_FULL;
+  uint32_t _jamPulses    = 0;
+  uint32_t _jamSweeps    = 0;
+  uint32_t _jamStartMs   = 0;
+  uint8_t  _jamNoiseMod  = 0;      // index into the ASK/2-FSK/MSK cycle
+  float    _jamBaseFreq  = 0;      // sweep centre (restored on stop)
+  float    _jamSweepFreq = 0;      // current sweep frequency
+  bool     _jamSweepFwd  = true;   // sweep direction
+  void _jamSendPulse(uint32_t width);   // one glitched OOK pulse over GDO0
+  void _jamRandomBurst(int numPulses);  // bounded random-width noise burst
   // Write the OOK RX sensitivity registers (AGC full gain, ADC retention, SmartRF
   // front-end) after ELECHOUSE Init(), whose FSK-packet defaults cap the gain.
   void  _applyOokRxRegs();
