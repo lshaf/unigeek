@@ -48,12 +48,14 @@ public:
     bool        validated     = false;  // confirmed valid handshake (beacon + paired M1+M2)
     std::string filepath;
 
-    // In-memory handshake pairing (same logic as brute force parser)
+    // In-memory handshake pairing (EapolUtil — shared with WifiUnigotchiScreen)
     uint8_t anonce[32]   = {};
+    uint8_t replayM1[8]  = {};      // Replay Counter from the stored M1/M3
     uint8_t staMacM1[6]  = {};
     bool    hasAnonce    = false;   // M1/M3 seen and written to PCAP
 
     uint8_t m2Snonce[32] = {};
+    uint8_t replayM2[8]  = {};      // Replay Counter from the stored M2
     uint8_t staMacM2[6]  = {};
     bool    hasM2Data    = false;   // M2 (non-zero nonce) seen and written to PCAP
   };
