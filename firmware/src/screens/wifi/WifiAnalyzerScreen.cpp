@@ -4,7 +4,6 @@
 #include "core/ConfigManager.h"
 #include "core/AchievementManager.h"
 #include "screens/wifi/WifiMenuScreen.h"
-#include "ui/actions/ShowStatusAction.h"
 
 #include <WiFi.h>
 #include <esp_wifi.h>
@@ -78,7 +77,9 @@ static void _clientSnifferCb(void* buf, wifi_promiscuous_pkt_type_t type)
 
 void WifiAnalyzerScreen::onInit()
 {
-  _scan();
+  _entryCount = 0;
+  _showScan();
+  _nextScanAt = millis();
 }
 
 void WifiAnalyzerScreen::onUpdate()
@@ -98,7 +99,19 @@ void WifiAnalyzerScreen::onUpdate()
     }
     return;
   }
+
   ListScreen::onUpdate();
+
+  if (_scanInFlight) {
+    _pollLiveScan();
+  } else if (millis() >= _nextScanAt) {
+    _startLiveScan();
+  }
+
+  if (millis() - _lastPruneAt >= 1000) {
+    _lastPruneAt = millis();
+    _pruneStale();
+  }
 }
 
 void WifiAnalyzerScreen::onItemSelected(uint8_t index)
@@ -124,55 +137,126 @@ void WifiAnalyzerScreen::onBack()
     _showScan();
   } else {
     WiFi.scanDelete();
+    _scanInFlight = false;
     Screen.goBack();
   }
 }
 
 // ── Private ────────────────────────────────────────────────────────────────
 
-void WifiAnalyzerScreen::_scan()
+// ── Live scan ────────────────────────────────────────────────────────────────
+//
+// Instead of one blocking WiFi.scanNetworks() call, we kick an async scan,
+// poll it from onUpdate(), merge results into _entries[] in place (existing
+// BSSIDs keep their row/index so the cursor doesn't jump), then immediately
+// schedule the next cycle. _pruneStale() separately drops APs that haven't
+// been seen in a while, so the list behaves like a live radar while walking.
+
+void WifiAnalyzerScreen::_startLiveScan()
 {
-  ShowStatusAction::show("Scanning...", 0);
-
   WiFi.mode(WIFI_STA);
-  int total = WiFi.scanNetworks(false, true);
-  if (total > MAX_SCAN) total = MAX_SCAN;
-  _entryCount = total;
+  WiFi.scanNetworks(true, true);  // async
+  _scanInFlight = true;
+}
 
-  for (int i = 0; i < total; i++) {
-    int32_t rssi = WiFi.RSSI(i);
-    const char* strength;
-    if      (rssi >= -50) strength = "Very Good";
-    else if (rssi >= -60) strength = "Good";
-    else if (rssi >= -70) strength = "Better";
-    else if (rssi >= -80) strength = "Low";
-    else                  strength = "Very Low";
-
-    snprintf(_entries[i].ssid,    sizeof(_entries[i].ssid),    "%s", WiFi.SSID(i).c_str());
-    snprintf(_entries[i].bssid,   sizeof(_entries[i].bssid),   "%s", WiFi.BSSIDstr(i).c_str());
-    snprintf(_entries[i].rssi,    sizeof(_entries[i].rssi),    "[%d] %s", (int)rssi, strength);
-    snprintf(_entries[i].channel, sizeof(_entries[i].channel), "%d", (int)WiFi.channel(i));
-
-    switch (WiFi.encryptionType(i)) {
-      case WIFI_AUTH_OPEN:           snprintf(_entries[i].encryption, sizeof(_entries[i].encryption), "OPEN");            break;
-      case WIFI_AUTH_WEP:            snprintf(_entries[i].encryption, sizeof(_entries[i].encryption), "WEP");             break;
-      case WIFI_AUTH_WPA_PSK:        snprintf(_entries[i].encryption, sizeof(_entries[i].encryption), "WPA_PSK");         break;
-      case WIFI_AUTH_WPA2_PSK:       snprintf(_entries[i].encryption, sizeof(_entries[i].encryption), "WPA2_PSK");        break;
-      case WIFI_AUTH_WPA_WPA2_PSK:   snprintf(_entries[i].encryption, sizeof(_entries[i].encryption), "WPA_WPA2_PSK");    break;
-      case WIFI_AUTH_WPA2_ENTERPRISE:snprintf(_entries[i].encryption, sizeof(_entries[i].encryption), "WPA2_ENTERPRISE"); break;
-      case WIFI_AUTH_WPA3_PSK:       snprintf(_entries[i].encryption, sizeof(_entries[i].encryption), "WPA3_PSK");        break;
-      default:                       snprintf(_entries[i].encryption, sizeof(_entries[i].encryption), "UNKNOWN");         break;
-    }
+void WifiAnalyzerScreen::_pollLiveScan()
+{
+  int total = WiFi.scanComplete();
+  if (total == WIFI_SCAN_RUNNING || total == WIFI_SCAN_FAILED) {
+    if (total == WIFI_SCAN_FAILED) { _scanInFlight = false; _nextScanAt = millis() + SCAN_CYCLE_GAP_MS; }
+    return;
   }
+
+  if (total > MAX_SCAN) total = MAX_SCAN;
+  for (int i = 0; i < total; i++) _mergeScanResult(i);
+
+  WiFi.scanDelete();
+  _scanInFlight = false;
+  _nextScanAt   = millis() + SCAN_CYCLE_GAP_MS;
 
   int na = Achievement.inc("wifi_analyzer_scan");
   if (na == 1) Achievement.unlock("wifi_analyzer_scan");
-  if (total >= 20) {
+  if (_entryCount >= 20) {
     int n20 = Achievement.inc("wifi_analyzer_20aps");
     if (n20 == 1) Achievement.unlock("wifi_analyzer_20aps");
   }
 
-  _showScan();
+  _rebuildScanItems();
+  setCount(_entryCount);
+  render();
+}
+
+void WifiAnalyzerScreen::_mergeScanResult(int idx)
+{
+  String bssid = WiFi.BSSIDstr(idx);
+
+  int slot = -1;
+  for (int i = 0; i < _entryCount; i++) {
+    if (bssid.equalsIgnoreCase(_entries[i].bssid)) { slot = i; break; }
+  }
+  if (slot < 0) {
+    if (_entryCount >= MAX_SCAN) return;  // list full — ignore new APs until one drops
+    slot = _entryCount++;
+  }
+
+  int32_t rssi = WiFi.RSSI(idx);
+  const char* strength;
+  if      (rssi >= -50) strength = "Very Good";
+  else if (rssi >= -60) strength = "Good";
+  else if (rssi >= -70) strength = "Better";
+  else if (rssi >= -80) strength = "Low";
+  else                  strength = "Very Low";
+
+  WifiEntry& e = _entries[slot];
+  snprintf(e.ssid,    sizeof(e.ssid),    "%s", WiFi.SSID(idx).c_str());
+  snprintf(e.bssid,   sizeof(e.bssid),   "%s", bssid.c_str());
+  snprintf(e.rssi,    sizeof(e.rssi),    "[%d] %s", (int)rssi, strength);
+  snprintf(e.channel, sizeof(e.channel), "%d", (int)WiFi.channel(idx));
+  e.rssiValue = (int)rssi;
+  e.lastSeen  = millis();
+
+  switch (WiFi.encryptionType(idx)) {
+    case WIFI_AUTH_OPEN:           snprintf(e.encryption, sizeof(e.encryption), "OPEN");            break;
+    case WIFI_AUTH_WEP:            snprintf(e.encryption, sizeof(e.encryption), "WEP");             break;
+    case WIFI_AUTH_WPA_PSK:        snprintf(e.encryption, sizeof(e.encryption), "WPA_PSK");         break;
+    case WIFI_AUTH_WPA2_PSK:       snprintf(e.encryption, sizeof(e.encryption), "WPA2_PSK");        break;
+    case WIFI_AUTH_WPA_WPA2_PSK:   snprintf(e.encryption, sizeof(e.encryption), "WPA_WPA2_PSK");    break;
+    case WIFI_AUTH_WPA2_ENTERPRISE:snprintf(e.encryption, sizeof(e.encryption), "WPA2_ENTERPRISE"); break;
+    case WIFI_AUTH_WPA3_PSK:       snprintf(e.encryption, sizeof(e.encryption), "WPA3_PSK");        break;
+    default:                       snprintf(e.encryption, sizeof(e.encryption), "UNKNOWN");         break;
+  }
+}
+
+void WifiAnalyzerScreen::_pruneStale()
+{
+  if (_state != STATE_SCAN || _entryCount == 0) return;
+
+  uint32_t now     = millis();
+  bool     changed = false;
+
+  for (int i = _entryCount - 1; i >= 0; i--) {
+    if (now - _entries[i].lastSeen <= STALE_TIMEOUT_MS) continue;
+
+    for (int j = i; j < _entryCount - 1; j++) _entries[j] = _entries[j + 1];
+    _entryCount--;
+    changed = true;
+
+    if (_selectedIndex > i) _selectedIndex--;
+  }
+
+  if (!changed) return;
+  _rebuildScanItems();
+  setCount(_entryCount);
+  render();
+}
+
+void WifiAnalyzerScreen::_rebuildScanItems()
+{
+  for (int i = 0; i < _entryCount; i++) {
+    _scanItems[i]         = {_entries[i].ssid, _entries[i].bssid};
+    _scanItems[i].rssi    = (int16_t)_entries[i].rssiValue;
+    _scanItems[i].hasRssi = true;
+  }
 }
 
 void WifiAnalyzerScreen::_showScan()
@@ -180,15 +264,20 @@ void WifiAnalyzerScreen::_showScan()
   _state = STATE_SCAN;
   strncpy(_title, "WiFi Analyzer", sizeof(_title));
 
-  for (int i = 0; i < _entryCount; i++) {
-    _scanItems[i] = {_entries[i].ssid, _entries[i].bssid};
-  }
-
+  _rebuildScanItems();
   setItems(_scanItems, _entryCount);
+  _nextScanAt = millis();
 }
 
 void WifiAnalyzerScreen::_showClients(int index)
 {
+  // Hand the radio over to the client sniffer — abort any in-flight scan
+  // first so it doesn't collide with the promiscuous/channel-lock setup.
+  if (_scanInFlight) {
+    WiFi.scanDelete();
+    _scanInFlight = false;
+  }
+
   _selectedAp = index;
   _state      = STATE_CLIENTS;
 
