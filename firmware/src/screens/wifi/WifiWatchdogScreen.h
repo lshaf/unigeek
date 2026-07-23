@@ -85,6 +85,11 @@ private:
   static constexpr int           MAX_RING        = 64;
   static constexpr int           MAX_BEACON_RING = 128;
   static constexpr int           FLOOD_THRESHOLD = 50;
+  // Hard cap on distinct MACs/SSIDs tracked at once. Beacon/probe/deauth spam
+  // tools commonly randomize the source MAC per frame, which would otherwise
+  // grow these maps without bound (and past WINDOW_MS pruning, since a live
+  // flood keeps refreshing "last seen") until the heap is exhausted.
+  static constexpr size_t        MAX_TRACKED_MAC = 256;
 
   enum View  { VIEW_OVERALL, VIEW_DEAUTH, VIEW_PROBES, VIEW_FLOOD, VIEW_EVILTWIN };
 
