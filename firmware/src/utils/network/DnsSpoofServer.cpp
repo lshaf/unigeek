@@ -200,7 +200,17 @@ bool DnsSpoofServer::_isCaptiveDomain(const char* domain)
          strcasecmp(domain, "ipv6.msftncsi.com") == 0 ||
          strcasecmp(domain, "www.msftncsi.com") == 0 ||
          strcasecmp(domain, "nmcheck.gnome.org") == 0 ||
-         strcasecmp(domain, "detectportal.firefox.com") == 0;
+         strcasecmp(domain, "detectportal.firefox.com") == 0 ||
+         // Broader OS/desktop-environment connectivity checkers — catches
+         // things like connectivity-check.ubuntu.com, network-check-*, etc.
+         // that don't have a single canonical hostname worth hardcoding.
+         strcasestr(domain, "ncsi") ||
+         strcasestr(domain, "nmcheck") ||
+         strcasestr(domain, "gnome") ||
+         strcasestr(domain, "ubuntu") ||
+         strcasestr(domain, "canonical") ||
+         strcasestr(domain, "networkcheck") ||
+         strcasestr(domain, "hotspot");
 }
 
 // ── Web Server (delegates to SharedWebServer on port 80) ──────────────────

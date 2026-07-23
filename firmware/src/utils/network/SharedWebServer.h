@@ -129,4 +129,5 @@ private:
   static bool   _isCaptiveDomain(const char* domain);
   void _serveCaptive(AsyncWebServerRequest* req);
   void _capturePost(AsyncWebServerRequest* req);
+  void _redirectToPortal(AsyncWebServerRequest* req);
 };
