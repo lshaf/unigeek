@@ -3,7 +3,6 @@
 #include "core/ScreenManager.h"
 #include "core/AchievementManager.h"
 #include "screens/ble/BLEMenuScreen.h"
-#include "ui/actions/ShowStatusAction.h"
 
 static String _toHex(const std::string& data)
 {
@@ -312,6 +311,9 @@ static String _buildPayloadText(NimBLEAdvertisedDevice& dev)
 
 // ── Lifecycle ──────────────────────────────────────────────────────────────
 
+portMUX_TYPE  BLEAnalyzerScreen::_scanLock      = portMUX_INITIALIZER_UNLOCKED;
+volatile bool BLEAnalyzerScreen::_scanCycleDone = false;
+
 BLEAnalyzerScreen::~BLEAnalyzerScreen()
 {
   if (_bleScan != nullptr) {
@@ -332,6 +334,7 @@ void BLEAnalyzerScreen::onItemSelected(uint8_t index)
 {
   if (_state == STATE_LIST) {
     if (index < (uint8_t)_scanResults.getCount()) {
+      _stopLiveScan();
       _selectedDeviceIdx = index;
       _showInfo();
     }
@@ -355,7 +358,9 @@ void BLEAnalyzerScreen::onBack()
   } else if (_state == STATE_INFO) {
     _selectedDeviceIdx = -1;
     _showList();
+    _nextScanAt = millis();  // resume live scanning
   } else {
+    _stopLiveScan();
     Screen.goBack();
   }
 }
@@ -366,6 +371,18 @@ void BLEAnalyzerScreen::onUpdate()
 {
   if (_state != STATE_DETAIL) {
     ListScreen::onUpdate();
+
+    if (_state == STATE_LIST || _state == STATE_SCAN) {
+      if (_scanInFlight) {
+        _pollLiveScan();
+      } else if (millis() >= _nextScanAt) {
+        _startLiveScan();
+      }
+      if (millis() - _lastPruneAt >= 1000) {
+        _lastPruneAt = millis();
+        _pruneStale();
+      }
+    }
     return;
   }
   if (!Uni.Nav->wasPressed()) return;
@@ -396,47 +413,125 @@ void BLEAnalyzerScreen::_showDetail(const char* titleText, const String& content
 
 // ── Private ────────────────────────────────────────────────────────────────
 
+// ── Live scan (rolling) ──────────────────────────────────────────────────────
+//
+// NimBLEScan::start(duration, cb, is_continue=true) restarts scanning without
+// clearing previous results — the library itself merges by address and
+// refreshes RSSI/payload/timestamp in place for repeat sightings, so we get
+// "existing device updates, new device appends" for free. We only add the
+// restart cadence and staleness pruning (erase() for devices not re-seen in
+// a while) on top. The completion callback fires on the NimBLE host task —
+// it only flips a lock-protected flag; _pollLiveScan() does the real work
+// (reading results, building rows) on the main loop during the safe window
+// between one cycle ending and the next being kicked off.
+
 void BLEAnalyzerScreen::_startScan()
 {
-  _state = STATE_SCAN;
   _selectedDeviceIdx = -1;
-  ShowStatusAction::show("Scanning...", 0);
   _bleScan->clearResults();
-  _scanResults = _bleScan->start(5, false);
+  _scanResults = NimBLEScanResults();
+  _showList();
+  _nextScanAt = millis();
+}
+
+void BLEAnalyzerScreen::_startLiveScan()
+{
+  _bleScan->start(kScanCycleSeconds, &BLEAnalyzerScreen::_onScanComplete, true);
+  _scanInFlight = true;
+}
+
+void BLEAnalyzerScreen::_onScanComplete(NimBLEScanResults /*results*/)
+{
+  portENTER_CRITICAL(&_scanLock);
+  _scanCycleDone = true;
+  portEXIT_CRITICAL(&_scanLock);
+}
+
+void BLEAnalyzerScreen::_pollLiveScan()
+{
+  bool done;
+  portENTER_CRITICAL(&_scanLock);
+  done = _scanCycleDone;
+  if (done) _scanCycleDone = false;
+  portEXIT_CRITICAL(&_scanLock);
+  if (!done) return;
+
+  _scanInFlight = false;
+  _nextScanAt   = millis() + kScanCycleGapMs;
+  _scanResults  = _bleScan->getResults();
 
   int ns = Achievement.inc("ble_analyzer_scan");
   if (ns == 1) Achievement.unlock("ble_analyzer_scan");
+  if ((int)_scanResults.getCount() >= 20) {
+    int n20 = Achievement.inc("ble_analyzer_20");
+    if (n20 == 1) Achievement.unlock("ble_analyzer_20");
+  }
 
-  _showList();
+  _rebuildDevItems();
+  setCount(_devCount);
+  render();
+}
+
+void BLEAnalyzerScreen::_pruneStale()
+{
+  if (_state != STATE_LIST || _scanInFlight) return;
+
+  time_t now     = time(nullptr);
+  bool   changed = false;
+
+  for (int i = (int)_scanResults.getCount() - 1; i >= 0; i--) {
+    NimBLEAdvertisedDevice dev = _scanResults.getDevice(i);
+    if (now - dev.getTimestamp() <= kStaleTimeoutSec) continue;
+
+    _bleScan->erase(dev.getAddress());
+    changed = true;
+    if (_selectedIndex > i) _selectedIndex--;
+  }
+
+  if (!changed) return;
+  _scanResults = _bleScan->getResults();
+  _rebuildDevItems();
+  setCount(_devCount);
+  render();
+}
+
+void BLEAnalyzerScreen::_rebuildDevItems()
+{
+  int count = min((int)_scanResults.getCount(), (int)kMaxDevices);
+  _devCount = 0;
+  for (int i = 0; i < count; i++) {
+    NimBLEAdvertisedDevice dev = _scanResults.getDevice(i);
+    String name = _resolveName(dev);
+    if (name.length() > 0) {
+      _devLabel[i] = name;
+      _devSub[i]   = dev.getAddress().toString().c_str();
+    } else {
+      _devLabel[i] = dev.getAddress().toString().c_str();
+      _devSub[i]   = "";
+    }
+    _devItems[i]         = {_devLabel[i].c_str(),
+                             _devSub[i].length() > 0 ? _devSub[i].c_str() : nullptr};
+    _devItems[i].rssi    = (int16_t)dev.getRSSI();
+    _devItems[i].hasRssi = true;
+    _devCount++;
+  }
+}
+
+void BLEAnalyzerScreen::_stopLiveScan()
+{
+  if (_scanInFlight) {
+    _bleScan->stop();
+    _scanInFlight = false;
+    portENTER_CRITICAL(&_scanLock);
+    _scanCycleDone = false;
+    portEXIT_CRITICAL(&_scanLock);
+  }
 }
 
 void BLEAnalyzerScreen::_showList()
 {
   _state = STATE_LIST;
-  _devCount = 0;
-
-  int count = min((int)_scanResults.getCount(), (int)kMaxDevices);
-
-  if ((int)_scanResults.getCount() >= 20) {
-    int n20 = Achievement.inc("ble_analyzer_20");
-    if (n20 == 1) Achievement.unlock("ble_analyzer_20");
-  }
-  for (int i = 0; i < count; i++) {
-    NimBLEAdvertisedDevice dev = _scanResults.getDevice(i);
-    _devLabel[i] = dev.getAddress().toString().c_str();
-    _devSub[i]   = _resolveName(dev);
-    _devItems[i] = {_devLabel[i].c_str(),
-                    _devSub[i].length() > 0 ? _devSub[i].c_str() : nullptr};
-    _devCount++;
-  }
-
-  // Ensure non-empty list so DIR_BACK always works
-  if (_devCount == 0) {
-    _devLabel[0] = "No devices found";
-    _devItems[0] = {_devLabel[0].c_str()};
-    _devCount    = 1;
-  }
-
+  _rebuildDevItems();
   setItems(_devItems, _devCount);
 }
 
