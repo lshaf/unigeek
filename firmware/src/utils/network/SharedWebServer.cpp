@@ -267,9 +267,10 @@ void SharedWebServer::_registerRoutes() {
 
   // ── Captive-detection path redirects ──────────────────────────────────────
   // OS probes well-known paths to detect captive portals. Redirect to / when
-  // captive is active so the host-based routing above handles serving.
+  // captive (Evil Twin/Karma) or DNS-spoof captive (AP screen) is active so
+  // the host-based routing above handles serving.
   auto captiveProbe = [this](AsyncWebServerRequest* req) {
-    if (_captiveActive) req->redirect("/");
+    if (_captiveActive || _dnsSpoofActive) req->redirect("/");
     else req->send(204);
   };
   _server.on("/generate_204",         HTTP_GET, captiveProbe);
