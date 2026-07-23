@@ -9,6 +9,7 @@
 #include "utils/StorageUtil.h"
 
 #include "utils/network/WifiAttackUtil.h"
+#include "utils/network/EapolUtil.h"
 #include <WiFi.h>
 #include <cstring>
 
@@ -604,95 +605,46 @@ void WifiEapolCaptureScreen::_appendPcapFrame(const std::string& path,
   f.close();
 }
 
-// ── EAPOL message type parser ─────────────────────────────────────────────
-
-// Returns: 1=M1, 2=M2, 3=M3, 4=M4 (zero-nonce M2), 0=unknown.
-static int _parseEapolMsg(const uint8_t* data, uint16_t len) {
-  static const uint8_t snap[8] = {0xAA, 0xAA, 0x03, 0x00, 0x00, 0x00, 0x88, 0x8E};
-  for (uint16_t i = 24; i + 16 <= len; i++) {
-    bool match = true;
-    for (int k = 0; k < 8; k++) { if (data[i + k] != snap[k]) { match = false; break; } }
-    if (!match) continue;
-    const uint8_t* e = data + i + 8;
-    if (len < i + 8 + 49) return 0;     // need up to nonce end
-    if (e[1] != 0x03) return 0;
-    if (e[4] != 0x02) return 0;
-    uint16_t ki  = ((uint16_t)e[5] << 8) | e[6];
-    bool     ack = (ki & 0x0080) != 0;
-    bool     mic = (ki & 0x0100) != 0;
-    bool     ins = (ki & 0x0040) != 0;
-    if  (ack && !mic)        return 1;  // M1
-    if  (ack &&  mic)        return 3;  // M3
-    if (!ack &&  mic && !ins) {
-      // Distinguish M2 (non-zero nonce) from M4 (zero nonce)
-      bool nonceZero = true;
-      for (int z = 0; z < 32; z++) { if (e[17 + z] != 0) { nonceZero = false; break; } }
-      return nonceZero ? 4 : 2;
-    }
-    return 0;
-  }
-  return 0;
-}
-
-// ── Handshake validation (in-memory pairing, same logic as brute force) ──
+// ── Handshake validation (in-memory pairing via EapolUtil, shared with
+//    WifiUnigotchiScreen) ───────────────────────────────────────────────────
+//
+// A pair is only "validated" when the M1/M3 and M2 share BOTH the station
+// MAC *and* the EAPOL Replay Counter — MAC alone isn't enough, since this
+// screen actively deauths clients to force retries, and a stale M1/M3 from
+// one attempt paired with a fresh M2 from a later attempt (or vice versa)
+// produces a MIC that can never verify against that ANonce, no matter the
+// password.
 
 int WifiEapolCaptureScreen::_updateValidation(EapolEntry& entry,
                                                 const uint8_t* data, uint16_t len) {
-  static const uint8_t snap[8] = {0xAA, 0xAA, 0x03, 0x00, 0x00, 0x00, 0x88, 0x8E};
-  if (len < 40) return 0;
+  EapolUtil::Frame f;
+  EapolUtil::Msg   msg = EapolUtil::parse(data, len, f);
+  if (msg == EapolUtil::MSG_NONE || msg == EapolUtil::MSG_M4) return (int)msg;
+  if (entry.validated) return (int)msg;  // already confirmed — don't overwrite
 
-  // Find SNAP header
-  int snapOff = -1;
-  for (uint16_t i = 24; i + 16 <= len; i++) {
-    bool match = true;
-    for (int k = 0; k < 8; k++) { if (data[i + k] != snap[k]) { match = false; break; } }
-    if (match) { snapOff = i; break; }
-  }
-  if (snapOff < 0) return 0;
-
-  const uint8_t* e = data + snapOff + 8;
-  if (len < (uint16_t)(snapOff + 8 + 49)) return 0;
-  if (e[1] != 0x03 || e[4] != 0x02) return 0;
-
-  uint16_t ki  = ((uint16_t)e[5] << 8) | e[6];
-  bool     ack = (ki & 0x0080) != 0;
-  bool     mic = (ki & 0x0100) != 0;
-  bool     ins = (ki & 0x0040) != 0;
-
-  int msg = 0;
-  if (ack && !mic)       msg = 1;
-  else if (ack && mic)   msg = 3;
-  else if (!ack && mic && !ins) {
-    bool nonceZero = true;
-    for (int z = 0; z < 32; z++) { if (e[17 + z] != 0) { nonceZero = false; break; } }
-    msg = nonceZero ? 4 : 2;
-  }
-  if (msg == 0 || msg == 4) return msg;
-  if (entry.validated) return msg;  // already confirmed — don't overwrite
-
-  if (msg == 1 || msg == 3) {
-    // M1/M3: store ANonce + STA MAC (addr1 = DA = STA in AP→STA direction)
-    memcpy(entry.anonce, e + 17, 32);
-    memcpy(entry.staMacM1, data + 4, 6);
+  if (msg == EapolUtil::MSG_M1 || msg == EapolUtil::MSG_M3) {
+    memcpy(entry.anonce,   f.nonce,         32);
+    memcpy(entry.replayM1, f.replayCounter, 8);
+    memcpy(entry.staMacM1, f.staMac,        6);
     entry.hasAnonce = true;
-    // Reverse pair: check if buffered M2 from same STA
     if (entry.hasM2Data && entry.beaconWritten &&
-        memcmp(entry.staMacM1, entry.staMacM2, 6) == 0) {
+        memcmp(entry.staMacM1, entry.staMacM2, 6) == 0 &&
+        memcmp(entry.replayM1, entry.replayM2, 8) == 0) {
       entry.validated = true;
     }
-  } else if (msg == 2) {
-    // M2: store SNonce + STA MAC (addr2 = SA = STA in STA→AP direction)
-    memcpy(entry.m2Snonce, e + 17, 32);
-    memcpy(entry.staMacM2, data + 10, 6);
+  } else if (msg == EapolUtil::MSG_M2) {
+    memcpy(entry.m2Snonce, f.nonce,         32);
+    memcpy(entry.replayM2, f.replayCounter, 8);
+    memcpy(entry.staMacM2, f.staMac,        6);
     entry.hasM2Data = true;
-    // Forward pair: check if have M1/M3 from same STA
     if (entry.hasAnonce && entry.beaconWritten &&
-        memcmp(entry.staMacM1, entry.staMacM2, 6) == 0) {
+        memcmp(entry.staMacM1, entry.staMacM2, 6) == 0 &&
+        memcmp(entry.replayM1, entry.replayM2, 8) == 0) {
       entry.validated = true;
     }
   }
 
-  return msg;
+  return (int)msg;
 }
 
 // ── Main loop frame processor ─────────────────────────────────────────────
@@ -800,7 +752,8 @@ void WifiEapolCaptureScreen::_flush() {
       if (entry.validated) continue;
 
       auto  ssidIt = _ssidMap.find(cap.bssid);
-      int msg = _parseEapolMsg(cap.data, cap.len);
+      EapolUtil::Frame ef;
+      int msg = (int)EapolUtil::parse(cap.data, cap.len, ef);
       bool hasSsid = (ssidIt != _ssidMap.end());
 
       bool wasValid = false;  // entry.validated is false here (checked above)

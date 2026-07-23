@@ -6,6 +6,7 @@
 #include "core/ConfigManager.h"
 #include "utils/StorageUtil.h"
 #include "utils/HackerHead.h"
+#include "utils/network/EapolUtil.h"
 #include "ui/actions/InputSelectAction.h"
 
 #include <WiFi.h>
@@ -51,26 +52,6 @@ struct PcapGlobalHdr {
 };
 struct PcapPktHdr { uint32_t ts_sec; uint32_t ts_usec; uint32_t incl_len; uint32_t orig_len; };
 #pragma pack(pop)
-
-// ── EAPOL message parser (M1..M4) ──────────────────────────────────────────────
-static int _parseEapolMsg(const uint8_t* data, uint16_t len) {
-  static const uint8_t snap[8] = {0xAA, 0xAA, 0x03, 0x00, 0x00, 0x00, 0x88, 0x8E};
-  for (uint16_t i = 24; i + 16 <= len; i++) {
-    bool match = true;
-    for (int k = 0; k < 8; k++) { if (data[i + k] != snap[k]) { match = false; break; } }
-    if (!match) continue;
-    const uint8_t* e = data + i + 8;
-    if (len < i + 8 + 49) return 0;
-    if (e[1] != 0x03 || e[4] != 0x02) return 0;
-    uint16_t ki = ((uint16_t)e[5] << 8) | e[6];
-    bool ack = (ki & 0x0080), mic = (ki & 0x0100), secure = (ki & 0x0200);
-    if (ack && !mic) return 1;          // M1
-    if (ack &&  mic) return 3;          // M3
-    if (!ack && mic) return secure ? 4 : 2;  // M4 sets the Secure bit, M2 doesn't (matches oink)
-    return 0;
-  }
-  return 0;
-}
 
 // ── Lifecycle ───────────────────────────────────────────────────────────────
 
@@ -532,35 +513,40 @@ bool WifiUnigotchiScreen::_extractPmkid(const uint8_t* data, uint16_t len) {
   return false;
 }
 
+// Pairing via EapolUtil (shared with WifiEapolCaptureScreen). A pair is only
+// "validated" when the M1/M3 and M2 share BOTH the station MAC *and* the
+// EAPOL Replay Counter — MAC alone isn't enough, since active mode deauths
+// clients to force retries, and a stale M1/M3 from one attempt paired with
+// a fresh M2 from a later attempt (or vice versa) produces a MIC that can
+// never verify against that ANonce, no matter the password.
 int WifiUnigotchiScreen::_updateValidation(EapolEntry& entry, const uint8_t* data, uint16_t len) {
-  static const uint8_t snap[8] = {0xAA, 0xAA, 0x03, 0x00, 0x00, 0x00, 0x88, 0x8E};
-  if (len < 40) return 0;
-  int so = -1;
-  for (uint16_t i = 24; i + 16 <= len; i++) {
-    bool m = true; for (int k = 0; k < 8; k++) if (data[i + k] != snap[k]) { m = false; break; }
-    if (m) { so = i; break; }
+  EapolUtil::Frame f;
+  EapolUtil::Msg   msg = EapolUtil::parse(data, len, f);
+  if (msg == EapolUtil::MSG_NONE || msg == EapolUtil::MSG_M4) return (int)msg;
+  if (entry.validated) return (int)msg;
+
+  if (msg == EapolUtil::MSG_M1 || msg == EapolUtil::MSG_M3) {
+    memcpy(entry.anonce,   f.nonce,         32);
+    memcpy(entry.replayM1, f.replayCounter, 8);
+    memcpy(entry.staMacM1, f.staMac,        6);
+    entry.hasAnonce = true;
+    if (entry.hasM2Data &&
+        !memcmp(entry.staMacM1, entry.staMacM2, 6) &&
+        !memcmp(entry.replayM1, entry.replayM2, 8)) {
+      entry.validated = true;
+    }
+  } else if (msg == EapolUtil::MSG_M2) {
+    memcpy(entry.m2Snonce, f.nonce,         32);
+    memcpy(entry.replayM2, f.replayCounter, 8);
+    memcpy(entry.staMacM2, f.staMac,        6);
+    entry.hasM2Data = true;
+    if (entry.hasAnonce &&
+        !memcmp(entry.staMacM1, entry.staMacM2, 6) &&
+        !memcmp(entry.replayM1, entry.replayM2, 8)) {
+      entry.validated = true;
+    }
   }
-  if (so < 0) return 0;
-  const uint8_t* e = data + so + 8;
-  if (len < (uint16_t)(so + 8 + 49)) return 0;
-  if (e[1] != 0x03 || e[4] != 0x02) return 0;
-  uint16_t ki = ((uint16_t)e[5] << 8) | e[6];
-  bool ack = (ki & 0x0080), mic = (ki & 0x0100), secure = (ki & 0x0200);
-  int msg = 0;
-  if (ack && !mic) msg = 1; else if (ack && mic) msg = 3;
-  else if (!ack && mic) msg = secure ? 4 : 2;  // Secure bit splits M4 from M2 (matches oink)
-  if (msg == 0 || msg == 4) return msg;
-  if (entry.validated) return msg;
-  // Pair M1 ANonce + M2 SNonce by STA MAC. Validation is independent of storage
-  // and of whether a beacon was seen — the nonces in the frames are enough.
-  if (msg == 1 || msg == 3) {
-    memcpy(entry.anonce, e + 17, 32); memcpy(entry.staMacM1, data + 4, 6); entry.hasAnonce = true;
-    if (entry.hasM2Data && !memcmp(entry.staMacM1, entry.staMacM2, 6)) entry.validated = true;
-  } else if (msg == 2) {
-    memcpy(entry.m2Snonce, e + 17, 32); memcpy(entry.staMacM2, data + 10, 6); entry.hasM2Data = true;
-    if (entry.hasAnonce && !memcmp(entry.staMacM1, entry.staMacM2, 6)) entry.validated = true;
-  }
-  return msg;
+  return (int)msg;
 }
 
 int WifiUnigotchiScreen::_registerApTarget(const MacAddr& bssid, uint8_t ch, int8_t rssi) {
@@ -656,7 +642,8 @@ void WifiUnigotchiScreen::_flush() {
     auto ssidIt = _ssidMap.find(cap.bssid);
     if (ssidIt != _ssidMap.end() && entry.ssid.empty()) entry.ssid = ssidIt->second;
 
-    if (_parseEapolMsg(cap.data, cap.len) == 1 && !entry.pmkidSeen &&
+    EapolUtil::Frame pmkidFrame;
+    if (EapolUtil::parse(cap.data, cap.len, pmkidFrame) == EapolUtil::MSG_M1 && !entry.pmkidSeen &&
         _extractPmkid(cap.data, cap.len)) {
       entry.pmkidSeen = true; _pmkids++;
       if (Uni.Speaker) Uni.Speaker->beep();

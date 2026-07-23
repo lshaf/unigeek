@@ -54,8 +54,8 @@ public:
     std::string ssid;
     bool beaconWritten = false, validated = false, pmkidSeen = false;
     std::string filepath;
-    uint8_t anonce[32] = {}, staMacM1[6] = {}; bool hasAnonce = false;
-    uint8_t m2Snonce[32] = {}, staMacM2[6] = {}; bool hasM2Data = false;
+    uint8_t anonce[32] = {}, replayM1[8] = {}, staMacM1[6] = {}; bool hasAnonce = false;
+    uint8_t m2Snonce[32] = {}, replayM2[8] = {}, staMacM2[6] = {}; bool hasM2Data = false;
   };
 
   static constexpr int RING_SIZE = 16;
