@@ -5,10 +5,17 @@
 class ListScreen : public BaseScreen
 {
 public:
+  // NOTE: no default member initializers here — this project builds with a
+  // C++ standard where NSDMI disqualify aggregate-init, and dozens of call
+  // sites rely on brace-init like `{"Label"}` / `{"Label", "Sub"}`, which
+  // needs ListItem to stay a plain aggregate (trailing members then get
+  // zero/false from aggregate-init, same effective default).
   struct ListItem
   {
     const char* label;
     const char* sublabel;
+    int16_t     rssi;      // dBm, only meaningful when hasRssi
+    bool        hasRssi;   // when true, label is tinted by RSSI strength
   };
 
   template <size_t N>
@@ -67,6 +74,7 @@ public:
       {
         _selectedIndex = (_selectedIndex == 0) ? eff - 1 : _selectedIndex - 1;
         _scrollIfNeeded();
+        _resetMarquee();
         onRender();
         if (Uni.Speaker) Uni.Speaker->beep();
       }
@@ -74,6 +82,7 @@ public:
       {
         _selectedIndex = (_selectedIndex >= eff - 1) ? 0 : _selectedIndex + 1;
         _scrollIfNeeded();
+        _resetMarquee();
         onRender();
         if (Uni.Speaker) Uni.Speaker->beep();
       }
@@ -82,6 +91,7 @@ public:
         uint8_t page = bodyH() / ITEM_H;
         _selectedIndex = (_selectedIndex >= page) ? _selectedIndex - page : 0;
         _scrollIfNeeded();
+        _resetMarquee();
         onRender();
         if (Uni.Speaker) Uni.Speaker->beep();
       }
@@ -91,6 +101,7 @@ public:
         uint8_t last = eff - 1;
         _selectedIndex = (_selectedIndex + page <= last) ? _selectedIndex + page : last;
         _scrollIfNeeded();
+        _resetMarquee();
         onRender();
         if (Uni.Speaker) Uni.Speaker->beep();
       }
@@ -98,7 +109,10 @@ public:
       {
         onItemSelected(_selectedIndex);
       }
+      return;
     }
+
+    _updateMarquee();
   }
 
   void onRender() override
@@ -120,7 +134,8 @@ public:
       const ListItem* item     = &_items[idx];
       bool     selected = (idx == _selectedIndex);
       uint16_t bg       = selected ? Config.getThemeColor() : TFT_BLACK;
-      uint16_t fg       = selected ? TFT_WHITE : TFT_LIGHTGREY;
+      uint16_t fg       = item->hasRssi ? _rssiColor(item->rssi)
+                                         : (selected ? TFT_WHITE : TFT_LIGHTGREY);
 
       Sprite sprite(&lcd);
       sprite.createSprite(listW, rowH);
@@ -132,17 +147,20 @@ public:
 
       sprite.setTextColor(fg, bg);
 
+      int16_t labelAvailW = listW - 12;
       if (item->sublabel)
       {
-        sprite.drawString(item->label, 6, (ITEM_H / 2) - 4 + dy);
         sprite.setTextColor(selected ? TFT_CYAN : TFT_DARKGREY, bg);
         int16_t subX = listW - 6 - sprite.textWidth(item->sublabel);
         sprite.drawString(item->sublabel, subX, (ITEM_H / 2) - 4 + dy);
+        labelAvailW = subX - 6 - 4;
+        sprite.setTextColor(fg, bg);
       }
+
+      if (selected && sprite.textWidth(item->label) > labelAvailW)
+        sprite.drawString(_marqueeWindow(sprite, item->label, labelAvailW), 6, (ITEM_H / 2) - 4 + dy);
       else
-      {
         sprite.drawString(item->label, 6, (ITEM_H / 2) - 4 + dy);
-      }
 
       sprite.pushSprite(bodyX(), bodyY() + screenY);
       sprite.deleteSprite();
@@ -217,6 +235,7 @@ protected:
     uint8_t eff = _effectiveCount();
     if (eff > 0 && _selectedIndex >= eff) _selectedIndex = eff - 1;
     _scrollIfNeeded();
+    _marqueeOffset = 0;
   }
 
 private:
@@ -225,7 +244,67 @@ private:
   uint8_t       _scrollOffset     = 0;
   bool          _partialTopActive = false;
 
+  uint32_t      _marqueeTimer     = 0;
+  int16_t       _marqueeOffset    = 0;
+
   static constexpr uint8_t ITEM_H = 22;
+
+  static uint16_t _rssiColor(int16_t rssi)
+  {
+    if (rssi >= -60) return TFT_GREEN;
+    if (rssi >= -75) return TFT_YELLOW;
+    return TFT_RED;
+  }
+
+  void _resetMarquee()
+  {
+    _marqueeOffset = 0;
+    _marqueeTimer  = millis();
+  }
+
+  // Redraws the whole list (small — a handful of rows, each a cheap sprite
+  // blit) only while the selected row's label actually overflows its
+  // available width. No-op for every other ListScreen subclass's rows.
+  void _updateMarquee()
+  {
+    uint8_t eff = _effectiveCount();
+    if (eff == 0 || _selectedIndex >= eff) return;
+
+    const ListItem& item   = _items[_selectedIndex];
+    int16_t         listW  = bodyW() - 4;
+    int16_t         availW = listW - 12;
+    if (item.sublabel)
+      availW = (listW - 6 - Uni.Lcd.textWidth(item.sublabel)) - 10;
+
+    if (Uni.Lcd.textWidth(item.label) <= availW) {
+      if (_marqueeOffset != 0) { _marqueeOffset = 0; onRender(); }
+      return;
+    }
+
+    if (millis() - _marqueeTimer < 180) return;
+    _marqueeTimer = millis();
+    _marqueeOffset++;
+    onRender();
+  }
+
+  // Returns the visible slice of `label` for the current marquee offset,
+  // shrinking from the right until it fits `availW` pixels. The label loops
+  // ("label     label     ...") so the ticker scrolls seamlessly.
+  String _marqueeWindow(Sprite& sprite, const char* label, int16_t availW)
+  {
+    String base(label);
+    base += "     ";
+    int16_t loopLen = (int16_t)base.length();
+    if (loopLen <= 0) return String(label);
+
+    int16_t off = _marqueeOffset % loopLen;
+    String  doubled = base + base;
+    String  window  = doubled.substring(off);
+
+    int16_t n = window.length();
+    while (n > 1 && sprite.textWidth(window.substring(0, n)) > availW) n--;
+    return window.substring(0, n);
+  }
 
   uint8_t _effectiveCount()
   {
