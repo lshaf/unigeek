@@ -248,8 +248,17 @@ void SharedWebServer::_registerRoutes() {
     } else if (_dnsSpoofActive && _dnsSpoofCb) {
       _dnsSpoofCb(req, _dnsSpoofCtx);
     } else if (_isCaptiveDomain(host.c_str())) {
-      if (_captiveActive) { _visitCount++; if (_onVisit) _onVisit(_ctx); _serveCaptive(req); }
-      else _sendUnavailable(req);
+      if (!_captiveActive) { _sendUnavailable(req); return; }
+      // Some OS connectivity checkers (notably Linux NetworkManager) only
+      // recognize a captive portal when the probe gets redirected to a
+      // *different* host — serving 200 straight back under the domain they
+      // probed isn't reliably picked up. Bounce anything that isn't already
+      // addressed to the AP's own IP before serving the page.
+      if (!host.equalsIgnoreCase(WiFi.softAPIP().toString())) {
+        _redirectToPortal(req);
+        return;
+      }
+      _visitCount++; if (_onVisit) _onVisit(_ctx); _serveCaptive(req);
     } else {
       _sendUnavailable(req);
     }
@@ -269,7 +278,7 @@ void SharedWebServer::_registerRoutes() {
   // OS probes well-known paths to detect captive portals. Redirect to / when
   // captive is active so the host-based routing above handles serving.
   auto captiveProbe = [this](AsyncWebServerRequest* req) {
-    if (_captiveActive) req->redirect("/");
+    if (_captiveActive) _redirectToPortal(req);
     else req->send(204);
   };
   _server.on("/generate_204",         HTTP_GET, captiveProbe);
@@ -381,6 +390,13 @@ void SharedWebServer::_registerRoutes() {
       _dnsSpoofCb(req, _dnsSpoofCtx);
     } else if (_isCaptiveDomain(host.c_str())) {
       if (!_captiveActive) { _sendUnavailable(req); return; }
+      // Same reasoning as GET / — probes under a domain host need to see an
+      // actual redirect elsewhere, not a same-host 200/asset, to be reliably
+      // recognized as "there's a captive portal here".
+      if (!host.equalsIgnoreCase(WiFi.softAPIP().toString())) {
+        _redirectToPortal(req);
+        return;
+      }
       // Serve portal asset if it exists, otherwise redirect to portal root
       if (!_portalBasePath.isEmpty() && Uni.Storage && Uni.Storage->isAvailable()) {
         String asset = _portalBasePath + path;
@@ -389,7 +405,7 @@ void SharedWebServer::_registerRoutes() {
           return;
         }
       }
-      req->redirect("/");
+      _redirectToPortal(req);
     } else {
       _sendUnavailable(req);
     }
@@ -610,7 +626,23 @@ bool SharedWebServer::_isCaptiveDomain(const char* domain) {
          strcasecmp(domain, "ipv6.msftncsi.com") == 0 ||
          strcasecmp(domain, "www.msftncsi.com") == 0 ||
          strcasecmp(domain, "nmcheck.gnome.org") == 0 ||
-         strcasecmp(domain, "detectportal.firefox.com") == 0;
+         strcasecmp(domain, "detectportal.firefox.com") == 0 ||
+         // Broader OS/desktop-environment connectivity checkers — catches
+         // things like connectivity-check.ubuntu.com, network-check-*, etc.
+         // that don't have a single canonical hostname worth hardcoding.
+         strcasestr(domain, "ncsi") ||
+         strcasestr(domain, "nmcheck") ||
+         strcasestr(domain, "gnome") ||
+         strcasestr(domain, "ubuntu") ||
+         strcasestr(domain, "canonical") ||
+         strcasestr(domain, "networkcheck") ||
+         strcasestr(domain, "hotspot");
+}
+
+void SharedWebServer::_redirectToPortal(AsyncWebServerRequest* req) {
+  AsyncWebServerResponse* response = req->beginResponse(302);
+  response->addHeader("Location", "http://" + WiFi.softAPIP().toString() + "/");
+  req->send(response);
 }
 
 void SharedWebServer::_serveCaptive(AsyncWebServerRequest* req) {
