@@ -75,6 +75,7 @@ struct PcapPktHdr {
 // ── Destructor ────────────────────────────────────────────────────────────
 
 WifiEapolCaptureScreen::~WifiEapolCaptureScreen() {
+  _stopLiveScan();
   _skipBeacons = false;
   esp_wifi_set_promiscuous_rx_cb(nullptr);
   esp_wifi_set_promiscuous(false);
@@ -147,13 +148,12 @@ void WifiEapolCaptureScreen::_showMenu() {
 void WifiEapolCaptureScreen::onItemSelected(uint8_t index) {
   if (_phase == PHASE_SELECT_WIFI) {
     if (index >= _scanCount) return;
-    // _scanLabels[index] is "[ch] ssid"
-    _target.channel = atoi(_scanLabels[index] + 1);
-    const char* sp = strchr(_scanLabels[index], ']');
-    _target.ssid = (sp && sp[1]) ? String(sp + 2) : String("(hidden)");
+    _target.channel = _scanChannel[index];
+    _target.ssid    = _scanSsid[index];
     sscanf(_scanValues[index], "%hhx:%hhx:%hhx:%hhx:%hhx:%hhx",
            &_target.bssid[0], &_target.bssid[1], &_target.bssid[2],
            &_target.bssid[3], &_target.bssid[4], &_target.bssid[5]);
+    _stopLiveScan();
     _phase = PHASE_MENU;
     _showMenu();
     return;
@@ -275,42 +275,136 @@ void WifiEapolCaptureScreen::onItemSelected(uint8_t index) {
   }
 }
 
+// ── WiFi Scan (live/rolling) ─────────────────────────────────────────────────
+//
+// Async scan, polled from onUpdate() while PHASE_SELECT_WIFI is active.
+// Results merge into the per-slot arrays by BSSID (stable cursor); entries
+// not re-seen for STALE_TIMEOUT_MS are pruned. Same pattern as
+// WifiAnalyzerScreen/WifiEvilTwinScreen/WifiDeautherScreen.
+//
+// Async mode sidesteps the old blocking-scan concern entirely: the framework's
+// hard 10 s cap (WiFiScan.cpp's WIFI_SCAN_DONE_BIT wait) only applies to the
+// *synchronous* scanNetworks() call this used to make — with async=true we
+// just poll scanComplete() ourselves, so the per-channel dwell below (600 ms,
+// tuned so weaker/less chatty APs still get airtime) no longer has to fit
+// under that timeout.
+
 void WifiEapolCaptureScreen::_selectWifi() {
-  _phase = PHASE_SELECT_WIFI;
-  ShowStatusAction::show("Scanning (10s)...", 0);
+  _phase     = PHASE_SELECT_WIFI;
+  _scanCount = 0;
+  setItems(_scanItems, 0);
 
   WiFi.mode(WIFI_STA);
   WiFi.disconnect();
-  // Long-ish sweep so weaker / less chatty APs get airtime, but the per-channel
-  // dwell MUST stay under the framework's hard 10 s sync-scan timeout
-  // (WiFiScan.cpp waits WIFI_SCAN_DONE_BIT for 10000 ms, else WIFI_SCAN_FAILED).
-  // 600 ms × up to 14 channels = 8.4 s — comfortably below 10 s. The previous
-  // 770 ms × 13 channels = 10.01 s tipped over the timeout in 13-channel
-  // regulatory domains (EU/BR), so every scan returned "No networks found".
-  const int total = WiFi.scanNetworks(false, false, false, 600, 0);
+  _nextScanAt = millis();
+}
 
-  if (total <= 0) {
-    ShowStatusAction::show("No networks found");
-    _phase = PHASE_MENU;
-    _showMenu();
+void WifiEapolCaptureScreen::_startLiveScan() {
+  WiFi.scanNetworks(true, false, false, 600, 0);
+  _scanInFlight = true;
+}
+
+void WifiEapolCaptureScreen::_pollLiveScan() {
+  int total = WiFi.scanComplete();
+  if (total == WIFI_SCAN_RUNNING) return;
+  if (total == WIFI_SCAN_FAILED) {
+    _scanInFlight = false;
+    _nextScanAt   = millis() + SCAN_CYCLE_GAP_MS;
     return;
   }
 
-  _scanCount = total > MAX_SCAN ? MAX_SCAN : total;
+  if (total > MAX_SCAN) total = MAX_SCAN;
+  for (int i = 0; i < total; i++) _mergeScanResult(i);
+
+  WiFi.scanDelete();
+  _scanInFlight = false;
+  _nextScanAt   = millis() + SCAN_CYCLE_GAP_MS;
+
+  _rebuildScanItems();
+  setCount(_scanCount);
+  render();
+}
+
+void WifiEapolCaptureScreen::_mergeScanResult(int idx) {
+  String bssid = WiFi.BSSIDstr(idx);
+
+  int slot = -1;
   for (int i = 0; i < _scanCount; i++) {
-    snprintf(_scanLabels[i], sizeof(_scanLabels[i]), "[%2d] %s",
-             WiFi.channel(i), WiFi.SSID(i).c_str());
-    snprintf(_scanValues[i], sizeof(_scanValues[i]), "%s",
-             WiFi.BSSIDstr(i).c_str());
-    _scanItems[i] = {_scanLabels[i], _scanValues[i]};
+    if (bssid.equalsIgnoreCase(_scanValues[i])) { slot = i; break; }
+  }
+  if (slot < 0) {
+    if (_scanCount >= MAX_SCAN) return;
+    slot = _scanCount++;
   }
 
-  setItems(_scanItems, _scanCount);
+  String ssid = WiFi.SSID(idx);
+  snprintf(_scanSsid[slot],   sizeof(_scanSsid[slot]),   "%s", ssid.isEmpty() ? "(hidden)" : ssid.c_str());
+  snprintf(_scanValues[slot], sizeof(_scanValues[slot]), "%s", bssid.c_str());
+  _scanChannel[slot]  = (uint8_t)WiFi.channel(idx);
+  _scanRssi[slot]     = (int16_t)WiFi.RSSI(idx);
+  _scanLastSeen[slot] = millis();
+}
+
+void WifiEapolCaptureScreen::_pruneStale() {
+  if (_phase != PHASE_SELECT_WIFI || _scanCount == 0) return;
+
+  unsigned long now     = millis();
+  bool          changed = false;
+
+  for (int i = _scanCount - 1; i >= 0; i--) {
+    if (now - _scanLastSeen[i] <= STALE_TIMEOUT_MS) continue;
+
+    for (int j = i; j < _scanCount - 1; j++) {
+      memcpy(_scanSsid[j],   _scanSsid[j + 1],   sizeof(_scanSsid[j]));
+      memcpy(_scanValues[j], _scanValues[j + 1], sizeof(_scanValues[j]));
+      _scanChannel[j]  = _scanChannel[j + 1];
+      _scanRssi[j]     = _scanRssi[j + 1];
+      _scanLastSeen[j] = _scanLastSeen[j + 1];
+    }
+    _scanCount--;
+    changed = true;
+
+    if (_selectedIndex > i) _selectedIndex--;
+  }
+
+  if (!changed) return;
+  _rebuildScanItems();
+  setCount(_scanCount);
+  render();
+}
+
+void WifiEapolCaptureScreen::_rebuildScanItems() {
+  for (int i = 0; i < _scanCount; i++) {
+    snprintf(_scanLabels[i], sizeof(_scanLabels[i]), "[%2d] %s",
+             _scanChannel[i], _scanSsid[i]);
+    _scanItems[i]         = {_scanLabels[i], _scanValues[i]};
+    _scanItems[i].rssi    = _scanRssi[i];
+    _scanItems[i].hasRssi = true;
+  }
+}
+
+void WifiEapolCaptureScreen::_stopLiveScan() {
+  if (_scanInFlight) {
+    WiFi.scanDelete();
+    _scanInFlight = false;
+  }
 }
 
 void WifiEapolCaptureScreen::onUpdate() {
   if (_phase == PHASE_MENU || _phase == PHASE_SELECT_WIFI) {
     ListScreen::onUpdate();
+
+    if (_phase == PHASE_SELECT_WIFI) {
+      if (_scanInFlight) {
+        _pollLiveScan();
+      } else if (millis() >= _nextScanAt) {
+        _startLiveScan();
+      }
+      if (millis() - _lastPruneAt >= 1000) {
+        _lastPruneAt = millis();
+        _pruneStale();
+      }
+    }
     return;
   }
 
@@ -448,6 +542,7 @@ void WifiEapolCaptureScreen::onRender() {
 
 void WifiEapolCaptureScreen::onBack() {
   if (_phase == PHASE_SELECT_WIFI) {
+    _stopLiveScan();
     _phase = PHASE_MENU;
     _showMenu();
     return;
