@@ -262,13 +262,15 @@ void WifiWatchdogScreen::_drainRings()
     const auto& ev = _ring[_ringTail];
     auto it = _deauthMap.find(ev.mac);
     if (it == _deauthMap.end()) {
-      DeauthEntry e{};
-      e.timestamp  = ev.timestamp;
-      e.counter    = 1;
-      e.isDisassoc = ev.isDisassoc;
-      auto ssidIt = _ssidMap.find(ev.mac);
-      if (ssidIt != _ssidMap.end()) e.ssid = ssidIt->second;
-      _deauthMap.emplace(ev.mac, e);
+      if (_deauthMap.size() < MAX_TRACKED_MAC) {
+        DeauthEntry e{};
+        e.timestamp  = ev.timestamp;
+        e.counter    = 1;
+        e.isDisassoc = ev.isDisassoc;
+        auto ssidIt = _ssidMap.find(ev.mac);
+        if (ssidIt != _ssidMap.end()) e.ssid = ssidIt->second;
+        _deauthMap.emplace(ev.mac, e);
+      }
       gotDeauth = true;
       if (Achievement.inc("wifi_deauth_detected") == 1)
         Achievement.unlock("wifi_deauth_detected");
@@ -284,18 +286,25 @@ void WifiWatchdogScreen::_drainRings()
     const auto& ev = _ssidRing[_ssidRingTail];
     MacAddr bssid{};
     memcpy(bssid.data(), ev.bssid.data(), 6);
-    if (_ssidMap.find(bssid) == _ssidMap.end())
+    if (_ssidMap.find(bssid) == _ssidMap.end() && _ssidMap.size() < MAX_TRACKED_MAC)
       _ssidMap.emplace(bssid, std::string(ev.ssid));
 
     // Build twin map: SSID → list of unique BSSIDs
     if (ev.ssid[0] != '\0') {
       std::string ssidKey(ev.ssid);
-      auto& list = _twinMap[ssidKey];
-      bool found = false;
-      for (auto& b : list)
-        if (b.bssid == bssid) { found = true; break; }
-      if (!found && list.size() < 8)
-        list.push_back({bssid, ev.channel});
+      auto twinIt = _twinMap.find(ssidKey);
+      if (twinIt == _twinMap.end()) {
+        if (_twinMap.size() < MAX_TRACKED_MAC)
+          twinIt = _twinMap.emplace(ssidKey, std::vector<BssidInfo>{}).first;
+      }
+      if (twinIt != _twinMap.end()) {
+        auto& list = twinIt->second;
+        bool found = false;
+        for (auto& b : list)
+          if (b.bssid == bssid) { found = true; break; }
+        if (!found && list.size() < 8)
+          list.push_back({bssid, ev.channel});
+      }
     }
 
     _ssidRingTail = (_ssidRingTail + 1) % MAX_RING;
@@ -307,14 +316,16 @@ void WifiWatchdogScreen::_drainRings()
     memcpy(src.data(), ev.src.data(), 6);
     auto it = _probeMap.find(src);
     if (it == _probeMap.end()) {
-      ProbeEntry e{};
-      e.timestamp = ev.timestamp;
-      e.count     = 1;
-      if (ev.ssid[0] != '\0') {
-        memcpy(e.ssids[0], ev.ssid, 33);
-        e.ssidCount = 1;
+      if (_probeMap.size() < MAX_TRACKED_MAC) {
+        ProbeEntry e{};
+        e.timestamp = ev.timestamp;
+        e.count     = 1;
+        if (ev.ssid[0] != '\0') {
+          memcpy(e.ssids[0], ev.ssid, 33);
+          e.ssidCount = 1;
+        }
+        _probeMap.emplace(src, e);
       }
-      _probeMap.emplace(src, e);
       if (Achievement.inc("wifi_probe_logged") == 1)
         Achievement.unlock("wifi_probe_logged");
     } else {
@@ -337,11 +348,13 @@ void WifiWatchdogScreen::_drainRings()
     memcpy(bssid.data(), ev.bssid.data(), 6);
     auto it = _beaconWindow.find(bssid);
     if (it == _beaconWindow.end()) {
-      BeaconWindow w{};
-      w.count = 1;
-      auto ssidIt = _ssidMap.find(bssid);
-      if (ssidIt != _ssidMap.end()) strncpy(w.ssid, ssidIt->second.c_str(), 32);
-      _beaconWindow.emplace(bssid, w);
+      if (_beaconWindow.size() < MAX_TRACKED_MAC) {
+        BeaconWindow w{};
+        w.count = 1;
+        auto ssidIt = _ssidMap.find(bssid);
+        if (ssidIt != _ssidMap.end()) strncpy(w.ssid, ssidIt->second.c_str(), 32);
+        _beaconWindow.emplace(bssid, w);
+      }
     } else {
       if (it->second.count < 65535) ++it->second.count;
       if (it->second.ssid[0] == '\0') {
@@ -364,11 +377,13 @@ void WifiWatchdogScreen::_updateRates()
   for (auto& kv : _beaconWindow) {
     auto it = _beaconMap.find(kv.first);
     if (it == _beaconMap.end()) {
-      BeaconEntry e{};
-      strncpy(e.ssid, kv.second.ssid, 32);
-      e.ratePerSec = kv.second.count;
-      e.lastSeen   = now;
-      _beaconMap.emplace(kv.first, e);
+      if (_beaconMap.size() < MAX_TRACKED_MAC) {
+        BeaconEntry e{};
+        strncpy(e.ssid, kv.second.ssid, 32);
+        e.ratePerSec = kv.second.count;
+        e.lastSeen   = now;
+        _beaconMap.emplace(kv.first, e);
+      }
     } else {
       it->second.ratePerSec = kv.second.count;
       it->second.lastSeen   = now;
