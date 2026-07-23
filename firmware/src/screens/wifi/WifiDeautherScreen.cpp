@@ -22,6 +22,7 @@ WifiDeautherScreen::~WifiDeautherScreen()
     delete _attacker;
     _attacker = nullptr;
   }
+  _stopLiveScan();
 }
 
 // ── Lifecycle ─────────────────────────────────────────────────────────────
@@ -46,10 +47,11 @@ void WifiDeautherScreen::onItemSelected(uint8_t index)
     }
   } else if (_state == STATE_SELECT_WIFI && index < _scanCount) {
     _target.ssid    = _scanLabels[index];
-    _target.channel = atoi(_scanLabels[index] + 1);
+    _target.channel = _scanChannel[index];
     sscanf(_scanValues[index], "%hhx:%hhx:%hhx:%hhx:%hhx:%hhx",
            &_target.bssid[0], &_target.bssid[1], &_target.bssid[2],
            &_target.bssid[3], &_target.bssid[4], &_target.bssid[5]);
+    _stopLiveScan();
     _showMain();
   }
 }
@@ -58,6 +60,18 @@ void WifiDeautherScreen::onUpdate()
 {
   if (_state != STATE_DEAUTHING) {
     ListScreen::onUpdate();
+
+    if (_state == STATE_SELECT_WIFI) {
+      if (_scanInFlight) {
+        _pollLiveScan();
+      } else if (millis() >= _nextScanAt) {
+        _startLiveScan();
+      }
+      if (millis() - _lastPruneAt >= 1000) {
+        _lastPruneAt = millis();
+        _pruneStale();
+      }
+    }
     return;
   }
 
@@ -88,6 +102,7 @@ void WifiDeautherScreen::onUpdate()
 void WifiDeautherScreen::onBack()
 {
   if (_state == STATE_SELECT_WIFI) {
+    _stopLiveScan();
     _showMain();
   } else if (_state == STATE_DEAUTHING) {
     _stopDeauth();
@@ -121,30 +136,116 @@ void WifiDeautherScreen::_showMain()
   }
 }
 
+// ── WiFi Scan (live/rolling) ─────────────────────────────────────────────────
+//
+// Async scan, polled from onUpdate() while STATE_SELECT_WIFI is active.
+// Results are merged into the per-slot arrays by BSSID so an already-listed
+// network keeps its row (stable cursor); networks not re-seen for
+// STALE_TIMEOUT_MS are pruned. Mirrors WifiAnalyzerScreen/WifiEvilTwinScreen.
+
 void WifiDeautherScreen::_selectWifi()
 {
-  _state = STATE_SELECT_WIFI;
-  ShowStatusAction::show("Scanning...", 0);
+  _state     = STATE_SELECT_WIFI;
+  _scanCount = 0;
+  setItems(_scanItems, 0);
+  _nextScanAt = millis();
+}
 
+void WifiDeautherScreen::_startLiveScan()
+{
   WiFi.mode(WIFI_STA);
-  const int total = WiFi.scanNetworks();
+  WiFi.scanNetworks(true, false);
+  _scanInFlight = true;
+}
 
-  if (total == 0) {
-    ShowStatusAction::show("No networks found");
-    _showMain();
+void WifiDeautherScreen::_pollLiveScan()
+{
+  int total = WiFi.scanComplete();
+  if (total == WIFI_SCAN_RUNNING) return;
+  if (total == WIFI_SCAN_FAILED) {
+    _scanInFlight = false;
+    _nextScanAt   = millis() + SCAN_CYCLE_GAP_MS;
     return;
   }
 
-  _scanCount = total > MAX_SCAN ? MAX_SCAN : total;
+  if (total > MAX_SCAN) total = MAX_SCAN;
+  for (int i = 0; i < total; i++) _mergeScanResult(i);
+
+  WiFi.scanDelete();
+  _scanInFlight = false;
+  _nextScanAt   = millis() + SCAN_CYCLE_GAP_MS;
+
+  _rebuildScanItems();
+  setCount(_scanCount);
+  render();
+}
+
+void WifiDeautherScreen::_mergeScanResult(int idx)
+{
+  String bssid = WiFi.BSSIDstr(idx);
+
+  int slot = -1;
   for (int i = 0; i < _scanCount; i++) {
-    snprintf(_scanLabels[i], sizeof(_scanLabels[i]), "[%2d] %s",
-             WiFi.channel(i), WiFi.SSID(i).c_str());
-    snprintf(_scanValues[i], sizeof(_scanValues[i]), "%s",
-             WiFi.BSSIDstr(i).c_str());
-    _scanItems[i] = {_scanLabels[i], _scanValues[i]};
+    if (bssid.equalsIgnoreCase(_scanValues[i])) { slot = i; break; }
+  }
+  if (slot < 0) {
+    if (_scanCount >= MAX_SCAN) return;
+    slot = _scanCount++;
   }
 
-  setItems(_scanItems, _scanCount);
+  snprintf(_scanSsid[slot],   sizeof(_scanSsid[slot]),   "%s", WiFi.SSID(idx).c_str());
+  snprintf(_scanValues[slot], sizeof(_scanValues[slot]), "%s", bssid.c_str());
+  _scanChannel[slot]  = (uint8_t)WiFi.channel(idx);
+  _scanRssi[slot]     = (int16_t)WiFi.RSSI(idx);
+  _scanLastSeen[slot] = millis();
+}
+
+void WifiDeautherScreen::_pruneStale()
+{
+  if (_state != STATE_SELECT_WIFI || _scanCount == 0) return;
+
+  unsigned long now     = millis();
+  bool          changed = false;
+
+  for (int i = _scanCount - 1; i >= 0; i--) {
+    if (now - _scanLastSeen[i] <= STALE_TIMEOUT_MS) continue;
+
+    for (int j = i; j < _scanCount - 1; j++) {
+      memcpy(_scanSsid[j],   _scanSsid[j + 1],   sizeof(_scanSsid[j]));
+      memcpy(_scanValues[j], _scanValues[j + 1], sizeof(_scanValues[j]));
+      _scanChannel[j]  = _scanChannel[j + 1];
+      _scanRssi[j]     = _scanRssi[j + 1];
+      _scanLastSeen[j] = _scanLastSeen[j + 1];
+    }
+    _scanCount--;
+    changed = true;
+
+    if (_selectedIndex > i) _selectedIndex--;
+  }
+
+  if (!changed) return;
+  _rebuildScanItems();
+  setCount(_scanCount);
+  render();
+}
+
+void WifiDeautherScreen::_rebuildScanItems()
+{
+  for (int i = 0; i < _scanCount; i++) {
+    snprintf(_scanLabels[i], sizeof(_scanLabels[i]), "[%2d] %s",
+             _scanChannel[i], _scanSsid[i]);
+    _scanItems[i]         = {_scanLabels[i], _scanValues[i]};
+    _scanItems[i].rssi    = _scanRssi[i];
+    _scanItems[i].hasRssi = true;
+  }
+}
+
+void WifiDeautherScreen::_stopLiveScan()
+{
+  if (_scanInFlight) {
+    WiFi.scanDelete();
+    _scanInFlight = false;
+  }
 }
 
 void WifiDeautherScreen::_startDeauth()

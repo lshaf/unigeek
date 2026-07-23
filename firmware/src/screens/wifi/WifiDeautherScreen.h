@@ -59,10 +59,28 @@ private:
   String   _modeSub;
   String   _targetSub;
 
+  static constexpr unsigned long SCAN_CYCLE_GAP_MS = 3000;
+  static constexpr unsigned long STALE_TIMEOUT_MS  = 15000;
+
   ListItem _scanItems[MAX_SCAN];
   char     _scanLabels[MAX_SCAN][52];
-  char     _scanValues[MAX_SCAN][18];
+  char     _scanValues[MAX_SCAN][18];  // BSSID string, also the sublabel
+  char     _scanSsid[MAX_SCAN][33];
+  uint8_t  _scanChannel[MAX_SCAN]  = {};
+  int16_t  _scanRssi[MAX_SCAN]     = {};
+  unsigned long _scanLastSeen[MAX_SCAN] = {};
   int      _scanCount = 0;
+
+  bool          _scanInFlight = false;
+  unsigned long _nextScanAt   = 0;
+  unsigned long _lastPruneAt  = 0;
+
+  void _startLiveScan();
+  void _pollLiveScan();
+  void _mergeScanResult(int idx);
+  void _pruneStale();
+  void _rebuildScanItems();
+  void _stopLiveScan();
 
   static ApEntry      _allTargets[MAX_ALL];
   static int          _allCount;
