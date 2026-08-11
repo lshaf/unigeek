@@ -9,6 +9,43 @@
 #include "SubGhzDecoders.h"
 #include <ELECHOUSE_CC1101_SRC_DRV.h>
 
+// ── CC1101 antenna-path selection ───────────────────────────────────────────
+// Select the appropriate RF switch path for the requested frequency band.
+// Only boards equipped with the CC1101 antenna switch define this block;
+// on other boards, cc1101SetFrequency() simply changes the CC1101 frequency.
+#ifdef DEVICE_HAS_CC1101_ANTENNA_SWITCH
+
+static void cc1101SetAntennaPath(float mhz) {
+    if (mhz >= 300.0f && mhz <= 348.0f) {
+        // 315 MHz path
+        digitalWrite(CC1101_SW1_PIN, HIGH);
+        digitalWrite(CC1101_SW0_PIN, LOW);
+    }
+    else if (mhz >= 387.0f && mhz <= 464.0f) {
+        // 434 MHz path
+        digitalWrite(CC1101_SW1_PIN, HIGH);
+        digitalWrite(CC1101_SW0_PIN, HIGH);
+    }
+    else if (mhz >= 779.0f && mhz <= 928.0f) {
+        // 868 / 915 MHz path
+        digitalWrite(CC1101_SW1_PIN, LOW);
+        digitalWrite(CC1101_SW0_PIN, HIGH);
+    }
+}
+
+#endif
+
+static void cc1101SetFrequency(float mhz) {
+#ifdef DEVICE_HAS_CC1101_ANTENNA_SWITCH
+  cc1101SetAntennaPath(mhz);
+#endif
+
+    // Program the CC1101 frequency registers. The actual VCO calibration is
+    // deliberately triggered by SetRx() at call sites that require a fresh
+    // calibration for the newly selected frequency (e.g. _tunedRssi()).
+    ELECHOUSE_cc1101.setMHZ(mhz);
+}
+
 // ── Frequency list (Bruce rf_utils.cpp) ─────────────────────────────────────
 
 static const float kFreqList[] = {
@@ -102,7 +139,7 @@ bool CC1101Util::setFrequency(float mhz) {
                (mhz >= 779 && mhz <= 928);
   if (!valid) return false;
   _freq = mhz;
-  if (_initialized) ELECHOUSE_cc1101.setMHZ(mhz);
+  if (_initialized) cc1101SetFrequency(mhz);
   return true;
 }
 
@@ -127,7 +164,7 @@ float CC1101Util::_scanForBestFreq(std::function<bool()> cancelCb) {
     if (cancelCb && cancelCb()) return 0;
 
     float f = kFreqList[idx % kFreqCount];
-    ELECHOUSE_cc1101.setMHZ(f);
+    cc1101SetFrequency(f);
     _scanFreq = f;
 
     delay(2);
@@ -462,12 +499,18 @@ void CC1101Util::beginAnalyze() {
   ELECHOUSE_cc1101.SetRx();
 }
 
-// Tune + recalibrate + settle, then read RSSI. See header for rationale.
+// Tune to the requested frequency, force the CC1101 back into RX so that
+// FS_AUTOCAL recalibrates the VCO for this frequency, then allow the PLL/AGC
+// to settle before reading RSSI.
+//
+// This per-frequency recalibration is important during a sweep: simply
+// changing FREQ registers and reading RSSI can leave the VCO calibrated for
+// the previous frequency, producing incorrect/noisy RSSI measurements.
 int CC1101Util::_tunedRssi(float mhz) {
-  ELECHOUSE_cc1101.setMHZ(mhz);   // FREQ registers + manual Calibrate()
-  ELECHOUSE_cc1101.SetRx();       // SIDLE→SRX → FS_AUTOCAL recalibrates at `mhz`
-  delayMicroseconds(kSweepSettleUs);
-  return ELECHOUSE_cc1101.getRssi();
+    cc1101SetFrequency(mhz);        // Select antenna path + program FREQ registers
+    ELECHOUSE_cc1101.SetRx();       // SIDLE -> SRX; FS_AUTOCAL recalibrates at `mhz`
+    delayMicroseconds(kSweepSettleUs);  // Let PLL/AGC settle before reading RSSI
+    return ELECHOUSE_cc1101.getRssi();
 }
 
 bool CC1101Util::analyzeStep() {
@@ -575,10 +618,14 @@ void CC1101Util::beginRssiSweep(float calibMhz) {
 }
 
 int CC1101Util::rssiAt(float mhz) {
-  if (!_initialized) return -120;
-  ELECHOUSE_cc1101.setMHZ(mhz);
-  delayMicroseconds(250);  // PLL relock + AGC settle; too short smears signals
-  return ELECHOUSE_cc1101.getRssi();
+    if (!_initialized) return -120;
+
+    // Fast sweep path: unlike _tunedRssi(), do not force a fresh VCO calibration
+    // for every pixel. beginRssiSweep() calibrates once near the band's midpoint;
+    // here we only retune and allow the PLL/AGC to relock.
+    cc1101SetFrequency(mhz);
+    delayMicroseconds(250);         // Allow PLL relock and AGC settling
+    return ELECHOUSE_cc1101.getRssi();
 }
 
 void CC1101Util::endRssiSweep() {
@@ -638,7 +685,7 @@ void CC1101Util::startJam(JamMode mode) {
       ELECHOUSE_cc1101.setModulation(2);
       ELECHOUSE_cc1101.setPktFormat(3);
       ELECHOUSE_cc1101.setPA(12);
-      ELECHOUSE_cc1101.setMHZ(_jamSweepFreq);
+      cc1101SetFrequency(_jamSweepFreq);
       ELECHOUSE_cc1101.SetTx();
       pinMode(_gdo0Pin, OUTPUT);
       break;
@@ -717,7 +764,7 @@ void CC1101Util::jamTick() {
     }
 
     case JAM_SWEEP: {
-      ELECHOUSE_cc1101.setMHZ(_jamSweepFreq);
+      cc1101SetFrequency(_jamSweepFreq);
       // Tight TX burst at the current step.
       for (int b = 0; b < 40; b++) {
         digitalWrite(_gdo0Pin, HIGH); delayMicroseconds(30);
@@ -751,7 +798,7 @@ void CC1101Util::stopJam() {
     ELECHOUSE_cc1101.setPktFormat(3);
     ELECHOUSE_cc1101.setDRate(50);
   } else if (_jamMode == JAM_SWEEP) {
-    ELECHOUSE_cc1101.setMHZ(_jamBaseFreq);
+    cc1101SetFrequency(_jamBaseFreq);
   }
   ELECHOUSE_cc1101.setSidle();
 }
