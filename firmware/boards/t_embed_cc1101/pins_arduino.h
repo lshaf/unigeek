@@ -98,4 +98,5 @@ static const uint8_t SCL = GROVE_SCL;
 // used by SubGHz RX/TX, causing rmt_driver_install() to fail.
 //#define DEVICE_HAS_LED_RING              // WS2812B ring → LED Effect setting
 #define DEVICE_HAS_CC1101_ANTENNA_SWITCH // SW0/SW1 (GPIO 47/48) select the RF band filter path 
-#define APP_MENU_POWER_OFF               // BQ25896 can power off the device
+#define DEVICE_HAS_DEEP_SLEEP       // ESP32-S3 deep sleep with button wake support
+#define DEVICE_HAS_POWER_OFF        // True hardware power-off via BQ25896 BATFET disable

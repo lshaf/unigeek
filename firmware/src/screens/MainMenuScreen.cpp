@@ -13,6 +13,7 @@
 #include "screens/LuaScreen.h"
 #include "screens/setting/SettingScreen.h"
 #include "screens/CharacterScreen.h"
+#include "screens/PowerMenuScreen.h"
 #include "ui/components/Icon.h"
 
 
@@ -25,7 +26,14 @@ void MainMenuScreen::onInit() {
   _items[5] = {"LUA", Icons::drawLua};
   _items[6] = {"Games", Icons::drawGame};
   _items[7] = {"Settings", Icons::drawSetting};
-#ifdef APP_MENU_POWER_OFF
+#if defined(DEVICE_HAS_DEEP_SLEEP) || defined(DEVICE_HAS_POWER_OFF)
+# ifdef DEVICE_HAS_TOUCH_NAV
+  _items[8] = {"Home", Icons::drawHome};
+  _items[9] = {"Power", Icons::drawPower};
+# else
+  _items[8] = {"Power", Icons::drawPower};
+# endif
+#elif defined(APP_MENU_POWER_OFF)
 # ifdef DEVICE_HAS_TOUCH_NAV
   _items[8] = {"Home", Icons::drawHome};
   _items[9] = {"Power Off", Icons::drawPower};
@@ -296,7 +304,14 @@ void MainMenuScreen::onItemSelected(uint8_t index) {
   case 5: Screen.push(new LuaScreen());          break;
   case 6: Screen.push(new GameMenuScreen());     break;
   case 7: Screen.push(new SettingScreen());      break;
-#ifdef APP_MENU_POWER_OFF
+#if defined(DEVICE_HAS_DEEP_SLEEP) || defined(DEVICE_HAS_POWER_OFF)
+# ifdef DEVICE_HAS_TOUCH_NAV
+  case 8: onBack(); break;
+  case 9: Screen.push(new PowerMenuScreen()); break;
+# else
+  case 8: Screen.push(new PowerMenuScreen()); break;
+# endif
+#elif defined(APP_MENU_POWER_OFF)
 # ifdef DEVICE_HAS_TOUCH_NAV
   case 8: onBack(); break;
   case 9: Uni.Power.powerOff(); break;

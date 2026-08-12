@@ -51,18 +51,34 @@ public:
     return (chrg == 0x01 || chrg == 0x02);
   }
 
-  void powerOff() override
+  void deepSleep() override
   {
-    // Backlight off so the screen is dark whether we cut power or just sleep.
+    // Keep the board powered while the ESP32-S3 is in deep sleep.
+    digitalWrite(PIN_POWER_ON, HIGH);
     digitalWrite(LCD_BL, LOW);
 
-    // Release the BQ25896 power latch. On battery this is a true power-off
-    // (the rail drops). On USB the BQ25896 keeps the rail alive, so we fall
-    // through into deep sleep as a low-power standby instead.
-    digitalWrite(PIN_POWER_ON, LOW);
-
     // Wake on the back button (ENCODER_BK = GPIO6, active LOW).
+    esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_ALL);
     esp_sleep_enable_ext0_wakeup((gpio_num_t)ENCODER_BK, 0);
+
+    // Deep-sleep wake restarts the ESP32-S3.
+    esp_deep_sleep_start();
+  }
+
+  void powerOff() override
+  {
+    // Turn off the backlight first.
+    digitalWrite(LCD_BL, LOW);
+
+    // Put the BQ25896 into BATFET-disable (shipping) mode.
+    // REG09 bit 5 = BATFET_DIS. This disconnects the battery from SYS.
+    uint8_t reg09 = _readReg8(BQ25896_ADDR, 0x09);
+    reg09 |= (1 << 5);
+    _writeReg(BQ25896_ADDR, 0x09, reg09);
+
+    // If USB power keeps the MCU alive, remain in deep sleep. Do not configure
+    // GPIO wake here: true power-off should require QON/physical power or USB.
+    esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_ALL);
     esp_deep_sleep_start();
   }
 
