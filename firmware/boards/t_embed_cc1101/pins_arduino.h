@@ -41,6 +41,8 @@ static const uint8_t SCL = GROVE_SCL;
 // ─── CC1101 Sub-GHz ───────────────────────────────────────
 #define CC1101_CS_PIN    12
 #define CC1101_GDO0_PIN   3
+#define CC1101_SW1_PIN 47
+#define CC1101_SW0_PIN 48
 
 // ─── NRF24L01+ (QWIIC port) ──────────────────────────────
 #define NRF24_CE_PIN     43
@@ -88,9 +90,12 @@ static const uint8_t SCL = GROVE_SCL;
 #define SPK_I2S_PORT  I2S_NUM_0
 
 // ─── Firmware Feature Flags ───────────────────────────────
-#define DEVICE_HAS_SOUND          // NS4168 I2S speaker
-#define DEVICE_HAS_VOLUME_CONTROL // I2S amp supports setVolume()
-#define DEVICE_HAS_USB_HID        // ESP32-S3 native USB OTG
-#define DEVICE_HAS_WEBAUTHN       // FIDO2 / WebAuthn USB security key (CTAP2 + U2F)
-#define DEVICE_HAS_LED_RING       // WS2812B ring → LED Effect setting
-#define APP_MENU_POWER_OFF        // BQ25896 can power off the device
+#define DEVICE_HAS_SOUND                 // NS4168 I2S speaker
+#define DEVICE_HAS_VOLUME_CONTROL        // I2S amp supports setVolume()
+#define DEVICE_HAS_USB_HID               // ESP32-S3 native USB OTG
+#define DEVICE_HAS_WEBAUTHN              // FIDO2 / WebAuthn USB security key (CTAP2 + U2F)
+// Disabled on T-Embed CC1101: FastLED conflicts with the RMT resources
+// used by SubGHz RX/TX, causing rmt_driver_install() to fail.
+//#define DEVICE_HAS_LED_RING              // WS2812B ring → LED Effect setting
+#define DEVICE_HAS_CC1101_ANTENNA_SWITCH // SW0/SW1 (GPIO 47/48) select the RF band filter path 
+#define APP_MENU_POWER_OFF               // BQ25896 can power off the device

@@ -20,7 +20,7 @@ private:
   // and 3), so one click = DETENT_COUNTS. Carrying the remainder instead of
   // resetting means a half-detent dropped to contact bounce is recovered on the
   // next edge rather than costing the whole click ("rotate twice" symptom).
-  static constexpr int           DETENT_COUNTS   = 2;
+  static constexpr int           DETENT_COUNTS   = 1;
 
   RotaryEncoder* _encoder     = nullptr;
   int            _lastPos     = 0;
