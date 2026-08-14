@@ -21,12 +21,12 @@ void Device::boardHook() {
   ledRing.update();
 
 #ifdef DEVICE_HAS_LIGHT_SLEEP
-  // Global shortcut: hold the dedicated Back button for 3 seconds.
+  // Global shortcut: hold the dedicated Back button for 1.3 seconds.
   // Navigation already tracks the current direction and hold duration.
   if (Nav &&
       Nav->isPressed() &&
       Nav->currentDirection() == INavigation::DIR_BACK &&
-      Nav->heldDuration() >= 2000) {
+      Nav->heldDuration() >= 1300) {
 
     // Use the same display-safe sequence as Power -> Light Sleep:
     // turn the PWM-controlled backlight off through IDisplay, enter real
