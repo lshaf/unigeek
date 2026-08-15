@@ -16,7 +16,6 @@
 #include "screens/PowerMenuScreen.h"
 #include "ui/components/Icon.h"
 
-
 void MainMenuScreen::onInit() {
   _items[0] = {"Wifi", Icons::drawWifi};
   _items[1] = {"Bluetooth", Icons::drawBluetooth};
@@ -26,7 +25,7 @@ void MainMenuScreen::onInit() {
   _items[5] = {"LUA", Icons::drawLua};
   _items[6] = {"Games", Icons::drawGame};
   _items[7] = {"Settings", Icons::drawSetting};
-#if defined(DEVICE_HAS_DEEP_SLEEP) || defined(DEVICE_HAS_POWER_OFF)
+#if defined(DEVICE_HAS_LIGHT_SLEEP) || defined(DEVICE_HAS_DEEP_SLEEP) || defined(DEVICE_HAS_POWER_OFF)
 # ifdef DEVICE_HAS_TOUCH_NAV
   _items[8] = {"Home", Icons::drawHome};
   _items[9] = {"Power", Icons::drawPower};
@@ -304,7 +303,7 @@ void MainMenuScreen::onItemSelected(uint8_t index) {
   case 5: Screen.push(new LuaScreen());          break;
   case 6: Screen.push(new GameMenuScreen());     break;
   case 7: Screen.push(new SettingScreen());      break;
-#if defined(DEVICE_HAS_DEEP_SLEEP) || defined(DEVICE_HAS_POWER_OFF)
+#if defined(DEVICE_HAS_LIGHT_SLEEP) || defined(DEVICE_HAS_DEEP_SLEEP) || defined(DEVICE_HAS_POWER_OFF)
 # ifdef DEVICE_HAS_TOUCH_NAV
   case 8: onBack(); break;
   case 9: Screen.push(new PowerMenuScreen()); break;

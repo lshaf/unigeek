@@ -93,4 +93,7 @@ static const uint8_t SCL = GROVE_SCL;
 #define DEVICE_HAS_USB_HID        // ESP32-S3 native USB OTG
 #define DEVICE_HAS_WEBAUTHN       // FIDO2 / WebAuthn USB security key (CTAP2 + U2F)
 #define DEVICE_HAS_LED_RING       // WS2812B ring → LED Effect setting
+#define DEVICE_HAS_LIGHT_SLEEP    // Light sleep with wake via dedicated back button
+#define DEVICE_HAS_DEEP_SLEEP     // Deep sleep with wake via dedicated back button
+#define DEVICE_HAS_POWER_OFF      // BQ25896 can power off the device
 #define APP_MENU_POWER_OFF        // BQ25896 can power off the device
