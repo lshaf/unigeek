@@ -26,6 +26,9 @@ static uint8_t      _cliMacs[kMaxClients][6];
 static volatile uint8_t _cliCount = 0;
 static uint8_t      _targetBssid[6];
 static volatile int _apRssi = 0;   // 0 = no frame from the AP seen yet
+// -1 = still waiting for a beacon/probe response, 0 = not advertised, 1 = advertised.
+static volatile int8_t _apWps = -1;
+static volatile uint8_t _apMgmtFrames = 0;
 
 // Multicast/broadcast group bit (LSB of the first octet). Group-addressed
 // frames never identify a real station, so they are ignored.
@@ -43,6 +46,30 @@ static void _addClient(const uint8_t* mac)
     _cliCount++;
   }
   portEXIT_CRITICAL(&_cliMux);
+}
+
+static bool _hasWpsIe(const uint8_t* pl, uint16_t len)
+{
+  if (len < 36) return false;
+
+  // Beacon and probe-response fixed parameters end 36 bytes from the start
+  // of the 802.11 MAC frame. Walk the tagged parameters that follow.
+  size_t pos = 36;
+  while (pos + 2 <= len) {
+    const uint8_t id = pl[pos];
+    const uint8_t ieLen = pl[pos + 1];
+    pos += 2;
+    if (pos + ieLen > len) break;
+
+    // WPS: vendor-specific IE (221), Microsoft OUI 00:50:F2, type 04.
+    if (id == 221 && ieLen >= 4 &&
+        pl[pos] == 0x00 && pl[pos + 1] == 0x50 &&
+        pl[pos + 2] == 0xF2 && pl[pos + 3] == 0x04) {
+      return true;
+    }
+    pos += ieLen;
+  }
+  return false;
 }
 
 static void _clientSnifferCb(void* buf, wifi_promiscuous_pkt_type_t type)
@@ -63,7 +90,20 @@ static void _clientSnifferCb(void* buf, wifi_promiscuous_pkt_type_t type)
 
   // Live RSSI: only frames the AP itself transmitted (addr2 == BSSID) measure
   // the AP's signal — a client's uplink frame would report the client's level.
-  if (memcmp(a2, _targetBssid, 6) == 0) _apRssi = pkt->rx_ctrl.rssi;
+  if (memcmp(a2, _targetBssid, 6) == 0) {
+    _apRssi = pkt->rx_ctrl.rssi;
+
+    if (type == WIFI_PKT_MGMT) {
+      const uint8_t subtype = (pl[0] >> 4) & 0x0F;
+      if (subtype == 8 || subtype == 5) {  // beacon or probe response
+        if (_hasWpsIe(pl, pkt->rx_ctrl.sig_len)) {
+          _apWps = 1;
+        } else if (_apWps < 0 && ++_apMgmtFrames >= 5) {
+          _apWps = 0;
+        }
+      }
+    }
+  }
 
   // Resolve which address is the BSSID and which is the station from the
   // toDS/fromDS flags. WDS (both set) uses a 4-address header — skip it.
@@ -171,7 +211,7 @@ void WifiAnalyzerScreen::_doScan()
 {
   _state = STATE_SCAN;
   strncpy(_title, "WiFi Analyzer", sizeof(_title));
-  ShowStatusAction::show("Scanning (10s)...", 0);
+  ShowStatusAction::show("Scanning...", 0);
 
   WiFi.mode(WIFI_STA);
   WiFi.scanDelete();
@@ -253,6 +293,8 @@ void WifiAnalyzerScreen::_showClients(int index)
   _cliCount = 0;
   portEXIT_CRITICAL(&_cliMux);
   _apRssi = 0;
+  _apWps = -1;
+  _apMgmtFrames = 0;
 
   _lastClientCount   = -1;
   _lastRssiShown     = 1;
@@ -290,11 +332,14 @@ void WifiAnalyzerScreen::_refreshClients(bool force)
   portEXIT_CRITICAL(&_cliMux);
 
   const int rssi = _apRssi;
+  const int wps  = _apWps;
 
   // Nothing new to show — skip the rebuild and the full-body redraw.
-  if (!force && (int)n == _lastClientCount && rssi == _lastRssiShown) return;
+  if (!force && (int)n == _lastClientCount &&
+      rssi == _lastRssiShown && wps == _lastWpsShown) return;
   _lastClientCount = n;
   _lastRssiShown   = rssi;
+  _lastWpsShown    = wps;
 
   // Live RSSI from the AP's own frames; falls back to the scan value until the
   // first beacon lands on this channel.
@@ -304,12 +349,14 @@ void WifiAnalyzerScreen::_refreshClients(bool force)
     snprintf(_rssiRow, sizeof(_rssiRow), "%s", _entries[_selectedAp].rssi);
   }
 
-  // Row 0..4: the AP details (kept visible regardless of client count).
+  // AP details (kept visible regardless of client count).
   _rows[0] = {"SSID",       _entries[_selectedAp].ssid};
   _rows[1] = {"BSSID",      _entries[_selectedAp].bssid};
   _rows[2] = {"RSSI",       _rssiRow};
   _rows[3] = {"Channel",    _entries[_selectedAp].channel};
   _rows[4] = {"Encryption", _entries[_selectedAp].encryption};
+  _rows[5] = {"WPS",        wps > 0 ? String("Yes") :
+                            (wps == 0 ? String("No") : String("Detecting..."))};
 
   // Clients section header, then one row per captured MAC below it.
   _rows[INFO_ROWS] = {"Clients", n > 0 ? String((unsigned)n)

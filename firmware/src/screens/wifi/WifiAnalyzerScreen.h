@@ -42,7 +42,7 @@ private:
 
   // Client sniffer (per-AP) state. The detail view is one scrollable list:
   // the AP info rows on top, then a "Clients" header, then the live MACs.
-  static constexpr int INFO_ROWS = 5;  // SSID, BSSID, RSSI, Channel, Encryption
+  static constexpr int INFO_ROWS = 6;  // SSID, BSSID, RSSI, Channel, Encryption, WPS
   int                 _selectedAp        = -1;
   ScrollListView::Row _rows[INFO_ROWS + 1 + MAX_CLIENTS];
   char                _clientLabels[MAX_CLIENTS][6];
@@ -53,6 +53,7 @@ private:
   // promiscuous callback. Sentinel 1 dBm = "nothing rendered yet".
   char _rssiRow[24]     = {};
   int  _lastRssiShown   = 1;
+  int  _lastWpsShown    = -2;
 
   void _doScan();
   void _showScan();
