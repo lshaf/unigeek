@@ -94,9 +94,9 @@ void WifiAnalyzerScreen::onUpdate()
   if (_state == STATE_CLIENTS) {
     if (Uni.Nav->wasPressed()) {
       auto dir = Uni.Nav->readDirection();
-      if (dir == INavigation::DIR_BACK) { _stopClients(); _doScan(); return; }
+      if (dir == INavigation::DIR_BACK) { _stopClients(); _showScan(); return; }
 #ifndef DEVICE_HAS_KEYBOARD
-      if (dir == INavigation::DIR_PRESS) { _stopClients(); _doScan(); return; }
+      if (dir == INavigation::DIR_PRESS) { _stopClients(); _showScan(); return; }
 #endif
       _scrollView.onNav(dir);
     }
@@ -114,8 +114,16 @@ void WifiAnalyzerScreen::onUpdate()
 
 void WifiAnalyzerScreen::onItemSelected(uint8_t index)
 {
-  if (_state == STATE_SCAN && index < _entryCount) {
-    _showClients(index);
+  if (_state != STATE_SCAN) return;
+
+  if (index == 0) {
+    _doScan();
+    return;
+  }
+
+  const int apIndex = (int)index - 1;
+  if (apIndex >= 0 && apIndex < _entryCount) {
+    _showClients(apIndex);
   }
 }
 
@@ -132,7 +140,7 @@ void WifiAnalyzerScreen::onBack()
 {
   if (_state == STATE_CLIENTS) {
     _stopClients();
-    _doScan();      // leaving the detail view re-scans, so the list stays current
+    _showScan();    // return immediately to the cached scan snapshot
   } else {
     WiFi.scanDelete();
     Screen.goBack();
@@ -144,8 +152,9 @@ void WifiAnalyzerScreen::onBack()
 // ── Scan ─────────────────────────────────────────────────────────────────────
 //
 // One blocking sweep, same as every other WiFi module (Deauther, EAPOL Capture,
-// Evil Twin): the list is a snapshot, not a live radar. Re-entering the list —
-// on open, or on BACK out of an AP's detail view — takes a fresh snapshot.
+// Evil Twin): the list is a snapshot, not a live radar. A fresh snapshot is
+// taken on open or when the explicit "Rescan" entry is selected. Returning from
+// an AP's detail view reuses the cached list immediately.
 // Real-time tracking is limited to the RSSI of a selected AP, sampled from its
 // own frames by the promiscuous callback.
 
@@ -165,8 +174,8 @@ void WifiAnalyzerScreen::_doScan()
   ShowStatusAction::show("Scanning (10s)...", 0);
 
   WiFi.mode(WIFI_STA);
-  WiFi.disconnect();
-  int total = WiFi.scanNetworks(false, false, false, SCAN_DWELL_MS, 0);
+  WiFi.scanDelete();
+  int total = WiFi.scanNetworks();
 
   _entryCount = 0;
   if (total <= 0) {
@@ -212,10 +221,12 @@ void WifiAnalyzerScreen::_doScan()
 
 void WifiAnalyzerScreen::_rebuildScanItems()
 {
+  _scanItems[0] = {"Rescan"};
+
   for (int i = 0; i < _entryCount; i++) {
-    _scanItems[i]         = {_entries[i].ssid, _entries[i].bssid};
-    _scanItems[i].rssi    = (int16_t)_entries[i].rssiValue;
-    _scanItems[i].hasRssi = true;
+    _scanItems[i + 1]         = {_entries[i].ssid, _entries[i].bssid};
+    _scanItems[i + 1].rssi    = (int16_t)_entries[i].rssiValue;
+    _scanItems[i + 1].hasRssi = true;
   }
 }
 
@@ -225,7 +236,7 @@ void WifiAnalyzerScreen::_showScan()
   strncpy(_title, "WiFi Analyzer", sizeof(_title));
 
   _rebuildScanItems();
-  setItems(_scanItems, _entryCount);
+  setItems(_scanItems, _entryCount + 1);
 }
 
 void WifiAnalyzerScreen::_showClients(int index)
