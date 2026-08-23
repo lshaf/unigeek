@@ -354,9 +354,15 @@ void BLEAnalyzerScreen::onInit()
 void BLEAnalyzerScreen::onItemSelected(uint8_t index)
 {
   if (_state == STATE_LIST) {
-    if (index < _devCount) {
-      _selectedDeviceIdx = index;
-      _selDev            = _scanResults.getDevice(index);  // snapshot before the watcher runs
+    if (index == 0) {
+      _doScan();
+      return;
+    }
+
+    const int devIndex = (int)index - 1;
+    if (devIndex >= 0 && devIndex < _devCount) {
+      _selectedDeviceIdx = devIndex;
+      _selDev            = _devices[devIndex];
       _showInfo();
       _startRssiWatch();
     }
@@ -379,7 +385,7 @@ void BLEAnalyzerScreen::onBack()
   } else if (_state == STATE_INFO) {
     _stopRssiWatch();
     _selectedDeviceIdx = -1;
-    _doScan();   // leaving the detail view re-scans, so the list stays current
+    _showList();  // return immediately to the cached scan snapshot
   } else {
     _bleScan->stop();
     Screen.goBack();
@@ -431,9 +437,10 @@ void BLEAnalyzerScreen::_showDetail(const char* titleText, const String& content
 
 // ── Scan ─────────────────────────────────────────────────────────────────────
 //
-// One blocking sweep, same as every other BLE module (Whisper Pair, Chameleon
-// Scan): the list is a snapshot, not a live radar. Re-entering the list — on
-// open, or on BACK out of a device's info view — takes a fresh snapshot.
+// One blocking sweep: the device list is a snapshot, not a live radar.
+// A fresh snapshot is taken on open or when the explicit "Rescan" entry is
+// selected. Returning from a device's info view reuses the cached snapshot.
+// Real-time tracking is limited to the RSSI of the selected device.
 
 void BLEAnalyzerScreen::_doScan()
 {
@@ -457,6 +464,7 @@ void BLEAnalyzerScreen::_doScan()
     if (n20 == 1) Achievement.unlock("ble_analyzer_20");
   }
 
+  _rebuildDevItems();
   _showList();
 }
 
@@ -506,9 +514,18 @@ void BLEAnalyzerScreen::_refreshRssiRow()
 void BLEAnalyzerScreen::_rebuildDevItems()
 {
   int count = min((int)_scanResults.getCount(), (int)kMaxDevices);
+
+  _devices.clear();
+  _devices.reserve(count);
   _devCount = 0;
+
+  _devItems[0] = {"Rescan"};
+  _devItems[0].hasRssi = false;
+
   for (int i = 0; i < count; i++) {
     NimBLEAdvertisedDevice dev = _scanResults.getDevice(i);
+    _devices.push_back(dev);
+
     String name = _resolveName(dev);
     if (name.length() > 0) {
       _devLabel[i] = name;
@@ -517,10 +534,12 @@ void BLEAnalyzerScreen::_rebuildDevItems()
       _devLabel[i] = dev.getAddress().toString().c_str();
       _devSub[i]   = "";
     }
-    _devItems[i]         = {_devLabel[i].c_str(),
-                             _devSub[i].length() > 0 ? _devSub[i].c_str() : nullptr};
-    _devItems[i].rssi    = (int16_t)dev.getRSSI();
-    _devItems[i].hasRssi = true;
+
+    const int row = i + 1;
+    _devItems[row]         = {_devLabel[i].c_str(),
+                              _devSub[i].length() > 0 ? _devSub[i].c_str() : nullptr};
+    _devItems[row].rssi    = (int16_t)dev.getRSSI();
+    _devItems[row].hasRssi = true;
     _devCount++;
   }
 }
@@ -528,8 +547,12 @@ void BLEAnalyzerScreen::_rebuildDevItems()
 void BLEAnalyzerScreen::_showList()
 {
   _state = STATE_LIST;
-  _rebuildDevItems();
-  setItems(_devItems, _devCount);
+
+  // _rebuildDevItems() is needed only after a new storing scan. While returning
+  // from the live RSSI view, _devices/_devItems already hold the cached snapshot
+  // and must not be rebuilt from NimBLE's scan-results storage.
+  if (_devices.empty() && _devCount == 0) _rebuildDevItems();
+  setItems(_devItems, _devCount + 1);
 }
 
 void BLEAnalyzerScreen::_showInfo()

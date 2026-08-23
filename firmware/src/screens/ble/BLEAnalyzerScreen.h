@@ -3,6 +3,7 @@
 #include "ui/templates/ListScreen.h"
 #include "ui/views/TextScrollView.h"
 #include <NimBLEDevice.h>
+#include <vector>
 
 class BLEAnalyzerScreen : public ListScreen {
 public:
@@ -37,7 +38,8 @@ private:
   // Device list storage
   String   _devLabel[kMaxDevices];
   String   _devSub[kMaxDevices];
-  ListItem _devItems[kMaxDevices];
+  ListItem _devItems[kMaxDevices + 1];  // Rescan + snapshot devices
+  std::vector<NimBLEAdvertisedDevice> _devices;
   uint8_t  _devCount = 0;
 
   void _doScan();
