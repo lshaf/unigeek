@@ -232,11 +232,13 @@ void WifiEvilTwinScreen::_selectWifi()
 
   _scanCount = total > MAX_SCAN ? MAX_SCAN : total;
   for (int i = 0; i < _scanCount; i++) {
-    snprintf(_scanLabels[i], sizeof(_scanLabels[i]), "[%2d] %s",
-             WiFi.channel(i), WiFi.SSID(i).c_str());
+    snprintf(_scanLabels[i], sizeof(_scanLabels[i]), "%s",
+             WiFi.SSID(i).c_str());
     snprintf(_scanValues[i], sizeof(_scanValues[i]), "%s",
              WiFi.BSSIDstr(i).c_str());
-    _scanItems[i] = {_scanLabels[i], _scanValues[i]};
+    _scanItems[i]         = {_scanLabels[i]};
+    _scanItems[i].rssi    = (int16_t)WiFi.RSSI(i);
+    _scanItems[i].hasRssi = true;
   }
 
   setItems(_scanItems, _scanCount);
