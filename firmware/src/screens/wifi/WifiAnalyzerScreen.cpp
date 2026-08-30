@@ -264,7 +264,7 @@ void WifiAnalyzerScreen::_rebuildScanItems()
   _scanItems[0] = {"Rescan"};
 
   for (int i = 0; i < _entryCount; i++) {
-    _scanItems[i + 1]         = {_entries[i].ssid, _entries[i].bssid};
+    _scanItems[i + 1]         = {_entries[i].ssid};
     _scanItems[i + 1].rssi    = (int16_t)_entries[i].rssiValue;
     _scanItems[i + 1].hasRssi = true;
   }

@@ -85,7 +85,7 @@ void NetworkMenuScreen::_showWifiList() {
   if (ns == 1) Achievement.unlock("wifi_first_scan");
 
   for (int i = 0; i < _scannedCount; i++) {
-    _scannedItems[i] = { _scanned[i].label };
+    _scannedItems[i] = { _scanned[i].ssid };
   }
 
   _scanning = false;

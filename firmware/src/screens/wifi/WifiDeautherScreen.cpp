@@ -153,7 +153,7 @@ void WifiDeautherScreen::_selectWifi()
              WiFi.BSSIDstr(i).c_str());
     _scanChannels[i] = (uint8_t)WiFi.channel(i);
 
-    _scanItems[i + 1]         = {_scanLabels[i], _scanValues[i]};
+    _scanItems[i + 1]         = {_scanLabels[i]};
     _scanItems[i + 1].rssi    = (int16_t)WiFi.RSSI(i);
     _scanItems[i + 1].hasRssi = true;
   }
