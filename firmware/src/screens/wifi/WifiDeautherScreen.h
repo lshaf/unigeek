@@ -12,8 +12,9 @@ public:
   WifiDeautherScreen() {
     memset(_mainItems,  0, sizeof(_mainItems));
     memset(_scanItems,  0, sizeof(_scanItems));
-    memset(_scanLabels, 0, sizeof(_scanLabels));
-    memset(_scanValues, 0, sizeof(_scanValues));
+    memset(_scanLabels,   0, sizeof(_scanLabels));
+    memset(_scanValues,   0, sizeof(_scanValues));
+    memset(_scanChannels, 0, sizeof(_scanChannels));
   }
   ~WifiDeautherScreen() override;
 
@@ -59,9 +60,10 @@ private:
   String   _modeSub;
   String   _targetSub;
 
-  ListItem _scanItems[MAX_SCAN];
+  ListItem _scanItems[MAX_SCAN + 1];
   char     _scanLabels[MAX_SCAN][52];
   char     _scanValues[MAX_SCAN][18];
+  uint8_t  _scanChannels[MAX_SCAN];
   int      _scanCount = 0;
 
   static ApEntry      _allTargets[MAX_ALL];
