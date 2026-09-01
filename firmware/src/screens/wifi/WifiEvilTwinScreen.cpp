@@ -126,13 +126,21 @@ void WifiEvilTwinScreen::onItemSelected(uint8_t index)
   } else if (_state == STATE_SELECT_PORTAL && index < _browser.count()) {
     _portal.setPortalFolder(_browser.entry(index).name);
     _showMenu();
-  } else if (_state == STATE_SELECT_WIFI && index < _scanCount) {
-    _target.ssid    = WiFi.SSID(index);
-    _target.channel = WiFi.channel(index);
-    sscanf(_scanValues[index], "%hhx:%hhx:%hhx:%hhx:%hhx:%hhx",
-           &_target.bssid[0], &_target.bssid[1], &_target.bssid[2],
-           &_target.bssid[3], &_target.bssid[4], &_target.bssid[5]);
-    _showMenu();
+  } else if (_state == STATE_SELECT_WIFI) {
+    if (index == 0) {
+      _selectWifi();
+      return;
+    }
+
+    const int apIndex = (int)index - 1;
+    if (apIndex >= 0 && apIndex < _scanCount) {
+      _target.ssid    = WiFi.SSID(apIndex);
+      _target.channel = WiFi.channel(apIndex);
+      sscanf(_scanValues[apIndex], "%hhx:%hhx:%hhx:%hhx:%hhx:%hhx",
+             &_target.bssid[0], &_target.bssid[1], &_target.bssid[2],
+             &_target.bssid[3], &_target.bssid[4], &_target.bssid[5]);
+      _showMenu();
+    }
   }
 }
 
@@ -231,17 +239,19 @@ void WifiEvilTwinScreen::_selectWifi()
   }
 
   _scanCount = total > MAX_SCAN ? MAX_SCAN : total;
+  _scanItems[0] = {"Rescan"};
+
   for (int i = 0; i < _scanCount; i++) {
     snprintf(_scanLabels[i], sizeof(_scanLabels[i]), "%s",
              WiFi.SSID(i).c_str());
     snprintf(_scanValues[i], sizeof(_scanValues[i]), "%s",
              WiFi.BSSIDstr(i).c_str());
-    _scanItems[i]         = {_scanLabels[i]};
-    _scanItems[i].rssi    = (int16_t)WiFi.RSSI(i);
-    _scanItems[i].hasRssi = true;
+    _scanItems[i + 1]         = {_scanLabels[i]};
+    _scanItems[i + 1].rssi    = (int16_t)WiFi.RSSI(i);
+    _scanItems[i + 1].hasRssi = true;
   }
 
-  setItems(_scanItems, _scanCount);
+  setItems(_scanItems, _scanCount + 1);
 }
 
 // ── Try Password ────────────────────────────────────────────────────────────

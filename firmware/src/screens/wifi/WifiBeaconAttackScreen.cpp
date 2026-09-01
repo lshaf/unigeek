@@ -74,8 +74,14 @@ void WifiBeaconAttackScreen::onItemSelected(uint8_t index)
   }
 
   if (_state == STATE_SELECT_AP) {
-    if (index < (uint8_t)_apCount) {
-      _floodTarget = index;
+    if (index == 0) {
+      _startScan();
+      return;
+    }
+
+    const int apIndex = (int)index - 1;
+    if (apIndex >= 0 && apIndex < _apCount) {
+      _floodTarget = apIndex;
     }
     _state = STATE_MENU;
     setItems(_menuItems, 3);
@@ -259,20 +265,22 @@ void WifiBeaconAttackScreen::_startScan()
   }
 
   _apCount = (n < MAX_AP) ? n : MAX_AP;
+  _apItems[0] = {"Rescan"};
+
   for (int i = 0; i < _apCount; i++) {
     String ssid = WiFi.SSID(i);
     strncpy(_apList[i].ssid, ssid.length() > 0 ? ssid.c_str() : "(hidden)", 32);
     _apList[i].ssid[32] = '\0';
     memcpy(_apList[i].bssid, WiFi.BSSID(i), 6);
     _apList[i].channel = (uint8_t)WiFi.channel(i);
-    snprintf(_apSubLabels[i], sizeof(_apSubLabels[i]),
-             "CH%d  %ddBm", _apList[i].channel, (int)WiFi.RSSI(i));
-    _apItems[i] = {_apList[i].ssid, _apSubLabels[i]};
+    _apItems[i + 1]         = {_apList[i].ssid};
+    _apItems[i + 1].rssi    = (int16_t)WiFi.RSSI(i);
+    _apItems[i + 1].hasRssi = true;
   }
   WiFi.scanDelete();
 
   _state = STATE_SELECT_AP;
-  setItems(_apItems, (uint8_t)_apCount); // resets selection to 0 for AP list — correct
+  setItems(_apItems, (uint8_t)(_apCount + 1));
 }
 
 void WifiBeaconAttackScreen::_startAttack()

@@ -56,7 +56,7 @@ private:
 
   // Scan items
   static constexpr int MAX_SCAN = 20;
-  ListItem _scanItems[MAX_SCAN];
+  ListItem _scanItems[MAX_SCAN + 1];
   char     _scanLabels[MAX_SCAN][52];
   char     _scanValues[MAX_SCAN][18];
   int      _scanCount = 0;

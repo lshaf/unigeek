@@ -147,12 +147,16 @@ void WifiEapolCaptureScreen::_showMenu() {
 
 void WifiEapolCaptureScreen::onItemSelected(uint8_t index) {
   if (_phase == PHASE_SELECT_WIFI) {
-    if (index >= _scanCount) return;
-    // _scanLabels[index] is "[ch] ssid"
-    _target.channel = atoi(_scanLabels[index] + 1);
-    const char* sp = strchr(_scanLabels[index], ']');
-    _target.ssid = (sp && sp[1]) ? String(sp + 2) : String("(hidden)");
-    sscanf(_scanValues[index], "%hhx:%hhx:%hhx:%hhx:%hhx:%hhx",
+    if (index == 0) {
+      _selectWifi();
+      return;
+    }
+
+    const int apIndex = (int)index - 1;
+    if (apIndex < 0 || apIndex >= _scanCount) return;
+    _target.channel = _scanChannels[apIndex];
+    _target.ssid = _scanLabels[apIndex][0] ? String(_scanLabels[apIndex]) : String("(hidden)");
+    sscanf(_scanValues[apIndex], "%hhx:%hhx:%hhx:%hhx:%hhx:%hhx",
            &_target.bssid[0], &_target.bssid[1], &_target.bssid[2],
            &_target.bssid[3], &_target.bssid[4], &_target.bssid[5]);
     _phase = PHASE_MENU;
@@ -187,7 +191,7 @@ void WifiEapolCaptureScreen::onItemSelected(uint8_t index) {
       break;
     case ACT_START: {
       // Target mode requires a picked AP — _target.channel only goes non-zero
-      // once _selectWifi() lands an `[ch] ssid` result, so it's the canonical
+      // once _selectWifi() lands a scan result, so it's the canonical
       // "no target set" indicator.
       if (_mode == MODE_TARGET && _target.channel == 0) {
         ShowStatusAction::show("Select a Target WiFi first!");
@@ -298,15 +302,20 @@ void WifiEapolCaptureScreen::_selectWifi() {
   }
 
   _scanCount = total > MAX_SCAN ? MAX_SCAN : total;
+  _scanItems[0] = {"Rescan"};
+
   for (int i = 0; i < _scanCount; i++) {
-    snprintf(_scanLabels[i], sizeof(_scanLabels[i]), "[%2d] %s",
-             WiFi.channel(i), WiFi.SSID(i).c_str());
-    snprintf(_scanValues[i], sizeof(_scanValues[i]), "%s",
-             WiFi.BSSIDstr(i).c_str());
-    _scanItems[i] = {_scanLabels[i], _scanValues[i]};
+    snprintf(_scanLabels[i], sizeof(_scanLabels[i]), "%s", WiFi.SSID(i).c_str());
+    snprintf(_scanValues[i], sizeof(_scanValues[i]), "%s", WiFi.BSSIDstr(i).c_str());
+    _scanChannels[i] = (uint8_t)WiFi.channel(i);
+
+    // Match WiFi Analyzer target presentation: SSID + RSSI indicator.
+    _scanItems[i + 1]         = {_scanLabels[i]};
+    _scanItems[i + 1].rssi    = (int16_t)WiFi.RSSI(i);
+    _scanItems[i + 1].hasRssi = true;
   }
 
-  setItems(_scanItems, _scanCount);
+  setItems(_scanItems, _scanCount + 1);
 }
 
 void WifiEapolCaptureScreen::onUpdate() {
