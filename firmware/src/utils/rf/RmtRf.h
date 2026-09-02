@@ -28,9 +28,19 @@ public:
 
 #if CONFIG_IDF_TARGET_ESP32C3 || CONFIG_IDF_TARGET_ESP32C6
   static constexpr rmt_channel_t RX_CH = RMT_CHANNEL_2;
-  static constexpr rmt_channel_t TX_CH = RMT_CHANNEL_0;
 #else
+  // RX-candidate channel; FastLED only ever claims TX channels, so this is safe
+  // to keep even on boards that drive a WS2812 ring.
   static constexpr rmt_channel_t RX_CH = RMT_CHANNEL_4;
+#endif
+
+#ifdef DEVICE_HAS_LED_RING
+  // FastLED hands out RMT *TX* channels from 0 upward, so channel 0 is already
+  // taken by the ring by the time SubGHz transmits — rmt_driver_install() then
+  // fails and TX silently does nothing. Ring boards pin FastLED to a single
+  // channel (-DFASTLED_RMT_MAX_CHANNELS=1) and we transmit on channel 1.
+  static constexpr rmt_channel_t TX_CH = RMT_CHANNEL_1;
+#else
   static constexpr rmt_channel_t TX_CH = RMT_CHANNEL_0;
 #endif
 

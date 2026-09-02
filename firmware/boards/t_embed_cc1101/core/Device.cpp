@@ -71,6 +71,13 @@ Device* Device::createInstance() {
     digitalWrite(pin, HIGH);
   }
 
+  // CC1101 antenna path: 434 MHz
+  pinMode(CC1101_SW1_PIN, OUTPUT);
+  pinMode(CC1101_SW0_PIN, OUTPUT);
+  digitalWrite(CC1101_SW1_PIN, HIGH);
+  digitalWrite(CC1101_SW0_PIN, HIGH);
+
+  // Init I2C and shared SPI
   Wire.begin(GROVE_SDA, GROVE_SCL);
   sharedSpi.begin(SPI_SCK_PIN, SPI_MISO_PIN, SPI_MOSI_PIN, -1);
   ledRing.begin();
