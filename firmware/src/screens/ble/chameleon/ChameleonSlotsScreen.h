@@ -6,6 +6,7 @@ public:
   const char* title() override { return "Slot Manager"; }
 
   void onInit()                      override;
+  void onRestore()                   override;
   void onItemSelected(uint8_t index) override;
   void onBack()                      override;
 

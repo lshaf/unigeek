@@ -5,6 +5,7 @@
 #include "core/ScreenManager.h"
 #include "core/AchievementManager.h"
 #include "ui/components/StatusBar.h"
+#include "ui/actions/ShowStatusAction.h"
 #include "screens/ble/BLEMenuScreen.h"
 #include <NimBLEDevice.h>
 #include <string.h>
@@ -160,16 +161,13 @@ void ChameleonScanScreen::onItemSelected(uint8_t index) {
     if (n == 5) Achievement.unlock("chameleon_connect_5");
     Screen.push(new ChameleonMenuScreen());
   } else {
-    lcd.fillRect(bodyX(), bodyY(), bodyW(), bodyH(), TFT_BLACK);
-    lcd.setTextDatum(MC_DATUM);
-    lcd.setTextColor(TFT_RED, TFT_BLACK);
-    lcd.drawString("Connect failed, retrying...", bodyX() + bodyW() / 2, bodyY() + bodyH() / 2);
-    delay(1200);
     _devCount   = 0;
     _devChanged = false;
     _state      = STATE_EMPTY;
-    render();
     _startScan();
+    render();
+    ShowStatusAction::show("Connection failed", 1200);
+    render();
   }
 }
 

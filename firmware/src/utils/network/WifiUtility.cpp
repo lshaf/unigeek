@@ -62,8 +62,10 @@ WifiUtility::ConnectResult WifiUtility::connectWithPrompt(const char* bssid, con
 
   // Ask for password
   String password = InputTextAction::popup(ssid);
-  if (password.length() == 0) return CONNECT_CANCELLED;
+  if (InputTextAction::wasCancelled()) return CONNECT_CANCELLED;
 
+  // An explicitly saved empty value is distinct from EXIT. This also lets
+  // connectWithPrompt() try open networks without treating them as cancelled.
   ShowStatusAction::show(("Connecting to " + String(ssid) + "...").c_str(), 0);
   if (!connect(ssid, password.c_str())) {
     return CONNECT_FAILED;

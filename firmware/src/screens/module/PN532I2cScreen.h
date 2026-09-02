@@ -34,6 +34,9 @@ private:
     STATE_RAW_RESULT,
     STATE_EMULATE,
     STATE_NTAG_MENU,
+    STATE_NDEF_WRITE_MENU,
+    STATE_NDEF_RESULT,
+    STATE_NDEF_FILE_SELECT,
   };
 
   State_e      _state    = STATE_MAIN_MENU;
@@ -64,23 +67,28 @@ private:
   String _rowValues[MAX_ROWS];
   uint16_t _rowCount = 0;
 
-  ListItem _mainItems[6] = {
+  ListItem _mainItems[5] = {
     {"Scan ISO14443A"},
     {"MIFARE Classic"},
-    {"MIFARE Ultralight"},
+    {"Ultralight / NTAG"},
     {"Magic Card"},
     {"Firmware Info"},
-    {"NTAG Emulate"},
   };
 
-  ListItem _mfItems[4] = {
+  ListItem _mfItems[7] = {
+    {"Read NDEF"},
+    {"Write NDEF"},
+    {"Erase NDEF"},
     {"Authenticate"},
     {"Dump Memory"},
     {"Discovered Keys"},
     {"Dictionary Attack"},
   };
 
-  ListItem _ulItems[2] = {
+  ListItem _ulItems[5] = {
+    {"Read NDEF"},
+    {"Write NDEF"},
+    {"Erase NDEF"},
     {"Read All Pages"},
     {"Write Page"},
   };
@@ -96,10 +104,39 @@ private:
     {"URL Record"},
   };
 
+  ListItem _ndefWriteItems[6] = {
+    {"Text"},
+    {"URL"},
+    {"Phone"},
+    {"Email"},
+    {"vCard"},
+    {"Load from File"},
+  };
+
+
   // MIFARE dump image — filled by _doDumpMemory(), saved by _doSaveDump()
+  static constexpr const char* _nfcPath  = "/unigeek/nfc";
+  static constexpr const char* _ndefPath = "/unigeek/nfc/ndefs";
   static constexpr const char* _dumpPath = "/unigeek/nfc/dumps";
-  uint8_t  _dumpImg[1024] = {};
+  uint8_t  _dumpImg[4096] = {};
+  size_t   _dumpLen = 0;
   bool     _hasDump = false;
+
+  enum NdefTarget_e {
+    NDEF_TARGET_ULTRALIGHT,
+    NDEF_TARGET_MIFARE_CLASSIC,
+  };
+  NdefTarget_e _ndefTarget = NDEF_TARGET_ULTRALIGHT;
+
+  // Raw NDEF message retained after Read NDEF (without the tag-specific TLV wrapper).
+  static constexpr size_t MAX_NDEF_BYTES = 254;
+  uint8_t  _ndefBuf[MAX_NDEF_BYTES] = {};
+  size_t   _ndefLen = 0;
+  size_t   _ndefCapacity = 0;
+  bool     _hasNdef = false;
+  bool     _ndefWritePreview = false;
+  bool     _ndefWritePreviewFromFile = false;
+  String   _ndefPickDir;
 
   static constexpr const char* _dictPath = "/unigeek/nfc/dictionaries";
   BrowseFileView _browser;
@@ -122,6 +159,32 @@ private:
   void _doDictionaryAttackWithFile(uint8_t fileIndex);
   void _doUltralightDump();
   void _doUltralightWrite();
+  void _doReadNdef();
+  void _doReadClassicNdef();
+  void _showNdefResult(const uint8_t* uid, uint8_t uidLen,
+                       const uint8_t* ndef, size_t ndefLen);
+  void _goNdefWrite();
+  void _goNdefParent();
+  void _doWriteNdefText();
+  void _doWriteNdefUrl();
+  void _doWriteNdefEmail();
+  void _doWriteNdefPhone();
+  void _doWriteNdefVcard();
+  void _doWriteNdefFromFile();
+  void _doWriteNdefFileSelected(uint8_t fileIndex);
+  void _showNdefWritePreview(const uint8_t* ndef, size_t ndefLen, bool fromFile);
+  void _showNdefActions();
+  void _doSaveNdef();
+  void _doWriteCurrentNdef();
+  void _doEraseNdef();
+  void _doEraseClassicNdef();
+  bool _writeNdefRecord(const uint8_t* ndef, size_t ndefLen);
+  bool _writeUltralightNdefRecord(const uint8_t* ndef, size_t ndefLen);
+  bool _writeClassicNdefRecord(const uint8_t* ndef, size_t ndefLen);
+  bool _classicNdefSectors(uint8_t* sectors, size_t maxSectors, size_t& count);
+  bool _classicAuthSector(uint8_t sector, const uint8_t key[6]);
+  bool _classicReadNdefArea(const uint8_t* sectors, size_t sectorCount,
+                            uint8_t*& area, size_t& areaLen);
   void _doDetectGen1a();
   void _doGen3SetUid();
   void _doGen3LockUid();
@@ -133,7 +196,9 @@ private:
   String _hexUid(const uint8_t* uid, uint8_t len) const;
   String _hexBlock(const uint8_t* data, uint8_t len) const;
   const char* _inferType(uint8_t sak, uint16_t atqa) const;
+  const char* _inferType2Variant();
   bool _scanCardOrShow(uint32_t timeoutMs);
   void _pushRow(const String& label, const String& value);
+  void _pushWrappedRow(const String& label, const String& value);
   void _resetRows();
 };

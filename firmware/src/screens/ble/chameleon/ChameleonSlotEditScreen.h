@@ -13,13 +13,13 @@ public:
   void onBack()                      override;
 
 private:
-  static constexpr int kCount = 12;
+  static constexpr int kCount = 15;
 
   uint8_t  _slot;
   char     _title[14];
 
   ListItem _items[kCount];
-  char     _labels[kCount][22];
+  char     _labels[kCount][28];
   char     _subs[kCount][22];
 
   BrowseFileView _browser;  // shared file picker (HF dump browse)
@@ -40,7 +40,10 @@ private:
   void _editNick(bool lf);
   void _loadDefault();
   void _writeContent();
+  void _downloadDump();
   void _viewContent();
+  void _viewData();
+  void _writeTag();
   bool _writeHfFromBin(const char* path);
   bool _writeLfFromHex(const char* hex);
   void _deleteSlot(bool lf);

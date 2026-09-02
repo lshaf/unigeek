@@ -86,6 +86,7 @@ void WifiAPScreen::onItemSelected(uint8_t index)
     case 0: { // SSID
       String ssid = InputTextAction::popup("SSID", Config.get(APP_CONFIG_WIFI_AP_SSID, APP_CONFIG_WIFI_AP_SSID_DEFAULT));
       render();
+      if (InputTextAction::wasCancelled()) { render(); return; }
       if (ssid.isEmpty()) {
         ShowStatusAction::show("SSID is required", 1500);
         render();

@@ -5,6 +5,7 @@
 #include "core/ScreenManager.h"
 #include "core/AchievementManager.h"
 #include "core/ConfigManager.h"
+#include "ui/actions/ShowStatusAction.h"
 
 void ChameleonDeviceScreen::_load() {
   static constexpr const char* kLabels[kFields] = {
@@ -53,6 +54,7 @@ void ChameleonDeviceScreen::_load() {
 }
 
 void ChameleonDeviceScreen::onInit() {
+  ShowStatusAction::show("Loading...", 0);
   _load();
 }
 

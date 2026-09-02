@@ -35,7 +35,6 @@ uint8_t BrowseFileView::load(BaseScreen* host, String dir,
                               LabelStyle style)
 {
   _count = 0;
-  showLoading();
 
   if (!Uni.Storage || !Uni.Storage->isAvailable()) return 0;
 

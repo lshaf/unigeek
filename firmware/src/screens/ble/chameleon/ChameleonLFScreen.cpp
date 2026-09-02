@@ -5,6 +5,7 @@
 #include "core/ScreenManager.h"
 #include "core/AchievementManager.h"
 #include "core/ConfigManager.h"
+#include "ui/actions/ShowStatusAction.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -18,36 +19,13 @@ void ChameleonLFScreen::_draw() {
   sp.fillSprite(TFT_BLACK);
   sp.setTextDatum(MC_DATUM);
 
-  switch (_state) {
-    case STATE_IDLE:
-      sp.setTextColor(TFT_CYAN, TFT_BLACK);
-      sp.drawString("LF Card Reader", bw / 2, bh / 2 - 28);
-      sp.setTextColor(TFT_DARKGREY, TFT_BLACK);
-      sp.drawString("Place EM410X card near", bw / 2, bh / 2 - 10);
-      sp.drawString("Chameleon reader", bw / 2, bh / 2 + 6);
-      sp.setTextColor(TFT_WHITE, TFT_BLACK);
-      sp.drawString("[Press] Scan", bw / 2, bh / 2 + 24);
-      break;
-
-    case STATE_ERROR:
-      sp.setTextColor(TFT_RED, TFT_BLACK);
-      sp.drawString("No card found", bw / 2, bh / 2 - 10);
-      sp.setTextColor(TFT_DARKGREY, TFT_BLACK);
-      sp.drawString("[Press] Retry", bw / 2, bh / 2 + 8);
-      break;
-
-    case STATE_CLONED:
-      sp.setTextColor(TFT_GREEN, TFT_BLACK);
-      sp.drawString("Cloned!", bw / 2, bh / 2 - 20);
-      sp.setTextColor(TFT_WHITE, TFT_BLACK);
-      sp.drawString("Card loaded to slot.", bw / 2, bh / 2 - 4);
-      sp.drawString("Emulating now.", bw / 2, bh / 2 + 12);
-      sp.setTextColor(TFT_DARKGREY, TFT_BLACK);
-      sp.drawString("[Press] Rescan", bw / 2, bh - 10);
-      break;
-
-    default: break;
-  }
+  sp.setTextColor(TFT_CYAN, TFT_BLACK);
+  sp.drawString("LF Card Reader", bw / 2, bh / 2 - 28);
+  sp.setTextColor(TFT_DARKGREY, TFT_BLACK);
+  sp.drawString("Place EM410X card near", bw / 2, bh / 2 - 10);
+  sp.drawString("Chameleon reader", bw / 2, bh / 2 + 6);
+  sp.setTextColor(TFT_WHITE, TFT_BLACK);
+  sp.drawString("[Press] Scan", bw / 2, bh / 2 + 24);
 
   sp.pushSprite(bx, by);
   sp.deleteSprite();
@@ -123,7 +101,12 @@ void ChameleonLFScreen::_doScan() {
     if (n == 5)  Achievement.unlock("chameleon_lf_read_5");
     if (n == 10) Achievement.unlock("chameleon_lf_read_10");
   } else {
-    _state = STATE_ERROR;
+    _state = STATE_IDLE;
+    _needsDraw = true;
+    render();
+    ShowStatusAction::show("No card found", 1200);
+    render();
+    return;
   }
 
   _needsDraw = true;
@@ -141,14 +124,17 @@ void ChameleonLFScreen::_doT5577() {
   auto& c = ChameleonClient::get();
   bool ok = c.writeEM410XToT5577(_uid, nullptr, nullptr, 0);
 
+  _state = STATE_RESULT;
+  _needsDraw = true;
+  render();
+
   if (ok) {
     int n = Achievement.inc("chameleon_t5577_write");
     if (n == 1) Achievement.unlock("chameleon_t5577_write");
-    _state = STATE_CLONED;
+    ShowStatusAction::show("T5577 write OK", 1200);
   } else {
-    _state = STATE_ERROR;
+    ShowStatusAction::show("T5577 write failed", 1200);
   }
-  _needsDraw = true;
   render();
 }
 
@@ -163,17 +149,20 @@ void ChameleonLFScreen::_doClone() {
   auto& c = ChameleonClient::get();
   bool ok = c.setEM410XSlot(_uid);
 
+  _state = STATE_RESULT;
+  _needsDraw = true;
+  render();
+
   if (ok) {
     c.setMode(0); // emulator mode
     int n = Achievement.inc("chameleon_clone");
     if (n == 1)  Achievement.unlock("chameleon_clone");
     if (n == 3)  Achievement.unlock("chameleon_clone_3");
     if (n == 10) Achievement.unlock("chameleon_clone_10");
-    _state = STATE_CLONED;
+    ShowStatusAction::show("Clone OK", 1200);
   } else {
-    _state = STATE_ERROR;
+    ShowStatusAction::show("Clone failed", 1200);
   }
-  _needsDraw = true;
   render();
 }
 

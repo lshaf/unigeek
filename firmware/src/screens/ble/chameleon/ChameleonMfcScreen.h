@@ -21,6 +21,7 @@ private:
     STATE_MF_MENU,
     STATE_SHOW_KEYS,
     STATE_DUMP,
+    STATE_DUMP_RESULT,
     STATE_DICT_SEL,
     STATE_DICT_RUN,
     STATE_DICT_LOG,
@@ -38,6 +39,11 @@ private:
   uint8_t _uidLen  = 0;
   uint8_t _sak     = 0;
   uint8_t _sectors = 16;
+
+  // Current MIFARE Classic dump retained in RAM until the user saves it.
+  uint8_t* _dump       = nullptr;
+  uint16_t _dumpLen    = 0;
+  uint16_t _dumpBlocks = 0;
 
   // Discovered keys
   uint8_t _keysA[40][6] = {};
@@ -91,6 +97,10 @@ private:
   void _callAuth();
   void _showDiscoveredKeys();
   void _callDump();
+  void _buildDumpPreview();
+  void _saveDump();
+  void _freeDump();
+  bool _extractDumpNdef(uint8_t** ndef, size_t* ndefLen) const;
   void _loadDictPicker();
   bool _loadDictFile(const char* path);
   void _runDictAttack();

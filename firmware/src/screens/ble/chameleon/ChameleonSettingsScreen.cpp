@@ -67,6 +67,7 @@ void ChameleonSettingsScreen::_rebuildLabels() {
 }
 
 void ChameleonSettingsScreen::onInit() {
+  ShowStatusAction::show("Loading...", 0);
   _load();
   setItems(_items);
 

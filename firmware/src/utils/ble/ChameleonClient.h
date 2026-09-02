@@ -52,6 +52,7 @@ public:
   static constexpr uint16_t CMD_MF1_READ_BLOCK   = 2008;
   static constexpr uint16_t CMD_MF1_WRITE_BLOCK  = 2009;
   static constexpr uint16_t CMD_HF14A_RAW        = 2010;
+  static constexpr uint16_t CMD_MF1_CHECK_SECTORS = 2012;
   static constexpr uint16_t CMD_MF1_CHECK_BLOCK  = 2015;
   static constexpr uint16_t CMD_SCAN_EM410X      = 3000;
   static constexpr uint16_t CMD_WRITE_EM410X_T5  = 3001;
@@ -65,6 +66,9 @@ public:
   static constexpr uint16_t CMD_MF1_DET_COUNT    = 4005;
   static constexpr uint16_t CMD_MF1_DET_RESULT   = 4006;
   static constexpr uint16_t CMD_MF1_GET_BLOCK    = 4008;
+  static constexpr uint16_t CMD_MF0_NTAG_READ_EMU_PAGE_DATA  = 4021;
+  static constexpr uint16_t CMD_MF0_NTAG_WRITE_EMU_PAGE_DATA = 4022;
+  static constexpr uint16_t CMD_MF0_NTAG_GET_PAGE_COUNT      = 4030;
   static constexpr uint16_t CMD_SET_EM410X_ID    = 5000;
   static constexpr uint16_t CMD_GET_EM410X_ID    = 5001;
   static constexpr uint16_t CMD_SET_HID_PROX_ID  = 5002;
@@ -93,7 +97,7 @@ public:
   bool sendCommand(uint16_t cmd, const uint8_t* data, uint16_t dataLen,
                    uint8_t* respBuf, uint16_t* respLen, uint16_t* respStatus,
                    uint32_t timeoutMs = 2000,
-                   uint16_t respBufSize = 256);
+                   uint16_t respBufSize = 0);
 
   bool getVersion(char* out, uint8_t maxLen);
   bool getGitVersion(char* out, uint8_t maxLen);
@@ -134,6 +138,14 @@ public:
   bool mf1CheckKey(uint8_t block, uint8_t keyType, const uint8_t key[6]);
   bool mf1ReadBlock(uint8_t block, uint8_t keyType, const uint8_t key[6],
                     uint8_t out[16]);
+  bool mf1WriteBlock(uint8_t block, uint8_t keyType, const uint8_t key[6],
+                     const uint8_t data[16]);
+  // Bulk-check candidate keys against selected sector Key A/B positions.
+  // `mask` uses the CU 2012 format: bit 1 = skip, bit 0 = check.
+  bool mf1CheckKeysOfSectors(const uint8_t mask[10],
+                             const uint8_t* keys, uint8_t keyCount,
+                             uint8_t found[10],
+                             uint8_t sectorKeys[40][2][6]);
   // Batch check up to ~32 keys against one block. Firmware returns the first
   // matching key directly; outKey[6] receives it on success.
   bool mf1CheckKeysOfBlock(uint8_t block, uint8_t keyType,
@@ -147,10 +159,60 @@ public:
   bool mf1GetBlockData(uint8_t startBlock, uint8_t count, uint8_t* out,
                        uint16_t* outStatus = nullptr,
                        uint16_t* outLen    = nullptr);
+
+  // Write MF0 / NTAG emulator pages to the active slot. Each page is 4 bytes.
+  // The firmware command payload is: firstPage | pageCount | pageData.
+  bool mfuLoadPageData(uint8_t slot, uint8_t firstPage,
+                       const uint8_t* data, uint8_t pageCount);
+  // Read MF0 / NTAG emulator memory from the active slot.
+  bool mfuGetPageCount(uint8_t* pageCount);
+  bool mfuGetPageData(uint8_t firstPage, uint8_t pageCount, uint8_t* out,
+                      uint16_t* outStatus = nullptr,
+                      uint16_t* outLen = nullptr);
   bool hf14ARaw(uint8_t options, uint16_t timeoutMs, uint16_t bitLen,
                 const uint8_t* data, uint16_t dataBytes,
                 uint8_t* respOut, uint16_t* respLen, uint16_t respBufSize,
                 uint16_t* outStatus = nullptr);
+
+
+  // ── Ultralight / NTAG reader ──
+  enum MfuTagType : uint16_t {
+    MFU_UNKNOWN       = 0,
+    MFU_NTAG213       = 1100,
+    MFU_NTAG215       = 1101,
+    MFU_NTAG216       = 1102,
+    MFU_ULTRALIGHT    = 1103,
+    MFU_ULTRALIGHT_C  = 1104,
+    MFU_ULTRALIGHT_EV1_11 = 1105,
+    MFU_ULTRALIGHT_EV1_21 = 1106,
+    MFU_NTAG210       = 1107,
+    MFU_NTAG212       = 1108,
+  };
+
+  struct MfuTagInfo {
+    uint16_t type;
+    uint16_t pages;
+    uint8_t uid[7];
+    uint8_t uidLen;
+    uint8_t atqa[2];
+    uint8_t sak;
+  };
+
+  // Detect the concrete Ultralight / NTAG variant without asking the user.
+  // GET_VERSION is preferred; legacy tags fall back to safe capability probes.
+  bool mfuDetect(MfuTagInfo* out);
+  // Read a Type-2 memory image as consecutive 4-byte pages.
+  using MfuProgressCallback = void (*)(uint16_t pagesDone, uint16_t totalPages);
+  bool mfuReadDump(const MfuTagInfo& info, uint8_t* out, uint16_t outSize,
+                   uint16_t* bytesRead = nullptr,
+                   MfuProgressCallback progress = nullptr);
+  // Write the writable user-memory area of a physical NTAG215 (pages 4..129).
+  // Manufacturer/UID, lock and configuration/password pages are deliberately
+  // preserved.
+  bool mfuWriteNtag215User(const uint8_t* dump, uint16_t dumpLen,
+                           MfuProgressCallback progress = nullptr,
+                           const MfuTagInfo* expectedTarget = nullptr);
+  static const char* mfuTagTypeName(uint16_t type);
 
   // Firmware-side nested-attack helpers (cmds 2003/2005/2006).
   // The Chameleon Ultra firmware does the entire CRYPTO1 + nested-AUTH dance

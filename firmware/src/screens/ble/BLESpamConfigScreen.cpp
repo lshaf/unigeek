@@ -74,7 +74,8 @@ void BLESpamConfigScreen::onItemSelected(uint8_t index)
       break;
     }
     case 4: {  // Custom name
-      String s = InputTextAction::popup("Custom Name");
+      String s = InputTextAction::popup("Custom Name", BleSpamUtil::customName);
+      if (InputTextAction::wasCancelled()) break;
       strncpy(BleSpamUtil::customName, s.c_str(), sizeof(BleSpamUtil::customName) - 1);
       BleSpamUtil::customName[sizeof(BleSpamUtil::customName) - 1] = '\0';
       break;

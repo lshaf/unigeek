@@ -6,6 +6,7 @@
 #include "core/AchievementManager.h"
 #include "core/ConfigManager.h"
 #include "ui/actions/InputSelectAction.h"
+#include "ui/actions/ShowStatusAction.h"
 
 void ChameleonVikingScreen::_draw() {
   _needsDraw = false;
@@ -17,14 +18,14 @@ void ChameleonVikingScreen::_draw() {
   sp.fillSprite(TFT_BLACK);
   sp.setTextDatum(MC_DATUM);
 
-  if (_state == STATE_IDLE) {
+  if (_state == STATE_IDLE || _state == STATE_ERROR) {
     sp.setTextColor(TFT_CYAN, TFT_BLACK);
     sp.drawString("Viking Scanner", bw / 2, bh / 2 - 20);
     sp.setTextColor(TFT_DARKGREY, TFT_BLACK);
     sp.drawString("Place Viking card", bw / 2, bh / 2);
     sp.setTextColor(TFT_WHITE, TFT_BLACK);
     sp.drawString("[OK] Scan  [Hold] Back", bw / 2, bh / 2 + 20);
-  } else if (_state == STATE_RESULT) {
+  } else if (_state == STATE_RESULT || _state == STATE_CLONED) {
     sp.setTextColor(TFT_GREEN, TFT_BLACK);
     sp.drawString("Viking detected", bw / 2, bh / 2 - 30);
     char hex[24] = {};
@@ -35,16 +36,6 @@ void ChameleonVikingScreen::_draw() {
     sp.drawString(hex, bw / 2, bh / 2 - 10);
     sp.setTextColor(TFT_DARKGREY, TFT_BLACK);
     sp.drawString("[OK] Action  [Hold] Back", bw / 2, bh / 2 + 20);
-  } else if (_state == STATE_CLONED) {
-    sp.setTextColor(TFT_GREEN, TFT_BLACK);
-    sp.drawString("Success!", bw / 2, bh / 2 - 10);
-    sp.setTextColor(TFT_WHITE, TFT_BLACK);
-    sp.drawString("[Back] Menu", bw / 2, bh / 2 + 14);
-  } else {
-    sp.setTextColor(TFT_RED, TFT_BLACK);
-    sp.drawString("No card / failed", bw / 2, bh / 2 - 4);
-    sp.setTextColor(TFT_DARKGREY, TFT_BLACK);
-    sp.drawString("[OK] Retry", bw / 2, bh / 2 + 14);
   }
   sp.pushSprite(bx, by);
   sp.deleteSprite();
@@ -66,13 +57,17 @@ void ChameleonVikingScreen::_doScan() {
   c.setMode(1);
   bool ok = c.scanViking(_uid, &_uidLen);
   _scanning = false;
-  _state = ok ? STATE_RESULT : STATE_ERROR;
+  _state = ok ? STATE_RESULT : STATE_IDLE;
   if (ok) {
     int n = Achievement.inc("chameleon_viking_scan");
     if (n == 1) Achievement.unlock("chameleon_viking_scan");
   }
   _needsDraw = true;
   render();
+  if (!ok) {
+    ShowStatusAction::show("No card found", 1200);
+    render();
+  }
 }
 
 void ChameleonVikingScreen::_doCloneSlot() {
@@ -85,8 +80,10 @@ void ChameleonVikingScreen::_doCloneSlot() {
     if (n == 3) Achievement.unlock("chameleon_clone_3");
     if (n == 10) Achievement.unlock("chameleon_clone_10");
   }
-  _state = ok ? STATE_CLONED : STATE_ERROR;
+  _state = STATE_RESULT;
   _needsDraw = true;
+  render();
+  ShowStatusAction::show(ok ? "Clone OK" : "Clone failed", 1200);
   render();
 }
 
@@ -104,8 +101,10 @@ void ChameleonVikingScreen::_doT5577() {
     int n = Achievement.inc("chameleon_t5577_write");
     if (n == 1) Achievement.unlock("chameleon_t5577_write");
   }
-  _state = ok ? STATE_CLONED : STATE_ERROR;
+  _state = STATE_RESULT;
   _needsDraw = true;
+  render();
+  ShowStatusAction::show(ok ? "T5577 write OK" : "T5577 write failed", 1200);
   render();
 }
 

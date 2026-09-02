@@ -28,6 +28,7 @@ void ChameleonMfkey32Screen::_refresh() {
 }
 
 void ChameleonMfkey32Screen::onInit() {
+  ShowStatusAction::show("Loading...", 0);
   _refresh();
   int n = Achievement.inc("chameleon_mfkey32_open");
   if (n == 1) Achievement.unlock("chameleon_mfkey32_open");

@@ -24,6 +24,7 @@ private:
   uint8_t _atqa[2]    = {};
   uint8_t _sak        = 0;
   uint8_t _activeSlot = 0;
+  uint16_t _tagType    = 0;
 
   static constexpr int kMaxRows = 10;
   ScrollListView      _scrollView;
