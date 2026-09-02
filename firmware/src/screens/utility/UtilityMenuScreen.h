@@ -14,7 +14,7 @@ public:
 
 private:
 #ifdef DEVICE_HAS_WEBAUTHN
-  ListItem _items[11] = {
+  ListItem _items[12] = {
     {"I2C Detector"},
     {"QR Code"},
     {"Barcode"},
@@ -23,12 +23,13 @@ private:
     {"Achievements"},
     {"TOTP Auth"},
     {"UART Terminal"},
+    {"ESPNOW Chat"},
     {"Pomodoro"},
     {"Random Line Picker"},
     {"Wikipedia"},
   };
 #else
-  ListItem _items[10] = {
+  ListItem _items[11] = {
     {"I2C Detector"},
     {"QR Code"},
     {"Barcode"},
@@ -36,6 +37,7 @@ private:
     {"Achievements"},
     {"TOTP Auth"},
     {"UART Terminal"},
+    {"ESPNOW Chat"},
     {"Pomodoro"},
     {"Random Line Picker"},
     {"Wikipedia"},

@@ -2,6 +2,7 @@
 // LilyGO T-Embed CC1101 — Device factory
 //
 #include "core/Device.h"
+#include "core/ConfigManager.h"
 #include "Navigation.h"
 #include "Display.h"
 #include "Power.h"
@@ -18,6 +19,32 @@ static SpeakerEmbedCC1101 speaker;
 
 void Device::boardHook() {
   ledRing.update();
+
+#ifdef DEVICE_HAS_LIGHT_SLEEP
+  // Global shortcut: hold the dedicated Back button for 3 seconds.
+  // Navigation already tracks the current direction and hold duration.
+  if (Nav &&
+      Nav->isPressed() &&
+      Nav->currentDirection() == INavigation::DIR_BACK &&
+      Nav->heldDuration() >= 2000) {
+
+    // Use the same display-safe sequence as Power -> Light Sleep:
+    // turn the PWM-controlled backlight off through IDisplay, enter real
+    // ESP32-S3 Light Sleep, then restore the configured brightness.
+    uint8_t brightness =
+      (uint8_t)Config.get(APP_CONFIG_BRIGHTNESS, APP_CONFIG_BRIGHTNESS_DEFAULT).toInt();
+
+    Lcd.setBrightness(0);
+    Power.lightSleep();
+    Lcd.setBrightness(brightness);
+
+    // lightSleep() waits for the physical Back button to be released, but the
+    // navigation state still represents the press from before sleep until the
+    // next Nav->update(). Suppress that release so it does not also execute a
+    // normal Back action on the current screen.
+    Nav->suppressCurrentPress();
+  }
+#endif
 }
 
 Device* Device::createInstance() {

@@ -4,7 +4,9 @@
 #include "core/AchievementManager.h"
 #include "screens/wifi/network/NetworkMenuScreen.h"
 #include "ui/actions/InputNumberAction.h"
+#include "ui/actions/ShowStatusAction.h"
 #include "ui/views/ProgressView.h"
+#include "utils/network/ScanCancelUtil.h"
 
 // ── screen methods ─────────────────────────────────────
 
@@ -24,6 +26,7 @@ void IPScannerScreen::onBack() {
   switch (_state) {
     case STATE_RESULT_PORT:
       _state = STATE_RESULT_IP;
+      setPreferSublabel(true);
       setItems(_foundItems, (_foundCount == 0) ? 1 : _foundCount);
       break;
     case STATE_RESULT_IP:
@@ -38,15 +41,23 @@ void IPScannerScreen::onBack() {
 void IPScannerScreen::onItemSelected(uint8_t index) {
   if (_state == STATE_CONFIGURATION) {
     switch (index) {
-      case 0:
-        _startIp = InputNumberAction::popup("Start IP", 1, _endIp, _startIp);
-        _showConfiguration();
+      case 0: {
+        int value = InputNumberAction::popup("Start IP", 1, _endIp, _startIp);
+        if (!InputNumberAction::wasCancelled()) _startIp = value;
+        _showConfiguration(index);
         break;
-      case 1:
-        _endIp = InputNumberAction::popup("End IP", _startIp, 254, _endIp);
-        _showConfiguration();
+      }
+      case 1: {
+        int value = InputNumberAction::popup("End IP", _startIp, 254, _endIp);
+        if (!InputNumberAction::wasCancelled()) _endIp = value;
+        _showConfiguration(index);
         break;
+      }
       case 2:
+        _resolveName = !_resolveName;
+        _showConfiguration(index);
+        break;
+      case 3:
         _scanIP();
         break;
     }
@@ -61,44 +72,53 @@ void IPScannerScreen::onItemSelected(uint8_t index) {
 
 // ── private ────────────────────────────────────────────
 
-void IPScannerScreen::_showConfiguration() {
+void IPScannerScreen::_showConfiguration(uint8_t selectedIndex) {
   _state = STATE_CONFIGURATION;
+  setPreferSublabel(false);
   _startIpSub = String(_startIp);
   _endIpSub   = String(_endIp);
   _configItems[0] = {"Start IP", _startIpSub.c_str()};
-  _configItems[1] = {"End IP",   _endIpSub.c_str()};
-  _configItems[2] = {"Start Scan"};
-  setItems(_configItems, 3);
+  _configItems[1] = {"End IP", _endIpSub.c_str()};
+  _configItems[2] = {"Resolve Name", _resolveName ? "On" : "Off"};
+  _configItems[3] = {"Start Scan"};
+  setItems(_configItems, 4, selectedIndex);
 }
 
 void IPScannerScreen::_scanIP() {
-  _state = STATE_SCANNING_IP;
+  if (WiFi.localIP() == IPAddress(0, 0, 0, 0)) {
+    ShowStatusAction::show("WiFi not connected");
+    return;
+  }
 
+  _state = STATE_SCANNING_IP;
   memset(_foundIPs,   0, sizeof(_foundIPs));
   memset(_foundItems, 0, sizeof(_foundItems));
   _foundCount = 0;
 
-  if (WiFi.localIP()[0] == 0) {
-    _foundItems[0] = {"No devices found"};
-    _state = STATE_RESULT_IP;
-    setItems(_foundItems, 1);
-    return;
-  }
-
   int nip = Achievement.inc("wifi_ip_scan_started");
   if (nip == 1) Achievement.unlock("wifi_ip_scan_started");
 
+  ScanCancelUtil::begin();
   ProgressView::init();
+
   _foundCount = IpScanUtil::scan(
     (uint8_t)_startIp, (uint8_t)_endIp,
-    _foundIPs, MAX_FOUND, true,
-    [](uint8_t pct) { ProgressView::progress("IP scanning...", pct); }
+    _foundIPs, MAX_FOUND, _resolveName,
+    [](uint8_t pct) { ProgressView::progress("Scanning...", pct); },
+    []() { return ScanCancelUtil::poll(); }
   );
+
   ProgressView::finish();
+
+  if (ScanCancelUtil::wasCancelled()) {
+    _showConfiguration();
+    return;
+  }
 
   if (_foundCount == 0) {
     _foundItems[0] = {"No devices found"};
     _state = STATE_RESULT_IP;
+    setPreferSublabel(true);
     setItems(_foundItems, 1);
     return;
   }
@@ -106,10 +126,12 @@ void IPScannerScreen::_scanIP() {
   int nh = Achievement.inc("wifi_ip_host_found");
   if (nh == 1) Achievement.unlock("wifi_ip_host_found");
 
-  for (uint8_t i = 0; i < _foundCount; i++)
+  for (uint8_t i = 0; i < _foundCount; i++) {
     _foundItems[i] = {_foundIPs[i].ip, _foundIPs[i].hostname};
+  }
 
   _state = STATE_RESULT_IP;
+  setPreferSublabel(true);
   setItems(_foundItems, _foundCount);
 }
 
@@ -122,13 +144,23 @@ void IPScannerScreen::_scanPort(const char* ip) {
   int nps = Achievement.inc("wifi_port_scan_started");
   if (nps == 1) Achievement.unlock("wifi_port_scan_started");
 
+  ScanCancelUtil::begin();
   ProgressView::init();
-  _openCount = PortScanUtil::scan(ip, _openPorts, PortScanUtil::MAX_RESULTS);
+  String scanLabel = String("Scanning ") + ip + "...";
+  _openCount = PortScanUtil::scan(ip, _openPorts, PortScanUtil::MAX_RESULTS, scanLabel.c_str(), false);
   ProgressView::finish();
+
+  if (ScanCancelUtil::wasCancelled()) {
+    _state = STATE_RESULT_IP;
+    setPreferSublabel(true);
+    setItems(_foundItems, _foundCount);
+    return;
+  }
 
   if (_openCount == 0) {
     _openItems[0] = {"No ports open"};
     _state = STATE_RESULT_PORT;
+    setPreferSublabel(false);
     setItems(_openItems, 1);
     return;
   }
@@ -141,5 +173,6 @@ void IPScannerScreen::_scanPort(const char* ip) {
   }
 
   _state = STATE_RESULT_PORT;
+  setPreferSublabel(false);
   setItems(_openItems, _openCount);
 }

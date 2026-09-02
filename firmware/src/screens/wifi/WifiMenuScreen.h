@@ -16,19 +16,11 @@ public:
   void onBack() override;
 
 private:
-  ListItem _items[13] = {
-    {"Network"},
+  ListItem _items[5] = {
     {"Access Point"},
-    {"Evil Twin"},
-    {"Karma Attack"},
-    {"WiFi Analyzer"},
-    {"Packet Monitor"},
-    {"WiFi Deauther"},
-    {"WiFi Watchdog"},
-    {"Beacon Attack"},
-    {"CIW Zeroclick"},
-    {"ESPNOW Chat"},
-    {"EAPOL Capture"},
-    {"EAPOL Brute Force"},
+    {"Network"},
+    {"Analysis & Detection"},
+    {"Sniffers"},
+    {"Attacks"},
   };
 };

@@ -1,9 +1,7 @@
 #pragma once
 
 #include "ui/templates/ListScreen.h"
-#include "ui/views/BrowseFileView.h"
 #include "ui/views/LogView.h"
-#include "utils/network/DnsSpoofServer.h"
 
 class WifiAPScreen : public ListScreen {
 public:
@@ -16,28 +14,16 @@ public:
   void onItemSelected(uint8_t index) override;
   void onBack() override;
 
-  void logVisit(const char* msg);
-  void logPost(const char* msg);
-
 private:
   enum State { STATE_MENU, STATE_LOG, STATE_QR };
   State _state  = STATE_MENU;
   bool  _hidden = false;
-  bool  _dnsSpoofEnabled = false;
-  bool  _captiveEnabled = false;
   bool  _fileManagerEnabled = false;
 
   String _ssidSub;
   String _passwordSub;
-  String _rogueSub;
-  String _captiveSub;
-  String _fmSub;
-  String _captivePath;
 
-  ListItem _menuItems[7];
-
-  BrowseFileView _browser;     // captive-portal folder picker
-  DnsSpoofServer _dnsSpoofServer;
+  ListItem _menuItems[5];
 
   // Log view
   LogView _log;

@@ -3,7 +3,6 @@
 #include "WifiKarmaCaptiveScreen.h"
 #include "WifiKarmaEapolScreen.h"
 #include "WifiKarmaBroadcastScreen.h"
-#include "WifiKarmaDetectorScreen.h"
 #include "WifiKarmaSupportScreen.h"
 
 void WifiKarmaMenuScreen::onInit() {
@@ -15,8 +14,7 @@ void WifiKarmaMenuScreen::onItemSelected(uint8_t index) {
     case 0: Screen.push(new WifiKarmaCaptiveScreen());   break;
     case 1: Screen.push(new WifiKarmaEapolScreen());     break;
     case 2: Screen.push(new WifiKarmaBroadcastScreen()); break;
-    case 3: Screen.push(new WifiKarmaDetectorScreen());  break;
-    case 4: Screen.push(new WifiKarmaSupportScreen());   break;
+    case 3: Screen.push(new WifiKarmaSupportScreen());   break;
   }
 }
 

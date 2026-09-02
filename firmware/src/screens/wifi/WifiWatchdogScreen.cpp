@@ -1,4 +1,5 @@
 #include "WifiWatchdogScreen.h"
+#include "karma/WifiKarmaDetectorScreen.h"
 #include "core/Device.h"
 #include "core/ScreenManager.h"
 #include "core/AchievementManager.h"
@@ -84,6 +85,8 @@ void WifiWatchdogScreen::onInit()
   _beaconMap.clear();
   _twinMap.clear();
 
+  _karmaBaseline = Achievement.getInt("wifi_karma_attack_detected");
+
   WiFi.mode(WIFI_MODE_STA);
   esp_wifi_set_promiscuous(true);
   esp_wifi_set_promiscuous_rx_cb(&WifiWatchdogScreen::_promiscuousCb);
@@ -92,7 +95,42 @@ void WifiWatchdogScreen::onInit()
   Uni.Nav->setSuppressKeys(true);
 #endif
 
-  render();
+  if (_initialView != InitialView::None) {
+    static constexpr View kInitialViewMap[] = {
+      VIEW_DEAUTH, VIEW_PROBES, VIEW_FLOOD, VIEW_EVILTWIN
+    };
+    _enterView(kInitialViewMap[static_cast<int>(_initialView)]);
+  } else {
+    render();
+  }
+}
+
+void WifiWatchdogScreen::_enterView(View view)
+{
+#ifdef DEVICE_HAS_TOUCH_NAV
+  Uni.Nav->setSuppressKeys(false);
+#endif
+  _holdCell  = -1;
+  _view      = view;
+  _itemCount = 0;
+  _scroll.resetScroll();
+  _renderView();
+}
+
+void WifiWatchdogScreen::onRestore()
+{
+  WiFi.mode(WIFI_MODE_STA);
+  esp_wifi_set_promiscuous(true);
+  esp_wifi_set_promiscuous_rx_cb(&WifiWatchdogScreen::_promiscuousCb);
+
+  _view        = VIEW_OVERALL;
+  _prevGridSel = -1;
+  _holdCell    = -1;
+  for (int i = 0; i < 4; i++) _prevCounts[i] = -1;
+
+#ifdef DEVICE_HAS_TOUCH_NAV
+  Uni.Nav->setSuppressKeys(true);
+#endif
 }
 
 void WifiWatchdogScreen::onUpdate()
@@ -114,13 +152,15 @@ void WifiWatchdogScreen::onUpdate()
         const int col = gx / (gw / 2);
         const int row = ((int)ty - (int)bodyY()) / (bodyH() / 2);
         if (col >= 0 && col < 2 && row >= 0 && row < 2) {
-          static constexpr View kViewMap[] = {VIEW_DEAUTH, VIEW_PROBES, VIEW_FLOOD, VIEW_EVILTWIN};
-          Uni.Nav->setSuppressKeys(false);
-          _holdCell  = -1;
-          _view      = kViewMap[row * 2 + col];
-          _itemCount = 0;
-          _scroll.resetScroll();
-          _renderView();
+          const int idx = row * 2 + col;
+          if (idx == 3) {
+            Uni.Nav->setSuppressKeys(false);
+            Screen.push(new WifiKarmaDetectorScreen());
+            return;
+          }
+          static constexpr View kViewMap[] = {VIEW_DEAUTH, VIEW_FLOOD, VIEW_EVILTWIN};
+          _enterView(kViewMap[idx]);
+          return;
         }
       }
 #else
@@ -144,11 +184,12 @@ void WifiWatchdogScreen::onUpdate()
         _renderOverall();
         if (Uni.Speaker) Uni.Speaker->beep();
       } else if (dir == INavigation::DIR_PRESS) {
-        static constexpr View kViewMap[] = {VIEW_DEAUTH, VIEW_PROBES, VIEW_FLOOD, VIEW_EVILTWIN};
-        _view      = kViewMap[_gridSel];
-        _itemCount = 0;
-        _scroll.resetScroll();
-        _renderView();
+        if (_gridSel == 3) {
+          Screen.push(new WifiKarmaDetectorScreen());
+          return;
+        }
+        static constexpr View kViewMap[] = {VIEW_DEAUTH, VIEW_FLOOD, VIEW_EVILTWIN};
+        _enterView(kViewMap[_gridSel]);
         return;
       }
 #endif
@@ -195,6 +236,10 @@ void WifiWatchdogScreen::onUpdate()
     if (Uni.Nav->wasPressed()) {
       auto dir = Uni.Nav->readDirection();
       if (dir == INavigation::DIR_BACK || dir == INavigation::DIR_PRESS) {
+        if (_initialView != InitialView::None) {
+          onBack();
+          return;
+        }
         _view        = VIEW_OVERALL;
         _prevGridSel = -1;
 #ifdef DEVICE_HAS_TOUCH_NAV
@@ -233,14 +278,14 @@ void WifiWatchdogScreen::onRender()
   if (_itemCount > 0) {
     _scroll.render(bodyX(), bodyY(), bodyW(), bodyH());
   } else {
-    Sprite sp(&Uni.Lcd);
-    sp.createSprite(bodyW(), bodyH());
-    sp.fillSprite(TFT_BLACK);
-    sp.setTextDatum(MC_DATUM);
-    sp.setTextColor(TFT_DARKGREY, TFT_BLACK);
-    sp.drawString("Monitoring...", bodyW() / 2, bodyH() / 2);
-    sp.pushSprite(bodyX(), bodyY());
-    sp.deleteSprite();
+    Uni.Lcd.fillRect(bodyX(), bodyY(), bodyW(), bodyH(), TFT_BLACK);
+    Uni.Lcd.setTextDatum(MC_DATUM);
+    Uni.Lcd.setTextColor(TFT_DARKGREY, TFT_BLACK);
+    Uni.Lcd.drawString(
+      "Monitoring...",
+      bodyX() + bodyW() / 2,
+      bodyY() + bodyH() / 2
+    );
   }
 }
 
@@ -475,13 +520,14 @@ void WifiWatchdogScreen::_renderOverall()
 
   int counts[4];
   counts[0] = (int)_deauthMap.size();
-  counts[1] = (int)_probeMap.size();
-  counts[2] = 0;
+  counts[1] = 0;
   for (auto& kv : _beaconMap)
-    if (kv.second.ratePerSec >= FLOOD_THRESHOLD) counts[2]++;
-  counts[3] = 0;
+    if (kv.second.ratePerSec >= FLOOD_THRESHOLD) counts[1]++;
+  counts[2] = 0;
   for (auto& kv : _twinMap)
-    if ((int)kv.second.size() >= 2) counts[3]++;
+    if ((int)kv.second.size() >= 2) counts[2]++;
+  counts[3] = Achievement.getInt("wifi_karma_attack_detected") - _karmaBaseline;
+  if (counts[3] < 0) counts[3] = 0;
 
   const bool forceAll = (_prevGridSel < 0);
 
@@ -635,7 +681,7 @@ void WifiWatchdogScreen::_drawBackButton()
 void WifiWatchdogScreen::_drawGridCell(int idx, int count)
 {
   static constexpr const char* kNames[] = {
-    "Deauth", "Probes", "Beacon Flood", "Evil Twin"
+    "Deauth", "Beacon Flood", "Evil Twin", "Karma"
   };
 
 #ifdef DEVICE_HAS_TOUCH_NAV

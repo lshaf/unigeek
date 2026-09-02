@@ -79,8 +79,8 @@ void WifiKarmaDetectorScreen::onRender()
   if (_state == STATE_SCANNING) {
     sp.setTextDatum(MC_DATUM);
     sp.setTextColor(TFT_DARKGREY, TFT_BLACK);
-    sp.drawString(_statusLine[0] ? _statusLine : "Starting...", bodyW() / 2, bodyH() / 2 - 8);
-    sp.drawString("No Karma Attacks Found", bodyW() / 2, bodyH() / 2 + 8);
+    sp.drawString("Monitoring...", bodyW() / 2, bodyH() / 2 - 8);
+    sp.drawString(_statusLine[0] ? _statusLine : "Starting...", bodyW() / 2, bodyH() / 2 + 8);
   } else {
     // Alert view
     const int cy = bodyH() / 2;

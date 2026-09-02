@@ -13,13 +13,10 @@ public:
 private:
   void _toggleRemoteDevice();
 
-  ListItem _items[7] = {
-    {"BLE Analyzer"},
-    {"BLE Spam"},
-    {"BLE Detector"},
-    {"WhisperPair"},
-    {"Chameleon Ultra"},
-    {"Claude Buddy"},
-    {"Remote Device"},
+  ListItem _items[4] = {
+    {"Analysis & Detection"},
+    {"Attacks"},
+    {"Extensions"},
+    {"BLE Remote"},
   };
 };

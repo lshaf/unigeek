@@ -1,14 +1,27 @@
 #include "CctvSnifferScreen.h"
+#include "utils/network/TargetResolveUtil.h"
 #include "core/Device.h"
 #include "core/ScreenManager.h"
-#include "screens/wifi/network/NetworkMenuScreen.h"
 #include "ui/actions/InputTextAction.h"
-#include "ui/actions/InputSelectAction.h"
+#include "ui/actions/InputNumberAction.h"
 #include "ui/actions/ShowStatusAction.h"
 #include "ui/views/ProgressView.h"
-#include "utils/network/IpScanUtil.h"
+#include "utils/network/ScanCancelUtil.h"
 #include <WiFi.h>
 #include <TJpg_Decoder.h>
+
+namespace {
+static const char* gCameraProgressLabel = nullptr;
+
+static void cameraPortProgress(uint8_t pct)
+{
+  if (!gCameraProgressLabel) return;
+  ProgressView::progress(
+    gCameraProgressLabel,
+    (uint8_t)((uint16_t)pct * 70 / 100)
+  );
+}
+}
 
 CctvSnifferScreen* CctvSnifferScreen::_instance = nullptr;
 
@@ -17,6 +30,10 @@ CctvSnifferScreen* CctvSnifferScreen::_instance = nullptr;
 void CctvSnifferScreen::onInit()
 {
   _username = "admin";
+  memset(_hosts,       0, sizeof(_hosts));
+  memset(_cameras,     0, sizeof(_cameras));
+  memset(_cameraItems, 0, sizeof(_cameraItems));
+  memset(_configItems, 0, sizeof(_configItems));
   _showConfig();
 }
 
@@ -24,17 +41,21 @@ void CctvSnifferScreen::onBack()
 {
   switch (_state) {
     case STATE_SCANNING:
-      break;  // can't exit during scan
+      break;
+
     case STATE_STREAMING:
       _stopStream();
       _showCameraMenu(_selectedCamera);
       break;
+
     case STATE_CAMERA_MENU:
       _showCameraList();
       break;
+
     case STATE_CAMERA_LIST:
       _showConfig();
       break;
+
     default:
       Screen.goBack();
       break;
@@ -43,92 +64,86 @@ void CctvSnifferScreen::onBack()
 
 void CctvSnifferScreen::onItemSelected(uint8_t index)
 {
-  switch (_state) {
-    case STATE_CONFIG:
-      switch (index) {
-        case 0: { // Mode
-          static constexpr InputSelectAction::Option opts[] = {
-            {"Local Network (LAN)", "lan"},
-            {"Single IP",           "single"},
-            {"File IP",             "file"},
-          };
-          const char* val = InputSelectAction::popup("Mode", opts, 3);
-          if (val) {
-            if (strcmp(val, "lan") == 0)         _mode = MODE_LAN;
-            else if (strcmp(val, "single") == 0) _mode = MODE_SINGLE_IP;
-            else if (strcmp(val, "file") == 0)   _mode = MODE_FILE_IP;
-          }
-          _showConfig();
-          break;
-        }
-        case 1: // IP or File or Network (depends on mode)
-          if (_mode == MODE_SINGLE_IP) {
-            String ip = InputTextAction::popup("Target IP", _targetIp, InputTextAction::INPUT_IP_ADDRESS);
-            if (ip.length()) _targetIp = ip;
-            _showConfig();
-          } else if (_mode == MODE_FILE_IP) {
-            String file = InputTextAction::popup("File Path", _targetFile);
-            if (file.length()) _targetFile = file;
-            _showConfig();
-          }
-          // LAN mode: network info is display-only
-          break;
-        case 2: // Start
-          _startScan();
-          break;
-      }
-      break;
+  if (_state == STATE_CONFIG) {
+    if (index >= _configCount) return;
 
-    case STATE_CAMERA_LIST:
-      if (index < _cameraCount) {
-        _showCameraMenu(index);
-      }
-      break;
+    switch (_configActions[index]) {
+      case CFG_MODE:
+        _scanMode = (_scanMode == MODE_RANGE) ? MODE_TARGETS : MODE_RANGE;
+        _showConfig(index);
+        break;
 
-    case STATE_CAMERA_MENU:
-      switch (index) {
-        case 0: { // Username
-          String u = InputTextAction::popup("Username", _username);
-          if (u.length()) _username = u;
-          _showCameraMenu(_selectedCamera);
-          break;
-        }
-        case 1: { // Password
-          String p = InputTextAction::popup("Password", _password);
-          if (!InputTextAction::wasCancelled()) _password = p;
-          _showCameraMenu(_selectedCamera);
-          break;
-        }
-        case 2: // Stream
-          _startStream();
-          break;
-        case 3: // Back
-          _showCameraList();
-          break;
-      }
-      break;
+      case CFG_TARGET_1:
+        _editTarget(0, index);
+        break;
+      case CFG_TARGET_2:
+        _editTarget(1, index);
+        break;
+      case CFG_TARGET_3:
+        _editTarget(2, index);
+        break;
+      case CFG_TARGET_4:
+        _editTarget(3, index);
+        break;
 
-    default:
-      break;
+      case CFG_START_IP: {
+        int value = InputNumberAction::popup("Start IP", 1, _endIp, _startIp);
+        if (!InputNumberAction::wasCancelled()) _startIp = value;
+        _showConfig(index);
+        break;
+      }
+
+      case CFG_END_IP: {
+        int value = InputNumberAction::popup("End IP", _startIp, 254, _endIp);
+        if (!InputNumberAction::wasCancelled()) _endIp = value;
+        _showConfig(index);
+        break;
+      }
+
+      case CFG_START_SCAN:
+        _startScan();
+        break;
+    }
+    return;
+  }
+
+  if (_state == STATE_CAMERA_LIST) {
+    if (_cameraCount > 0 && index < _cameraCount) {
+      _showCameraMenu(index);
+    }
+    return;
+  }
+
+  if (_state == STATE_CAMERA_MENU) {
+    switch (index) {
+      case 0: {
+        String u = InputTextAction::popup("Username", _username);
+        if (u.length()) _username = u;
+        _showCameraMenu(_selectedCamera);
+        break;
+      }
+
+      case 1: {
+        String p = InputTextAction::popup("Password", _password);
+        if (!InputTextAction::wasCancelled()) _password = p;
+        _showCameraMenu(_selectedCamera);
+        break;
+      }
+
+      case 2:
+        _startStream();
+        break;
+
+      case 3:
+        _showCameraList();
+        break;
+    }
   }
 }
 
 void CctvSnifferScreen::onUpdate()
 {
-  if (_state == STATE_SCANNING) {
-    if (Uni.Nav->wasPressed()) {
-      auto dir = Uni.Nav->readDirection();
-      if (dir == INavigation::DIR_BACK || dir == INavigation::DIR_PRESS) {
-        if (_cameraCount > 0) {
-          _showCameraList();
-        } else {
-          _showConfig();
-        }
-        return;
-      }
-    }
-    return;
-  }
+  if (_state == STATE_SCANNING) return;
 
   if (_state == STATE_STREAMING) {
     if (_stream.isConnected()) {
@@ -141,7 +156,6 @@ void CctvSnifferScreen::onUpdate()
         _frameCount = 0;
         _lastFrame = now;
 
-        // Draw FPS overlay
         char fpsBuf[16];
         snprintf(fpsBuf, sizeof(fpsBuf), "%.1f FPS", _fps);
         Uni.Lcd.setTextColor(TFT_YELLOW, TFT_BLACK);
@@ -160,7 +174,6 @@ void CctvSnifferScreen::onUpdate()
       if (dir == INavigation::DIR_BACK || dir == INavigation::DIR_PRESS) {
         _stopStream();
         _showCameraMenu(_selectedCamera);
-        return;
       }
     }
     return;
@@ -169,189 +182,254 @@ void CctvSnifferScreen::onUpdate()
   ListScreen::onUpdate();
 }
 
-void CctvSnifferScreen::onRender()
-{
-  if (_state == STATE_SCANNING) { _drawLog(); return; }
-  ListScreen::onRender();
-}
-
 // ── Config ──────────────────────────────────────────────────────────────────
 
-void CctvSnifferScreen::_showConfig()
+void CctvSnifferScreen::_showConfig(uint8_t selectedIndex)
 {
   _state = STATE_CONFIG;
+  _configCount = 0;
 
-  static const char* modeNames[] = {"LAN", "Single IP", "File IP"};
-  _modeSub = modeNames[_mode];
+  auto add = [&](const char* label, const char* sub, ConfigAction action) {
+    _configItems[_configCount] = {label, sub};
+    _configActions[_configCount] = action;
+    _configCount++;
+  };
 
-  _configItems[0] = {"Mode", _modeSub.c_str()};
+  add("Mode", _scanMode == MODE_RANGE ? "Range" : "Targets", CFG_MODE);
 
-  if (_mode == MODE_SINGLE_IP) {
-    _ipSub = _targetIp.length() ? _targetIp : "Not set";
-    _configItems[1] = {"IP", _ipSub.c_str()};
-  } else if (_mode == MODE_FILE_IP) {
-    if (!_targetFile.length()) _targetFile = "/unigeek/utility/cctv/targets.txt";
-    int lastSlash = _targetFile.lastIndexOf('/');
-    _fileSub = lastSlash >= 0 ? _targetFile.substring(lastSlash + 1) : _targetFile;
-    _configItems[1] = {"File", _fileSub.c_str()};
+  if (_scanMode == MODE_TARGETS) {
+    static const ConfigAction targetActions[MAX_TARGETS] = {
+      CFG_TARGET_1, CFG_TARGET_2, CFG_TARGET_3, CFG_TARGET_4
+    };
+    static const char* targetLabels[MAX_TARGETS] = {
+      "Target 1", "Target 2", "Target 3", "Target 4"
+    };
+
+    for (uint8_t i = 0; i < MAX_TARGETS; ++i) {
+      _targetSubs[i] = _targets[i].length() > 0 ? _targets[i] : "-";
+      add(targetLabels[i], _targetSubs[i].c_str(), targetActions[i]);
+    }
   } else {
-    _ipSub = WiFi.SSID();
-    _configItems[1] = {"Network", _ipSub.c_str()};
+    _startIpSub = String(_startIp);
+    _endIpSub   = String(_endIp);
+    add("Start IP", _startIpSub.c_str(), CFG_START_IP);
+    add("End IP",   _endIpSub.c_str(),   CFG_END_IP);
   }
 
-  _configItems[2] = {"Start Scan"};
-  setItems(_configItems, 3);
+  add("Start Scan", nullptr, CFG_START_SCAN);
+  setItems(_configItems, _configCount, selectedIndex);
 }
 
 // ── Scanning ────────────────────────────────────────────────────────────────
 
 void CctvSnifferScreen::_startScan()
 {
-  if (_mode == MODE_SINGLE_IP && !_targetIp.length()) {
-    ShowStatusAction::show("Set IP first!", 1500);
+  if (WiFi.localIP()[0] == 0 && WiFi.localIP()[1] == 0 &&
+      WiFi.localIP()[2] == 0 && WiFi.localIP()[3] == 0) {
+    ShowStatusAction::show("WiFi not connected");
     return;
+  }
+
+  if (_scanMode == MODE_TARGETS) {
+    if (!_hasTargets()) {
+      ShowStatusAction::show("Enter at least one target");
+      return;
+    }
+
+    for (uint8_t i = 0; i < MAX_TARGETS; ++i) {
+      if (_targets[i].length() > 0 && !TargetResolveUtil::isValidTarget(_targets[i])) {
+        ShowStatusAction::show("Invalid target");
+        return;
+      }
+    }
   }
 
   _state = STATE_SCANNING;
-  _log.clear();
   _cameraCount = 0;
-  memset(_cameras, 0, sizeof(_cameras));
-  setItems(nullptr, 0);
+  memset(_hosts,       0, sizeof(_hosts));
+  memset(_cameras,     0, sizeof(_cameras));
+  memset(_cameraItems, 0, sizeof(_cameraItems));
 
-  switch (_mode) {
-    case MODE_LAN:       _scanLAN();      break;
-    case MODE_SINGLE_IP: _scanSingleIP(); break;
-    case MODE_FILE_IP:   _scanFileIP();   break;
-  }
-
-  if (_cameraCount > 0) {
-    char buf[40];
-    snprintf(buf, sizeof(buf), "[+] Found %d camera(s)", _cameraCount);
-    _log.addLine(buf);
-    _log.addLine("BACK/Press for results");
-  } else {
-    _log.addLine("[!] No cameras found");
-    _log.addLine("BACK/Press to return");
-  }
-  render();
-}
-
-void CctvSnifferScreen::_scanLAN()
-{
-  if (WiFi.localIP()[0] == 0) {
-    _log.addLine("[!] Not connected");
-    return;
-  }
-
-  _log.addLine("[*] Ping scanning LAN...");
-  render();
-
-  static IpScanUtil::Host hosts[64];
+  ScanCancelUtil::begin();
   ProgressView::init();
-  uint8_t hostCount = IpScanUtil::scan(1, 254, hosts, 64, false,
-    [](uint8_t pct) { ProgressView::progress("Ping scanning...", pct * 40 / 100); });
 
-  if (hostCount == 0) {
-    ProgressView::finish();
-    _log.addLine("[!] No hosts found");
-    return;
-  }
+  if (_scanMode == MODE_TARGETS) {
+    uint8_t targetCount = 0;
+    for (uint8_t i = 0; i < MAX_TARGETS; ++i) {
+      if (_targets[i].length() > 0) targetCount++;
+    }
 
-  char buf[40];
-  snprintf(buf, sizeof(buf), "[*] %d host(s), scanning ports...", hostCount);
-  _log.addLine(buf);
-  render();
+    uint8_t done = 0;
+    for (uint8_t i = 0; i < MAX_TARGETS && _cameraCount < MAX_FOUND; ++i) {
+      if (_targets[i].length() == 0) continue;
+      if (ScanCancelUtil::poll()) break;
 
-  for (uint8_t i = 0; i < hostCount; i++) {
-    snprintf(buf, sizeof(buf), "[*] Host: %s", hosts[i].ip);
-    _log.addLine(buf);
-    render();
-    _scanHost(hosts[i].ip);
-    ProgressView::progress("Scanning...", 40 + i * 60 / hostCount);
+      char label[48];
+      snprintf(
+        label, sizeof(label),
+        "Scanning %s (%u/%u)...",
+        _targets[i].c_str(),
+        (unsigned)(done + 1),
+        (unsigned)targetCount
+      );
+      ProgressView::progress(label, 0);
+      String resolved;
+      if (!TargetResolveUtil::resolve(_targets[i], resolved)) {
+        ShowStatusAction::show("Could not resolve target", 900);
+        done++;
+        continue;
+      }
+      _scanTarget(resolved.c_str(), label);
+      done++;
+    }
+  } else {
+    _scanRange();
   }
 
   ProgressView::finish();
-  snprintf(buf, sizeof(buf), "[*] %d host(s) on network", hostCount);
-  _log.addLine(buf);
-}
 
-void CctvSnifferScreen::_scanSingleIP()
-{
-  char buf[40];
-  snprintf(buf, sizeof(buf), "[*] Scanning %s...", _targetIp.c_str());
-  _log.addLine(buf);
-  render();
-  _scanHost(_targetIp.c_str());
-}
-
-void CctvSnifferScreen::_scanFileIP()
-{
-  if (!Uni.Storage || !Uni.Storage->exists(_targetFile.c_str())) {
-    _log.addLine("[!] File not found");
+  if (ScanCancelUtil::wasCancelled()) {
+    _showConfig();
     return;
   }
-
-  String content = Uni.Storage->readFile(_targetFile.c_str());
-  int lineStart = 0;
-  int ipCount = 0;
-
-  while (lineStart < (int)content.length()) {
-    int lineEnd = content.indexOf('\n', lineStart);
-    if (lineEnd < 0) lineEnd = content.length();
-
-    String line = content.substring(lineStart, lineEnd);
-    line.trim();
-    lineStart = lineEnd + 1;
-
-    if (line.length() == 0 || line[0] == '#') continue;
-
-    IPAddress ip;
-    if (!ip.fromString(line)) continue;
-
-    ipCount++;
-    char buf[40];
-    snprintf(buf, sizeof(buf), "[*] Scanning %s...", line.c_str());
-    _log.addLine(buf);
-    render();
-    _scanHost(line.c_str());
-  }
-
-  char buf[40];
-  snprintf(buf, sizeof(buf), "[*] %d IP(s) from file", ipCount);
-  _log.addLine(buf);
+  _showCameraList();
 }
 
-void CctvSnifferScreen::_scanHost(const char* ip)
+bool CctvSnifferScreen::_validIp(const String& ip) const
+{
+  int a, b, c, d;
+  char tail;
+
+  return sscanf(ip.c_str(), "%d.%d.%d.%d%c", &a, &b, &c, &d, &tail) == 4 &&
+         a >= 0 && a <= 255 &&
+         b >= 0 && b <= 255 &&
+         c >= 0 && c <= 255 &&
+         d >= 0 && d <= 255;
+}
+
+bool CctvSnifferScreen::_hasTargets() const
+{
+  for (uint8_t i = 0; i < MAX_TARGETS; ++i) {
+    if (_targets[i].length() > 0) return true;
+  }
+  return false;
+}
+
+void CctvSnifferScreen::_editTarget(uint8_t targetIndex, uint8_t selectedIndex)
+{
+  if (targetIndex >= MAX_TARGETS) return;
+
+  String initial = _targets[targetIndex].length() > 0
+    ? _targets[targetIndex]
+    : _networkPrefix();
+
+  char title[16];
+  snprintf(title, sizeof(title), "Target %u", (unsigned)(targetIndex + 1));
+
+  String ip = InputTextAction::popup(
+    title,
+    initial.c_str(),
+    InputTextAction::INPUT_IP_ADDRESS
+  );
+
+  if (!InputTextAction::wasCancelled()) {
+    _targets[targetIndex] = ip;
+  }
+
+  _showConfig(selectedIndex);
+}
+
+void CctvSnifferScreen::_scanTarget(const char* ip, const char* label)
+{
+  if (!ip || !ip[0] || _cameraCount >= MAX_FOUND) return;
+
+  gCameraProgressLabel = label;
+  ProgressView::progress(label, 0);
+  _scanHost(ip, label);
+  ProgressView::progress(label, 100);
+  gCameraProgressLabel = nullptr;
+}
+
+void CctvSnifferScreen::_scanRange()
+{
+  uint8_t hostCount = IpScanUtil::scan(
+    (uint8_t)_startIp,
+    (uint8_t)_endIp,
+    _hosts,
+    MAX_FOUND_HOSTS,
+    false,
+    [](uint8_t pct) {
+      ProgressView::progress("Scanning hosts...", pct);
+    },
+    []() { return ScanCancelUtil::poll(); }
+  );
+
+  for (uint8_t i = 0; i < hostCount && _cameraCount < MAX_FOUND; i++) {
+    if (ScanCancelUtil::poll()) break;
+    char label[48];
+    snprintf(
+      label, sizeof(label),
+      "Scanning %s (%u/%u)...",
+      _hosts[i].ip,
+      (unsigned)(i + 1),
+      (unsigned)hostCount
+    );
+    ProgressView::progress(label, 0);
+    _scanTarget(_hosts[i].ip, label);
+  }
+}
+
+void CctvSnifferScreen::_scanHost(const char* ip, const char* label)
 {
   CctvScanUtil::Camera tempCams[8];
-  uint8_t found = CctvScanUtil::scanPorts(ip, tempCams, 8);
+  const bool patient = _scanMode == MODE_TARGETS;
+  uint8_t found = CctvScanUtil::scanPorts(
+    ip,
+    tempCams,
+    8,
+    patient,
+    cameraPortProgress
+  );
 
-  if (found == 0) return;
-
-  char buf[60];
-  snprintf(buf, sizeof(buf), "    %d port(s) open", found);
-  _log.addLine(buf);
+  if (found == 0) {
+    ProgressView::progress(label, 100);
+    return;
+  }
 
   for (uint8_t i = 0; i < found && _cameraCount < MAX_FOUND; i++) {
     bool detected = false;
 
     if (strcmp(tempCams[i].service, "RTSP") == 0) {
-      detected = CctvScanUtil::probeRtsp(ip, tempCams[i].port,
-                                          tempCams[i].brand, sizeof(tempCams[i].brand));
+      detected = CctvScanUtil::probeRtsp(
+        ip,
+        tempCams[i].port,
+        tempCams[i].brand,
+        sizeof(tempCams[i].brand),
+        patient
+      );
     } else if (strcmp(tempCams[i].service, "RTMP") != 0) {
-      detected = CctvScanUtil::detectBrand(ip, tempCams[i].port,
-                                            tempCams[i].brand, sizeof(tempCams[i].brand));
+      detected = CctvScanUtil::detectBrand(
+        ip,
+        tempCams[i].port,
+        tempCams[i].brand,
+        sizeof(tempCams[i].brand),
+        patient
+      );
     }
 
     if (detected) {
-      memcpy(&_cameras[_cameraCount], &tempCams[i], sizeof(CctvScanUtil::Camera));
+      memcpy(
+        &_cameras[_cameraCount],
+        &tempCams[i],
+        sizeof(CctvScanUtil::Camera)
+      );
       _cameraCount++;
-
-      snprintf(buf, sizeof(buf), "    [+] %s:%d (%s)",
-               ip, tempCams[i].port, tempCams[i].brand);
-      _log.addLine(buf);
-      render();
     }
+
+    ProgressView::progress(
+      label,
+      (uint8_t)(70 + ((uint16_t)(i + 1) * 30 / found))
+    );
   }
 }
 
@@ -359,16 +437,22 @@ void CctvSnifferScreen::_scanHost(const char* ip)
 
 void CctvSnifferScreen::_showCameraList()
 {
+  _state = STATE_CAMERA_LIST;
+
   if (_cameraCount == 0) {
-    _showConfig();
+    _cameraItems[0] = {"No cameras found"};
+    setItems(_cameraItems, 1);
     return;
   }
 
-  _state = STATE_CAMERA_LIST;
-
   for (uint8_t i = 0; i < _cameraCount; i++) {
-    snprintf(_cameraLabels[i], sizeof(_cameraLabels[i]),
-             "%s:%d", _cameras[i].ip, _cameras[i].port);
+    snprintf(
+      _cameraLabels[i],
+      sizeof(_cameraLabels[i]),
+      "%s:%d",
+      _cameras[i].ip,
+      _cameras[i].port
+    );
     _cameraItems[i] = {_cameraLabels[i], _cameras[i].brand};
   }
 
@@ -391,11 +475,14 @@ void CctvSnifferScreen::_showCameraMenu(uint8_t camIdx)
   setItems(_menuItems, 4);
 }
 
-// ── Log ─────────────────────────────────────────────────────────────────────
-
-void CctvSnifferScreen::_drawLog()
+String CctvSnifferScreen::_networkPrefix() const
 {
-  _log.draw(Uni.Lcd, bodyX(), bodyY(), bodyW(), bodyH());
+  IPAddress ip = WiFi.localIP();
+  if (ip[0] == 0 && ip[1] == 0 && ip[2] == 0 && ip[3] == 0) return "";
+
+  char prefix[16];
+  snprintf(prefix, sizeof(prefix), "%u.%u.%u.", ip[0], ip[1], ip[2]);
+  return String(prefix);
 }
 
 // ── Streaming ───────────────────────────────────────────────────────────────
@@ -408,19 +495,10 @@ void CctvSnifferScreen::_startStream()
   const char* pass = _password.length() ? _password.c_str() : nullptr;
 
   char streamUrl[128];
-  _log.addLine("[*] Finding stream...");
-  render();
-
   if (!CctvScanUtil::findStream(ip, port, user, pass, streamUrl, sizeof(streamUrl))) {
     snprintf(streamUrl, sizeof(streamUrl), "http://%s:%u/mjpg/video.mjpg", ip, port);
-    _log.addLine("[!] Trying default path");
-    render();
   }
 
-  char buf[60];
-  snprintf(buf, sizeof(buf), "[*] Connecting %s:%u", ip, port);
-  _log.addLine(buf);
-  render();
 
   if (!_stream.begin(streamUrl, user, pass)) {
     ShowStatusAction::show("Stream failed!", 1500);

@@ -5,6 +5,7 @@
 #pragma once
 
 #include "ui/templates/BaseScreen.h"
+#include "pins_arduino.h"
 
 class MainMenuScreen : public BaseScreen
 {
@@ -28,9 +29,9 @@ private:
     DrawIconFunc drawIcon;
   };
 
-#if defined(APP_MENU_POWER_OFF) && defined(DEVICE_HAS_TOUCH_NAV)
+#if (defined(DEVICE_HAS_LIGHT_SLEEP) || defined(DEVICE_HAS_DEEP_SLEEP) || defined(DEVICE_HAS_POWER_OFF) || defined(APP_MENU_POWER_OFF)) && defined(DEVICE_HAS_TOUCH_NAV)
   static const uint8_t ITEM_COUNT = 10;
-#elif defined(APP_MENU_POWER_OFF) || defined(DEVICE_HAS_TOUCH_NAV)
+#elif defined(DEVICE_HAS_LIGHT_SLEEP) || defined(DEVICE_HAS_DEEP_SLEEP) || defined(DEVICE_HAS_POWER_OFF) || defined(APP_MENU_POWER_OFF) || defined(DEVICE_HAS_TOUCH_NAV)
   static const uint8_t ITEM_COUNT = 9;
 #else
   static const uint8_t ITEM_COUNT = 8;

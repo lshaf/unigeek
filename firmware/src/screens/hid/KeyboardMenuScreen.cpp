@@ -17,7 +17,7 @@
 
 void KeyboardMenuScreen::onInit()
 {
-  _items[USB_REMOTE_IDX].sublabel = UartFM.isActive() ? "ON" : "OFF";
+  _items[USB_REMOTE_IDX].sublabel = UartFM.isActive() ? "On" : "Off";
   setItems(_items);
 }
 
@@ -68,7 +68,7 @@ void KeyboardMenuScreen::_toggleUsbRemote()
     Mirror.setEnabled(true);
     UartFM.begin(true, true);
   }
-  _items[USB_REMOTE_IDX].sublabel = UartFM.isActive() ? "ON" : "OFF";
+  _items[USB_REMOTE_IDX].sublabel = UartFM.isActive() ? "On" : "Off";
   render();
 }
 

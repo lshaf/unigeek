@@ -1,0 +1,14 @@
+{
+  "name": "LibSSH-SFTP",
+  "version": "0.11.5-ug2",
+  "description": "Minimal synchronous SFTP client support for LibSSH-ESP32 0.11.5",
+  "build": {
+    "srcFilter": [
+      "+<sftp.c>",
+      "+<sftp_common.c>"
+    ]
+  },
+  "dependencies": {
+    "LibSSH-ESP32": "*"
+  }
+}

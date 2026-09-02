@@ -14,9 +14,16 @@ public:
   void onBack() override;
 
 private:
-  ListItem _items[3] = {
-    {"IP Scanner"},     // live hosts on the subnet
-    {"Port Scanner"},   // open ports on one host
-    {"CCTV Sniffer"},   // network cameras: brand, creds, live view
+  ListItem _items[10] = {
+    {"IP Scan"},
+    {"Port Scan"},
+    {"Web Servers"},
+    {"File Servers"},
+    {"Remote Shells"},
+    {"Printers"},
+    {"IP Cameras"},
+    {"IoT Devices"},
+    {"mDNS"},
+    {"SSDP"},
   };
 };

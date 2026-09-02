@@ -10,6 +10,7 @@ public:
     char label[52];
     char bssid[18];
     char ssid[33];
+    int16_t rssi = 0;
   };
 
   // Scan

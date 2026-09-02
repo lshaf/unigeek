@@ -16,6 +16,7 @@
 
 #include <Arduino.h>
 #include <IPAddress.h>
+#include <lwip/def.h>   // ntohl/htonl - used inline below, must not depend on include order
 
 class ArpSpoofer {
 public:

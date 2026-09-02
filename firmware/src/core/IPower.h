@@ -11,6 +11,8 @@ public:
   virtual void    begin()                       = 0;
   virtual uint8_t getBatteryPercentage()        = 0;
   virtual bool    isCharging()                  = 0;
+  virtual void    lightSleep()                  {}
+  virtual void    deepSleep()                   {}
   virtual void    powerOff()                    = 0;
   virtual void    setExtOutput(bool /*enable*/) {}  // Grove 5V: true=output, false=input
 };

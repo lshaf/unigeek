@@ -106,22 +106,7 @@ void WifiEvilTwinScreen::onItemSelected(uint8_t index)
         setItems(_browser.items(), n);
         break;
       }
-      case 4: { // File Manager toggle
-        if (!_fmEnabled) {
-          String indexPath = String(SharedWebServer::FM_PATH) + "/index.htm";
-          if (!Uni.Storage || !Uni.Storage->exists(indexPath.c_str())) {
-            ShowStatusAction::show("Web files not installed", 1500);
-            render();
-            break;
-          }
-        }
-        _fmEnabled = !_fmEnabled;
-        _fmSub = _fmEnabled ? "On" : "Off";
-        _menuItems[4].sublabel = _fmSub.c_str();
-        render();
-        break;
-      }
-      case 5: _startAttack();   break;
+      case 4: _startAttack();   break;
     }
   } else if (_state == STATE_SELECT_PORTAL && index < _browser.count()) {
     _portal.setPortalFolder(_browser.entry(index).name);
@@ -211,15 +196,13 @@ void WifiEvilTwinScreen::_showMenu()
   _deauthSub   = _deauth ? "On" : "Off";
   _checkPwdSub = _checkPwd ? "On" : "Off";
   _portalSub   = _portal.portalFolder().isEmpty() ? "-" : _portal.portalFolder();
-  _fmSub       = _fmEnabled ? "On" : "Off";
 
   _menuItems[0] = {"Network",        _networkSub.c_str()};
   _menuItems[1] = {"Deauth",         _deauthSub.c_str()};
   _menuItems[2] = {"Check Password", _checkPwdSub.c_str()};
   _menuItems[3] = {"Portal",         _portalSub.c_str()};
-  _menuItems[4] = {"File Manager",   _fmSub.c_str()};
-  _menuItems[5] = {"Start"};
-  setItems(_menuItems, 6);
+  _menuItems[4] = {"Start"};
+  setItems(_menuItems, 5);
 }
 
 // ── WiFi Scan ───────────────────────────────────────────────────────────────
@@ -328,14 +311,6 @@ void WifiEvilTwinScreen::_startAttack()
 
   _log.addLine("AP started");
 
-  // Start file manager if enabled
-  if (_fmEnabled) {
-    if (!Uni.Server.enableFileManager()) {
-      _fmEnabled = false;
-      _log.addLine("[!] File Manager failed", TFT_RED);
-    }
-  }
-
   // Start captive portal server
   AsyncWebServer* server = _portal.start(apIP);
 
@@ -414,9 +389,6 @@ void WifiEvilTwinScreen::_startAttack()
 
 void WifiEvilTwinScreen::_stopAttack()
 {
-  if (_fmEnabled) {
-    Uni.Server.disableFileManager();
-  }
   _portal.reset();
   if (_attacker) {
     delete _attacker;

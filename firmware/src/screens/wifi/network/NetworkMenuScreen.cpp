@@ -11,6 +11,7 @@
 #include "screens/wifi/network/NetworkPranksScreen.h"
 #include "screens/wifi/network/NetworkServicesScreen.h"
 #include "screens/wifi/network/NetworkInternetScreen.h"
+#include "screens/wifi/network/remote/RemoteAccessScreen.h"
 #include "ui/actions/ShowStatusAction.h"
 #include "ui/actions/ShowQRCodeAction.h"
 #include <WiFi.h>
@@ -51,7 +52,13 @@ void NetworkMenuScreen::onUpdate() {
 
 void NetworkMenuScreen::onItemSelected(uint8_t index) {
   if (_state == STATE_SELECT_WIFI) {
-    _connectToSelected(index);
+    if (index == 0) {
+      _showWifiList();
+      return;
+    }
+
+    const uint8_t wifiIndex = index - 1;
+    _connectToSelected(wifiIndex);
   } else if (_state == STATE_MENU) {
     switch (index) {
       case 0: _showInformation(); break;
@@ -59,8 +66,9 @@ void NetworkMenuScreen::onItemSelected(uint8_t index) {
       case 2: Screen.push(new NetworkScannersScreen()); break;
       case 3: Screen.push(new NetworkAttacksScreen());  break;
       case 4: Screen.push(new NetworkPranksScreen());   break;
-      case 5: Screen.push(new NetworkServicesScreen()); break;
-      case 6: Screen.push(new NetworkInternetScreen()); break;
+      case 5: Screen.push(new RemoteAccessScreen());    break;
+      case 6: Screen.push(new NetworkServicesScreen()); break;
+      case 7: Screen.push(new NetworkInternetScreen()); break;
     }
   } else if (_state == STATE_INFORMATION) {
     _showMenu();
@@ -84,12 +92,16 @@ void NetworkMenuScreen::_showWifiList() {
   int ns = Achievement.inc("wifi_first_scan");
   if (ns == 1) Achievement.unlock("wifi_first_scan");
 
+  _scannedItems[0] = {"Rescan"};
+
   for (int i = 0; i < _scannedCount; i++) {
-    _scannedItems[i] = { _scanned[i].ssid };
+    _scannedItems[i + 1]         = {_scanned[i].ssid, _scanned[i].bssid};
+    _scannedItems[i + 1].rssi    = _scanned[i].rssi;
+    _scannedItems[i + 1].hasRssi = true;
   }
 
   _scanning = false;
-  setItems(_scannedItems, _scannedCount);
+  setItems(_scannedItems, _scannedCount + 1);
 }
 
 void NetworkMenuScreen::_connectToSelected(uint8_t index) {

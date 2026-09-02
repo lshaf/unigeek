@@ -1,81 +1,97 @@
 #pragma once
 
 #include "ui/templates/ListScreen.h"
-#include "ui/views/LogView.h"
 #include "utils/cctv/CctvScanUtil.h"
 #include "utils/cctv/CctvStreamUtil.h"
+#include "utils/network/IpScanUtil.h"
 
 class CctvSnifferScreen : public ListScreen {
 public:
-  const char* title()        override { return "CCTV Sniffer"; }
+  const char* title()        override { return "IP Cameras"; }
   bool inhibitPowerSave()    override { return _state == STATE_SCANNING || _state == STATE_STREAMING; }
   bool inhibitPowerOff()     override { return _state == STATE_SCANNING || _state == STATE_STREAMING; }
 
   void onInit() override;
   void onUpdate() override;
-  void onRender() override;
   void onBack() override;
   void onItemSelected(uint8_t index) override;
 
 private:
   enum State {
-    STATE_CONFIG,       // Mode, IP, File, Start
-    STATE_SCANNING,     // Log view during scan
-    STATE_CAMERA_LIST,  // List of found cameras
-    STATE_CAMERA_MENU,  // Selected camera: Username, Password, Stream
-    STATE_STREAMING,    // MJPEG viewer
+    STATE_CONFIG,
+    STATE_SCANNING,
+    STATE_CAMERA_LIST,
+    STATE_CAMERA_MENU,
+    STATE_STREAMING,
   };
 
-  enum Mode { MODE_LAN, MODE_SINGLE_IP, MODE_FILE_IP };
+  enum ScanMode { MODE_RANGE, MODE_TARGETS };
 
-  State _state = STATE_CONFIG;
-  Mode  _mode  = MODE_LAN;
+  enum ConfigAction {
+    CFG_MODE,
+    CFG_TARGET_1,
+    CFG_TARGET_2,
+    CFG_TARGET_3,
+    CFG_TARGET_4,
+    CFG_START_IP,
+    CFG_END_IP,
+    CFG_START_SCAN,
+  };
 
-  // Config menu
-  String   _modeSub;
-  String   _ipSub;
-  String   _fileSub;
-  String   _targetIp;
-  String   _targetFile;
-  ListItem _configItems[3];
+  State    _state    = STATE_CONFIG;
+  ScanMode _scanMode = MODE_RANGE;
 
-  // Scanning log
-  LogView _log;
+  static constexpr uint8_t MAX_TARGETS = 4;
+  String _targets[MAX_TARGETS];
+  int    _startIp = 1;
+  int    _endIp   = 254;
 
-  // Found cameras
-  static constexpr uint8_t MAX_FOUND = 32;
+  String _targetSubs[MAX_TARGETS];
+  String _startIpSub;
+  String _endIpSub;
+
+  static constexpr uint8_t MAX_CONFIG_ITEMS = 7;
+  static constexpr uint8_t MAX_FOUND_HOSTS  = 64;
+  static constexpr uint8_t MAX_FOUND        = 32;
+
+  ListItem     _configItems[MAX_CONFIG_ITEMS];
+  ConfigAction _configActions[MAX_CONFIG_ITEMS];
+  uint8_t      _configCount = 0;
+
+  IpScanUtil::Host _hosts[MAX_FOUND_HOSTS];
+
   CctvScanUtil::Camera _cameras[MAX_FOUND];
-  uint8_t _cameraCount = 0;
-  char    _cameraLabels[MAX_FOUND][40];
+  uint8_t  _cameraCount = 0;
+  char     _cameraLabels[MAX_FOUND][40];
   ListItem _cameraItems[MAX_FOUND];
 
-  // Selected camera menu
-  uint8_t  _selectedCamera = 0;
-  String   _usernameSub;
-  String   _passwordSub;
-  String   _username;
-  String   _password;
-  ListItem _menuItems[4]; // Username, Password, Stream, Back
+  uint8_t _selectedCamera = 0;
+  String  _usernameSub;
+  String  _passwordSub;
+  String  _username;
+  String  _password;
+  ListItem _menuItems[4];
 
-  // Streaming
   CctvStreamUtil _stream;
   unsigned long  _lastFrame = 0;
   int            _frameCount = 0;
   float          _fps = 0;
-  static CctvSnifferScreen* _instance;  // for TJpgDec callback
+  static CctvSnifferScreen* _instance;
 
-  void _showConfig();
+  void _showConfig(uint8_t selectedIndex = 0);
   void _startScan();
-  void _scanLAN();
-  void _scanSingleIP();
-  void _scanFileIP();
-  void _scanHost(const char* ip);
-  void _drawLog();
+  void _scanTarget(const char* ip, const char* label);
+  bool _validIp(const String& ip) const;
+  bool _hasTargets() const;
+  void _editTarget(uint8_t targetIndex, uint8_t selectedIndex);
+  void _scanRange();
+  void _scanHost(const char* ip, const char* label);
   void _showCameraList();
   void _showCameraMenu(uint8_t camIdx);
   void _startStream();
   void _stopStream();
   void _drawFrame(const uint8_t* jpegBuf, size_t jpegLen);
+  String _networkPrefix() const;
 
   static bool _onFrame(const uint8_t* jpegBuf, size_t jpegLen, void* userData);
   static bool _tjpgCallback(int16_t x, int16_t y, uint16_t w, uint16_t h, uint16_t* bitmap);

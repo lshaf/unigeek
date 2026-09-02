@@ -13,12 +13,24 @@
 class WifiWatchdogScreen : public BaseScreen
 {
 public:
+  enum class InitialView : int8_t {
+    None     = -1,
+    Deauth   = 0,
+    Probes   = 1,
+    Flood    = 2,
+    EvilTwin = 3
+  };
+
+  explicit WifiWatchdogScreen(InitialView initialView = InitialView::None)
+    : _initialView(initialView) {}
+
   const char* title() override;
   bool inhibitPowerOff() override { return true; }
 
   ~WifiWatchdogScreen();
 
   void onInit() override;
+  void onRestore() override;
   void onUpdate() override;
   void onRender() override;
   void onBack();
@@ -133,6 +145,7 @@ private:
 
   static portMUX_TYPE    _ringLock;
 
+  InitialView         _initialView      = InitialView::None;
   View                _view             = VIEW_OVERALL;
   int                 _channel          = 1;
   unsigned long       _lastUpdate       = 0;
@@ -141,11 +154,13 @@ private:
   int                 _prevGridSel      = -1;
   int                 _holdCell         = -1;
   int                 _prevCounts[4]    = {-1, -1, -1, -1};
+  int                 _karmaBaseline    = 0;
   ScrollListView      _scroll;
   ScrollListView::Row _rows[MAX_ROWS]          = {};
   char                _labels[MAX_ROWS][64]    = {};
   char                _sublabels[MAX_ITEMS][64] = {};
 
+  void _enterView(View view);
   void _drainRings();
   void _updateRates();
   void _renderView();

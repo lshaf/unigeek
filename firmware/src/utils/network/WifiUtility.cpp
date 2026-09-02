@@ -13,10 +13,13 @@ uint8_t WifiUtility::scan(ScannedWifi* out, uint8_t maxCount)
   if (total > maxCount) total = maxCount;
 
   for (int i = 0; i < total; i++) {
+    const int rssi = WiFi.RSSI(i);
+
     snprintf(out[i].label, sizeof(out[i].label),
-             "[%d] %s", WiFi.RSSI(i), WiFi.SSID(i).c_str());
+             "[%d] %s", rssi, WiFi.SSID(i).c_str());
     strncpy(out[i].bssid, WiFi.BSSIDstr(i).c_str(), sizeof(out[i].bssid));
     strncpy(out[i].ssid,  WiFi.SSID(i).c_str(),     sizeof(out[i].ssid));
+    out[i].rssi = (int16_t)rssi;
   }
 
   return (uint8_t)total;

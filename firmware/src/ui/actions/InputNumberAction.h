@@ -4,6 +4,8 @@
 
 #pragma once
 
+#include <ctype.h>
+
 #include "core/Device.h"
 #include "utils/uart/UartFileManager.h"
 #include "core/ConfigManager.h"
@@ -17,6 +19,16 @@ public:
     _cancelledFlag() = action._cancelled;
     Uni.lastActiveMs = millis();
     return result;
+  }
+
+  static String popupList(const char* title, const char* defaultValue = "") {
+    InputNumberAction action(title, INT_MIN, INT_MAX, 0);
+    action._listMode = true;
+    action._input = defaultValue ? defaultValue : "";
+    action._run();
+    _cancelledFlag() = action._cancelled;
+    Uni.lastActiveMs = millis();
+    return action._cancelled ? String() : action._input;
   }
 
   static bool wasCancelled() { return _cancelledFlag(); }
@@ -48,6 +60,7 @@ private:
   bool        _done           = false;
   bool        _cancelled      = false;
   bool        _cursorVisible  = true;
+  bool        _listMode       = false;
   uint32_t    _lastBlinkTime  = 0;
 
   static bool& _cancelledFlag() { static bool v = false; return v; }
@@ -58,7 +71,7 @@ private:
   struct DigitSet {
     const char* label;
     bool        isAction;
-    enum Action { ACT_DEL, ACT_SAVE, ACT_CANCEL } action;
+    enum Action { ACT_DEL, ACT_SAVE, ACT_CANCEL, ACT_SPACE } action;
   };
 
   DigitSet _sets[DIGIT_COUNT];
@@ -73,21 +86,54 @@ private:
   {}
 
   void _buildSets() {
-    // 3 cols × 5 rows = 15 items
-    // rows 0-2: 1-9  row 3: dummy 0 dummy  row 4: CNCL DEL SAVE
-    static constexpr const char* d[] = { "1","2","3","4","5","6","7","8","9" };
+    // 5-column layout matching HEX / Phone key positions.
+    // rows 0-1: 1-9, 0
+    // row 2 normal: · · BKSP SAVE EXIT
+    // row 2 list:   · SPACE BKSP SAVE EXIT
+    static constexpr const char* d[] = { "1","2","3","4","5","6","7","8","9","0" };
     _setCount = 0;
-    for (int i = 0; i < 9; i++)
+    for (int i = 0; i < 10; i++)
       _sets[_setCount++] = { d[i], false, DigitSet::ACT_DEL };
-    _sets[_setCount++] = { "",     false, DigitSet::ACT_DEL    };  // dummy
-    _sets[_setCount++] = { "0",    false, DigitSet::ACT_DEL    };
-    _sets[_setCount++] = { "",     false, DigitSet::ACT_DEL    };  // dummy
-    _sets[_setCount++] = { "CNCL", true,  DigitSet::ACT_CANCEL };
-    _sets[_setCount++] = { "DEL",  true,  DigitSet::ACT_DEL    };
-    _sets[_setCount++] = { "SAVE", true,  DigitSet::ACT_SAVE   };
+
+    _sets[_setCount++] = { "", false, DigitSet::ACT_DEL };
+    _sets[_setCount++] = _listMode
+      ? DigitSet{"SPACE", true, DigitSet::ACT_SPACE}
+      : DigitSet{"", false, DigitSet::ACT_DEL};
+    _sets[_setCount++] = { "BKSP", true, DigitSet::ACT_DEL    };
+    _sets[_setCount++] = { "SAVE", true, DigitSet::ACT_SAVE   };
+    _sets[_setCount++] = { "EXIT", true, DigitSet::ACT_CANCEL };
   }
 
   bool _validate() {
+    if (_listMode) {
+      String src = _input;
+      src.trim();
+      if (src.length() == 0) {
+        _error = "Enter one or more ports";
+        return false;
+      }
+
+      String normalized;
+      int pos = 0;
+      while (pos < (int)src.length()) {
+        while (pos < (int)src.length() && isspace((unsigned char)src[pos])) pos++;
+        if (pos >= (int)src.length()) break;
+        int start = pos;
+        while (pos < (int)src.length() && !isspace((unsigned char)src[pos])) pos++;
+        String token = src.substring(start, pos);
+        for (size_t i = 0; i < token.length(); i++) {
+          if (!isdigit((unsigned char)token[i])) { _error = "Invalid port list"; return false; }
+        }
+        long port = token.toInt();
+        if (port < 1 || port > 65535) { _error = "Ports: 1 - 65535"; return false; }
+        if (normalized.length() > 0) normalized += ' ';
+        normalized += String(port);
+      }
+      _input = normalized;
+      _error = "";
+      return true;
+    }
+
     if (_input.length() == 0) {
       _error = "Enter a number";
       return false;
@@ -131,7 +177,7 @@ private:
   // ── grid scroll mode ────────────────────────────────────────────────────────
 
   int _gridHdrH() const { return HDR_H; }
-  int _gridCols()  const { return 3; }
+  int _gridCols()  const { return 5; }
   int _gridRows()  const { return (_setCount + _gridCols() - 1) / _gridCols(); }
   int _gridCellW() const { return Uni.Lcd.width() / _gridCols(); }
   int _gridCellH() const { return (Uni.Lcd.height() - _gridHdrH()) / _gridRows(); }
@@ -162,7 +208,8 @@ private:
         int16_t ty = Uni.Nav->lastTouchY();
         int hdr = _gridHdrH();
         if (tx >= 0 && ty >= hdr) {
-          int idx = (int)(ty - hdr) / _gridCellH() * _gridCols() + (int)tx / _gridCellW();
+          int row = (int)(ty - hdr) / _gridCellH();
+          int idx = row * _gridCols() + (int)tx / _gridCellW();
           if (idx >= 0 && idx < _setCount) {
             if (!_sets[idx].isAction && _sets[idx].label[0] == '\0') { delay(10); continue; }
             _scrollPos = idx;
@@ -236,6 +283,9 @@ private:
         case DigitSet::ACT_CANCEL:
           _cancelled = true;
           break;
+        case DigitSet::ACT_SPACE:
+          if (_listMode && _input.length() > 0 && _input[_input.length() - 1] != ' ') _input += ' ';
+          break;
       }
     } else {
       if (s.label && s.label[0] != '\0') _input += s.label;
@@ -300,8 +350,10 @@ private:
     auto&    lcd   = Uni.Lcd;
     uint16_t theme = Config.getThemeColor();
     int hdr = _gridHdrH();
-    int cW  = _gridCellW(), cH = _gridCellH();
-    int col = idx % _gridCols(), row = idx / _gridCols();
+    int cH  = _gridCellH();
+    int cW  = _gridCellW();
+    int col = idx % _gridCols();
+    int row = idx / _gridCols();
     bool sel = (idx == _scrollPos);
     const DigitSet& s = _sets[idx];
 
@@ -324,7 +376,7 @@ private:
       sp.setTextColor(TFT_WHITE, theme);
     } else {
       sp.drawRoundRect(1, 1, cW - 2, cH - 2, 3, 0x2104);
-      sp.setTextColor(s.isAction ? TFT_CYAN : TFT_LIGHTGREY, TFT_BLACK);
+      sp.setTextColor(s.isAction ? TFT_WHITE : TFT_LIGHTGREY, TFT_BLACK);
     }
     sp.drawString(s.label, cW / 2, cH / 2);
     sp.pushSprite(col * cW, hdr + row * cH);
@@ -371,6 +423,11 @@ private:
           else { _drawError(); }
         } else if (isdigit(c)) {
           _input += c;
+          cursorOn  = true;
+          lastBlink = millis();
+          _drawInput(true);
+        } else if (_listMode && isspace((unsigned char)c)) {
+          if (_input.length() > 0 && _input[_input.length() - 1] != ' ') _input += ' ';
           cursorOn  = true;
           lastBlink = millis();
           _drawInput(true);
@@ -430,7 +487,7 @@ private:
 
     lcd.setTextColor(TFT_DARKGREY);
     lcd.setCursor(x + PAD, y + _hintY());
-    lcd.print("Numbers only + ENTER to confirm");
+    lcd.print(_listMode ? "Ports separated by SPACE" : "Numbers only + ENTER to confirm");
   }
 
   void _drawInput(bool cursorOn) {

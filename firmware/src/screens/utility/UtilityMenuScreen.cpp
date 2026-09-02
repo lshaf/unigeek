@@ -8,6 +8,7 @@
 #include "screens/utility/AchievementScreen.h"
 #include "screens/utility/TotpScreen.h"
 #include "screens/utility/UartTerminalScreen.h"
+#include "screens/wifi/WifiESPNowChatScreen.h"
 #include "screens/utility/PomodoroScreen.h"
 #include "screens/utility/RandomLinePickerScreen.h"
 #include "screens/wifi/network/WikipediaScreen.h"
@@ -36,9 +37,10 @@ void UtilityMenuScreen::onItemSelected(uint8_t index) {
     case 5: Screen.push(new AchievementScreen());      break;
     case 6: Screen.push(new TotpScreen());             break;
     case 7: Screen.push(new UartTerminalScreen());     break;
-    case 8: Screen.push(new PomodoroScreen());         break;
-    case 9: Screen.push(new RandomLinePickerScreen()); break;
-    case 10: Screen.push(new WikipediaScreen(true));   break;
+    case 8: Screen.push(new WifiESPNowChatScreen());   break;
+    case 9: Screen.push(new PomodoroScreen());         break;
+    case 10: Screen.push(new RandomLinePickerScreen()); break;
+    case 11: Screen.push(new WikipediaScreen(true));   break;
   }
 #else
   switch (index) {
@@ -49,9 +51,10 @@ void UtilityMenuScreen::onItemSelected(uint8_t index) {
     case 4: Screen.push(new AchievementScreen());      break;
     case 5: Screen.push(new TotpScreen());             break;
     case 6: Screen.push(new UartTerminalScreen());     break;
-    case 7: Screen.push(new PomodoroScreen());         break;
-    case 8: Screen.push(new RandomLinePickerScreen()); break;
-    case 9: Screen.push(new WikipediaScreen(true));    break;
+    case 7: Screen.push(new WifiESPNowChatScreen());   break;
+    case 8: Screen.push(new PomodoroScreen());         break;
+    case 9: Screen.push(new RandomLinePickerScreen()); break;
+    case 10: Screen.push(new WikipediaScreen(true));   break;
   }
 #endif
 }

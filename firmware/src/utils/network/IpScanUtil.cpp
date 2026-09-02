@@ -9,7 +9,6 @@
 // ── ICMP internals ───────────────────────────────────────────────────────────
 
 static constexpr uint16_t PING_ID = 0x1A2B;
-
 static volatile bool s_pingReceived = false;
 
 static uint8_t onPingRecv(void* /*arg*/, struct raw_pcb* /*pcb*/,
@@ -39,7 +38,6 @@ static bool icmpPing(const char* ipStr, uint32_t timeoutMs) {
   s_pingReceived = false;
   raw_recv(pcb, onPingRecv, nullptr);
 
-  // Build ICMP echo request
   struct pbuf* p = pbuf_alloc(PBUF_IP, sizeof(struct icmp_echo_hdr), PBUF_RAM);
   if (!p) { raw_remove(pcb); return false; }
 
@@ -47,32 +45,49 @@ static bool icmpPing(const char* ipStr, uint32_t timeoutMs) {
   memset(iecho, 0, sizeof(*iecho));
   ICMPH_TYPE_SET(iecho, ICMP_ECHO);
   ICMPH_CODE_SET(iecho, 0);
-  iecho->id    = htons(PING_ID);
-  iecho->seqno = htons(1);
+  iecho->id     = htons(PING_ID);
+  iecho->seqno  = htons(1);
   iecho->chksum = inet_chksum(iecho, sizeof(struct icmp_echo_hdr));
 
   raw_sendto(pcb, p, &dest);
   pbuf_free(p);
 
   uint32_t start = millis();
-  while (!s_pingReceived && (millis() - start) < timeoutMs) {
-    delay(5);
-  }
+  while (!s_pingReceived && (millis() - start) < timeoutMs) delay(5);
 
   raw_remove(pcb);
   return s_pingReceived;
 }
 
-// ── IpScanUtil::scan ─────────────────────────────────────────────────────────
+// ── IpScanUtil public methods ────────────────────────────────────────────────
+
+bool IpScanUtil::resolveName(const char* ip, char* out, size_t outLen) {
+  if (!ip || !out || outLen == 0) return false;
+  out[0] = '\0';
+
+  DnsUtil::resolveHostname(ip, out, outLen);
+  return out[0] != '\0';
+}
+
+bool IpScanUtil::scanTarget(const char* targetIp, Host& out, bool resolveHostnames) {
+  memset(&out, 0, sizeof(out));
+  if (!targetIp || !icmpPing(targetIp, 100)) return false;
+
+  strncpy(out.ip, targetIp, sizeof(out.ip) - 1);
+  out.ip[sizeof(out.ip) - 1] = '\0';
+  if (resolveHostnames) resolveName(targetIp, out.hostname, sizeof(out.hostname));
+  return true;
+}
 
 uint8_t IpScanUtil::scan(uint8_t startOctet, uint8_t endOctet,
                          Host* out, uint8_t maxHosts,
                          bool resolveHostnames,
-                         void (*progressCb)(uint8_t)) {
-  if (!out || maxHosts == 0) return 0;
+                         void (*progressCb)(uint8_t),
+                         bool (*cancelCb)()) {
+  if (!out || maxHosts == 0 || startOctet > endOctet) return 0;
 
   IPAddress localIP = WiFi.localIP();
-  if (localIP[0] == 0 && localIP[1] == 0 && localIP[2] == 0 && localIP[3] == 0) return 0;
+  if (localIP == IPAddress(0, 0, 0, 0)) return 0;
 
   char baseIp[16];
   snprintf(baseIp, sizeof(baseIp), "%d.%d.%d.", localIP[0], localIP[1], localIP[2]);
@@ -81,6 +96,7 @@ uint8_t IpScanUtil::scan(uint8_t startOctet, uint8_t endOctet,
   uint8_t found = 0;
 
   for (int i = startOctet; i <= endOctet && found < maxHosts; i++) {
+    if (cancelCb && cancelCb()) break;
     if (progressCb) progressCb((uint8_t)((i - startOctet) * 100 / total));
     if (i == (int)localIP[3]) continue;  // skip self
 
@@ -91,9 +107,7 @@ uint8_t IpScanUtil::scan(uint8_t startOctet, uint8_t endOctet,
       strncpy(out[found].ip, ipStr, sizeof(out[found].ip) - 1);
       out[found].ip[sizeof(out[found].ip) - 1] = '\0';
       out[found].hostname[0] = '\0';
-      if (resolveHostnames) {
-        DnsUtil::resolveHostname(ipStr, out[found].hostname, sizeof(out[found].hostname));
-      }
+      if (resolveHostnames) resolveName(ipStr, out[found].hostname, sizeof(out[found].hostname));
       found++;
     }
   }

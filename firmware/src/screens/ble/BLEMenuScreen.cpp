@@ -2,32 +2,26 @@
 #include "core/Device.h"
 #include "core/ScreenManager.h"
 #include "screens/MainMenuScreen.h"
-#include "screens/ble/BLEAnalyzerScreen.h"
-#include "screens/ble/BLESpamScreen.h"
-#include "screens/ble/BLEDetectorScreen.h"
-#include "screens/ble/WhisperPairScreen.h"
-#include "screens/ble/chameleon/ChameleonMenuScreen.h"
-#include "screens/ble/ClaudeBuddyScreen.h"
+#include "screens/ble/BLEAnalysisDetectionMenuScreen.h"
+#include "screens/ble/BLEAttacksMenuScreen.h"
+#include "screens/ble/BLEExtensionsMenuScreen.h"
 #include "core/ScreenMirror.h"
 #include "utils/uart/BleFileManager.h"
 #include "utils/uart/UartFileManager.h"
 
 void BLEMenuScreen::onInit()
 {
-  _items[6].sublabel = BleFM.isActive() ? "ON" : "OFF";
+  _items[3].sublabel = BleFM.isActive() ? "On" : "Off";
   setItems(_items);
 }
 
 void BLEMenuScreen::onItemSelected(uint8_t index)
 {
   switch (index) {
-    case 0: Screen.push(new BLEAnalyzerScreen());   break;
-    case 1: Screen.push(new BLESpamScreen());       break;
-    case 2: Screen.push(new BLEDetectorScreen());   break;
-    case 3: Screen.push(new WhisperPairScreen());   break;
-    case 4: Screen.push(new ChameleonMenuScreen()); break;
-    case 5: Screen.push(new ClaudeBuddyScreen());   break;
-    case 6: _toggleRemoteDevice();                  break;
+    case 0: Screen.push(new BLEAnalysisDetectionMenuScreen()); break;
+    case 1: Screen.push(new BLEAttacksMenuScreen());           break;
+    case 2: Screen.push(new BLEExtensionsMenuScreen());        break;
+    case 3: _toggleRemoteDevice();                             break;
   }
 }
 
@@ -45,7 +39,7 @@ void BLEMenuScreen::_toggleRemoteDevice()
     Mirror.setEnabled(true);
     BleFM.begin();
   }
-  _items[6].sublabel = BleFM.isActive() ? "ON" : "OFF";
+  _items[3].sublabel = BleFM.isActive() ? "On" : "Off";
   render();
 }
 

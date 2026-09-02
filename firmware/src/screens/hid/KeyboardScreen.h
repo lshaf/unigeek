@@ -12,7 +12,9 @@ public:
   explicit KeyboardScreen(int mode);
   ~KeyboardScreen() override;
 
-  const char* title()            override { return "HID"; }
+  const char* title() override {
+  return _mode == MODE_USB ? "USB HID" : "BLE HID";
+  }
   bool inhibitPowerOff()         override { return true; }
 
   void onInit()                  override;

@@ -17,22 +17,22 @@ private:
 
 #ifdef DEVICE_HAS_WEBAUTHN
   ListItem _items[5] = {
-    {"USB MouseKeyboard"},
-    {"BLE MouseKeyboard"},
+    {"USB HID"},
+    {"BLE HID"},
     {"USB Web Authn"},
     {"USB Mass Storage"},
     {"USB Remote"},
   };
 #elif defined(DEVICE_HAS_USB_HID)
   ListItem _items[4] = {
-    {"USB MouseKeyboard"},
-    {"BLE MouseKeyboard"},
+    {"USB HID"},
+    {"BLE HID"},
     {"USB Mass Storage"},
     {"USB Remote"},
   };
 #else
   ListItem _items[2] = {
-    {"BLE MouseKeyboard"},
+    {"BLE HID"},
     {"USB Remote"},
   };
 #endif

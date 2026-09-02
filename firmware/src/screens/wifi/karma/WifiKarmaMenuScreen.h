@@ -14,11 +14,10 @@ public:
   void onBack() override;
 
 private:
-  ListItem _items[5] = {
+  ListItem _items[4] = {
     {"Captive Portal"},   // harvest credentials via evil portal
     {"EAPOL Handshake"},  // capture WPA handshake (+ optional support device)
     {"Active Karma"},     // probe-response + beaconing engine, modes & options
-    {"Detector"},         // defensive: spot a rogue Karma AP nearby
     {"Support Device"},   // companion role for the dual-device attack
   };
 };

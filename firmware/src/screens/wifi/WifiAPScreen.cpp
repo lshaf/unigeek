@@ -8,45 +8,17 @@
 #include "ui/actions/ShowStatusAction.h"
 #include "ui/actions/ShowQRCodeAction.h"
 #include "ui/components/QRCodeRenderer.h"
-#include "ui/actions/InputSelectAction.h"
-#include "utils/StorageUtil.h"
 #include <WiFi.h>
-
-// Static callback bridge for visit logging
-static WifiAPScreen* _activeInstance = nullptr;
-
-static void _onVisit(const char* clientIP, const char* domain)
-{
-  if (_activeInstance) {
-    char buf[60];
-    snprintf(buf, sizeof(buf), "%s > %s", clientIP, domain);
-    _activeInstance->logVisit(buf);
-  }
-}
-
-static void _onPost(const char* clientIP, const char* domain, const char* data)
-{
-  (void)clientIP;
-  (void)data;
-  if (_activeInstance) {
-    char buf[60];
-    snprintf(buf, sizeof(buf), "[+] POST %s", domain);
-    _activeInstance->logPost(buf);
-  }
-}
 
 // ── Lifecycle ──────────────────────────────────────────────────────────────
 
 void WifiAPScreen::onInit()
 {
-  _activeInstance = this;
   _showMenu();
 }
 
 void WifiAPScreen::onUpdate()
 {
-  _dnsSpoofServer.update();
-
   if (_state == STATE_LOG && millis() - _lastDraw > 500) {
     render();
     _lastDraw = millis();
@@ -150,61 +122,11 @@ void WifiAPScreen::onItemSelected(uint8_t index)
     }
     case 2: { // Hidden toggle
       _hidden = !_hidden;
-      _menuItems[2].sublabel = _hidden ? "Yes" : "No";
+      _menuItems[2].sublabel = _hidden ? "On" : "Off";
       render();
       break;
     }
-    case 3: { // DNS Spoof toggle
-      if (!_dnsSpoofEnabled) {
-        if (!Uni.Storage || !Uni.Storage->exists(DnsSpoofServer::CONFIG_PATH)) {
-          ShowStatusAction::show("dns_config not found", 1500);
-          render();
-          break;
-        }
-      }
-      _dnsSpoofEnabled = !_dnsSpoofEnabled;
-      _menuItems[3].sublabel = _dnsSpoofEnabled ? "Yes" : "No";
-      render();
-      break;
-    }
-    case 4: { // Captive Portal toggle
-      if (!_captiveEnabled) {
-        // List portal folders
-        static constexpr const char* PORTALS_DIR = "/unigeek/web/portals";
-        if (!Uni.Storage || !Uni.Storage->exists(PORTALS_DIR)) {
-          ShowStatusAction::show("No portals found", 1500);
-          render();
-          break;
-        }
-        // BrowseFileView in DIRECTORY mode — sorts folders alphabetically.
-        uint8_t n = _browser.load(this, PORTALS_DIR, BrowseFileView::Mode::DIRECTORY);
-        if (n == 0) {
-          ShowStatusAction::show("No portal folders found", 1500);
-          render();
-          break;
-        }
-        static constexpr uint8_t kMaxOpts = 10;
-        uint8_t optCount = (n < kMaxOpts) ? n : kMaxOpts;
-        InputSelectAction::Option opts[kMaxOpts];
-        for (uint8_t i = 0; i < optCount; i++) {
-          opts[i] = { _browser.entry(i).name.c_str(), _browser.entry(i).name.c_str() };
-        }
-        const char* selected = InputSelectAction::popup("Captive Portal", opts, optCount);
-        render();
-        if (!selected) break;
-        _captivePath = String(PORTALS_DIR) + "/" + selected;
-        _captiveEnabled = true;
-        _captiveSub = selected;
-      } else {
-        _captiveEnabled = false;
-        _captivePath = "";
-        _captiveSub = "No";
-      }
-      _menuItems[4].sublabel = _captiveEnabled ? _captiveSub.c_str() : "No";
-      render();
-      break;
-    }
-    case 5: { // File Manager toggle
+    case 3: { // File Manager toggle
       if (!_fileManagerEnabled) {
         String indexPath = String(SharedWebServer::FM_PATH) + "/index.htm";
         if (!Uni.Storage || !Uni.Storage->exists(indexPath.c_str())) {
@@ -214,11 +136,11 @@ void WifiAPScreen::onItemSelected(uint8_t index)
         }
       }
       _fileManagerEnabled = !_fileManagerEnabled;
-      _menuItems[5].sublabel = _fileManagerEnabled ? "Yes" : "No";
+      _menuItems[3].sublabel = _fileManagerEnabled ? "On" : "Off";
       render();
       break;
     }
-    case 6: { // Start
+    case 4: { // Start
       _startAP();
       break;
     }
@@ -231,7 +153,6 @@ void WifiAPScreen::onBack()
     _stopAP();
     return;
   }
-  _activeInstance = nullptr;
   Screen.goBack();
 }
 
@@ -242,26 +163,17 @@ void WifiAPScreen::_showMenu()
   _state       = STATE_MENU;
   _ssidSub     = Config.get(APP_CONFIG_WIFI_AP_SSID, APP_CONFIG_WIFI_AP_SSID_DEFAULT);
   String pwd   = Config.get(APP_CONFIG_WIFI_AP_PASSWORD, APP_CONFIG_WIFI_AP_PASSWORD_DEFAULT);
-  _passwordSub = pwd.isEmpty() ? "None" : pwd;
-  _captiveSub = _captiveEnabled ? _captivePath.substring(_captivePath.lastIndexOf('/') + 1) : "No";
-  _menuItems[0] = {"SSID",            _ssidSub.c_str()};
-  _menuItems[1] = {"Password",        _passwordSub.c_str()};
-  _menuItems[2] = {"Hidden",          _hidden ? "Yes" : "No"};
-  _menuItems[3] = {"DNS Spoof",       _dnsSpoofEnabled ? "Yes" : "No"};
-  _menuItems[4] = {"Captive Portal",  _captiveSub.c_str()};
-  _menuItems[5] = {"File Manager",    _fileManagerEnabled ? "Yes" : "No"};
-  _menuItems[6] = {"Start"};
-  setItems(_menuItems, 7);
+  _passwordSub = pwd.isEmpty() ? "-" : pwd;
+  _menuItems[0] = {"SSID",         _ssidSub.isEmpty() ? "-" : _ssidSub.c_str()};
+  _menuItems[1] = {"Password",     _passwordSub.c_str()};
+  _menuItems[2] = {"Hidden",       _hidden ? "On" : "Off"};
+  _menuItems[3] = {"File Manager", _fileManagerEnabled ? "On" : "Off"};
+  _menuItems[4] = {"Start"};
+  setItems(_menuItems, 5);
 }
 
 void WifiAPScreen::_startAP()
 {
-  if ((_dnsSpoofEnabled || _captiveEnabled) && !StorageUtil::hasSpace()) {
-    ShowStatusAction::show("Storage full! (<20KB free)");
-    render();
-    return;
-  }
-
   String ssid = Config.get(APP_CONFIG_WIFI_AP_SSID, APP_CONFIG_WIFI_AP_SSID_DEFAULT);
   String pwd  = Config.get(APP_CONFIG_WIFI_AP_PASSWORD, APP_CONFIG_WIFI_AP_PASSWORD_DEFAULT);
 
@@ -272,20 +184,6 @@ void WifiAPScreen::_startAP()
     IPAddress(255, 255, 255, 0)
   );
   WiFi.softAP(ssid.c_str(), pwd.c_str(), 1, _hidden);
-
-  // Start DNS Spoof if enabled (also needed for captive portal)
-  if (_dnsSpoofEnabled || _captiveEnabled) {
-    _dnsSpoofServer.setVisitCallback(_onVisit);
-    _dnsSpoofServer.setPostCallback(_onPost);
-    _dnsSpoofServer.setCaptiveIntercept(_captiveEnabled);
-    if (_captiveEnabled) {
-      _dnsSpoofServer.setCaptivePortalPath(_captivePath.c_str());
-    }
-    if (!_dnsSpoofServer.begin(WiFi.softAPIP())) {
-      _dnsSpoofEnabled = false;
-      _captiveEnabled = false;
-    }
-  }
 
   // Start File Manager if enabled
   if (_fileManagerEnabled) {
@@ -302,16 +200,11 @@ void WifiAPScreen::_startAP()
 
 void WifiAPScreen::_stopAP()
 {
-  if (_dnsSpoofEnabled || _captiveEnabled) {
-    _dnsSpoofServer.end();
-  }
   if (_fileManagerEnabled) {
     Uni.Server.disableFileManager();
   }
   WiFi.softAPdisconnect(true);
   WiFi.mode(WIFI_MODE_STA);
-  _dnsSpoofEnabled = false;
-  _captiveEnabled = false;
   _fileManagerEnabled = false;
   _log.clear();
   _lastDraw    = 0;
@@ -346,26 +239,6 @@ void WifiAPScreen::_showLog()
   snprintf(apLabel, sizeof(apLabel), "[*] AP: %s", ssid.c_str());
   _log.addLine(apLabel);
 
-  if (_dnsSpoofEnabled) {
-    _log.addLine("[*] DNS Spoof started");
-    for (int i = 0; i < _dnsSpoofServer.recordCount(); i++) {
-      char buf[60];
-      const char* path = _dnsSpoofServer.records()[i].path;
-      const char* lastSlash = strrchr(path, '/');
-      const char* pathName = lastSlash ? lastSlash + 1 : path;
-      snprintf(buf, sizeof(buf), "  %s > %s",
-               _dnsSpoofServer.records()[i].domain, pathName);
-      _log.addLine(buf);
-    }
-  }
-
-  if (_captiveEnabled) {
-    char capBuf[60];
-    const char* lastSlash = strrchr(_captivePath.c_str(), '/');
-    snprintf(capBuf, sizeof(capBuf), "[*] Captive: %s", lastSlash ? lastSlash + 1 : _captivePath.c_str());
-    _log.addLine(capBuf);
-  }
-
   if (_fileManagerEnabled) {
     char fmBuf[60];
     snprintf(fmBuf, sizeof(fmBuf), "[*] FM: unigeek.local / %s:8000",
@@ -384,18 +257,6 @@ void WifiAPScreen::_showLog()
 
 // ── Log ────────────────────────────────────────────────────────────────────
 
-void WifiAPScreen::logVisit(const char* msg)
-{
-  int nv = Achievement.inc("wifi_ap_client_visit");
-  if (nv == 1) Achievement.unlock("wifi_ap_client_visit");
-  _log.addLine(msg);
-}
-
-void WifiAPScreen::logPost(const char* msg)
-{
-  _log.addLine(msg, TFT_GREEN);
-}
-
 void WifiAPScreen::_drawLog()
 {
   auto* self = this;
@@ -404,13 +265,7 @@ void WifiAPScreen::_drawLog()
       auto* s = static_cast<WifiAPScreen*>(ud);
       sp.setTextColor(TFT_GREEN, TFT_BLACK);
       sp.setTextDatum(TL_DATUM);
-      char label[30];
-      if (s->_dnsSpoofEnabled) {
-        snprintf(label, sizeof(label), "DNS: %d", s->_dnsSpoofServer.recordCount());
-      } else {
-        snprintf(label, sizeof(label), "AP");
-      }
-      sp.drawString(label, 2, barY);
+      sp.drawString("AP", 2, barY);
       sp.setTextDatum(TR_DATUM);
       sp.drawString(WiFi.softAPIP().toString(), w - 2, barY);
     }, self);

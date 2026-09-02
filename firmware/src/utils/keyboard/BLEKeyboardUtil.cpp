@@ -1,5 +1,4 @@
 #include "BLEKeyboardUtil.h"
-
 static constexpr uint8_t kKeyboardId = 0x01;
 static constexpr uint8_t kMouseId    = 0x02;
 static constexpr uint8_t kConsumerId = 0x03;
@@ -26,7 +25,7 @@ void BLEKeyboardUtil::begin()
     NimBLEDevice::setSecurityAuth(true, true, true);
 
     _server = NimBLEDevice::createServer();
-    _server->setCallbacks(this);
+    _server->setCallbacks(this, false);
 
     _hid = new NimBLEHIDDevice(_server);
     _inputKbd  = _hid->inputReport(kKeyboardId);
