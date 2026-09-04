@@ -325,12 +325,15 @@ void KeyboardScreen::_renderConnected()
     lcd.setTextSize(1);
     lcd.setTextColor(TFT_DARKGREY, TFT_BLACK);
     lcd.setTextDatum(BC_DATUM);
+#if defined(DEVICE_M5_CARDPUTER) || defined(DEVICE_M5_CARDPUTER_ADV) || defined(DEVICE_T_LORA_PAGER)
+    static constexpr int FOOTER_H = 12;
+    const int footerY = bodyY() + bodyH() - FOOTER_H;
+    lcd.drawFastHLine(bodyX(), footerY - 5, bodyW(), TFT_DARKGREY);
 #if defined(DEVICE_M5_CARDPUTER) || defined(DEVICE_M5_CARDPUTER_ADV)
-    lcd.drawString("G0: Stop", bodyX() + bodyW() / 2, bodyY() + bodyH());
-#elif defined(DEVICE_T_LORA_PAGER)
-    lcd.drawString("Encoder press: Stop", bodyX() + bodyW() / 2, bodyY() + bodyH());
+    lcd.drawString("[G0] Stop", bodyX() + bodyW() / 2, footerY + 7);
 #else
-    lcd.drawString("BACK / ENTER: Stop", bodyX() + bodyW() / 2, bodyY() + bodyH());
+    lcd.drawString("[Press] Stop", bodyX() + bodyW() / 2, footerY + 7);
+#endif
 #endif
     _connectedChromeDrawn = true;
     _connectedLastStatus  = !connected;  // force first status paint
@@ -365,7 +368,6 @@ void KeyboardScreen::_renderScript()
     lcd.fillRect(bodyX(), bodyY(), bodyW(), bodyH(), TFT_BLACK);
     lcd.setTextDatum(BC_DATUM);
     lcd.setTextColor(TFT_DARKGREY, TFT_BLACK);
-    lcd.drawString("BACK / ENTER: Close", bodyX() + bodyW() / 2, bodyY() + bodyH());
     _scriptChromeDrawn  = true;
     _scriptLastRendered = 0;
   }
@@ -492,7 +494,6 @@ void KeyboardScreen::_renderMouseJiggle()
     lcd.setTextSize(1);
     lcd.setTextColor(TFT_DARKGREY, TFT_BLACK);
     lcd.setTextDatum(BC_DATUM);
-    lcd.drawString("BACK / ENTER: Stop", bodyX() + bodyW() / 2, bodyY() + bodyH());
     _jiggleChromeDrawn = true;
   }
 

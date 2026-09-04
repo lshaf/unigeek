@@ -69,9 +69,6 @@ void WebFileManagerScreen::_drawRunning() {
   lcd.setTextColor(TFT_GREEN, TFT_BLACK);
   lcd.drawString(_ipUrl,   cx, midY - 10);
   lcd.drawString(_mdnsUrl, cx, midY + 4);
-
-  lcd.setTextColor(TFT_DARKGREY, TFT_BLACK);
-  lcd.drawString("BACK to stop", cx, bodyY() + bodyH() - 14);
 }
 
 void WebFileManagerScreen::_start() {

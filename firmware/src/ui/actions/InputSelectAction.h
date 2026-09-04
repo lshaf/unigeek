@@ -14,6 +14,9 @@ public:
   struct Option {
     const char* label;
     const char* value;
+    const char* sublabel;
+    int16_t     rssi;
+    bool        hasRssi;
   };
 
   static const char* popup(const char* title, const Option* options, uint8_t count, const char* defaultValue = nullptr) {
@@ -176,7 +179,7 @@ private:
 
     lcd.setTextDatum(TL_DATUM);
     lcd.setTextColor(TFT_DARKGREY);
-    lcd.drawString("UP/DN:select  PRESS:confirm", x + PAD, y + h - PAD - HINT_H);
+    lcd.drawString("[Up/Dn] Select  [Press] Confirm", x + PAD, y + h - PAD - HINT_H);
   }
 
   void _drawCounter() {
@@ -198,6 +201,12 @@ private:
       lcd.setTextDatum(TR_DATUM);
       lcd.drawString(buf, x + w - PAD, y + PAD);
     }
+  }
+
+  static uint16_t _rssiColor(int16_t rssi) {
+    if (rssi >= -60) return TFT_GREEN;
+    if (rssi >= -75) return TFT_YELLOW;
+    return TFT_RED;
   }
 
   void _drawRow(int idx) {
@@ -223,17 +232,33 @@ private:
     sp.fillSprite(TFT_BLACK);
     sp.setTextSize(1);
 
+    const Option* opt = idx < _count ? &_options[idx] : nullptr;
     if (isSel) {
       uint16_t boxColor = isCancel ? TFT_RED : themeColor;
       sp.fillRoundRect(0, 0, innerW, ITEM_H, 3, boxColor);
       sp.drawRoundRect(0, 0, innerW, ITEM_H, 3, TFT_WHITE);
-      sp.setTextColor(TFT_WHITE);
-    } else {
-      sp.setTextColor(isCancel ? TFT_RED : TFT_LIGHTGREY);
     }
 
+    uint16_t labelColor = isCancel ? TFT_RED
+                          : (opt && opt->hasRssi ? _rssiColor(opt->rssi)
+                                                : (isSel ? TFT_WHITE : TFT_LIGHTGREY));
+    sp.setTextColor(labelColor, isSel ? (isCancel ? TFT_RED : themeColor) : TFT_BLACK);
     sp.setTextDatum(ML_DATUM);
-    sp.drawString(_labelAt(idx), 4, ITEM_H / 2);
+
+    int labelAvailW = innerW - 8;
+    if (opt && opt->sublabel) {
+      sp.setTextColor(TFT_DARKGREY, isSel ? themeColor : TFT_BLACK);
+      sp.setTextDatum(MR_DATUM);
+      sp.drawString(opt->sublabel, innerW - 4, ITEM_H / 2);
+      labelAvailW = innerW - 12 - sp.textWidth(opt->sublabel);
+      sp.setTextColor(labelColor, isSel ? themeColor : TFT_BLACK);
+      sp.setTextDatum(ML_DATUM);
+    }
+
+    String label = _labelAt(idx);
+    while (label.length() > 1 && sp.textWidth(label) > labelAvailW)
+      label.remove(label.length() - 1);
+    sp.drawString(label, 4, ITEM_H / 2);
 
     sp.pushSprite(x + PAD, y + itemY);
     sp.deleteSprite();

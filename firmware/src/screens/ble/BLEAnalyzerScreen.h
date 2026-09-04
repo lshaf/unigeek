@@ -32,12 +32,13 @@ private:
 
   NimBLEScan*       _bleScan           = nullptr;
   NimBLEScanResults _scanResults;
+  NimBLEAdvertisedDevice _devices[kMaxDevices];
   int               _selectedDeviceIdx = -1;
 
   // Device list storage
   String   _devLabel[kMaxDevices];
   String   _devSub[kMaxDevices];
-  ListItem _devItems[kMaxDevices];
+  ListItem _devItems[kMaxDevices + 1];
   uint8_t  _devCount = 0;
 
   void _doScan();

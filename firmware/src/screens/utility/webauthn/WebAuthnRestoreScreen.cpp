@@ -141,7 +141,7 @@ void WebAuthnRestoreScreen::_drawWarning()
 
   sp.setTextDatum(BC_DATUM);
   sp.setTextColor(TFT_GREEN, TFT_BLACK);
-  sp.drawString("PRESS: continue / BACK: cancel", cx, bodyH() - 4);
+  sp.drawString("[Press] Continue / [Back] Cancel", cx, bodyH() - 4);
 
   sp.pushSprite(bodyX(), bodyY());
   sp.deleteSprite();
@@ -167,7 +167,6 @@ void WebAuthnRestoreScreen::_drawBadChecksum()
   sp.drawString("then try again.",              cx, y);
 
   sp.setTextDatum(BC_DATUM);
-  sp.drawString("PRESS: exit", cx, bodyH() - 4);
 
   sp.pushSprite(bodyX(), bodyY());
   sp.deleteSprite();
@@ -205,7 +204,7 @@ void WebAuthnRestoreScreen::_drawConfirm()
 
   sp.setTextDatum(BC_DATUM);
   sp.setTextColor(TFT_YELLOW, TFT_BLACK);
-  sp.drawString("PRESS: write / BACK: cancel", cx, bodyH() - 4);
+  sp.drawString("[Press] Write / [Back] Cancel", cx, bodyH() - 4);
 
   sp.pushSprite(bodyX(), bodyY());
   sp.deleteSprite();
@@ -229,7 +228,6 @@ void WebAuthnRestoreScreen::_drawDone()
 
   sp.setTextDatum(BC_DATUM);
   sp.setTextColor(TFT_DARKGREY, TFT_BLACK);
-  sp.drawString("PRESS: exit", cx, bodyH() - 4);
 
   sp.pushSprite(bodyX(), bodyY());
   sp.deleteSprite();
@@ -248,7 +246,6 @@ void WebAuthnRestoreScreen::_drawError()
   sp.drawString(_err ? _err : "Failed", cx, cy);
   sp.setTextDatum(BC_DATUM);
   sp.setTextColor(TFT_DARKGREY, TFT_BLACK);
-  sp.drawString("PRESS: exit", cx, bodyH() - 4);
 
   sp.pushSprite(bodyX(), bodyY());
   sp.deleteSprite();

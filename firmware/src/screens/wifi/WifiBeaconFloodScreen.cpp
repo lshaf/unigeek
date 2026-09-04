@@ -1,4 +1,4 @@
-#include "WifiBeaconAttackScreen.h"
+#include "WifiBeaconFloodScreen.h"
 #include "core/Device.h"
 #include "core/IStorage.h"
 #include "core/ScreenManager.h"
@@ -33,14 +33,14 @@ static constexpr int kSsidCount = (int)(sizeof(kSsids) / sizeof(kSsids[0]));
 
 // ── Destructor ────────────────────────────────────────────────────────────────
 
-WifiBeaconAttackScreen::~WifiBeaconAttackScreen()
+WifiBeaconFloodScreen::~WifiBeaconFloodScreen()
 {
   if (_attacker) { delete _attacker; _attacker = nullptr; }
 }
 
 // ── Lifecycle ─────────────────────────────────────────────────────────────────
 
-void WifiBeaconAttackScreen::onInit()
+void WifiBeaconFloodScreen::onInit()
 {
   _state      = STATE_MENU;
   _mode       = MODE_SPAM;
@@ -55,7 +55,7 @@ void WifiBeaconAttackScreen::onInit()
   setItems(_menuItems, 3);
 }
 
-void WifiBeaconAttackScreen::onItemSelected(uint8_t index)
+void WifiBeaconFloodScreen::onItemSelected(uint8_t index)
 {
   if (_state == STATE_MENU) {
     if (index == 0) {
@@ -74,8 +74,14 @@ void WifiBeaconAttackScreen::onItemSelected(uint8_t index)
   }
 
   if (_state == STATE_SELECT_AP) {
-    if (index < (uint8_t)_apCount) {
-      _floodTarget = index;
+    if (index == 0) {
+      _startScan(true);
+      return;
+    }
+
+    const int apIndex = (int)index - 1;
+    if (apIndex >= 0 && apIndex < _apCount) {
+      _floodTarget = apIndex;
     }
     _state = STATE_MENU;
     setItems(_menuItems, 3);
@@ -115,7 +121,7 @@ void WifiBeaconAttackScreen::onItemSelected(uint8_t index)
   }
 }
 
-void WifiBeaconAttackScreen::onUpdate()
+void WifiBeaconFloodScreen::onUpdate()
 {
   if (_state == STATE_ATTACKING) {
     if (Uni.Nav->wasPressed()) {
@@ -167,7 +173,7 @@ void WifiBeaconAttackScreen::onUpdate()
   ListScreen::onUpdate();
 }
 
-void WifiBeaconAttackScreen::onRender()
+void WifiBeaconFloodScreen::onRender()
 {
   if (_state == STATE_ATTACKING) { _drawAttacking(); return; }
   if (_state == STATE_SCAN) {
@@ -181,7 +187,7 @@ void WifiBeaconAttackScreen::onRender()
   ListScreen::onRender();
 }
 
-void WifiBeaconAttackScreen::onBack()
+void WifiBeaconFloodScreen::onBack()
 {
   if (_state == STATE_ATTACKING) { _stop(); return; }
   if (_state == STATE_FILE_PICK) {
@@ -209,7 +215,7 @@ void WifiBeaconAttackScreen::onBack()
 
 // ── Private ───────────────────────────────────────────────────────────────────
 
-void WifiBeaconAttackScreen::_updateMenuValues()
+void WifiBeaconFloodScreen::_updateMenuValues()
 {
   _modeSub = (_mode == MODE_SPAM) ? "Spam" : "Flood";
 
@@ -239,9 +245,32 @@ void WifiBeaconAttackScreen::_updateMenuValues()
   render();
 }
 
-void WifiBeaconAttackScreen::_startScan()
+void WifiBeaconFloodScreen::_showScanResults()
 {
+  _state = STATE_SELECT_AP;
+  _apItems[0] = {"Rescan"};
+
+  for (int i = 0; i < _apCount; i++) {
+    _apItems[i + 1] = {_apList[i].ssid, _apSubLabels[i]};
+    _apItems[i + 1].rssi            = _apList[i].rssi;
+    _apItems[i + 1].hasRssi         = true;
+    _apItems[i + 1].sublabelMarquee = true;
+  }
+
+  setItems(_apItems, (uint8_t)(_apCount + 1));
+}
+
+void WifiBeaconFloodScreen::_startScan(bool forceScan)
+{
+  if (_scanValid && !forceScan) {
+    _showScanResults();
+    return;
+  }
+
+  // Flood mode stores the selected AP by index into _apList. A fresh scan
+  // rebuilds that array, so the previous selection must not survive Rescan.
   _floodTarget = -1;
+
   WiFi.mode(WIFI_MODE_STA);
 
   // Draw "Scanning..." before blocking
@@ -249,33 +278,34 @@ void WifiBeaconAttackScreen::_startScan()
   render();
 
   // Synchronous scan — blocks ~3 s; display stays on "Scanning..." during this time
-  int n = WiFi.scanNetworks(false, false);
-
-  if (n <= 0) {
-    _state = STATE_MENU;
-    // _items still points to _menuItems (set in onInit / last setItems call)
-    render();
-    return;
-  }
-
-  _apCount = (n < MAX_AP) ? n : MAX_AP;
-  for (int i = 0; i < _apCount; i++) {
-    String ssid = WiFi.SSID(i);
-    strncpy(_apList[i].ssid, ssid.length() > 0 ? ssid.c_str() : "(hidden)", 32);
-    _apList[i].ssid[32] = '\0';
-    memcpy(_apList[i].bssid, WiFi.BSSID(i), 6);
-    _apList[i].channel = (uint8_t)WiFi.channel(i);
-    snprintf(_apSubLabels[i], sizeof(_apSubLabels[i]),
-             "CH%d  %ddBm", _apList[i].channel, (int)WiFi.RSSI(i));
-    _apItems[i] = {_apList[i].ssid, _apSubLabels[i]};
-  }
   WiFi.scanDelete();
+  int n = WiFi.scanNetworks();
 
-  _state = STATE_SELECT_AP;
-  setItems(_apItems, (uint8_t)_apCount); // resets selection to 0 for AP list — correct
+  _apCount = 0;
+  if (n > 0) {
+    _apCount = (n < MAX_AP) ? n : MAX_AP;
+    for (int i = 0; i < _apCount; i++) {
+      String ssid = WiFi.SSID(i);
+      strncpy(_apList[i].ssid, ssid.length() > 0 ? ssid.c_str() : "(hidden)", 32);
+      _apList[i].ssid[32] = '\0';
+      memcpy(_apList[i].bssid, WiFi.BSSID(i), 6);
+      _apList[i].channel = (uint8_t)WiFi.channel(i);
+      _apList[i].rssi = (int16_t)WiFi.RSSI(i);
+      snprintf(_apSubLabels[i], sizeof(_apSubLabels[i]), "%s", WiFi.BSSIDstr(i).c_str());
+    }
+  }
+
+  WiFi.scanDelete();
+  _scanValid = true;
+
+  if (_apCount == 0) {
+    ShowStatusAction::show("No networks found");
+  }
+
+  _showScanResults();
 }
 
-void WifiBeaconAttackScreen::_startAttack()
+void WifiBeaconFloodScreen::_startAttack()
 {
   if (_mode == MODE_FLOOD && _floodTarget < 0) return;
 
@@ -305,7 +335,7 @@ void WifiBeaconAttackScreen::_startAttack()
   render();
 }
 
-void WifiBeaconAttackScreen::_stop()
+void WifiBeaconFloodScreen::_stop()
 {
   if (_attacker) { delete _attacker; _attacker = nullptr; }
   _state       = STATE_MENU;
@@ -316,7 +346,7 @@ void WifiBeaconAttackScreen::_stop()
   _updateMenuValues();
 }
 
-void WifiBeaconAttackScreen::_broadcastNext()
+void WifiBeaconFloodScreen::_broadcastNext()
 {
   const char* ssid;
   uint8_t     channel;
@@ -343,7 +373,7 @@ void WifiBeaconAttackScreen::_broadcastNext()
   if (_rounds == 100) Achievement.unlock("wifi_beacon_spam_100");
 }
 
-void WifiBeaconAttackScreen::_drawAttacking()
+void WifiBeaconFloodScreen::_drawAttacking()
 {
   auto& lcd = Uni.Lcd;
 
@@ -358,7 +388,6 @@ void WifiBeaconAttackScreen::_drawAttacking()
       lcd.drawString(line, bodyX() + bodyW() / 2, bodyY() + 4);
       lcd.setTextDatum(BC_DATUM);
       lcd.setTextColor(TFT_DARKGREY, TFT_BLACK);
-      lcd.drawString("BACK / ENTER: Stop", bodyX() + bodyW() / 2, bodyY() + bodyH());
       _chromeDrawn = true;
     }
     const bool above = (_ratePerSec >= 50);
@@ -393,7 +422,6 @@ void WifiBeaconAttackScreen::_drawAttacking()
       lcd.setTextColor(TFT_DARKGREY, TFT_BLACK);
       lcd.drawString(bline, bodyX() + bodyW() / 2, bodyY() + 20);
       lcd.setTextDatum(BC_DATUM);
-      lcd.drawString("BACK / ENTER: Stop", bodyX() + bodyW() / 2, bodyY() + bodyH());
       _chromeDrawn = true;
     }
 
@@ -423,7 +451,7 @@ void WifiBeaconAttackScreen::_drawAttacking()
 // filtered to `.txt`. Storage may be unavailable — Built In is still shown
 // so the user always has a way out.
 
-void WifiBeaconAttackScreen::_showFilePicker()
+void WifiBeaconFloodScreen::_showFilePicker()
 {
   if (_pickerDir.length() == 0) _pickerDir = DICT_DIR;
 
@@ -446,7 +474,7 @@ void WifiBeaconAttackScreen::_showFilePicker()
   setItems(_pickerItems, (uint8_t)(n + baseOffset));
 }
 
-bool WifiBeaconAttackScreen::_loadDictFile(const String& path)
+bool WifiBeaconFloodScreen::_loadDictFile(const String& path)
 {
   if (!Uni.Storage || !Uni.Storage->isAvailable()) return false;
 

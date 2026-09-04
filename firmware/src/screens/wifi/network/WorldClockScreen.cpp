@@ -49,8 +49,10 @@ void WorldClockScreen::onRender() {
   if (!getLocalTime(&timeInfo, 0)) return;
 
   auto& lcd = Uni.Lcd;
+  static constexpr int FOOTER_H = 12;
+  const int contentH = bodyH() - FOOTER_H - 1;
   int cx = bodyX() + bodyW() / 2;
-  int cy = bodyY() + bodyH() / 2;
+  int cy = bodyY() + contentH / 2;
 
   if (!_synced) {
     _synced = true;
@@ -67,17 +69,15 @@ void WorldClockScreen::onRender() {
     if (Uni.Speaker) Uni.Speaker->playNotification();
   }
 
-  // Static chrome: paint the hint once; body is already black from init().
+  // Static chrome: dedicated control footer.
   if (!_chromeDrawn) {
     lcd.fillRect(bodyX(), bodyY(), bodyW(), bodyH(), TFT_BLACK);
+    const int footerY = bodyY() + bodyH() - FOOTER_H;
+    lcd.drawFastHLine(bodyX(), footerY - 1, bodyW(), TFT_DARKGREY);
     lcd.setTextSize(1);
     lcd.setTextDatum(MC_DATUM);
     lcd.setTextColor(TFT_DARKGREY, TFT_BLACK);
-#ifdef DEVICE_HAS_KEYBOARD
-    lcd.drawString("BACK:back  UP/DN:offset", cx, bodyY() + bodyH() - 8);
-#else
-    lcd.drawString("UP/DN:offset  PRESS:back", cx, bodyY() + bodyH() - 8);
-#endif
+    lcd.drawString("[Up/Dn] Offset", cx, footerY + 7);
     _chromeDrawn = true;
   }
 

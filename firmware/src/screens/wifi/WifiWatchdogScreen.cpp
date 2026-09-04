@@ -13,7 +13,6 @@
 
 std::unordered_map<WifiWatchdogScreen::MacAddr, std::string,                     WifiWatchdogScreen::MacHash, WifiWatchdogScreen::MacEqual> WifiWatchdogScreen::_ssidMap;
 std::unordered_map<WifiWatchdogScreen::MacAddr, WifiWatchdogScreen::DeauthEntry, WifiWatchdogScreen::MacHash, WifiWatchdogScreen::MacEqual> WifiWatchdogScreen::_deauthMap;
-std::unordered_map<WifiWatchdogScreen::MacAddr, WifiWatchdogScreen::ProbeEntry,  WifiWatchdogScreen::MacHash, WifiWatchdogScreen::MacEqual> WifiWatchdogScreen::_probeMap;
 std::unordered_map<WifiWatchdogScreen::MacAddr, WifiWatchdogScreen::BeaconWindow,WifiWatchdogScreen::MacHash, WifiWatchdogScreen::MacEqual> WifiWatchdogScreen::_beaconWindow;
 std::unordered_map<WifiWatchdogScreen::MacAddr, WifiWatchdogScreen::BeaconEntry, WifiWatchdogScreen::MacHash, WifiWatchdogScreen::MacEqual> WifiWatchdogScreen::_beaconMap;
 std::unordered_map<std::string, std::vector<WifiWatchdogScreen::BssidInfo>>                                                                  WifiWatchdogScreen::_twinMap;
@@ -26,10 +25,6 @@ WifiWatchdogScreen::SsidEvent    WifiWatchdogScreen::_ssidRing[MAX_RING]        
 volatile int                     WifiWatchdogScreen::_ssidRingHead                = 0;
 volatile int                     WifiWatchdogScreen::_ssidRingTail                = 0;
 
-WifiWatchdogScreen::ProbeEvent   WifiWatchdogScreen::_probeRing[MAX_RING]         = {};
-volatile int                     WifiWatchdogScreen::_probeRingHead               = 0;
-volatile int                     WifiWatchdogScreen::_probeRingTail               = 0;
-
 WifiWatchdogScreen::BeaconEvent  WifiWatchdogScreen::_beaconRing[MAX_BEACON_RING] = {};
 volatile int                     WifiWatchdogScreen::_beaconRingHead              = 0;
 volatile int                     WifiWatchdogScreen::_beaconRingTail              = 0;
@@ -41,7 +36,7 @@ portMUX_TYPE WifiWatchdogScreen::_ringLock = portMUX_INITIALIZER_UNLOCKED;
 const char* WifiWatchdogScreen::title()
 {
   static constexpr const char* kNames[] = {
-    "WiFi Watchdog", "Deauth/Disassoc", "Probe Requests", "Beacon Flood", "Evil Twin"
+    "WiFi Watchdog", "Deauth/Disassoc", "Beacon Flood", "Evil Twin"
   };
   return kNames[_view];
 }
@@ -54,7 +49,6 @@ WifiWatchdogScreen::~WifiWatchdogScreen()
   esp_wifi_set_promiscuous(false);
   _deauthMap.clear();
   _ssidMap.clear();
-  _probeMap.clear();
   _beaconWindow.clear();
   _beaconMap.clear();
   _twinMap.clear();
@@ -75,12 +69,10 @@ void WifiWatchdogScreen::onInit()
 
   _ringHead = _ringTail = 0;
   _ssidRingHead = _ssidRingTail = 0;
-  _probeRingHead = _probeRingTail = 0;
   _beaconRingHead = _beaconRingTail = 0;
 
   _deauthMap.clear();
   _ssidMap.clear();
-  _probeMap.clear();
   _beaconWindow.clear();
   _beaconMap.clear();
   _twinMap.clear();
@@ -97,7 +89,7 @@ void WifiWatchdogScreen::onInit()
 
   if (_initialView != InitialView::None) {
     static constexpr View kInitialViewMap[] = {
-      VIEW_DEAUTH, VIEW_PROBES, VIEW_FLOOD, VIEW_EVILTWIN
+      VIEW_DEAUTH, VIEW_FLOOD, VIEW_EVILTWIN
     };
     _enterView(kInitialViewMap[static_cast<int>(_initialView)]);
   } else {
@@ -355,38 +347,6 @@ void WifiWatchdogScreen::_drainRings()
     _ssidRingTail = (_ssidRingTail + 1) % MAX_RING;
   }
 
-  for (int i = 0; i < MAX_RING && _probeRingTail != _probeRingHead; i++) {
-    const auto& ev = _probeRing[_probeRingTail];
-    MacAddr src{};
-    memcpy(src.data(), ev.src.data(), 6);
-    auto it = _probeMap.find(src);
-    if (it == _probeMap.end()) {
-      if (_probeMap.size() < MAX_TRACKED_MAC) {
-        ProbeEntry e{};
-        e.timestamp = ev.timestamp;
-        e.count     = 1;
-        if (ev.ssid[0] != '\0') {
-          memcpy(e.ssids[0], ev.ssid, 33);
-          e.ssidCount = 1;
-        }
-        _probeMap.emplace(src, e);
-      }
-      if (Achievement.inc("wifi_probe_logged") == 1)
-        Achievement.unlock("wifi_probe_logged");
-    } else {
-      ++it->second.count;
-      it->second.timestamp = ev.timestamp;
-      if (ev.ssid[0] != '\0' && it->second.ssidCount < 3) {
-        bool found = false;
-        for (int j = 0; j < it->second.ssidCount; j++) {
-          if (strcmp(it->second.ssids[j], ev.ssid) == 0) { found = true; break; }
-        }
-        if (!found) memcpy(it->second.ssids[it->second.ssidCount++], ev.ssid, 33);
-      }
-    }
-    _probeRingTail = (_probeRingTail + 1) % MAX_RING;
-  }
-
   for (int i = 0; i < MAX_BEACON_RING && _beaconRingTail != _beaconRingHead; i++) {
     const auto& ev = _beaconRing[_beaconRingTail];
     MacAddr bssid{};
@@ -457,7 +417,6 @@ void WifiWatchdogScreen::_renderView()
   switch (_view) {
     case VIEW_OVERALL:  _renderOverall();  break;
     case VIEW_DEAUTH:   _renderDeauth();   break;
-    case VIEW_PROBES:   _renderProbes();   break;
     case VIEW_FLOOD:    _renderFlood();    break;
     case VIEW_EVILTWIN: _renderEviltwin(); break;
   }
@@ -510,12 +469,6 @@ void WifiWatchdogScreen::_renderOverall()
     for (auto& kv : _deauthMap)
       if (now - kv.second.timestamp > WINDOW_MS) toErase.push_back(kv.first);
     for (auto& k : toErase) _deauthMap.erase(k);
-  }
-  {
-    std::vector<MacAddr> toErase;
-    for (auto& kv : _probeMap)
-      if (now - kv.second.timestamp > WINDOW_MS) toErase.push_back(kv.first);
-    for (auto& k : toErase) _probeMap.erase(k);
   }
 
   int counts[4];
@@ -583,51 +536,6 @@ void WifiWatchdogScreen::_renderDeauth()
     _rows[n].label = _labels[n];
     _rows[n].value = _sublabels[n];
     n++;
-  }
-
-  _setListState(n);
-}
-
-void WifiWatchdogScreen::_renderProbes()
-{
-  const unsigned long now = millis();
-  {
-    std::vector<MacAddr> toErase;
-    for (auto& kv : _probeMap)
-      if (now - kv.second.timestamp > WINDOW_MS) toErase.push_back(kv.first);
-    for (auto& k : toErase) _probeMap.erase(k);
-  }
-
-  int n = 0;
-  int macCount = 0;
-  for (auto& kv : _probeMap) {
-    if (macCount >= MAX_ITEMS || n >= MAX_ROWS) break;
-    const MacAddr&    mac = kv.first;
-    const ProbeEntry& e   = kv.second;
-
-    snprintf(_labels[n], sizeof(_labels[n]),
-             "%02X:%02X:%02X:%02X:%02X:%02X (x%d)",
-             mac[0], mac[1], mac[2], mac[3], mac[4], mac[5], e.count);
-    _rows[n].label = _labels[n];
-    _rows[n].value = "";
-    n++;
-
-    if (e.ssidCount == 0) {
-      if (n < MAX_ROWS) {
-        snprintf(_labels[n], sizeof(_labels[n]), "  - (wildcard)");
-        _rows[n].label = _labels[n];
-        _rows[n].value = "";
-        n++;
-      }
-    } else {
-      for (int i = 0; i < e.ssidCount && n < MAX_ROWS; i++) {
-        snprintf(_labels[n], sizeof(_labels[n]), "  - %s", e.ssids[i]);
-        _rows[n].label = _labels[n];
-        _rows[n].value = "";
-        n++;
-      }
-    }
-    macCount++;
   }
 
   _setListState(n);
@@ -801,23 +709,4 @@ void WifiWatchdogScreen::_promiscuousCb(void* buf, wifi_promiscuous_pkt_type_t t
     portEXIT_CRITICAL_ISR(&_ringLock);
   }
 
-  // Probe Request (4) — neighbor device detection
-  if (fc_sub == 0x4 && len >= 26) {
-    char ssid[33] = {};
-    const uint8_t id   = pay[24];
-    const uint8_t elen = pay[25];
-    if (id == 0 && elen > 0 && elen <= 32 && (size_t)(26 + elen) <= len) {
-      memcpy(ssid, pay + 26, elen);
-      ssid[elen] = '\0';
-    }
-    portENTER_CRITICAL_ISR(&_ringLock);
-    int next = (_probeRingHead + 1) % MAX_RING;
-    if (next != _probeRingTail) {
-      memcpy(_probeRing[_probeRingHead].src.data(), pay + 10, 6);
-      memcpy(_probeRing[_probeRingHead].ssid, ssid, 33);
-      _probeRing[_probeRingHead].timestamp = millis();
-      _probeRingHead = next;
-    }
-    portEXIT_CRITICAL_ISR(&_ringLock);
-  }
 }

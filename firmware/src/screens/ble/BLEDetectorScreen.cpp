@@ -305,27 +305,12 @@ void BLEDetectorScreen::_draw()
   auto& lcd = Uni.Lcd;
 
   static constexpr int rowH = 14;
-#ifdef DEVICE_HAS_KEYBOARD
-  static constexpr int footerH = 14;
-#else
-  static constexpr int footerH = 16;
-#endif
   const int contentY = bodyY() + 2;
-  const int contentH = bodyH() - footerH - 2;
+  const int contentH = bodyH() - 2;
   const int visibleRows = contentH / rowH;
 
   if (!_chromeDrawn) {
     lcd.fillRect(bodyX(), bodyY(), bodyW(), bodyH(), TFT_BLACK);
-#ifdef DEVICE_HAS_KEYBOARD
-    lcd.setTextDatum(BC_DATUM);
-    lcd.setTextColor(TFT_DARKGREY, TFT_BLACK);
-    lcd.drawString("BACK: Exit", bodyX() + bodyW() / 2, bodyY() + bodyH() - 2);
-#else
-    lcd.fillRect(bodyX(), bodyY() + bodyH() - footerH, bodyW(), footerH, Config.getThemeColor());
-    lcd.setTextDatum(BC_DATUM);
-    lcd.setTextColor(TFT_WHITE, Config.getThemeColor());
-    lcd.drawString("< Back", bodyX() + bodyW() / 2, bodyY() + bodyH() - 3);
-#endif
     _chromeDrawn = true;
   }
 

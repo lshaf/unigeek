@@ -24,7 +24,7 @@ void ChameleonVikingScreen::_draw() {
     sp.setTextColor(TFT_DARKGREY, TFT_BLACK);
     sp.drawString("Place Viking card", bw / 2, bh / 2);
     sp.setTextColor(TFT_WHITE, TFT_BLACK);
-    sp.drawString("[OK] Scan  [Hold] Back", bw / 2, bh / 2 + 20);
+    sp.drawString("[Press] Scan", bw / 2, bh / 2 + 20);
   } else if (_state == STATE_RESULT || _state == STATE_CLONED) {
     sp.setTextColor(TFT_GREEN, TFT_BLACK);
     sp.drawString("Viking detected", bw / 2, bh / 2 - 30);
@@ -35,7 +35,7 @@ void ChameleonVikingScreen::_draw() {
     sp.setTextColor(TFT_WHITE, TFT_BLACK);
     sp.drawString(hex, bw / 2, bh / 2 - 10);
     sp.setTextColor(TFT_DARKGREY, TFT_BLACK);
-    sp.drawString("[OK] Action  [Hold] Back", bw / 2, bh / 2 + 20);
+    sp.drawString("[Press] Action", bw / 2, bh / 2 + 20);
   }
   sp.pushSprite(bx, by);
   sp.deleteSprite();

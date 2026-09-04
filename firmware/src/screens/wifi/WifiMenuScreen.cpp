@@ -6,8 +6,7 @@
 #include "core/ScreenManager.h"
 #include "network/NetworkMenuScreen.h"
 #include "WifiAPScreen.h"
-#include "WifiAnalysisDetectionMenuScreen.h"
-#include "WifiSniffersMenuScreen.h"
+#include "WifiMonitoringDetectionMenuScreen.h"
 #include "WifiAttacksMenuScreen.h"
 
 void WifiMenuScreen::onInit() {
@@ -16,11 +15,10 @@ void WifiMenuScreen::onInit() {
 
 void WifiMenuScreen::onItemSelected(uint8_t index) {
   switch (index) {
-    case 0: Screen.push(new WifiAPScreen());                    break;
-    case 1: Screen.push(new NetworkMenuScreen());               break;
-    case 2: Screen.push(new WifiAnalysisDetectionMenuScreen()); break;
-    case 3: Screen.push(new WifiSniffersMenuScreen());          break;
-    case 4: Screen.push(new WifiAttacksMenuScreen());           break;
+    case 0: Screen.push(new WifiAPScreen());                        break;
+    case 1: Screen.push(new NetworkMenuScreen());                   break;
+    case 2: Screen.push(new WifiMonitoringDetectionMenuScreen());     break;
+    case 3: Screen.push(new WifiAttacksMenuScreen());               break;
   }
 }
 

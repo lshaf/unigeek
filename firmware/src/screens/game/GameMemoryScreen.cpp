@@ -646,9 +646,9 @@ void GameMemoryScreen::_renderWaitingInput()
     sp.setTextColor(TFT_DARKGREY, TFT_BLACK);
     sp.setTextDatum(BC_DATUM);
 #ifdef DEVICE_HAS_KEYBOARD
-    sp.drawString("ENTER:submit  BKSP:erase", bodyW() / 2, hintH - 1);
+    sp.drawString("[Enter] Submit  [BKSP] Erase", bodyW() / 2, hintH - 1);
 #else
-    sp.drawString("UP/DN:cycle  PRESS:confirm", bodyW() / 2, hintH - 1);
+    sp.drawString("[Up/Dn] Cycle  [Press] Confirm", bodyW() / 2, hintH - 1);
 #endif
     sp.pushSprite(bodyX(), bodyY() + bodyH() - hintH);
     sp.deleteSprite();
@@ -774,7 +774,7 @@ void GameMemoryScreen::_renderHighScores()
     lcd.setTextSize(1);
     lcd.setTextColor(TFT_DARKGREY, TFT_BLACK);
     lcd.setTextDatum(BC_DATUM);
-    lcd.drawString("UP/DN: switch  BACK: return", bodyX() + bodyW() / 2, bodyY() + bodyH() - 1);
+    lcd.drawString("[Up/Dn] Switch  [Back] Return", bodyX() + bodyW() / 2, bodyY() + bodyH() - 1);
   }
 
   if (_lastHsViewIdx == _hsViewIdx) return;

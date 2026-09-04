@@ -14,7 +14,7 @@ private:
   void _toggleRemoteDevice();
 
   ListItem _items[4] = {
-    {"Analysis & Detection"},
+    {"Monitoring & Detection"},
     {"Attacks"},
     {"Extensions"},
     {"BLE Remote"},

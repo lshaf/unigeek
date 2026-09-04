@@ -27,7 +27,7 @@ void ChameleonT5577CleanerScreen::onInit() {
   _log.clear();
   _log.addLine("T5577 Password Cleaner", TFT_CYAN);
   _log.addLine("Place T5577 card", TFT_DARKGREY);
-  _log.addLine("[OK] start  [Hold] back", TFT_DARKGREY);
+  _log.addLine("[Press] Start", TFT_DARKGREY);
   _needsDraw = true;
 }
 

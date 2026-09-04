@@ -3,13 +3,13 @@
 #include "ui/templates/ListScreen.h"
 #include "ui/views/BrowseFileView.h"
 
-class WifiBeaconAttackScreen : public ListScreen
+class WifiBeaconFloodScreen : public ListScreen
 {
 public:
-  const char* title() override { return "Beacon Attack"; }
+  const char* title() override { return "Beacon Flood"; }
   bool inhibitPowerOff() override { return _state == STATE_ATTACKING; }
 
-  ~WifiBeaconAttackScreen() override;
+  ~WifiBeaconFloodScreen() override;
 
   void onInit() override;
   void onItemSelected(uint8_t index) override;
@@ -36,6 +36,7 @@ private:
     char    ssid[33];
     uint8_t bssid[6];
     uint8_t channel;
+    int16_t rssi;
   };
 
   State      _state      = STATE_MENU;
@@ -43,7 +44,7 @@ private:
   SpamTarget _spamTarget = SPAM_BUILTIN;
 
   ApEntry  _apList[MAX_AP]          = {};
-  char     _apSubLabels[MAX_AP][16] = {};
+  char     _apSubLabels[MAX_AP][18] = {};
   int      _apCount     = 0;
   int      _floodTarget = -1;
 
@@ -71,12 +72,14 @@ private:
   String   _targetSub;
   String   _startSub;
   ListItem _menuItems[3] = { {"Mode"}, {"Target"}, {"Start"} };
-  ListItem _apItems[MAX_AP];
+  ListItem _apItems[MAX_AP + 1];
+  bool     _scanValid = false;
 
   void _updateMenuValues();
   void _showFilePicker();
   bool _loadDictFile(const String& path);
-  void _startScan();
+  void _startScan(bool forceScan = false);
+  void _showScanResults();
   void _startAttack();
   void _stop();
   void _broadcastNext();

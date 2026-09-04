@@ -208,5 +208,4 @@ void LuaScreen::_drawDone() {
   _log.draw(Uni.Lcd, 0, 0, w, h - 12);
   Uni.Lcd.setTextSize(1);
   Uni.Lcd.setTextColor(TFT_DARKGREY, TFT_BLACK);
-  Uni.Lcd.drawString("BACK/OK: return", 2, h - 10);
 }

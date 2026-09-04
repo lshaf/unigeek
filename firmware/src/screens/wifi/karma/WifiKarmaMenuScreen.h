@@ -7,7 +7,7 @@
 class WifiKarmaMenuScreen : public ListScreen
 {
 public:
-  const char* title() override { return "Karma Attack"; }
+  const char* title() override { return "Karma"; }
 
   void onInit() override;
   void onItemSelected(uint8_t index) override;

@@ -20,9 +20,9 @@ static constexpr int16_t ZONE_H   = SCREEN_H / 3;   //  80
 struct ZoneRect { int16_t x, y, w, h; const char* label; };
 static const ZoneRect kZones[4] = {
   { 0,            0,          BACK_END,            SCREEN_H,            "BACK" },
-  { BACK_END + 1, 0,          SCREEN_W - BACK_END - 1, ZONE_H,          "UP"   },
+  { BACK_END + 1, 0,          SCREEN_W - BACK_END - 1, ZONE_H,          "Up"   },
   { BACK_END + 1, ZONE_H + 1, SCREEN_W - BACK_END - 1, ZONE_H - 1,      "SEL"  },
-  { BACK_END + 1, ZONE_H * 2 + 1, SCREEN_W - BACK_END - 1, SCREEN_H - ZONE_H * 2 - 1, "DOWN" },
+  { BACK_END + 1, ZONE_H * 2 + 1, SCREEN_W - BACK_END - 1, SCREEN_H - ZONE_H * 2 - 1, "Down" },
 };
 
 void TouchGuideScreen::onInit() {

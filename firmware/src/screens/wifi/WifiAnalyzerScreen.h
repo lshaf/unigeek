@@ -21,11 +21,6 @@ private:
   static constexpr int MAX_SCAN    = 20;
   static constexpr int MAX_CLIENTS = 32;  // keep in sync with kMaxClients in .cpp
 
-  // Per-channel dwell for the one-shot scan. 600 ms x up to 14 channels = 8.4 s,
-  // which stays under the framework's hard 10 s sync-scan timeout (see
-  // WifiEapolCaptureScreen::_selectWifi for the full rationale).
-  static constexpr int SCAN_DWELL_MS = 600;
-
   enum State { STATE_SCAN, STATE_CLIENTS };
   State _state = STATE_SCAN;
 
@@ -42,7 +37,7 @@ private:
   WifiEntry _entries[MAX_SCAN];
   int       _entryCount  = 0;
 
-  ListItem       _scanItems[MAX_SCAN];
+  ListItem       _scanItems[MAX_SCAN + 1];
   ScrollListView _scrollView;
 
   // Client sniffer (per-AP) state. The detail view is one scrollable list:

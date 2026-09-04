@@ -448,9 +448,9 @@ bool SubGHzScreen::_onRenderRecordRaw() {
   lcd.setTextDatum(TR_DATUM);
   lcd.setTextColor(TFT_DARKGREY, TFT_BLACK);
   #ifdef DEVICE_HAS_KEYBOARD
-    lcd.drawString(_rf.rawRecordStarted() ? "OK:stop" : "ESC:exit", bodyX() + bodyW() - 4, bodyY() + 1);
+    lcd.drawString(_rf.rawRecordStarted() ? "[Press] Stop" : "", bodyX() + bodyW() - 4, bodyY() + 1);
   #else
-    lcd.drawString(_rf.rawRecordStarted() ? "OK:stop" : "<:exit", bodyX() + bodyW() - 4, bodyY() + 1);
+    lcd.drawString(_rf.rawRecordStarted() ? "[Press] Stop" : "", bodyX() + bodyW() - 4, bodyY() + 1);
   #endif
 
   if (!_rf.rawRecordStarted()) {
@@ -704,12 +704,6 @@ bool SubGHzScreen::_onRenderBruteForce() {
     snprintf(h, sizeof(h), "%.2f MHz  %d bit", _rf.getFrequency(), _bruteBits);
     lcd.setTextColor(TFT_DARKGREY, TFT_BLACK);
     lcd.drawString(h, bodyX() + 4, bodyY() + 14);
-    lcd.setTextDatum(TR_DATUM);
-    #ifdef DEVICE_HAS_KEYBOARD
-      lcd.drawString("ESC:stop", bodyX() + bodyW() - 4, bodyY() + 2);
-    #else
-      lcd.drawString("<:stop", bodyX() + bodyW() - 4, bodyY() + 2);
-    #endif
     _bruteChrome = true;
   }
 
@@ -769,20 +763,16 @@ bool SubGHzScreen::_onRenderExtra() {
   static constexpr int kRssiCeiling = -30;
   static constexpr int kRssiRange   = kRssiCeiling - kRssiFloor; // 80
 
-  const int footerH  = 16;
-  const int contentH = bodyH() - footerH;
+  // Keep the scan sprite at the proven pre-footer-removal height.
+  // A full-body 16-bit sprite can fail to allocate on small-memory devices
+  // (notably Cardputer Adv), leaving Detect Freq black. This retains the old
+  // render height without restoring the removed footer.
+  const int contentH = bodyH() - 16;
 
   if (!_chromeDrawn) {
     lcd.fillRect(bodyX(), bodyY(), bodyW(), bodyH(), TFT_BLACK);
     lcd.setTextSize(1);
     lcd.setTextDatum(MC_DATUM);
-    lcd.fillRect(bodyX(), bodyY() + bodyH() - footerH, bodyW(), footerH, Config.getThemeColor());
-    lcd.setTextColor(TFT_WHITE, Config.getThemeColor());
-    #ifdef DEVICE_HAS_KEYBOARD
-      lcd.drawString("BACK: Stop", bodyX() + bodyW() / 2, bodyY() + bodyH() - 8);
-    #else
-      lcd.drawString("< Stop", bodyX() + bodyW() / 2, bodyY() + bodyH() - 8);
-    #endif
     _chromeDrawn = true;
   }
 

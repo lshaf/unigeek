@@ -3,19 +3,19 @@
 #include <esp_wifi.h>
 #include "ui/templates/ListScreen.h"
 
-class WifiDeautherScreen : public ListScreen
+class WifiDeauthDisassocScreen : public ListScreen
 {
 public:
-  const char* title() override { return "WiFi Deauther"; }
+  const char* title() override { return "Deauth/Disassoc"; }
   bool inhibitPowerOff() override { return _state == STATE_DEAUTHING; }
 
-  WifiDeautherScreen() {
+  WifiDeauthDisassocScreen() {
     memset(_mainItems,  0, sizeof(_mainItems));
     memset(_scanItems,  0, sizeof(_scanItems));
     memset(_scanLabels, 0, sizeof(_scanLabels));
     memset(_scanValues, 0, sizeof(_scanValues));
   }
-  ~WifiDeautherScreen() override;
+  ~WifiDeauthDisassocScreen() override;
 
   void onInit() override;
   void onItemSelected(uint8_t index) override;
@@ -59,10 +59,13 @@ private:
   String   _modeSub;
   String   _targetSub;
 
-  ListItem _scanItems[MAX_SCAN];
+  ListItem _scanItems[MAX_SCAN + 1];
   char     _scanLabels[MAX_SCAN][52];
   char     _scanValues[MAX_SCAN][18];
+  int16_t  _scanRssi[MAX_SCAN] = {};
+  uint8_t  _scanChannels[MAX_SCAN] = {};
   int      _scanCount = 0;
+  bool     _scanValid = false;
 
   static ApEntry      _allTargets[MAX_ALL];
   static int          _allCount;
@@ -72,7 +75,8 @@ private:
   String _statusMsg;
 
   void _showMain();
-  void _selectWifi();
+  void _selectWifi(bool forceScan = false);
+  void _showScanResults();
   void _startDeauth();
   void _stopDeauth();
   void _deauthAll();

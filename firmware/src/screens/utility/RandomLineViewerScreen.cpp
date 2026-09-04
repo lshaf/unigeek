@@ -229,7 +229,6 @@ void RandomLineViewerScreen::_renderDisplay() {
     sp.setTextColor(TFT_DARKGREY, TFT_BLACK);
     sp.setTextDatum(BC_DATUM);
     sp.setTextSize(1);
-    sp.drawString("Up=Prev  Dn=Next  Back=Exit", w / 2, BOT_H - 1);
     sp.pushSprite(x, y + h - BOT_H);
     sp.deleteSprite();
     _chromeDrawn = true;

@@ -100,10 +100,10 @@ void I2CDetectorScreen::onRender() {
     lcd.print("I2C Bus");
   }
 
-  const uint16_t labelH = 12;
-  const uint16_t hintH  = 10;
-  const uint16_t gridY  = labelH + 4;
-  const uint16_t gridH  = bodyH() - gridY - hintH - 4;
+  const uint16_t labelH  = 12;
+  const uint16_t footerH = _hasBoth ? 12 : 0;
+  const uint16_t gridY   = labelH + 4;
+  const uint16_t gridH   = bodyH() - gridY - footerH - (footerH ? 5 : 4);
   const uint16_t gridW  = bodyW() - 2;
 
   const uint8_t cols = 16;
@@ -134,9 +134,13 @@ void I2CDetectorScreen::onRender() {
     }
   }
 
-  // Bottom hint
-  lcd.setTextColor(TFT_DARKGREY, TFT_BLACK);
-  lcd.setTextSize(1);
-  lcd.setCursor(bodyX() + 2, bodyY() + bodyH() - hintH);
-  lcd.print(_hasBoth ? "UP/DN:bus  OK:exit" : "OK:exit");
+  // Dedicated control footer only when bus switching is available.
+  if (_hasBoth) {
+    const int footerY = bodyY() + bodyH() - footerH;
+    lcd.drawFastHLine(bodyX(), footerY - 1, bodyW(), TFT_DARKGREY);
+    lcd.setTextColor(TFT_DARKGREY, TFT_BLACK);
+    lcd.setTextSize(1);
+    lcd.setTextDatum(MC_DATUM);
+    lcd.drawString("[Up/Dn] Bus", bodyX() + bodyW() / 2, footerY + 7);
+  }
 }

@@ -437,7 +437,7 @@ void GPSScreen::_renderWardriver() {
 
 
 void GPSScreen::_connectInternet() {
-  ShowStatusAction::show("Scanning WiFi...", 0);
+  ShowStatusAction::show("Scanning...", 0);
   WifiUtility::ScannedWifi scanned[WifiUtility::MAX_WIFI];
   uint8_t count = WifiUtility::scan(scanned, WifiUtility::MAX_WIFI);
 
@@ -449,7 +449,7 @@ void GPSScreen::_connectInternet() {
 
   static InputSelectAction::Option opts[WifiUtility::MAX_WIFI];
   for (uint8_t i = 0; i < count; i++) {
-    opts[i] = {scanned[i].label, scanned[i].ssid};
+    opts[i] = {scanned[i].ssid, scanned[i].ssid, scanned[i].bssid, scanned[i].rssi, true};
   }
 
   const char* selected = InputSelectAction::popup("Select WiFi", opts, count);

@@ -74,7 +74,7 @@ void WebAuthnGenerateScreen::_enterWifiList()
   if (ns == 1) Achievement.unlock("wifi_first_scan");
 
   for (uint8_t i = 0; i < _scannedCount; i++) {
-    _scannedItems[i] = { _scanned[i].label };
+    _scannedItems[i] = { _scanned[i].ssid, _scanned[i].bssid, _scanned[i].rssi, true, true };
   }
 
   _state = ST_WIFI_LIST;
@@ -268,7 +268,7 @@ void WebAuthnGenerateScreen::_drawWarning()
 
   lcd.setTextDatum(BC_DATUM);
   lcd.setTextColor(TFT_GREEN, TFT_BLACK);
-  lcd.drawString("PRESS: continue / BACK: cancel",
+  lcd.drawString("[Press] Continue / [Back] Cancel",
                  cx, bodyY() + bodyH() - 4);
 }
 
@@ -327,8 +327,8 @@ void WebAuthnGenerateScreen::_drawWords()
 
   sp.setTextDatum(BC_DATUM);
   sp.setTextColor(TFT_DARKGREY, TFT_BLACK);
-  sp.drawString(_page + 1 < L.pageCount ? "PRESS: next  /  BACK: exit"
-                                        : "PRESS: done  /  BACK: exit",
+  sp.drawString(_page + 1 < L.pageCount ? "[Press] Next"
+                                        : "[Press] Done",
                 bodyW() / 2, bodyH() - 4);
 
   sp.pushSprite(bodyX(), bodyY());
@@ -350,8 +350,6 @@ void WebAuthnGenerateScreen::_drawDone()
   lcd.drawString("matches before exiting.",  cx, cy + 12);
   lcd.setTextDatum(BC_DATUM);
   lcd.setTextColor(TFT_DARKGREY, TFT_BLACK);
-  lcd.drawString("PRESS: exit",
-                 bodyX() + bodyW() / 2, bodyY() + bodyH() - 4);
 }
 
 void WebAuthnGenerateScreen::_drawError()
@@ -366,8 +364,6 @@ void WebAuthnGenerateScreen::_drawError()
   lcd.drawString(_err ? _err : "Failed", cx, cy);
   lcd.setTextDatum(BC_DATUM);
   lcd.setTextColor(TFT_DARKGREY, TFT_BLACK);
-  lcd.drawString("PRESS: exit",
-                 bodyX() + bodyW() / 2, bodyY() + bodyH() - 4);
 }
 
 #endif  // DEVICE_HAS_WEBAUTHN

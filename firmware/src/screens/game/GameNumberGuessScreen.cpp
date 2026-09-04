@@ -450,7 +450,7 @@ void GameNumberGuessScreen::_renderPlay()
 
   const int cx     = bodyW() / 2;
   const int statsH = 10;
-  const int hintH  = 10;
+  const int hintH  = noKb ? 18 : 10;
 
   const int cellW    = 18;
   const int cellH    = 22;
@@ -557,7 +557,7 @@ void GameNumberGuessScreen::_renderPlay()
     sp.setTextColor(TFT_DARKGREY, TFT_BLACK);
     sp.setTextDatum(BC_DATUM);
 #ifdef DEVICE_HAS_KEYBOARD
-    sp.drawString("ENTER:guess  BKSP:erase", cx, hintH - 1);
+    sp.drawString("[Enter] Guess  [BKSP] Erase", cx, hintH - 1);
 #else
     {
       bool _needHold = true;
@@ -565,10 +565,12 @@ void GameNumberGuessScreen::_renderPlay()
       if (Config.get(APP_CONFIG_NAV_MODE, APP_CONFIG_NAV_MODE_DEFAULT) == "encoder")
         _needHold = false;
 #endif
+      sp.setTextDatum(BL_DATUM);
+      sp.drawString("[Up/Dn] Digit  [Press] Confirm", 0, hintH - 9);
       if (_needHold)
-        sp.drawString("UP/DN:digit  OK:confirm  HOLD:menu", cx, hintH - 1);
+        sp.drawString("[Hold] Menu", 0, hintH - 1);
       else
-        sp.drawString("UP/DN:digit  OK:confirm  BACK:menu", cx, hintH - 1);
+        sp.drawString("[Back] Menu", 0, hintH - 1);
     }
 #endif
     sp.pushSprite(bodyX(), bodyY() + bodyH() - hintH);
@@ -652,7 +654,7 @@ void GameNumberGuessScreen::_renderHighScores()
     sp.setTextSize(1);
     sp.setTextColor(TFT_DARKGREY, TFT_BLACK);
     sp.setTextDatum(BC_DATUM);
-    sp.drawString("UP/DN:switch diff  BACK:return", cx, 9);
+    sp.drawString("[Up/Dn] Switch diff  [Back] Return", cx, 9);
     sp.pushSprite(bodyX(), bodyY() + bodyH() - 10);
     sp.deleteSprite();
   }

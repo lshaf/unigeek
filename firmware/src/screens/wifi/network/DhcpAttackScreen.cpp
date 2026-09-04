@@ -109,7 +109,6 @@ void DhcpAttackScreen::_start() {
     }
   }
 
-  _log.addLine("BACK to stop");
   _drawLog();
 }
 

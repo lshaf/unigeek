@@ -158,9 +158,7 @@ void WhisperPairScreen::_runTest()
   _state = STATE_RESULT;
   _log.addLine(_isVulnerable ? ">> VULNERABLE <<" : ">> Safe <<");
 #ifdef DEVICE_HAS_KEYBOARD
-  _log.addLine("ENTER/BACK: Back");
 #else
-  _log.addLine("Press: Back");
 #endif
   render();
   if (Uni.Speaker) Uni.Speaker->beep();

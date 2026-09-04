@@ -556,7 +556,7 @@ void GameDecoderScreen::_renderHighScores()
     lcd.setTextSize(1);
     lcd.setTextColor(TFT_DARKGREY, TFT_BLACK);
     lcd.setTextDatum(BC_DATUM);
-    lcd.drawString("UP/DN:switch diff  BACK:return", bodyX() + bodyW() / 2, bodyY() + bodyH() - 1);
+    lcd.drawString("[Up/Dn] Switch diff  [Back] Return", bodyX() + bodyW() / 2, bodyY() + bodyH() - 1);
   }
 
   if (_lastHsViewDiff == _hsViewDiff) return;

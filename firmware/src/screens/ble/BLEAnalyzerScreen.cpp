@@ -354,9 +354,14 @@ void BLEAnalyzerScreen::onInit()
 void BLEAnalyzerScreen::onItemSelected(uint8_t index)
 {
   if (_state == STATE_LIST) {
-    if (index < _devCount) {
-      _selectedDeviceIdx = index;
-      _selDev            = _scanResults.getDevice(index);  // snapshot before the watcher runs
+    if (index == 0) {
+      _doScan();
+      return;
+    }
+    const int devIndex = (int)index - 1;
+    if (devIndex >= 0 && devIndex < _devCount) {
+      _selectedDeviceIdx = devIndex;
+      _selDev            = _devices[devIndex];
       _showInfo();
       _startRssiWatch();
     }
@@ -379,7 +384,7 @@ void BLEAnalyzerScreen::onBack()
   } else if (_state == STATE_INFO) {
     _stopRssiWatch();
     _selectedDeviceIdx = -1;
-    _doScan();   // leaving the detail view re-scans, so the list stays current
+    _showList();
   } else {
     _bleScan->stop();
     Screen.goBack();
@@ -432,14 +437,15 @@ void BLEAnalyzerScreen::_showDetail(const char* titleText, const String& content
 // ── Scan ─────────────────────────────────────────────────────────────────────
 //
 // One blocking sweep, same as every other BLE module (Whisper Pair, Chameleon
-// Scan): the list is a snapshot, not a live radar. Re-entering the list — on
-// open, or on BACK out of a device's info view — takes a fresh snapshot.
+// Scan): the list is a snapshot, not a live radar. BACK from a device info view
+// returns to that cached snapshot; only the explicit Rescan item starts another
+// sweep.
 
 void BLEAnalyzerScreen::_doScan()
 {
   _state             = STATE_SCAN;
   _selectedDeviceIdx = -1;
-  ShowStatusAction::show("Scanning BLE...", 0);
+  ShowStatusAction::show("Scanning...", 0);
 
   // Undo the watcher's scan config before a storing scan.
   _bleScan->setAdvertisedDeviceCallbacks(nullptr, false);
@@ -448,11 +454,14 @@ void BLEAnalyzerScreen::_doScan()
 
   _scanResults = _bleScan->start(kScanSeconds, false);
 
-  if (_scanResults.getCount() == 0) ShowStatusAction::show("No devices found");
+  _devCount = min((int)_scanResults.getCount(), (int)kMaxDevices);
+  for (int i = 0; i < _devCount; i++) _devices[i] = _scanResults.getDevice(i);
+
+  if (_devCount == 0) ShowStatusAction::show("No devices found");
 
   int ns = Achievement.inc("ble_analyzer_scan");
   if (ns == 1) Achievement.unlock("ble_analyzer_scan");
-  if ((int)_scanResults.getCount() >= 20) {
+  if (_devCount >= 20) {
     int n20 = Achievement.inc("ble_analyzer_20");
     if (n20 == 1) Achievement.unlock("ble_analyzer_20");
   }
@@ -505,10 +514,9 @@ void BLEAnalyzerScreen::_refreshRssiRow()
 
 void BLEAnalyzerScreen::_rebuildDevItems()
 {
-  int count = min((int)_scanResults.getCount(), (int)kMaxDevices);
-  _devCount = 0;
-  for (int i = 0; i < count; i++) {
-    NimBLEAdvertisedDevice dev = _scanResults.getDevice(i);
+  _devItems[0] = {"Rescan"};
+  for (int i = 0; i < _devCount; i++) {
+    NimBLEAdvertisedDevice& dev = _devices[i];
     String name = _resolveName(dev);
     if (name.length() > 0) {
       _devLabel[i] = name;
@@ -517,11 +525,10 @@ void BLEAnalyzerScreen::_rebuildDevItems()
       _devLabel[i] = dev.getAddress().toString().c_str();
       _devSub[i]   = "";
     }
-    _devItems[i]         = {_devLabel[i].c_str(),
-                             _devSub[i].length() > 0 ? _devSub[i].c_str() : nullptr};
-    _devItems[i].rssi    = (int16_t)dev.getRSSI();
-    _devItems[i].hasRssi = true;
-    _devCount++;
+    _devItems[i + 1]         = {_devLabel[i].c_str(),
+                                 _devSub[i].length() > 0 ? _devSub[i].c_str() : nullptr};
+    _devItems[i + 1].rssi    = (int16_t)dev.getRSSI();
+    _devItems[i + 1].hasRssi = true;
   }
 }
 
@@ -529,7 +536,7 @@ void BLEAnalyzerScreen::_showList()
 {
   _state = STATE_LIST;
   _rebuildDevItems();
-  setItems(_devItems, _devCount);
+  setItems(_devItems, _devCount + 1);
 }
 
 void BLEAnalyzerScreen::_showInfo()

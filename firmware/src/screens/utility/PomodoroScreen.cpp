@@ -180,7 +180,7 @@ void PomodoroScreen::_renderTimer() {
   static constexpr int BAR_H     = 6;
   static constexpr int BAR_REG_H = 16; // seconds label (8) + gap (2) + bar (6)
   static constexpr int BAR_PAD   = 3;
-  static constexpr int HINT_H    = 10;
+  static constexpr int HINT_H    = 12;
   static constexpr int HINT_PAD  = 3;
 
   int phaseTop = PHASE_PAD;
@@ -285,17 +285,18 @@ void PomodoroScreen::_renderTimer() {
   // 5 ── Hint line
   {
     const char* hint;
-    if (_state == STATE_RUNNING) hint = "Press=Pause  Back=Exit";
-    else if (_state == STATE_PAUSED) hint = "Press=Resume  Back=Exit";
-    else hint = (_phase == PHASE_WORK) ? "Press=Break  Back=Exit"
-                                        : "Press=Work  Back=Exit";
+    if (_state == STATE_RUNNING) hint = "[Press] Pause";
+    else if (_state == STATE_PAUSED) hint = "[Press] Resume";
+    else hint = (_phase == PHASE_WORK) ? "[Press] Break"
+                                        : "[Press] Work";
+    lcd.drawFastHLine(x, y + hintTop - 1, w, TFT_DARKGREY);
     Sprite sp(&lcd);
     sp.createSprite(w, HINT_H);
     sp.fillSprite(TFT_BLACK);
     sp.setTextColor(TFT_DARKGREY);
     sp.setTextSize(1);
     sp.setTextDatum(TC_DATUM);
-    sp.drawString(hint, w / 2, 1);
+    sp.drawString(hint, w / 2, 3);
     sp.pushSprite(x, y + hintTop);
     sp.deleteSprite();
   }

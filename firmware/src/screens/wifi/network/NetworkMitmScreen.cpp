@@ -176,8 +176,6 @@ void NetworkMitmScreen::_start() {
     return;
   }
 
-  _log.addLine("BACK to stop");
-
   // Registered as id 52 in AchievementManager but never fired by the previous
   // implementation of this screen.
   if (Achievement.inc("wifi_mitm_started") == 1) Achievement.unlock("wifi_mitm_started");

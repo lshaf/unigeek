@@ -2,10 +2,9 @@
 
 #include "ui/templates/ListScreen.h"
 
-class WifiSniffersMenuScreen : public ListScreen
-{
+class BLEMonitoringDetectionMenuScreen : public ListScreen {
 public:
-  const char* title() override { return "Sniffers"; }
+  const char* title() override { return "Monitoring & Detection"; }
 
   void onInit() override;
   void onItemSelected(uint8_t index) override;
@@ -13,8 +12,8 @@ public:
 
 private:
   ListItem _items[3] = {
-    {"Packet Monitor"},
-    {"Probe Requests"},
-    {"EAPOL Capture"},
+    {"BLE Analyzer"},
+    {"BLE Detector"},
+    {"BLE Fox Hunt"},
   };
 };

@@ -172,7 +172,6 @@ void WifiBeaconSpamScreen::_drawSpamming()
     lcd.fillRect(bodyX(), bodyY(), bodyW(), bodyH(), TFT_BLACK);
     lcd.setTextDatum(BC_DATUM);
     lcd.setTextColor(TFT_DARKGREY, TFT_BLACK);
-    lcd.drawString("BACK / ENTER: Stop", bodyX() + bodyW() / 2, bodyY() + bodyH());
     _chromeDrawn = true;
   }
 

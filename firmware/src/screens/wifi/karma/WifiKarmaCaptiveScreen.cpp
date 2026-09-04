@@ -352,7 +352,6 @@ void WifiKarmaCaptiveScreen::_startAttack()
   if (nk == 1) Achievement.unlock("wifi_karma_captive_started");
 
   _log.addLine("[*] Karma Captive started");
-  _log.addLine("[*] BACK/Press to stop");
   _startSniffing();
   _drawLog();
 }

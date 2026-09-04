@@ -61,7 +61,6 @@ void BLESpamRunScreen::onRender()
              BleSpamUtil::macLabel(BleSpamUtil::macRand));
     lcd.drawString(cfg, bx + 4, by + 4 + bh / 6 * 2, 1);
 
-    lcd.drawString("BACK / OK: Stop", bx + 4, by + bh - 12, 1);
     _chromeDrawn = true;
   }
 
