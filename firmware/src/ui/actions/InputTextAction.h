@@ -7,14 +7,18 @@
 #include "core/Device.h"
 #include "utils/uart/UartFileManager.h"
 #include "core/ConfigManager.h"
+#include "utils/keyboard/HIDKeyboardUtil.h"
 
 class InputTextAction
 {
 public:
   enum Mode : uint8_t { INPUT_TEXT = 0, INPUT_IP_ADDRESS = 1, INPUT_HEX = 2, INPUT_PHONE =3 };
 
-  static String popup(const char* title, const String& defaultValue = "", Mode mode = INPUT_TEXT) {
-    InputTextAction action(title, defaultValue, mode);
+  enum Profile : uint8_t { PROFILE_STANDARD = 0, PROFILE_HID = 1 };
+
+  static String popup(const char* title, const String& defaultValue = "", Mode mode = INPUT_TEXT,
+                      Profile profile = PROFILE_STANDARD, HIDKeyboardUtil* hidKeyboard = nullptr) {
+    InputTextAction action(title, defaultValue, mode, profile, hidKeyboard);
     String result = action._run();
     _cancelledFlag() = action._cancelled;
     Uni.lastActiveMs = millis();
@@ -32,12 +36,45 @@ private:
     SP_CANCEL,
     SP_COUNT,
     SP_SPACE,
-    SP_TEXT
+    SP_TEXT,
+    SP_PAGE_ABC,
+    SP_PAGE_SYM,
+    SP_PAGE_HID,
+    SP_HID_SEND,
+    SP_HID_CTRL,
+    SP_HID_SHIFT,
+    SP_HID_ALT,
+    SP_HID_GUI,
+    SP_HID_ESC,
+    SP_HID_TAB,
+    SP_HID_LEFT,
+    SP_HID_UP,
+    SP_HID_DOWN,
+    SP_HID_RIGHT,
+    SP_HID_HOME,
+    SP_HID_END,
+    SP_HID_PGUP,
+    SP_HID_PGDN,
+    SP_HID_DEL,
+    SP_HID_INS,
+    SP_HID_F1,
+    SP_HID_F2,
+    SP_HID_F3,
+    SP_HID_F4,
+    SP_HID_F5,
+    SP_HID_F6,
+    SP_HID_F7,
+    SP_HID_F8,
+    SP_HID_F9,
+    SP_HID_F10,
+    SP_HID_F11,
+    SP_HID_F12
   };
 
   enum TextPage : uint8_t {
     PAGE_ABC = 0,
-    PAGE_SYM
+    PAGE_SYM,
+    PAGE_HID
   };
 
   enum SpecialNum {
@@ -81,6 +118,7 @@ private:
   uint32_t    _lastTapTime = 0;
 
   Mode        _mode        = INPUT_TEXT;
+  Profile     _profile     = PROFILE_STANDARD;
   bool        _capsLock    = false;
   bool        _symbolMode  = false;
   TextPage    _page        = PAGE_ABC;
@@ -88,13 +126,17 @@ private:
   bool        _cancelled   = false;
   bool        _longPressHandled = false;
 
+  HIDKeyboardUtil* _hidKeyboard = nullptr;
+  uint8_t     _hidModifiers = 0;
+
   bool        _cursorVisible  = true;
   uint32_t    _lastBlinkTime  = 0;
 
   static bool& _cancelledFlag() { static bool v = false; return v; }
 
-  explicit InputTextAction(const char* title, const String& defaultValue, Mode mode)
-  : _title(title), _input(defaultValue), _mode(mode)
+  explicit InputTextAction(const char* title, const String& defaultValue, Mode mode, Profile profile,
+                           HIDKeyboardUtil* hidKeyboard)
+  : _title(title), _input(defaultValue), _mode(mode), _profile(profile), _hidKeyboard(hidKeyboard)
   {
     _buildSets();
   }
@@ -176,30 +218,73 @@ private:
         {'<', '<'}, {'>', '>'}, {'`','~'},
       };
 
-      const KeyPair* keys = (_page == PAGE_SYM) ? symbolKeys : alphaKeys;
-      const int keyCount = (_page == PAGE_SYM) ? 21 : 30;
+      if (_page == PAGE_HID && _profile == PROFILE_HID) {
+        static constexpr const char* hidLabels[30] = {
+          "CTRL", "SHIFT", "ALT", "GUI", "ESC", "TAB",
+          "",     "LEFT",  "UP",  "DOWN", "RIGHT", "",
+          "HOME", "END",   "PGUP", "PGDN", "DEL", "INS",
+          "F1",   "F2",    "F3",  "F4",   "F5",  "F6",
+          "F7",   "F8",    "F9",  "F10",  "F11", "F12",
+        };
+        static constexpr Special hidMap[30] = {
+          SP_HID_CTRL, SP_HID_SHIFT, SP_HID_ALT, SP_HID_GUI, SP_HID_ESC, SP_HID_TAB,
+          SP_SAVE, SP_HID_LEFT, SP_HID_UP, SP_HID_DOWN, SP_HID_RIGHT, SP_SAVE,
+          SP_HID_HOME, SP_HID_END, SP_HID_PGUP, SP_HID_PGDN, SP_HID_DEL, SP_HID_INS,
+          SP_HID_F1, SP_HID_F2, SP_HID_F3, SP_HID_F4, SP_HID_F5, SP_HID_F6,
+          SP_HID_F7, SP_HID_F8, SP_HID_F9, SP_HID_F10, SP_HID_F11, SP_HID_F12,
+        };
 
-      for (int i = 0; i < 30; i++) {
-        if (i < keyCount) {
-          _keyChars[i][0] = keys[i].normal;
-          _keyChars[i][1] = keys[i].shifted;
-          _keyChars[i][2] = '\0';
-          _keyLabels[i][0] = keys[i].normal;
-          _keyLabels[i][1] = '\0';
-          _sets[_setCount++] = { _keyChars[i], _keyLabels[i], false, SP_SAVE };
-        } else {
-          _sets[_setCount++] = { nullptr, "", false, SP_SAVE };
+        for (int i = 0; i < 30; i++) {
+          if (hidLabels[i][0] == '\0')
+            _sets[_setCount++] = { nullptr, "", false, SP_SAVE };
+          else
+            _sets[_setCount++] = { nullptr, hidLabels[i], true, hidMap[i] };
         }
-      }
 
-      static constexpr const char* specialLabels[6] = {
-        "123", "CAPS", "SPACE", "BKSP", "SAVE", "EXIT"
-      };
-      static constexpr Special specialMap[6] = {
-        SP_SYMBOL, SP_CAPS, SP_SPACE, SP_DELETE, SP_SAVE, SP_CANCEL
-      };
-      for (int i = 0; i < 6; i++) {
-        _sets[_setCount++] = { nullptr, specialLabels[i], true, specialMap[i] };
+        static constexpr const char* hidFooterLabels[6] = {
+          "ABC", "123", "SPACE", "BKSP", "SEND", "EXIT"
+        };
+        static constexpr Special hidFooterMap[6] = {
+          SP_PAGE_ABC, SP_PAGE_SYM, SP_SPACE, SP_DELETE, SP_HID_SEND, SP_CANCEL
+        };
+        for (int i = 0; i < 6; i++)
+          _sets[_setCount++] = { nullptr, hidFooterLabels[i], true, hidFooterMap[i] };
+
+      } else {
+        const KeyPair* keys = (_page == PAGE_SYM) ? symbolKeys : alphaKeys;
+        const int keyCount = (_page == PAGE_SYM) ? 21 : 30;
+
+        for (int i = 0; i < 30; i++) {
+          if (i < keyCount) {
+            _keyChars[i][0] = keys[i].normal;
+            _keyChars[i][1] = keys[i].shifted;
+            _keyChars[i][2] = '\0';
+            _keyLabels[i][0] = keys[i].normal;
+            _keyLabels[i][1] = '\0';
+            _sets[_setCount++] = { _keyChars[i], _keyLabels[i], false, SP_SAVE };
+          } else {
+            _sets[_setCount++] = { nullptr, "", false, SP_SAVE };
+          }
+        }
+
+        const char* pageLabel = "123";
+        Special pageAction = SP_SYMBOL;
+        if (_profile == PROFILE_HID && _page == PAGE_SYM) {
+          pageLabel = "KEYS";
+          pageAction = SP_PAGE_HID;
+        }
+
+        const char* saveLabel = (_profile == PROFILE_HID) ? "SEND" : "SAVE";
+        Special saveAction = (_profile == PROFILE_HID) ? SP_HID_SEND : SP_SAVE;
+        const char* specialLabels[6] = {
+          pageLabel, "CAPS", "SPACE", "BKSP", saveLabel, "EXIT"
+        };
+        const Special specialMap[6] = {
+          pageAction, SP_CAPS, SP_SPACE, SP_DELETE, saveAction, SP_CANCEL
+        };
+        for (int i = 0; i < 6; i++) {
+          _sets[_setCount++] = { nullptr, specialLabels[i], true, specialMap[i] };
+        }
       }
     }
   }
@@ -450,12 +535,17 @@ private:
           // Other keyboard modes intentionally ignore Back.
           _commitTap();
 
-          _page = (_page == PAGE_ABC) ? PAGE_SYM : PAGE_ABC;
+          if (_profile == PROFILE_HID) {
+            if (_page == PAGE_ABC) _page = PAGE_SYM;
+            else if (_page == PAGE_SYM) _page = PAGE_HID;
+            else _page = PAGE_ABC;
+          } else {
+            _page = (_page == PAGE_ABC) ? PAGE_SYM : PAGE_ABC;
+          }
           _symbolMode = (_page == PAGE_SYM);
           _buildSets();
 
-          // Back always opens the new page at its first character:
-          // ABC -> 'a', 123 -> '1'.
+          // Back always opens the new page at its first selectable cell.
           _scrollPos = 0;
 
           _drawFullGrid();
@@ -472,8 +562,103 @@ private:
       delay(10);
     }
 
+    _hidReleaseModifiers();
     Uni.Lcd.fillScreen(TFT_BLACK);
     return _cancelled ? "" : _input;
+  }
+
+  bool _hidModifierActive(Special special) const {
+    uint8_t bit = 0;
+    switch (special) {
+      case SP_HID_CTRL:  bit = 0x01; break;
+      case SP_HID_SHIFT: bit = 0x02; break;
+      case SP_HID_ALT:   bit = 0x04; break;
+      case SP_HID_GUI:   bit = 0x08; break;
+      default: return false;
+    }
+    return (_hidModifiers & bit) != 0;
+  }
+
+  void _hidToggleModifier(Special special) {
+    if (!_hidKeyboard) return;
+
+    uint8_t bit = 0;
+    uint8_t key = 0;
+    switch (special) {
+      case SP_HID_CTRL:  bit = 0x01; key = KEY_LEFT_CTRL;  break;
+      case SP_HID_SHIFT: bit = 0x02; key = KEY_LEFT_SHIFT; break;
+      case SP_HID_ALT:   bit = 0x04; key = KEY_LEFT_ALT;   break;
+      case SP_HID_GUI:   bit = 0x08; key = KEY_LEFT_GUI;   break;
+      default: return;
+    }
+
+    if (_hidModifiers & bit) {
+      _hidKeyboard->release(key);
+      _hidModifiers &= ~bit;
+    } else {
+      _hidKeyboard->press(key);
+      _hidModifiers |= bit;
+    }
+  }
+
+  void _hidReleaseModifiers() {
+    if (_hidKeyboard && _hidModifiers != 0) _hidKeyboard->releaseAll();
+    _hidModifiers = 0;
+  }
+
+  void _hidSendKey(uint8_t key) {
+    if (!_hidKeyboard || key == 0) return;
+    bool hadModifiers = _hidModifiers != 0;
+    _hidKeyboard->write(key);
+    if (hadModifiers) {
+      _hidReleaseModifiers();
+      if (_page == PAGE_HID) _drawFullGrid();
+    }
+  }
+
+  void _hidSendBuffer() {
+    if (!_hidKeyboard) return;
+
+    // SEND is a composition action, never part of a latched shortcut.
+    _hidReleaseModifiers();
+    if (_input.length() > 0) {
+      _hidKeyboard->write(reinterpret_cast<const uint8_t*>(_input.c_str()), _input.length());
+    }
+    _hidKeyboard->write(KEY_RETURN);
+    _input = "";
+    _pendingChar = "";
+    _tapCount = 0;
+    _lastTapTime = 0;
+  }
+
+  uint8_t _hidKeyForSpecial(Special special) const {
+    switch (special) {
+      case SP_HID_ESC:   return KEY_ESC;
+      case SP_HID_TAB:   return KEY_TAB;
+      case SP_HID_LEFT:  return KEY_LEFT_ARROW;
+      case SP_HID_UP:    return KEY_UP_ARROW;
+      case SP_HID_DOWN:  return KEY_DOWN_ARROW;
+      case SP_HID_RIGHT: return KEY_RIGHT_ARROW;
+      case SP_HID_HOME:  return KEY_HOME;
+      case SP_HID_END:   return KEY_END;
+      case SP_HID_PGUP:  return KEY_PAGE_UP;
+      case SP_HID_PGDN:  return KEY_PAGE_DOWN;
+      case SP_HID_DEL:   return KEY_DELETE;
+      case SP_HID_INS:   return KEY_INSERT;
+      case SP_HID_F1:    return KEY_F1;
+      case SP_HID_F2:    return KEY_F2;
+      case SP_HID_F3:    return KEY_F3;
+      case SP_HID_F4:    return KEY_F4;
+      case SP_HID_F5:    return KEY_F5;
+      case SP_HID_F6:    return KEY_F6;
+      case SP_HID_F7:    return KEY_F7;
+      case SP_HID_F8:    return KEY_F8;
+      case SP_HID_F9:    return KEY_F9;
+      case SP_HID_F10:   return KEY_F10;
+      case SP_HID_F11:   return KEY_F11;
+      case SP_HID_F12:   return KEY_F12;
+      default:            return 0;
+    }
   }
 
   void _handleSelect(bool shifted = false) {
@@ -488,6 +673,10 @@ private:
           break;
 
         case SP_DELETE:
+          if (_profile == PROFILE_HID && _hidModifiers != 0) {
+            _hidSendKey(KEY_BACKSPACE);
+            break;
+          }
           if (_pendingChar.length() > 0) {
             _pendingChar = "";
             _tapCount    = 0;
@@ -510,8 +699,76 @@ private:
           }
           break;
 
+        case SP_PAGE_ABC:
+          if (_mode == INPUT_TEXT && _profile == PROFILE_HID) {
+            _page = PAGE_ABC;
+            _symbolMode = false;
+            _buildSets();
+            _scrollPos = 30;
+          }
+          break;
+
+        case SP_PAGE_SYM:
+          if (_mode == INPUT_TEXT && _profile == PROFILE_HID) {
+            _page = PAGE_SYM;
+            _symbolMode = true;
+            _buildSets();
+            _scrollPos = 31;
+          }
+          break;
+
+        case SP_PAGE_HID:
+          if (_mode == INPUT_TEXT && _profile == PROFILE_HID) {
+            _page = PAGE_HID;
+            _symbolMode = false;
+            _buildSets();
+            _scrollPos = 30;
+          }
+          break;
+
+        case SP_HID_SEND:
+          _hidSendBuffer();
+          break;
+
+        case SP_HID_CTRL:
+        case SP_HID_SHIFT:
+        case SP_HID_ALT:
+        case SP_HID_GUI:
+          _hidToggleModifier(s.special);
+          break;
+
+        case SP_HID_ESC:
+        case SP_HID_TAB:
+        case SP_HID_LEFT:
+        case SP_HID_UP:
+        case SP_HID_DOWN:
+        case SP_HID_RIGHT:
+        case SP_HID_HOME:
+        case SP_HID_END:
+        case SP_HID_PGUP:
+        case SP_HID_PGDN:
+        case SP_HID_DEL:
+        case SP_HID_INS:
+        case SP_HID_F1:
+        case SP_HID_F2:
+        case SP_HID_F3:
+        case SP_HID_F4:
+        case SP_HID_F5:
+        case SP_HID_F6:
+        case SP_HID_F7:
+        case SP_HID_F8:
+        case SP_HID_F9:
+        case SP_HID_F10:
+        case SP_HID_F11:
+        case SP_HID_F12:
+          _hidSendKey(_hidKeyForSpecial(s.special));
+          break;
+
         case SP_SPACE:
-          _input += ' ';
+          if (_profile == PROFILE_HID && _hidModifiers != 0)
+            _hidSendKey(' ');
+          else
+            _input += ' ';
           break;
 
         case SP_TEXT:
@@ -533,6 +790,7 @@ private:
           break;
 
         case SP_CANCEL:
+          _hidReleaseModifiers();
           _cancelled = true;
           break;
 
@@ -557,7 +815,11 @@ private:
           c = chars[1];
         }
 
-        _input += c;
+        if (_profile == PROFILE_HID && _hidModifiers != 0) {
+          _hidSendKey((uint8_t)c);
+        } else {
+          _input += c;
+        }
         _pendingChar = "";
         _tapCount = 0;
         _lastTapTime = 0;
@@ -608,6 +870,9 @@ private:
     if (_page == PAGE_SYM) {
       if (modeLabel.length() > 0) modeLabel += " ";
       modeLabel += "123";
+    } else if (_page == PAGE_HID) {
+      if (modeLabel.length() > 0) modeLabel += " ";
+      modeLabel += "HID";
     }
     if (modeLabel.length() > 0) {
       lcd.drawString(modeLabel.c_str(), lcd.width() - PAD, PAD);
@@ -665,6 +930,7 @@ private:
 
     bool sel = (idx == _scrollPos);
     const CharSet& s = _sets[idx];
+    bool hidModifierActive = s.isSpecial && _hidModifierActive(s.special);
 
     if (!s.isSpecial && s.chars == nullptr) {
       Sprite sp(&lcd);
@@ -692,8 +958,8 @@ private:
       sp.fillRoundRect(2, 2, cW - 4, cH - 4, 3, theme);
       sp.setTextColor(TFT_WHITE, theme);
     } else {
-      sp.drawRoundRect(2, 2, cW - 4, cH - 4, 3, TFT_DARKGREY);
-      sp.setTextColor(s.isSpecial ? TFT_WHITE : TFT_LIGHTGREY, TFT_BLACK);
+      sp.drawRoundRect(2, 2, cW - 4, cH - 4, 3, hidModifierActive ? theme : TFT_DARKGREY);
+      sp.setTextColor(hidModifierActive ? theme : (s.isSpecial ? TFT_WHITE : TFT_LIGHTGREY), TFT_BLACK);
     }
 
     String lbl;
@@ -713,8 +979,8 @@ private:
       }
 
       lbl = String(shown);
-    } else if (_mode == INPUT_TEXT && idx == 30) {
-      lbl = (_page == PAGE_ABC) ? "123" : "ABC";
+    } else if (_mode == INPUT_TEXT && idx == 30 && _page != PAGE_HID) {
+      lbl = (_page == PAGE_ABC) ? "123" : ((_profile == PROFILE_HID) ? "HID" : "ABC");
     } else {
       lbl = String(s.label);
     }

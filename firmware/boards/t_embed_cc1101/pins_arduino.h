@@ -91,6 +91,7 @@ static const uint8_t SCL = GROVE_SCL;
 #define DEVICE_HAS_SOUND               // NS4168 I2S speaker
 #define DEVICE_HAS_VOLUME_CONTROL      // I2S amp supports setVolume()
 #define DEVICE_HAS_USB_HID             // ESP32-S3 native USB OTG
+#define DEVICE_HAS_HID_VIRTUAL_KEYBOARD // On-screen keyboard for HID relay
 #define DEVICE_HAS_WEBAUTHN            // FIDO2 / WebAuthn USB security key (CTAP2 + U2F)
 #define DEVICE_HAS_LED_RING            // WS2812B ring → LED Effect setting
 #define DEVICE_HAS_LIGHT_SLEEP         // Light sleep with wake via dedicated back button
