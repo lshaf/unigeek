@@ -930,7 +930,7 @@ bool PN532I2cScreen::_scanCardOrShow(uint32_t timeoutMs) {
     }
     delay(50);
   }
-  ShowStatusAction::show("No tag found");
+  ShowStatusAction::show("No tag detected");
   return false;
 }
 
@@ -984,7 +984,7 @@ void PN532I2cScreen::_doScan14A() {
     }
     delay(50);
   }
-  if (!ok) { ShowStatusAction::show("No tag found", 1200); _goMain(); return; }
+  if (!ok) { ShowStatusAction::show("No tag detected", 1200); _goMain(); return; }
 
   int n = Achievement.inc("nfc_uid_first");
   if (n == 1)  Achievement.unlock("nfc_uid_first");
@@ -1739,7 +1739,7 @@ void PN532I2cScreen::_doUltralightDump() {
     if (_nfc->readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLen, 200)) { ok = true; break; }
     delay(50);
   }
-  if (!ok) { ShowStatusAction::show("No tag"); _goUltralight(); return; }
+  if (!ok) { ShowStatusAction::show("No tag detected"); _goUltralight(); return; }
 
   _state = STATE_RAW_RESULT;
   _resetRows();
@@ -1783,7 +1783,7 @@ void PN532I2cScreen::_doUltralightWrite() {
     if (_nfc->readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLen, 200)) { ok = true; break; }
     delay(50);
   }
-  if (!ok) { ShowStatusAction::show("No tag"); _goUltralight(); return; }
+  if (!ok) { ShowStatusAction::show("No tag detected"); _goUltralight(); return; }
 
   int page = InputNumberAction::popup("Page (4..63)", 4, 63, 4);
   if (InputNumberAction::wasCancelled()) { _goUltralight(); return; }
@@ -1842,7 +1842,7 @@ void PN532I2cScreen::_doReadNdef() {
   }
 
   if (!ok) {
-    ShowStatusAction::show("No tag");
+    ShowStatusAction::show("No tag detected");
     _goUltralight();
     return;
   }
@@ -2705,7 +2705,7 @@ bool PN532I2cScreen::_writeUltralightNdefRecord(const uint8_t* ndef, size_t ndef
   }
 
   if (!ok) {
-    ShowStatusAction::show("No tag");
+    ShowStatusAction::show("No tag detected");
     return false;
   }
 
@@ -3213,7 +3213,7 @@ void PN532I2cScreen::_doEraseNdef() {
   }
 
   if (!ok) {
-    ShowStatusAction::show("No tag");
+    ShowStatusAction::show("No tag detected");
     _goUltralightNdef();
     return;
   }
@@ -3460,7 +3460,7 @@ void PN532I2cScreen::_doDetectMagic() {
   }
 
   if (!ok) {
-    _magicLog.addLine("No tag", TFT_DARKGREY);
+    _magicLog.addLine("No tag detected", TFT_DARKGREY);
     _magicDetectDone = true;
     render();
     return;
@@ -3503,7 +3503,7 @@ void PN532I2cScreen::_doGen3SetUid() {
     if (_nfc->readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLen, 200)) { ok = true; break; }
     delay(50);
   }
-  if (!ok) { ShowStatusAction::show("No tag"); _goMagic(); return; }
+  if (!ok) { ShowStatusAction::show("No tag detected"); _goMagic(); return; }
 
   // Fail early instead of asking for a UID that cannot be applied to this tag.
   if (_detectMagicType() != MagicCardType::GEN3) {
@@ -3550,7 +3550,7 @@ void PN532I2cScreen::_doGen3LockUid() {
     if (_nfc->readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLen, 200)) { ok = true; break; }
     delay(50);
   }
-  if (!ok) { ShowStatusAction::show("No tag"); _goMagic(); return; }
+  if (!ok) { ShowStatusAction::show("No tag detected"); _goMagic(); return; }
 
   if (_detectMagicType() != MagicCardType::GEN3) {
     ShowStatusAction::show("Tag is not Gen3");

@@ -152,7 +152,7 @@ void ChameleonHFScreen::_doScan() {
     _state = STATE_IDLE;
     _needsDraw = true;
     render();
-    ShowStatusAction::show("No tag found", 1200);
+    ShowStatusAction::show("No tag detected", 1200);
     render();
     return;
   }

@@ -55,7 +55,7 @@ void ChameleonMagicScreen::_run() {
 
   uint8_t uid[7] = {}, uidLen = 0, atqa[2] = {}, sak = 0;
   if (!c.scan14A(uid, &uidLen, atqa, &sak)) {
-    _log.addLine("No tag", TFT_DARKGREY);
+    _log.addLine("No tag detected", TFT_DARKGREY);
   } else if (sak != 0x01 && sak != 0x08 && sak != 0x18) {
     _log.addLine("Not MIFARE Classic", TFT_DARKGREY);
   } else {

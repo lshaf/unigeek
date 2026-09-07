@@ -149,7 +149,7 @@ void ChameleonMfcScreen::_callAuth() {
     c.setMode(0);
     _running = false;
     render();
-    ShowStatusAction::show("No tag detected", 1200);
+    ShowStatusAction::show("No tag detected detected", 1200);
     Screen.goBack();
     return;
   }
