@@ -2271,7 +2271,7 @@ bool PN532I2cScreen::_formatClassic1kNdef() {
     }
     if (uidLen != _uidLen || memcmp(uid, _uid, uidLen) != 0) return false;
     return _nfc->mifareclassic_AuthenticateBlock(
-        _uid, _uidLen, block, useKeyB ? 1 : 0, const_cast<uint8_t*>(key));
+        _uid, _uidLen, block, useKeyB ? 1 : 0, const_cast<uint8_t*>(key)) != 0;
   };
 
   uint8_t sectorKey[3][6] = {};
