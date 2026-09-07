@@ -104,7 +104,7 @@ const char* PN532I2cScreen::title() {
     case STATE_ULTRALIGHT_TAG_MENU:return "Tag Operations";
     case STATE_ULTRALIGHT_NDEF_MENU:return "NDEF Operations";
     case STATE_MAGIC_MENU:      return "Magic Card";
-    case STATE_RAW_RESULT:      return "Result";
+    case STATE_RAW_RESULT:      return "Read Pages";
     case STATE_EMULATE:         return "Emulate Card";
     case STATE_NTAG_MENU:       return "Emulate NDEF";
     case STATE_NDEF_WRITE_MENU: return "Write NDEF";
@@ -207,6 +207,7 @@ void PN532I2cScreen::onUpdate() {
       if (dir == INavigation::DIR_BACK) {
         if (_state == STATE_MIFARE_KEYS) _goMifareKeys();
         else if (_state == STATE_MIFARE_KEY_DB_VIEW) _openKeyDatabases();
+        else if (_state == STATE_RAW_RESULT) _goUltralightTag();
         else _goMain();
       } else {
         _scrollView.onNav(dir);
@@ -398,6 +399,9 @@ void PN532I2cScreen::onBack() {
       break;
     case STATE_NTAG_MENU:
       _goMain();
+      break;
+    case STATE_RAW_RESULT:
+      _goUltralightTag();
       break;
     case STATE_NDEF_WRITE_MENU:
       _goNdefParent();
@@ -1659,7 +1663,7 @@ void PN532I2cScreen::_doUltralightDump() {
   }
   if (!ok) { ShowStatusAction::show("No card"); _goUltralight(); return; }
 
-  _state = STATE_NDEF_RESULT;
+  _state = STATE_RAW_RESULT;
   _resetRows();
   memcpy(_uid, uid, uidLen);
   _uidLen = uidLen;
