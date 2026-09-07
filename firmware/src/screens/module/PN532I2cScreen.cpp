@@ -330,7 +330,7 @@ void PN532I2cScreen::onItemSelected(uint8_t index) {
       break;
     case STATE_MAGIC_MENU:
       switch (index) {
-        case 0: _doDetectGen1a(); break;
+        case 0: _doDetectMagic(); break;
         case 1: _doGen3SetUid();  break;
         case 2: _doGen3LockUid(); break;
       }
@@ -944,6 +944,10 @@ void PN532I2cScreen::_doScan14A() {
     if (concreteType) typeName = concreteType;
   }
   _pushRow("Type", typeName);
+  if (_sak == 0x09 || _sak == 0x08 || _sak == 0x18) {
+    const MagicCardType magic = _detectMagicType();
+    _pushRow("Magic", magicCardTypeName(magic));
+  }
   const bool supported = (_sak == 0x09 || _sak == 0x08 || _sak == 0x18 || _sak == 0x00);
   if (!supported) _pushRow("Status", "Tag not supported");
   snprintf(buf, sizeof(buf), "%02X:%02X", (_atqa >> 8) & 0xFF, _atqa & 0xFF);
@@ -3166,7 +3170,131 @@ void PN532I2cScreen::_doEraseNdef() {
   _goUltralightNdef();
 }
 
-void PN532I2cScreen::_doDetectGen1a() {
+bool PN532I2cScreen::_resetAndReselect() {
+  if (!_nfc || !_nfc->SAMConfig()) return false;
+  uint8_t uid[7] = {}, uidLen = 0;
+  for (uint8_t attempt = 0; attempt < 3; ++attempt) {
+    if (_nfc->readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLen, 250))
+      return true;
+    delay(30);
+  }
+  return false;
+}
+
+MagicCardType PN532I2cScreen::_detectMagicType() {
+  // Probe Gen3 first. Gen3 / APDU cards accept a direct READ of block 0
+  // without MIFARE authentication; a prior Gen1A unlock would make the same
+  // read possible and could cause a false Gen3 positive.
+  {
+    static const uint8_t readBlock0[] = {0x30, 0x00};
+    uint8_t resp[20] = {};
+    uint8_t rlen = sizeof(resp);
+    if (_nfcDataExch(_nfc, _wire, readBlock0, sizeof(readBlock0), resp, rlen, 500) &&
+        rlen >= 16) {
+      _resetAndReselect();
+      return MagicCardType::GEN3;
+    }
+  }
+
+  if (!_resetAndReselect()) return MagicCardType::NONE;
+
+  // Gen1A wakeup/unlock is transient: 0x40 as 7 bits, followed by 0x43.
+  // Require both ACKs and always reset/reselect afterwards so Scan Tag leaves
+  // the card in a normal selected state. No memory is written by this probe.
+  bool gen1a = false;
+  if (_nfcWriteReg(_nfc, _wire, 0x633D, 0x07)) {
+    static const uint8_t wake[] = {0x40};
+    uint8_t resp[4] = {};
+    uint8_t rlen = sizeof(resp);
+    const bool ack1 = _nfcCommThru(_nfc, _wire, wake, sizeof(wake),
+                                    resp, rlen, 200) &&
+                      rlen >= 1 && resp[0] == 0x0A;
+
+    _nfcWriteReg(_nfc, _wire, 0x633D, 0x00);
+
+    if (ack1) {
+      static const uint8_t unlock[] = {0x43};
+      rlen = sizeof(resp);
+      gen1a = _nfcCommThru(_nfc, _wire, unlock, sizeof(unlock),
+                           resp, rlen, 200) &&
+              rlen >= 1 && resp[0] == 0x0A;
+    }
+  } else {
+    _nfcWriteReg(_nfc, _wire, 0x633D, 0x00);
+  }
+
+  _resetAndReselect();
+  return gen1a ? MagicCardType::GEN1A : MagicCardType::NONE;
+}
+
+
+bool PN532I2cScreen::_writeMagicUid(MagicCardType type, const uint8_t* sourceUid,
+                                       uint8_t sourceUidLen, const uint8_t block0[16]) {
+  if (!sourceUid || !block0 || !_nfc || !_wire ||
+      (sourceUidLen != 4 && sourceUidLen != 7)) return false;
+  if (type == MagicCardType::GEN1A && sourceUidLen != 4) return false;
+
+  if (!_resetAndReselect()) return false;
+
+  if (type == MagicCardType::GEN3) {
+    // Reuse the same command family already used by Magic -> Gen3 Set UID.
+    uint8_t cmd[13] = {0x90, 0xFB, 0xCC, 0xCC, sourceUidLen};
+    memcpy(cmd + 5, sourceUid, sourceUidLen);
+    cmd[5 + sourceUidLen] = 0x00;
+    const uint8_t cmdLen = (uint8_t)(6u + sourceUidLen);
+    uint8_t resp[8] = {};
+    uint8_t rlen = sizeof(resp);
+    if (!_nfcDataExch(_nfc, _wire, cmd, cmdLen, resp, rlen, 500)) return false;
+  } else if (type == MagicCardType::GEN1A) {
+    const uint8_t bcc = (uint8_t)(sourceUid[0] ^ sourceUid[1] ^ sourceUid[2] ^ sourceUid[3]);
+
+    // Enter the Gen1A backdoor with the exact 7-bit wakeup used by detection.
+    if (!_nfcWriteReg(_nfc, _wire, 0x633D, 0x07)) return false;
+    uint8_t resp[8] = {};
+    uint8_t rlen = sizeof(resp);
+    static const uint8_t wake[] = {0x40};
+    const bool ack1 = _nfcCommThru(_nfc, _wire, wake, sizeof(wake),
+                                    resp, rlen, 250) &&
+                      rlen >= 1 && resp[0] == 0x0A;
+    _nfcWriteReg(_nfc, _wire, 0x633D, 0x00);
+    if (!ack1) { _resetAndReselect(); return false; }
+
+    static const uint8_t unlock[] = {0x43};
+    rlen = sizeof(resp);
+    if (!_nfcCommThru(_nfc, _wire, unlock, sizeof(unlock),
+                      resp, rlen, 250) || rlen < 1 || resp[0] != 0x0A) {
+      _resetAndReselect();
+      return false;
+    }
+
+    // Let the PN532 perform the normal two-phase MIFARE WRITE exchange after
+    // the backdoor is open: A0 00 followed by the 16-byte manufacturer block.
+    uint8_t write[18] = {0xA0, 0x00};
+    memcpy(write + 2, block0, 16);
+    memcpy(write + 2, sourceUid, 4);
+    write[2 + 4] = bcc;
+    rlen = sizeof(resp);
+    if (!_nfcDataExch(_nfc, _wire, write, sizeof(write), resp, rlen, 700)) {
+      _resetAndReselect();
+      return false;
+    }
+  } else {
+    return false;
+  }
+
+  // Force a fresh activation and verify that the source UID is now presented.
+  if (!_nfc->SAMConfig()) return false;
+  uint8_t uid[7] = {};
+  uint8_t uidLen = 0;
+  for (uint8_t attempt = 0; attempt < 3; ++attempt) {
+    if (_nfc->readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLen, 300))
+      return uidLen == sourceUidLen && memcmp(uid, sourceUid, sourceUidLen) == 0;
+    delay(30);
+  }
+  return false;
+}
+
+void PN532I2cScreen::_doDetectMagic() {
   ShowStatusAction::show("Place card on reader...", 0);
   uint8_t uid[7]; uint8_t uidLen;
   uint32_t start = millis();
@@ -3180,21 +3308,21 @@ void PN532I2cScreen::_doDetectGen1a() {
   }
   if (!ok) { ShowStatusAction::show("No card"); _goMagic(); return; }
 
-  // Set CIU_BitFraming TxLastBits=7 so the magic byte is sent as 7 bits
-  _nfcWriteReg(_nfc, _wire, 0x633D, 0x07);
+  const uint16_t atqa = ((uint16_t)pn532_packetbuffer[9] << 8) | pn532_packetbuffer[10];
+  const uint8_t sak = pn532_packetbuffer[11];
+  (void)atqa;
+  if (sak != 0x09 && sak != 0x08 && sak != 0x18) {
+    ShowStatusAction::show("Not MIFARE Classic");
+    _goMagic();
+    return;
+  }
 
-  static const uint8_t magic1[] = {0x40};
-  uint8_t resp[4]; uint8_t rlen = sizeof(resp);
-  bool isGen1a = _nfcCommThru(_nfc, _wire, magic1, 1, resp, rlen, 200);
-  isGen1a = isGen1a && rlen >= 1 && resp[0] == 0x0A;
-
-  _nfcWriteReg(_nfc, _wire, 0x633D, 0x00); // restore bit framing
-
-  if (isGen1a) {
+  const MagicCardType magic = _detectMagicType();
+  if (magic != MagicCardType::NONE) {
     int n = Achievement.inc("pn532_magic_detect");
     if (n == 1) Achievement.unlock("pn532_magic_detect");
   }
-  ShowStatusAction::show(isGen1a ? "Gen1a detected" : "Not Gen1a");
+  ShowStatusAction::show(magicCardTypeName(magic));
   _goMagic();
 }
 
@@ -3291,7 +3419,7 @@ void PN532I2cScreen::_showDumpActions() {
   // could leave fragments of Dump Actions visible underneath the next UI.
   render();
   if (strcmp(r, "save") == 0) _doSaveDump();
-  else _doWriteDumpToTag(_dumpImg, _dumpLen);
+  else _doWriteDumpToTag(_dumpImg, _dumpLen, _uid, _uidLen);
 }
 
 void PN532I2cScreen::_doWriteDumpFromFilePicker() {
@@ -3362,7 +3490,14 @@ bool PN532I2cScreen::_tryWriteMifareBlock(uint16_t block, const uint8_t data[16]
       (uint8_t)block, const_cast<uint8_t*>(data));
 }
 
-void PN532I2cScreen::_doWriteDumpToTag(const uint8_t* dump, size_t len) {
+void PN532I2cScreen::_doWriteDumpToTag(const uint8_t* dump, size_t len,
+                                         const uint8_t* sourceUid, uint8_t sourceUidLen) {
+  // Copy source identity before scanning the destination: _scanCardOrShow()
+  // updates the screen's _uid/_uidLen members with the target tag.
+  uint8_t sourceUidCopy[7] = {};
+  const bool sourceUidKnown = sourceUid && (sourceUidLen == 4 || sourceUidLen == 7);
+  if (sourceUidKnown) memcpy(sourceUidCopy, sourceUid, sourceUidLen);
+
   renderOperationTitle("Write to Tag");
   if (!dump || (len != 320 && len != 1024 && len != 4096)) {
     ShowStatusAction::show("Invalid dump"); return;
@@ -3371,6 +3506,17 @@ void PN532I2cScreen::_doWriteDumpToTag(const uint8_t* dump, size_t len) {
   if (!_scanCardOrShow(5000)) { render(); return; }
   auto dims = _mfDims(_sak);
   if (dims.second * 16u != len) { ShowStatusAction::show("Tag size mismatch"); render(); return; }
+
+  MagicCardType magic = MagicCardType::NONE;
+  bool restoreUid = false;
+  if (sourceUidKnown) {
+    magic = _detectMagicType();
+    const bool uidDiffers = _uidLen != sourceUidLen ||
+                            (_uidLen == sourceUidLen && memcmp(_uid, sourceUidCopy, _uidLen) != 0);
+    restoreUid = uidDiffers &&
+                 ((magic == MagicCardType::GEN1A && sourceUidLen == 4) ||
+                  (magic == MagicCardType::GEN3 && (sourceUidLen == 4 || sourceUidLen == 7)));
+  }
 
   const auto defaults = NFCUtility::getDefaultKeys();
   uint8_t zeroKey[6] = {};
@@ -3424,11 +3570,26 @@ void PN532I2cScreen::_doWriteDumpToTag(const uint8_t* dump, size_t len) {
     }
   }
   ProgressView::finish();
+
+  // Magic Gen1A/Gen3 can reproduce the source identity as well as blocks
+  // 1..N. Do this last: a failed data write must never change the target UID.
+  if (restoreUid) {
+    Uni.Lcd.fillRect(bodyX(), bodyY(), bodyW(), bodyH(), TFT_BLACK);
+    ShowStatusAction::show("Writing source UID...", 0);
+    if (!_writeMagicUid(magic, sourceUidCopy, sourceUidLen, dump)) {
+      ShowStatusAction::show("UID write failed");
+      render();
+      return;
+    }
+  }
+
   // Do not leave the completed progress view behind the modal status box.
   // ShowStatusAction wipes only its own rectangle on dismissal, which made
   // remnants of the progress UI briefly visible during Write to Tag.
   Uni.Lcd.fillRect(bodyX(), bodyY(), bodyW(), bodyH(), TFT_BLACK);
-  char msg[40]; snprintf(msg, sizeof(msg), "Wrote %u blocks", (unsigned)written);
+  char msg[48];
+  if (restoreUid) snprintf(msg, sizeof(msg), "Wrote %u blocks + UID", (unsigned)written);
+  else snprintf(msg, sizeof(msg), "Wrote %u blocks", (unsigned)written);
   ShowStatusAction::show(msg);
   render();
 }

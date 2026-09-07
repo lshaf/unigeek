@@ -4,7 +4,7 @@
 
 class ChameleonMagicScreen : public BaseScreen {
 public:
-  const char* title() override { return "Magic Detect"; }
+  const char* title() override { return "Detect Magic"; }
   bool inhibitPowerOff() override { return _running; }
 
   void onInit()   override;

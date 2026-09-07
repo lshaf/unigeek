@@ -11,7 +11,7 @@ void ChameleonHFMenuScreen::onInit() {
   _items[0] = {"Scan Tag"};
   _items[1] = {"MIFARE Classic"};
   _items[2] = {"Ultralight / NTAG"};
-  _items[3] = {"Magic Detect"};
+  _items[3] = {"Detect Magic"};
   _items[4] = {"MFKey32 Log"};
   setItems(_items);
 }

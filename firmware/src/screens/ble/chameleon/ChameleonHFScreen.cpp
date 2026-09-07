@@ -114,6 +114,14 @@ void ChameleonHFScreen::_doScan() {
     _rows[_rowCount] = {_rowLabels[_rowCount].c_str(), _rowValues[_rowCount]};
     _rowCount++;
 
+    if (_sak == 0x01 || _sak == 0x08 || _sak == 0x18) {
+      const MagicCardType magic = c.detectMagicType();
+      _rowLabels[_rowCount] = "Magic";
+      _rowValues[_rowCount] = magicCardTypeName(magic);
+      _rows[_rowCount] = {_rowLabels[_rowCount].c_str(), _rowValues[_rowCount]};
+      _rowCount++;
+    }
+
     char buf[8];
     snprintf(buf, sizeof(buf), "%02X:%02X", _atqa[0], _atqa[1]);
     _rowLabels[_rowCount] = "ATQA";

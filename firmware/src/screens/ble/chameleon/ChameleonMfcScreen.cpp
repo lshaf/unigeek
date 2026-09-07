@@ -801,7 +801,7 @@ void ChameleonMfcScreen::_showDumpActions() {
     ShowStatusAction::show("Classic 1K only for now", 1500);
     render();
   } else {
-    Screen.push(new ChameleonMfcWriteScreen(_dump, _dumpLen));
+    Screen.push(new ChameleonMfcWriteScreen(_dump, _dumpLen, _uid, _uidLen));
   }
 }
 

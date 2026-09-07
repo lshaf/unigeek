@@ -6,6 +6,7 @@
 #include "ui/views/BrowseFileView.h"
 #include "ui/views/ScrollListView.h"
 #include "utils/nfc/NFCUtility.h"
+#include "utils/nfc/MagicCard.h"
 
 class PN532I2cScreen : public ListScreen
 {
@@ -131,7 +132,7 @@ private:
   };
 
   ListItem _magicItems[3] = {
-    {"Detect Gen1a"},
+    {"Detect Magic"},
     {"Gen3 Set UID"},
     {"Gen3 Lock UID"},
   };
@@ -214,7 +215,8 @@ private:
   void _appendDumpNdefDetails();
   void _showDumpHex();
   void _showDumpActions();
-  void _doWriteDumpToTag(const uint8_t* dump, size_t len);
+  void _doWriteDumpToTag(const uint8_t* dump, size_t len,
+                         const uint8_t* sourceUid = nullptr, uint8_t sourceUidLen = 0);
   bool _tryWriteMifareBlock(uint16_t block, const uint8_t data[16],
                             const uint8_t key[6], bool useKeyB);
   void _doWriteDumpFromFilePicker();
@@ -252,7 +254,11 @@ private:
   bool _classicAuthSector(uint8_t sector, const uint8_t key[6]);
   bool _classicReadNdefArea(const uint8_t* sectors, size_t sectorCount,
                             uint8_t*& area, size_t& areaLen);
-  void _doDetectGen1a();
+  MagicCardType _detectMagicType();
+  bool _writeMagicUid(MagicCardType type, const uint8_t* sourceUid,
+                      uint8_t sourceUidLen, const uint8_t block0[16]);
+  bool _resetAndReselect();
+  void _doDetectMagic();
   void _doGen3SetUid();
   void _doGen3LockUid();
   void _doSaveDump();

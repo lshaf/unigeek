@@ -412,6 +412,167 @@ bool ChameleonClient::scan14A(uint8_t uid[7], uint8_t* uidLen,
   return true;
 }
 
+MagicCardType ChameleonClient::detectMagicType() {
+  uint8_t previousMode = 0;
+  const bool restoreMode = getMode(&previousMode);
+  setMode(1);
+
+  auto finish = [&](MagicCardType type) -> MagicCardType {
+    if (restoreMode) setMode(previousMode);
+    return type;
+  };
+
+  uint8_t uid[7] = {}, uidLen = 0, atqa[2] = {}, sak = 0;
+  auto reselect = [&]() -> bool {
+    return scan14A(uid, &uidLen, atqa, &sak);
+  };
+
+  if (!reselect()) return finish(MagicCardType::NONE);
+
+  // Gen3 / APDU cards accept a direct MIFARE READ of block 0 without prior
+  // authentication. Probe this first: a Gen1A unlock would also make block 0
+  // directly readable and could otherwise create a false Gen3 positive.
+  {
+    uint8_t cmd[2] = {0x30, 0x00};
+    uint8_t resp[32] = {};
+    uint16_t respLen = 0;
+    const bool ok = hf14ARaw(128 | 64 | 32 | 16 | 4, 500, 16,
+                             cmd, sizeof(cmd), resp, &respLen, sizeof(resp));
+    if (ok && respLen >= 18) {
+      reselect();
+      return finish(MagicCardType::GEN3);
+    }
+  }
+
+  // Start the Gen1A backdoor with 0x40 sent as 7 bits, then require the
+  // second 0x43 ACK as well. This changes only transient RF/card state; no
+  // memory is written. Always reselect afterwards to leave the card normal.
+  if (!reselect()) return finish(MagicCardType::NONE);
+  bool gen1a = false;
+  {
+    uint8_t resp[16] = {};
+    uint16_t respLen = 0;
+    uint8_t wake = 0x40;
+    const bool ack1 = hf14ARaw(128 | 64 | 8, 200, 7, &wake, 1,
+                               resp, &respLen, sizeof(resp)) &&
+                      respLen >= 1 && resp[0] == 0x0A;
+    if (ack1) {
+      uint8_t unlock = 0x43;
+      respLen = 0;
+      gen1a = hf14ARaw(64 | 8, 200, 8, &unlock, 1,
+                       resp, &respLen, sizeof(resp)) &&
+              respLen >= 1 && resp[0] == 0x0A;
+    }
+  }
+
+  reselect();
+  return finish(gen1a ? MagicCardType::GEN1A : MagicCardType::NONE);
+}
+
+
+bool ChameleonClient::getAntiCollData(AntiCollData* out) {
+  if (!out) return false;
+  *out = AntiCollData{};
+
+  uint8_t buf[32] = {};
+  uint16_t len = 0, st = 0;
+  if (!sendCommand(CMD_HF14A_GET_ANTI_COLL, nullptr, 0,
+                   buf, &len, &st, 2000, sizeof(buf)) ||
+      (st != 0 && st != 0x68) || len < 5) {
+    return false;
+  }
+
+  const uint8_t uidLen = buf[0];
+  if ((uidLen != 4 && uidLen != 7) || len < (uint16_t)(5u + uidLen)) return false;
+  out->uidLen = uidLen;
+  memcpy(out->uid, buf + 1, uidLen);
+  out->atqa[0] = buf[1 + uidLen];
+  out->atqa[1] = buf[2 + uidLen];
+  out->sak = buf[3 + uidLen];
+  return true;
+}
+
+bool ChameleonClient::writeMagicUid(MagicCardType type, const uint8_t* sourceUid,
+                                    uint8_t sourceUidLen, const uint8_t block0[16]) {
+  if (!sourceUid || !block0 || (sourceUidLen != 4 && sourceUidLen != 7)) return false;
+  if (type == MagicCardType::GEN1A && sourceUidLen != 4) return false;
+
+  uint8_t previousMode = 0;
+  const bool restoreMode = getMode(&previousMode);
+  setMode(1);
+
+  auto finish = [&](bool ok) -> bool {
+    if (restoreMode) setMode(previousMode);
+    return ok;
+  };
+
+  uint8_t uid[7] = {}, uidLen = 0, atqa[2] = {}, sak = 0;
+  if (!scan14A(uid, &uidLen, atqa, &sak)) return finish(false);
+
+  if (type == MagicCardType::GEN3) {
+    // Gen3/APDU Set UID: 90 FB CC CC <len> <uid> 00.
+    uint8_t cmd[13] = {0x90, 0xFB, 0xCC, 0xCC, sourceUidLen};
+    memcpy(cmd + 5, sourceUid, sourceUidLen);
+    cmd[5 + sourceUidLen] = 0x00;
+    const uint8_t cmdLen = (uint8_t)(6u + sourceUidLen);
+    uint8_t resp[16] = {};
+    uint16_t respLen = 0;
+    uint16_t st = 0;
+    const bool ok = hf14ARaw(128 | 64 | 32 | 16 | 8, 500,
+                             (uint16_t)cmdLen * 8u, cmd, cmdLen,
+                             resp, &respLen, sizeof(resp), &st) &&
+                    (st == 0 || st == 0x68);
+    if (!ok) return finish(false);
+  } else if (type == MagicCardType::GEN1A) {
+    const uint8_t bcc = (uint8_t)(sourceUid[0] ^ sourceUid[1] ^ sourceUid[2] ^ sourceUid[3]);
+    uint8_t resp[16] = {};
+    uint16_t respLen = 0;
+    uint16_t st = 0;
+
+    // Gen1A backdoor: 0x40 as 7 bits, then 0x43. Keep the RF field active
+    // between frames. These two commands intentionally do not append CRC.
+    uint8_t wake = 0x40;
+    bool ok = hf14ARaw(128 | 64 | 8, 250, 7, &wake, 1,
+                       resp, &respLen, sizeof(resp), &st) &&
+              (st == 0 || st == 0x68) && respLen >= 1 && resp[0] == 0x0A;
+    if (!ok) return finish(false);
+
+    uint8_t unlock = 0x43;
+    respLen = 0; st = 0;
+    ok = hf14ARaw(64 | 8, 250, 8, &unlock, 1,
+                  resp, &respLen, sizeof(resp), &st) &&
+         (st == 0 || st == 0x68) && respLen >= 1 && resp[0] == 0x0A;
+    if (!ok) return finish(false);
+
+    // MIFARE WRITE is a two-frame exchange after the backdoor is open.
+    // From this point CRC-A is appended by the CU firmware.
+    uint8_t write0[2] = {0xA0, 0x00};
+    respLen = 0; st = 0;
+    ok = hf14ARaw(64 | 32 | 8, 500, 16, write0, sizeof(write0),
+                  resp, &respLen, sizeof(resp), &st) &&
+         (st == 0 || st == 0x68) && respLen >= 1 && resp[0] == 0x0A;
+    if (!ok) return finish(false);
+
+    uint8_t safeBlock0[16];
+    memcpy(safeBlock0, block0, sizeof(safeBlock0));
+    memcpy(safeBlock0, sourceUid, 4);
+    safeBlock0[4] = bcc;
+    respLen = 0; st = 0;
+    ok = hf14ARaw(64 | 32 | 8, 500, 16u * 8u,
+                  safeBlock0, sizeof(safeBlock0),
+                  resp, &respLen, sizeof(resp), &st) &&
+         (st == 0 || st == 0x68) && respLen >= 1 && resp[0] == 0x0A;
+    if (!ok) return finish(false);
+  } else {
+    return finish(false);
+  }
+
+  // Verify the identity after a fresh scan. scan14A starts a clean activation.
+  memset(uid, 0, sizeof(uid)); uidLen = 0;
+  if (!scan14A(uid, &uidLen, atqa, &sak)) return finish(false);
+  return finish(uidLen == sourceUidLen && memcmp(uid, sourceUid, sourceUidLen) == 0);
+}
+
 bool ChameleonClient::scanEM410X(uint8_t uid[5]) {
   uint8_t buf[16] = {};
   uint16_t len = 0, st = 0;

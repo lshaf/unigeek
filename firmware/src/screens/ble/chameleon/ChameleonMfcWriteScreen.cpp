@@ -38,11 +38,17 @@ static uint8_t trailerBlock(uint8_t sector) { return sector * 4u + 3u; }
 
 }
 
-ChameleonMfcWriteScreen::ChameleonMfcWriteScreen(const uint8_t* dump, uint16_t dumpLen)
+ChameleonMfcWriteScreen::ChameleonMfcWriteScreen(const uint8_t* dump, uint16_t dumpLen,
+                                                   const uint8_t* sourceUid, uint8_t sourceUidLen)
     : _source(SOURCE_MEMORY) {
   if (dump && dumpLen) {
     _dump = (uint8_t*)malloc(dumpLen);
     if (_dump) { memcpy(_dump, dump, dumpLen); _dumpLen = dumpLen; }
+  }
+  if (sourceUid && (sourceUidLen == 4 || sourceUidLen == 7)) {
+    memcpy(_sourceUid, sourceUid, sourceUidLen);
+    _sourceUidLen = sourceUidLen;
+    _sourceUidKnown = true;
   }
 }
 
@@ -75,6 +81,8 @@ void ChameleonMfcWriteScreen::_restoreContext() {
 }
 
 bool ChameleonMfcWriteScreen::_loadFile() {
+  _sourceUidKnown = false;
+  _sourceUidLen = 0;
   if (!Uni.Storage) return false;
   fs::File f = Uni.Storage->open(_path.c_str(), "r");
   if (!f || f.size() != kClassic1KBytes) { if (f) f.close(); return false; }
@@ -106,6 +114,18 @@ bool ChameleonMfcWriteScreen::_loadSlot() {
     block += count;
   }
   _dumpLen = kClassic1KBytes;
+
+  // Slot anti-collision data is authoritative for the identity actually
+  // emulated by the CU. It may intentionally differ from memory block 0.
+  ChameleonClient::AntiCollData anti{};
+  _sourceUidKnown = c.getAntiCollData(&anti);
+  if (_sourceUidKnown) {
+    _sourceUidLen = anti.uidLen;
+    memcpy(_sourceUid, anti.uid, anti.uidLen);
+  } else {
+    _sourceUidLen = 0;
+  }
+
   _restoreContext();
   return true;
 }
@@ -163,7 +183,7 @@ void ChameleonMfcWriteScreen::_buildSourcePreview() {
   if (_source == SOURCE_FILE) source = "File"; else if (_source == SOURCE_SLOT) source = String("Slot ") + (_slot + 1);
   _addRow("Source", source);
   _addRow("Type", "MIFARE Classic 1K");
-  _addRow("UID", _uidString(_dump, 4));
+  _addRow("UID", _sourceUidKnown ? _uidString(_sourceUid, _sourceUidLen) : _uidString(_dump, 4));
   _addRow("Blocks", "64");
   _addRow("Dump", String(_dumpLen) + " bytes");
   uint8_t* ndef = nullptr; size_t ndefLen = 0; NdefParser::Result parsed;
@@ -317,17 +337,33 @@ void ChameleonMfcWriteScreen::_write() {
 
   uint8_t uid[7] = {}, uidLen = 0, atqa[2] = {}, sak = 0;
   bool targetOk = c.scan14A(uid, &uidLen, atqa, &sak) && sak == 0x08 && c.mf1Support();
+  MagicCardType magic = MagicCardType::NONE;
+  bool restoreUid = false;
+  if (targetOk && _sourceUidKnown) {
+    magic = c.detectMagicType();
+    const bool uidDiffers = uidLen != _sourceUidLen ||
+                            (uidLen == _sourceUidLen && memcmp(uid, _sourceUid, uidLen) != 0);
+    restoreUid = uidDiffers &&
+                 ((magic == MagicCardType::GEN1A && _sourceUidLen == 4) ||
+                  (magic == MagicCardType::GEN3 && (_sourceUidLen == 4 || _sourceUidLen == 7)));
+  }
   uint8_t keysA[16][6] = {}, keysB[16][6] = {}; bool foundA[16] = {}, foundB[16] = {};
   bool ok = targetOk && _resolveTargetKeys(keysA, foundA, keysB, foundB);
   if (ok) ok = _writeTarget(keysA, foundA, keysB, foundB);
+
+  bool uidWriteFailed = false;
+  if (ok && restoreUid) {
+    ShowStatusAction::show("Writing source UID...", 0);
+    if (!c.writeMagicUid(magic, _sourceUid, _sourceUidLen, _dump)) uidWriteFailed = true;
+  }
   _busy = false; _restoreContext();
 
-  if (ok) {
-    ShowStatusAction::show("Tag written", 1600);
+  if (ok && !uidWriteFailed) {
+    ShowStatusAction::show(restoreUid ? "Tag + UID written" : "Tag written", 1600);
     _freeDump(); Screen.goBack(); return;
   }
   _buildSourcePreview(); render();
-  ShowStatusAction::show("Tag write failed", 1600); render();
+  ShowStatusAction::show(uidWriteFailed ? "UID write failed" : "Tag write failed", 1600); render();
 }
 
 void ChameleonMfcWriteScreen::onInit() {
