@@ -2241,18 +2241,79 @@ bool PN532I2cScreen::_formatClassic1kNdef() {
     0x7F,0x07,0x88,0x40,
     0xFF,0xFF,0xFF,0xFF,0xFF,0xFF
   };
+  // Keep formatter authentication aligned with the physically validated
+  // Chameleon Ultra path instead of limiting it to the four NFC defaults.
   static const uint8_t candidates[][6] = {
-    {0xFF,0xFF,0xFF,0xFF,0xFF,0xFF},
-    {0xA0,0xA1,0xA2,0xA3,0xA4,0xA5},
-    {0xD3,0xF7,0xD3,0xF7,0xD3,0xF7},
-    {0x00,0x00,0x00,0x00,0x00,0x00},
+    {0xFF,0xFF,0xFF,0xFF,0xFF,0xFF}, {0xA0,0xA1,0xA2,0xA3,0xA4,0xA5},
+    {0xD3,0xF7,0xD3,0xF7,0xD3,0xF7}, {0x00,0x00,0x00,0x00,0x00,0x00},
+    {0xB0,0xB1,0xB2,0xB3,0xB4,0xB5}, {0x4D,0x3A,0x99,0xC3,0x51,0xDD},
+    {0x1A,0x98,0x2C,0x7E,0x45,0x9A}, {0xAA,0xBB,0xCC,0xDD,0xEE,0xFF},
+    {0x71,0x4C,0x5C,0x88,0x6E,0x97}, {0x58,0x7E,0xE5,0xF9,0x35,0x0F},
+    {0xA0,0x47,0x8C,0xC3,0x90,0x91}, {0x53,0x3C,0xB6,0xC7,0x23,0xF6},
+    {0x8F,0xD0,0xA4,0xF2,0x56,0xE9}, {0x00,0x00,0x00,0x00,0x00,0x01},
+    {0x11,0x22,0x33,0x44,0x55,0x66}, {0x26,0x97,0x34,0x3B,0x00,0x00},
+    {0x12,0x34,0x56,0x78,0x9A,0xBC}, {0xBD,0x49,0x3A,0x39,0x62,0xB6},
   };
 
-  // Use the current tag's persisted Discovered Keys before the generic
-  // formatter candidates.  Keep this separate from discovery/auth scans: the
-  // PN532 only needs a usable credential for each block it actually writes.
+  // Prefer the current tag's persisted Discovered Keys, then preflight the
+  // same candidate set used by Chameleon Ultra. Formatting touches only
+  // sectors 0, 1 and 2, so validate one credential per sector up front.
   _mfKeys.fill({});
   _loadSavedKeys();
+
+  auto authSectorKey = [&](uint8_t block, const uint8_t key[6], bool useKeyB) {
+    // Failed MIFARE authentication can halt the PICC. Start every probe from
+    // a fresh selection, just like _tryWriteMifareBlock() does for writes.
+    uint8_t uid[7] = {};
+    uint8_t uidLen = 0;
+    if (!_nfc->readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLen, 300)) {
+      return false;
+    }
+    if (uidLen != _uidLen || memcmp(uid, _uid, uidLen) != 0) return false;
+    return _nfc->mifareclassic_AuthenticateBlock(
+        _uid, _uidLen, block, useKeyB ? 1 : 0, const_cast<uint8_t*>(key));
+  };
+
+  uint8_t sectorKey[3][6] = {};
+  bool sectorKeyB[3] = {};
+  for (uint8_t sector = 0; sector < 3; ++sector) {
+    const uint8_t block = (uint8_t)(sector * 4u);
+    bool found = false;
+
+    auto& savedA = _mfKeys[sector].first;
+    auto& savedB = _mfKeys[sector].second;
+    if (savedA) {
+      const auto ka = savedA.value();
+      if (authSectorKey(block, (const uint8_t*)ka.data(), false)) {
+        memcpy(sectorKey[sector], ka.data(), 6);
+        sectorKeyB[sector] = false;
+        found = true;
+      }
+    }
+    if (!found && savedB) {
+      const auto kb = savedB.value();
+      if (authSectorKey(block, (const uint8_t*)kb.data(), true)) {
+        memcpy(sectorKey[sector], kb.data(), 6);
+        sectorKeyB[sector] = true;
+        found = true;
+      }
+    }
+
+    for (uint8_t kt = 0; kt < 2 && !found; ++kt) {
+      for (const auto& key : candidates) {
+        if (authSectorKey(block, key, kt != 0)) {
+          memcpy(sectorKey[sector], key, 6);
+          sectorKeyB[sector] = (kt != 0);
+          found = true;
+          break;
+        }
+      }
+    }
+    if (!found) {
+      ShowStatusAction::show("Format: unknown sector key");
+      return false;
+    }
+  }
 
   uint8_t zero[16] = {};
   uint8_t emptyNdef[16] = {0x03,0x00,0xFE};
@@ -2269,17 +2330,6 @@ bool PN532I2cScreen::_formatClassic1kNdef() {
     const uint8_t sector = (uint8_t)(block / 4u); // Classic 1K only here.
     auto& keyA = _mfKeys[sector].first;
     auto& keyB = _mfKeys[sector].second;
-    const bool madDataBlock = (sector == 0 && (block == 1 || block == 2));
-
-    // MAD1 data blocks are the one place where the validated PN532 path must
-    // prefer Key B because of NFC Forum access conditions.
-    if (madDataBlock && keyB) {
-      const auto kb = keyB.value();
-      if (_tryWriteMifareBlock(block, data, (const uint8_t*)kb.data(), true)) {
-        ++done;
-        return true;
-      }
-    }
     if (keyA) {
       const auto ka = keyA.value();
       if (_tryWriteMifareBlock(block, data, (const uint8_t*)ka.data(), false)) {
@@ -2287,12 +2337,16 @@ bool PN532I2cScreen::_formatClassic1kNdef() {
         return true;
       }
     }
-    if (!madDataBlock && keyB) {
+    if (keyB) {
       const auto kb = keyB.value();
       if (_tryWriteMifareBlock(block, data, (const uint8_t*)kb.data(), true)) {
         ++done;
         return true;
       }
+    }
+    if (_tryWriteMifareBlock(block, data, sectorKey[sector], sectorKeyB[sector])) {
+      ++done;
+      return true;
     }
 
     for (const auto& key : candidates) {
