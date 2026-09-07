@@ -86,8 +86,8 @@ const char* PN532I2cScreen::title() {
   switch (_state) {
     case STATE_MAIN_MENU:       return "PN532 I2C";
     case STATE_INFO:            return "Firmware Info";
-    case STATE_SCAN_RESULT:
-    case STATE_SCAN_14A:        return "HF Reader";
+    case STATE_SCAN_RESULT:     return "Tag Details";
+    case STATE_SCAN_14A:        return "Scan Tag";
     case STATE_MIFARE_MENU:     return "MIFARE Classic";
     case STATE_MIFARE_TAG_MENU: return "Tag Operations";
     case STATE_MIFARE_NDEF_MENU:return "NDEF Operations";
