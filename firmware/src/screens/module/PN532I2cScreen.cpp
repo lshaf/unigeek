@@ -2404,9 +2404,8 @@ bool PN532I2cScreen::_writeClassicNdefRecord(const uint8_t* ndef, size_t ndefLen
   if (!_classicNdefSectors(sectors, sizeof(sectors), sectorCount)) {
     static const InputSelectAction::Option opts[] = {
       {"Format NDEF", "format"},
-      {"Cancel",      "cancel"},
     };
-    const char* choice = InputSelectAction::popup("Not NDEF formatted", opts, 2, nullptr);
+    const char* choice = InputSelectAction::popup("Not NDEF formatted", opts, 1, nullptr);
     render();
     if (!choice || strcmp(choice, "format") != 0 || !_formatClassic1kNdef()) {
       return false;

@@ -518,9 +518,8 @@ bool ChameleonMfcNdefScreen::_writeNdefRecord(const uint8_t* ndef, size_t ndefLe
   if (!_readNdefSectors(sectors, sizeof(sectors), count)) {
     static const InputSelectAction::Option opts[] = {
       {"Format NDEF", "format"},
-      {"Cancel",      "cancel"},
     };
-    const char* choice = InputSelectAction::popup("Not NDEF formatted", opts, 2, nullptr);
+    const char* choice = InputSelectAction::popup("Not NDEF formatted", opts, 1, nullptr);
     render();
     if (!choice || strcmp(choice, "format") != 0 || !_formatClassic1kNdef()) {
       ChameleonClient::get().setMode(0); _running = false;
