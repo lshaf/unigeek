@@ -33,11 +33,8 @@ void ChameleonHFScreen::_draw() {
   sp.fillSprite(TFT_BLACK);
   sp.setTextDatum(MC_DATUM);
 
-  sp.setTextColor(TFT_DARKGREY, TFT_BLACK);
-  sp.drawString("Place ISO14443A tag near", bw / 2, bh / 2 - 10);
-  sp.drawString("Chameleon reader", bw / 2, bh / 2 + 6);
-  sp.setTextColor(TFT_WHITE, TFT_BLACK);
-  sp.drawString("[Press] Scan", bw / 2, bh / 2 + 24);
+  sp.setTextColor(TFT_YELLOW, TFT_BLACK);
+  sp.drawString("Place tag on reader...", bw / 2, bh / 2);
 
   sp.pushSprite(bx, by);
   sp.deleteSprite();
@@ -53,9 +50,7 @@ void ChameleonHFScreen::_doScan() {
   lcd.setTextDatum(MC_DATUM);
   lcd.setTextSize(1);
   lcd.setTextColor(TFT_YELLOW, TFT_BLACK);
-  lcd.drawString("Scanning ISO14443A...", bx + bw / 2, by + bh / 2 - 8);
-  lcd.setTextColor(TFT_DARKGREY, TFT_BLACK);
-  lcd.drawString("Hold card near reader", bx + bw / 2, by + bh / 2 + 8);
+  lcd.drawString("Place tag on reader...", bx + bw / 2, by + bh / 2);
 
   auto& c = ChameleonClient::get();
 
@@ -201,6 +196,7 @@ void ChameleonHFScreen::_doClone() {
 void ChameleonHFScreen::onInit() {
   _state     = STATE_IDLE;
   _needsDraw = true;
+  _doScan();
 }
 
 void ChameleonHFScreen::onUpdate() {
@@ -213,13 +209,7 @@ void ChameleonHFScreen::onUpdate() {
       return;
     }
     if (dir == INavigation::DIR_PRESS) {
-      if (_state == STATE_RESULT) {
-        _state = STATE_IDLE;
-        _needsDraw = true;
-        render();
-      } else {
-        _doScan();
-      }
+      _doScan();
       return;
     }
     if (_state == STATE_RESULT) _scrollView.onNav(dir);

@@ -6,7 +6,7 @@
 // Supports MIFARE Classic and MF0 / Ultralight / NTAG slot content.
 class ChameleonSlotContentScreen : public BaseScreen {
 public:
-  explicit ChameleonSlotContentScreen(uint8_t slot) : _slot(slot) {}
+  explicit ChameleonSlotContentScreen(uint8_t slot, bool lf = false) : _slot(slot), _lf(lf) {}
 
   const char* title() override { return _title; }
   bool inhibitPowerOff() override { return _loading; }
@@ -17,6 +17,7 @@ public:
 
 private:
   uint8_t _slot;
+  bool    _lf = false;
   char    _title[24] = {};
   bool    _loading = true;
 
@@ -29,7 +30,7 @@ private:
   uint16_t _pages = 0;
   uint16_t _hfType = 0;
 
-  static constexpr int MAX_ROWS = 20;
+  static constexpr int MAX_ROWS = 24;
   ScrollListView      _scrollView;
   ScrollListView::Row _rows[MAX_ROWS];
   String              _labels[MAX_ROWS];

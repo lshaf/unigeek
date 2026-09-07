@@ -5,6 +5,15 @@
 #include "ui/views/ProgressView.h"
 #include "utils/nfc/NdefParser.h"
 
+static void renderTagPrompt(const char* message, int bx, int by, int bw, int bh) {
+  auto& lcd = Uni.Lcd;
+  lcd.fillRect(bx, by, bw, bh, TFT_BLACK);
+  lcd.setTextDatum(MC_DATUM);
+  lcd.setTextSize(1);
+  lcd.setTextColor(TFT_YELLOW, TFT_BLACK);
+  lcd.drawString(message, bx + bw / 2, by + bh / 2);
+}
+
 namespace {
 static constexpr uint16_t kClassic1KBytes = 1024;
 static constexpr uint8_t kSectors = 16;
@@ -184,7 +193,7 @@ void ChameleonMfcWriteScreen::_buildSourcePreview() {
   _addRow("Source", source);
   _addRow("Type", "MIFARE Classic 1K");
   _addRow("UID", _sourceUidKnown ? _uidString(_sourceUid, _sourceUidLen) : String("Unknown"));
-  if (!_sourceUidKnown) _addRow("Target UID", "Preserved");
+  _addRow("Target UID", _sourceUidKnown ? "Replace if Magic" : "Preserved");
   _addRow("Blocks", "64");
   _addRow("Dump", String(_dumpLen) + " bytes");
   uint8_t* ndef = nullptr; size_t ndefLen = 0; NdefParser::Result parsed;
@@ -334,7 +343,7 @@ void ChameleonMfcWriteScreen::_write() {
   _busy = true; auto& c = ChameleonClient::get();
   if (!_restoreMode && c.getMode(&_previousMode)) _restoreMode = true;
   c.setMode(1);
-  ShowStatusAction::show("Place target tag...", 0);
+  renderTagPrompt("Place tag on reader...", bodyX(), bodyY(), bodyW(), bodyH());
 
   uint8_t uid[7] = {}, uidLen = 0, atqa[2] = {}, sak = 0;
   bool targetOk = c.scan14A(uid, &uidLen, atqa, &sak) && sak == 0x08 && c.mf1Support();

@@ -5,6 +5,15 @@
 #include "ui/views/ProgressView.h"
 #include "utils/nfc/NdefParser.h"
 
+static void renderTagPrompt(const char* message, int bx, int by, int bw, int bh) {
+  auto& lcd = Uni.Lcd;
+  lcd.fillRect(bx, by, bw, bh, TFT_BLACK);
+  lcd.setTextDatum(MC_DATUM);
+  lcd.setTextSize(1);
+  lcd.setTextColor(TFT_YELLOW, TFT_BLACK);
+  lcd.drawString(message, bx + bw / 2, by + bh / 2);
+}
+
 namespace {
 static constexpr uint16_t kNtag215Bytes = 135u * 4u;
 static constexpr uint16_t kWritablePages = 126u; // pages 4..129
@@ -231,7 +240,7 @@ void ChameleonMfuWriteScreen::_detectTarget() {
   if (!_restoreMode && c.getMode(&_previousMode)) _restoreMode = true;
   c.setMode(1);
 
-  ShowStatusAction::show("Place target tag...", 0);
+  renderTagPrompt("Place tag on reader...", bodyX(), bodyY(), bodyW(), bodyH());
   bool ok = c.mfuDetect(&_targetInfo) &&
             _targetInfo.type == ChameleonClient::MFU_NTAG215 &&
             _targetInfo.pages == 135;
@@ -240,7 +249,7 @@ void ChameleonMfuWriteScreen::_detectTarget() {
   if (!ok) {
     _restoreContext();
     render();
-    ShowStatusAction::show("Target must be NTAG215", 1500);
+    ShowStatusAction::show("Tag must be NTAG215", 1500);
     render();
     return;
   }

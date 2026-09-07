@@ -38,6 +38,7 @@ private:
     STATE_MIFARE_DUMP_HEX,
     STATE_MIFARE_KEYS,
     STATE_MIFARE_DUMP_SELECT,
+    STATE_MIFARE_WRITE_PREVIEW,
     STATE_DICT_SELECT,
     STATE_ULTRALIGHT_MENU,
     STATE_ULTRALIGHT_TAG_MENU,
@@ -167,6 +168,10 @@ private:
   bool     _dumpComplete = false;
   bool     _resumeReadAfterDict = false;
   String   _dumpPickDir;
+  bool     _writePreviewFromFile = false;
+  bool     _writePreviewSourceUidKnown = false;
+  uint8_t  _writePreviewSourceUid[7] = {};
+  uint8_t  _writePreviewSourceUidLen = 0;
 
   enum NdefTarget_e {
     NDEF_TARGET_ULTRALIGHT,
@@ -227,6 +232,9 @@ private:
                             const uint8_t key[6], bool useKeyB);
   void _doWriteDumpFromFilePicker();
   void _doWriteDumpFileSelected(uint8_t fileIndex);
+  void _showWriteDumpPreview(const uint8_t* dump, size_t len,
+                             const uint8_t* sourceUid = nullptr, uint8_t sourceUidLen = 0,
+                             bool fromFile = false);
   void _doEraseTag();
   void _doShowKeys();
   void _doDictionaryPicker();

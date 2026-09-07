@@ -13,6 +13,15 @@
 #include <cstring>
 #include <ctype.h>
 
+static void renderTagPrompt(const char* message, int bx, int by, int bw, int bh) {
+  auto& lcd = Uni.Lcd;
+  lcd.fillRect(bx, by, bw, bh, TFT_BLACK);
+  lcd.setTextDatum(MC_DATUM);
+  lcd.setTextSize(1);
+  lcd.setTextColor(TFT_YELLOW, TFT_BLACK);
+  lcd.drawString(message, bx + bw / 2, by + bh / 2);
+}
+
 namespace {
 static void renderOperationTitle(const char* title) { Header header; header.render(title); }
 static constexpr uint8_t MAD_KEY_A[6] = {0xA0,0xA1,0xA2,0xA3,0xA4,0xA5};
@@ -159,6 +168,7 @@ uint16_t ChameleonMfcNdefScreen::_firstBlock(uint8_t sector) const {
 bool ChameleonMfcNdefScreen::_scanClassic() {
   auto& c = ChameleonClient::get();
   c.setMode(1);
+  renderTagPrompt("Place tag on reader...", bodyX(), bodyY(), bodyW(), bodyH());
   uint8_t atqa[2] = {}, sak = 0;
   if (!c.scan14A(_uid, &_uidLen, atqa, &sak)) {
     c.setMode(0);

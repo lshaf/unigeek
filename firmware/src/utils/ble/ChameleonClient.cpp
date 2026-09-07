@@ -529,6 +529,15 @@ bool ChameleonClient::writeMagicUid(MagicCardType type, const uint8_t* sourceUid
     uint16_t respLen = 0;
     uint16_t st = 0;
 
+    // Enter HALT before opening the Gen1A backdoor. This mirrors the PN532
+    // path that is known to work with the same physical Gen1A-compatible tag.
+    // HALT itself uses CRC-A; no response is expected.
+    uint8_t halt[2] = {0x50, 0x00};
+    uint16_t haltLen = 0;
+    uint16_t haltSt = 0;
+    (void)hf14ARaw(64 | 32 | 8, 200, 16, halt, sizeof(halt),
+                   resp, &haltLen, sizeof(resp), &haltSt);
+
     // Gen1A backdoor: 0x40 as 7 bits, then 0x43. Keep the RF field active
     // between frames. These two commands intentionally do not append CRC.
     uint8_t wake = 0x40;

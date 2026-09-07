@@ -77,6 +77,15 @@ static bool _nfcDataExch(Adafruit_PN532* nfc, TwoWire* wire,
 
 // ── title ──────────────────────────────────────────────────────────────────
 
+static void renderTagPrompt(const char* message, int bx, int by, int bw, int bh) {
+  auto& lcd = Uni.Lcd;
+  lcd.fillRect(bx, by, bw, bh, TFT_BLACK);
+  lcd.setTextDatum(MC_DATUM);
+  lcd.setTextSize(1);
+  lcd.setTextColor(TFT_YELLOW, TFT_BLACK);
+  lcd.drawString(message, bx + bw / 2, by + bh / 2);
+}
+
 static void renderOperationTitle(const char* title) {
   Header header;
   header.render(title);
@@ -99,6 +108,7 @@ const char* PN532I2cScreen::title() {
     case STATE_MIFARE_DUMP_HEX: return "Memory Dump";
     case STATE_MIFARE_KEYS:     return "Discovered Keys";
     case STATE_MIFARE_DUMP_SELECT:return "Dump Files";
+    case STATE_MIFARE_WRITE_PREVIEW:return "Write to Tag";
     case STATE_DICT_SELECT:     return "Dictionary Attack";
     case STATE_ULTRALIGHT_MENU: return "Ultralight / NTAG";
     case STATE_ULTRALIGHT_TAG_MENU:return "Tag Operations";
@@ -137,7 +147,7 @@ void PN532I2cScreen::onUpdate() {
       if (dir == INavigation::DIR_BACK) {
         _goMain();
       } else if (dir == INavigation::DIR_PRESS) {
-        _goScan14A();
+        _doScan14A();
       } else {
         _scrollView.onNav(dir);
       }
@@ -172,6 +182,25 @@ void PN532I2cScreen::onUpdate() {
           _resumeReadAfterDict = true;
           _doDictionaryPicker();
         }
+      } else {
+        _scrollView.onNav(dir);
+      }
+    }
+    return;
+  }
+  if (_state == STATE_MIFARE_WRITE_PREVIEW) {
+    if (Uni.Nav->wasPressed()) {
+      auto dir = Uni.Nav->readDirection();
+      if (dir == INavigation::DIR_BACK) {
+        if (_writePreviewFromFile) _doWriteDumpFromFilePicker();
+        else _showTagDetails();
+      } else if (dir == INavigation::DIR_PRESS) {
+        _doWriteDumpToTag(_dumpImg, _dumpLen,
+                          _writePreviewSourceUidKnown ? _writePreviewSourceUid : nullptr,
+                          _writePreviewSourceUidKnown ? _writePreviewSourceUidLen : 0);
+        // Writing scans the destination and updates the PN532 card context, so
+        // do not redisplay the source dump with destination UID/ATQA metadata.
+        _goMifareTag();
       } else {
         _scrollView.onNav(dir);
       }
@@ -237,6 +266,7 @@ void PN532I2cScreen::onRender() {
   }
   if (_state == STATE_INFO || _state == STATE_SCAN_RESULT ||
       _state == STATE_MIFARE_DUMP || _state == STATE_MIFARE_DUMP_HEX ||
+      _state == STATE_MIFARE_WRITE_PREVIEW ||
       _state == STATE_MIFARE_KEYS || _state == STATE_MIFARE_KEY_DB_VIEW ||
       _state == STATE_RAW_RESULT || _state == STATE_NDEF_RESULT ||
       _state == STATE_EMULATE) {
@@ -250,7 +280,7 @@ void PN532I2cScreen::onItemSelected(uint8_t index) {
   switch (_state) {
     case STATE_MAIN_MENU:
       switch (index) {
-        case 0: _goScan14A();         break;
+        case 0: _doScan14A();         break;
         case 1: _goMifare();          break;
         case 2: _goUltralight();      break;
         case 3: _goMagic();           break;
@@ -329,6 +359,10 @@ void PN532I2cScreen::onItemSelected(uint8_t index) {
           _doEraseNdef();
           break;
       }
+      break;
+    case STATE_MIFARE_WRITE_PREVIEW:
+      if (_writePreviewFromFile) _doWriteDumpFromFilePicker();
+      else _showTagDetails();
       break;
     case STATE_MIFARE_DUMP_SELECT:
       _doWriteDumpFileSelected(index);
@@ -581,12 +615,8 @@ void PN532I2cScreen::_goScan14A() {
   lcd.fillRect(bx, by, bw, bh, TFT_BLACK);
   lcd.setTextDatum(MC_DATUM);
   lcd.setTextSize(1);
-  lcd.setTextColor(TFT_CYAN, TFT_BLACK);
-  lcd.drawString("HF Card Reader", bx + bw / 2, by + bh / 2 - 20);
-  lcd.setTextColor(TFT_DARKGREY, TFT_BLACK);
-  lcd.drawString("Place ISO14443 card near", bx + bw / 2, by + bh / 2 - 2);
-  lcd.setTextColor(TFT_WHITE, TFT_BLACK);
-  lcd.drawString("Press to scan", bx + bw / 2, by + bh / 2 + 20);
+  lcd.setTextColor(TFT_YELLOW, TFT_BLACK);
+  lcd.drawString("Place tag on reader...", bx + bw / 2, by + bh / 2);
 }
 
 void PN532I2cScreen::_goMifareTag() {
@@ -872,7 +902,7 @@ const char* PN532I2cScreen::_inferType2Variant() {
 // ── scan helper ────────────────────────────────────────────────────────────
 
 bool PN532I2cScreen::_scanCardOrShow(uint32_t timeoutMs) {
-  ShowStatusAction::show("Place card on reader...", 0);
+  renderTagPrompt("Place tag on reader...", bodyX(), bodyY(), bodyW(), bodyH());
   uint32_t start = millis();
   while (millis() - start < timeoutMs) {
     Uni.update();
@@ -932,9 +962,7 @@ void PN532I2cScreen::_doScan14A() {
   lcd.setTextDatum(MC_DATUM);
   lcd.setTextSize(1);
   lcd.setTextColor(TFT_YELLOW, TFT_BLACK);
-  lcd.drawString("Scanning tag...", bx + bw / 2, by + bh / 2 - 8);
-  lcd.setTextColor(TFT_DARKGREY, TFT_BLACK);
-  lcd.drawString("Hold card near reader", bx + bw / 2, by + bh / 2 + 8);
+  lcd.drawString("Place tag on reader...", bx + bw / 2, by + bh / 2);
 
   bool ok = false;
   uint32_t start = millis();
@@ -1144,10 +1172,9 @@ void PN532I2cScreen::_doReadTag() {
     static const InputSelectAction::Option opts[] = {
       {"Dictionary Attack", "dict"},
       {"Read Partial",      "partial"},
-      {"Cancel",            "cancel"},
     };
-    const char* r = InputSelectAction::popup("Missing sector keys", opts, 3, nullptr);
-    if (!r || strcmp(r, "cancel") == 0) { _goMifareTag(); return; }
+    const char* r = InputSelectAction::popup("Missing sector keys", opts, 2, nullptr);
+    if (!r) { _goMifareTag(); return; }
     if (strcmp(r, "dict") == 0) {
       _resumeReadAfterDict = true;
       _doDictionaryPicker();
@@ -1700,8 +1727,8 @@ void PN532I2cScreen::_doDictionaryAttackWithFile(uint8_t fileIndex) {
 }
 
 void PN532I2cScreen::_doUltralightDump() {
-  renderOperationTitle("Read Pages");
-  ShowStatusAction::show("Place UL/NTAG on reader...", 0);
+  renderOperationTitle("Read Tag");
+  renderTagPrompt("Place tag on reader...", bodyX(), bodyY(), bodyW(), bodyH());
   uint8_t uid[7]; uint8_t uidLen;
   uint32_t start = millis();
   bool ok = false;
@@ -1744,7 +1771,8 @@ void PN532I2cScreen::_doUltralightDump() {
 }
 
 void PN532I2cScreen::_doUltralightWrite() {
-  ShowStatusAction::show("Place UL/NTAG on reader...", 0);
+  renderOperationTitle("Write Page");
+  renderTagPrompt("Place tag on reader...", bodyX(), bodyY(), bodyW(), bodyH());
   uint8_t uid[7]; uint8_t uidLen;
   uint32_t start = millis();
   bool ok = false;
@@ -1791,7 +1819,7 @@ void PN532I2cScreen::_doReadNdef() {
   _hasNdef = false;
   _ndefLen = 0;
   _ndefCapacity = 0;
-  ShowStatusAction::show("Place UL/NTAG on reader...", 0);
+  renderTagPrompt("Place tag on reader...", bodyX(), bodyY(), bodyW(), bodyH());
 
   uint8_t uid[7];
   uint8_t uidLen = 0;
@@ -2649,12 +2677,13 @@ bool PN532I2cScreen::_writeNdefRecord(const uint8_t* ndef, size_t ndefLen) {
 }
 
 bool PN532I2cScreen::_writeUltralightNdefRecord(const uint8_t* ndef, size_t ndefLen) {
+  renderOperationTitle("Write NDEF");
   if (!ndef || ndefLen == 0 || ndefLen > 254) {
     ShowStatusAction::show("NDEF too large");
     return false;
   }
 
-  ShowStatusAction::show("Place UL/NTAG on reader...", 0);
+  renderTagPrompt("Place tag on reader...", bodyX(), bodyY(), bodyW(), bodyH());
 
   uint8_t uid[7];
   uint8_t uidLen = 0;
@@ -3161,7 +3190,7 @@ void PN532I2cScreen::_doWriteNdefFileSelected(uint8_t fileIndex) {
 void PN532I2cScreen::_doEraseNdef() {
   renderOperationTitle("Erase NDEF");
   _ndefTarget = NDEF_TARGET_ULTRALIGHT;
-  ShowStatusAction::show("Place UL/NTAG on reader...", 0);
+  renderTagPrompt("Place tag on reader...", bodyX(), bodyY(), bodyW(), bodyH());
 
   uint8_t uid[7];
   uint8_t uidLen = 0;
@@ -3351,21 +3380,44 @@ bool PN532I2cScreen::_writeMagicUid(MagicCardType type, const uint8_t* sourceUid
     const bool ack2 = _nfcCommThru(_nfc, _wire, unlock, sizeof(unlock),
                                     resp, rlen, 250) &&
                       rlen >= 1 && (resp[0] & 0x0F) == 0x0A;
-    _nfcWriteReg(_nfc, _wire, 0x6302, 0x80);
-    _nfcWriteReg(_nfc, _wire, 0x6303, 0x80);
+    // MIFARE WRITE command/data frames need CRC-A on TX, but the PICC ACKs
+    // are only 4 bits and carry no CRC. Keep RX CRC disabled until both ACKs
+    // have been consumed; otherwise the PN532 can report a CRC/framing error
+    // even though the card accepted the transmitted frame.
+    _nfcWriteReg(_nfc, _wire, 0x6302, 0x80); // TxMode: CRC-A enabled
+    _nfcWriteReg(_nfc, _wire, 0x6303, 0x00); // RxMode: raw 4-bit ACK
     if (!ack2) {
+      _nfcWriteReg(_nfc, _wire, 0x6303, 0x80);
       _resetAndReselect();
       return false;
     }
 
-    // Let the PN532 perform the normal two-phase MIFARE WRITE exchange after
-    // the backdoor is open: A0 00 followed by the 16-byte manufacturer block.
-    uint8_t write[18] = {0xA0, 0x00};
-    memcpy(write + 2, block0, 16);
-    memcpy(write + 2, sourceUid, 4);
-    write[2 + 4] = bcc;
+    // MIFARE WRITE is a two-frame exchange. Sending A0 00 and the 16-byte
+    // manufacturer block in one InDataExchange frame is not equivalent and
+    // leaves block 0 unchanged on Gen1A cards. Keep the backdoor session open
+    // and perform both RF exchanges explicitly.
+    uint8_t write0[2] = {0xA0, 0x00};
     rlen = sizeof(resp);
-    if (!_nfcDataExch(_nfc, _wire, write, sizeof(write), resp, rlen, 700)) {
+    const bool writeAck = _nfcCommThru(_nfc, _wire, write0, sizeof(write0),
+                                       resp, rlen, 400) &&
+                          rlen >= 1 && (resp[0] & 0x0F) == 0x0A;
+    if (!writeAck) {
+      _nfcWriteReg(_nfc, _wire, 0x6303, 0x80);
+      _resetAndReselect();
+      return false;
+    }
+
+    uint8_t safeBlock0[16];
+    memcpy(safeBlock0, block0, sizeof(safeBlock0));
+    memcpy(safeBlock0, sourceUid, 4);
+    safeBlock0[4] = bcc;
+    rlen = sizeof(resp);
+    const bool dataAck = _nfcCommThru(_nfc, _wire, safeBlock0, sizeof(safeBlock0),
+                                      resp, rlen, 700) &&
+                         rlen >= 1 && (resp[0] & 0x0F) == 0x0A;
+    // Restore normal CRC handling before leaving the raw MIFARE exchange.
+    _nfcWriteReg(_nfc, _wire, 0x6303, 0x80);
+    if (!dataAck) {
       _resetAndReselect();
       return false;
     }
@@ -3455,7 +3507,7 @@ void PN532I2cScreen::_doGen3SetUid() {
 
   // Fail early instead of asking for a UID that cannot be applied to this tag.
   if (_detectMagicType() != MagicCardType::GEN3) {
-    ShowStatusAction::show("Target is not Gen3");
+    ShowStatusAction::show("Tag is not Gen3");
     _goMagic();
     return;
   }
@@ -3501,7 +3553,7 @@ void PN532I2cScreen::_doGen3LockUid() {
   if (!ok) { ShowStatusAction::show("No card"); _goMagic(); return; }
 
   if (_detectMagicType() != MagicCardType::GEN3) {
-    ShowStatusAction::show("Target is not Gen3");
+    ShowStatusAction::show("Tag is not Gen3");
     _goMagic();
     return;
   }
@@ -3546,7 +3598,7 @@ void PN532I2cScreen::_showDumpActions() {
   // could leave fragments of Dump Actions visible underneath the next UI.
   render();
   if (strcmp(r, "save") == 0) _doSaveDump();
-  else _doWriteDumpToTag(_dumpImg, _dumpLen, _uid, _uidLen);
+  else _showWriteDumpPreview(_dumpImg, _dumpLen, _uid, _uidLen, false);
 }
 
 void PN532I2cScreen::_doWriteDumpFromFilePicker() {
@@ -3582,9 +3634,59 @@ void PN532I2cScreen::_doWriteDumpFileSelected(uint8_t fileIndex) {
   if (!dump) { f.close(); ShowStatusAction::show("Out of memory"); _goMifareTag(); return; }
   size_t got = f.read(dump, len); f.close();
   if (got != len) { free(dump); ShowStatusAction::show("Read failed"); _goMifareTag(); return; }
-  _doWriteDumpToTag(dump, len);
+  _showWriteDumpPreview(dump, len, nullptr, 0, true);
   free(dump);
-  _goMifareTag();
+}
+
+
+void PN532I2cScreen::_showWriteDumpPreview(const uint8_t* dump, size_t len,
+                                             const uint8_t* sourceUid, uint8_t sourceUidLen,
+                                             bool fromFile) {
+  if (!dump || (len != 320 && len != 1024 && len != 4096)) {
+    ShowStatusAction::show("Invalid dump");
+    return;
+  }
+
+  memcpy(_dumpImg, dump, len);
+  _dumpLen = len;
+  _writePreviewFromFile = fromFile;
+  _writePreviewSourceUidKnown = sourceUid && (sourceUidLen == 4 || sourceUidLen == 7);
+  _writePreviewSourceUidLen = _writePreviewSourceUidKnown ? sourceUidLen : 0;
+  memset(_writePreviewSourceUid, 0, sizeof(_writePreviewSourceUid));
+  if (_writePreviewSourceUidKnown) memcpy(_writePreviewSourceUid, sourceUid, sourceUidLen);
+
+  _state = STATE_MIFARE_WRITE_PREVIEW;
+  _resetRows();
+  _pushRow("Source", fromFile ? "File" : "Read Tag");
+  const char* type = len == 320 ? "MIFARE Classic Mini" :
+                     (len == 4096 ? "MIFARE Classic 4K" : "MIFARE Classic 1K");
+  _pushRow("Type", type);
+  _pushRow("UID", _writePreviewSourceUidKnown ?
+                    _hexUid(_writePreviewSourceUid, _writePreviewSourceUidLen) : String("Unknown"));
+  _pushRow("Target UID", _writePreviewSourceUidKnown ? "Replace if Magic" : "Preserved");
+  _pushRow("Blocks", String((unsigned)(len / 16u)));
+  _pushRow("Dump", String((unsigned)len) + " bytes");
+
+  // Match the CU preview for Classic 1K by surfacing NDEF presence from MAD1.
+  if (len == 1024) {
+    uint8_t sectors[15] = {};
+    size_t sectorCount = 0;
+    const uint8_t* b1 = _dumpImg + 16u;
+    const uint8_t* b2 = _dumpImg + 32u;
+    for (uint8_t sec = 1; sec <= 7; ++sec) {
+      size_t off = 2u + (size_t)(sec - 1u) * 2u;
+      if (b1[off] == 0x03 && b1[off + 1u] == 0xE1) sectors[sectorCount++] = sec;
+    }
+    for (uint8_t sec = 8; sec <= 15; ++sec) {
+      size_t off = (size_t)(sec - 8u) * 2u;
+      if (b2[off] == 0x03 && b2[off + 1u] == 0xE1) sectors[sectorCount++] = sec;
+    }
+    _pushRow("NDEF", sectorCount ? "Present" : "Not found");
+  }
+
+  _pushRow("[Press]", "Write to Tag");
+  _scrollView.setRows(_rows, _rowCount);
+  render();
 }
 
 
@@ -3626,7 +3728,7 @@ void PN532I2cScreen::_doWriteDumpToTag(const uint8_t* dump, size_t len,
   if (!dump || (len != 320 && len != 1024 && len != 4096)) {
     ShowStatusAction::show("Invalid dump"); return;
   }
-  ShowStatusAction::show("Place target MIFARE tag...", 0);
+  renderTagPrompt("Place tag on reader...", bodyX(), bodyY(), bodyW(), bodyH());
   if (!_scanCardOrShow(5000)) { render(); return; }
   auto dims = _mfDims(_sak);
   if (dims.second * 16u != len) { ShowStatusAction::show("Tag size mismatch"); render(); return; }

@@ -121,7 +121,7 @@ void ChameleonMfuToolsScreen::_eraseTag() {
   lcd.setTextDatum(MC_DATUM);
   lcd.setTextSize(1);
   lcd.setTextColor(TFT_YELLOW, TFT_BLACK);
-  lcd.drawString("Place NTAG215...", bx + bw / 2, by + bh / 2);
+  lcd.drawString("Place tag on reader...", bx + bw / 2, by + bh / 2);
 
   ChameleonClient::MfuTagInfo info = {};
   if (!c.mfuDetect(&info) ||
@@ -129,7 +129,7 @@ void ChameleonMfuToolsScreen::_eraseTag() {
       info.pages != 135) {
     if (restoreMode) c.setMode(previousMode);
     render();
-    ShowStatusAction::show("Target must be NTAG215", 1500);
+    ShowStatusAction::show("Tag must be NTAG215", 1500);
     render();
     return;
   }

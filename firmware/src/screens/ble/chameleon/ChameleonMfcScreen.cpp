@@ -131,7 +131,7 @@ void ChameleonMfcScreen::_callAuth() {
 
   _authLog.clear();
   _authPct = 0;
-  strncpy(_authStatus, "Scanning tag...", sizeof(_authStatus) - 1);
+  strncpy(_authStatus, "Place tag on reader...", sizeof(_authStatus) - 1);
   render();
 
   auto& c = ChameleonClient::get();
@@ -142,7 +142,7 @@ void ChameleonMfcScreen::_callAuth() {
   lcd.setTextDatum(MC_DATUM);
   lcd.setTextSize(1);
   lcd.setTextColor(TFT_YELLOW, TFT_BLACK);
-  lcd.drawString("Scanning tag...", bodyX() + bodyW() / 2, bodyY() + bodyH() / 2);
+  lcd.drawString("Place tag on reader...", bodyX() + bodyW() / 2, bodyY() + bodyH() / 2);
 
   uint8_t atqa[2] = {}, sak = 0;
   if (!c.scan14A(_uid, &_uidLen, atqa, &sak)) {
@@ -271,11 +271,10 @@ void ChameleonMfcScreen::_continueRead() {
       {"Static Nested",     "static"},
       {"Nested Attack",     "nested"},
       {"Read Partial",      "partial"},
-      {"Cancel",            "cancel"},
     };
-    const char* r = InputSelectAction::popup("Missing sector keys", opts, 5, nullptr);
+    const char* r = InputSelectAction::popup("Missing sector keys", opts, 4, nullptr);
     render();
-    if (!r || strcmp(r, "cancel") == 0) { Screen.goBack(); return; }
+    if (!r) { Screen.goBack(); return; }
     if (strcmp(r, "partial") == 0) { _callDump(); return; }
     _resumeReadAfterAttack = true;
     if (strcmp(r, "dict") == 0) _loadDictPicker();
@@ -287,11 +286,10 @@ void ChameleonMfcScreen::_continueRead() {
   static const InputSelectAction::Option opts[] = {
     {"Dictionary Attack", "dict"},
     {"Read Partial",      "partial"},
-    {"Cancel",            "cancel"},
   };
-  const char* r = InputSelectAction::popup("Missing sector keys", opts, 3, nullptr);
+  const char* r = InputSelectAction::popup("Missing sector keys", opts, 2, nullptr);
   render();
-  if (!r || strcmp(r, "cancel") == 0) { Screen.goBack(); return; }
+  if (!r) { Screen.goBack(); return; }
   if (strcmp(r, "partial") == 0) { _callDump(); return; }
   _resumeReadAfterAttack = true;
   _loadDictPicker();

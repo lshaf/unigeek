@@ -140,9 +140,9 @@ void ChameleonMfcToolsScreen::_eraseTag() {
   auto& c = ChameleonClient::get();
   uint8_t previousMode = 0; const bool restoreMode = c.getMode(&previousMode); c.setMode(1);
   auto& lcd = Uni.Lcd; const int bx=bodyX(),by=bodyY(),bw=bodyW(),bh=bodyH();
-  lcd.fillRect(bx,by,bw,bh,TFT_BLACK); lcd.setTextDatum(MC_DATUM); lcd.setTextSize(1); lcd.setTextColor(TFT_YELLOW,TFT_BLACK); lcd.drawString("Place MFC1K tag...",bx+bw/2,by+bh/2);
+  lcd.fillRect(bx,by,bw,bh,TFT_BLACK); lcd.setTextDatum(MC_DATUM); lcd.setTextSize(1); lcd.setTextColor(TFT_YELLOW,TFT_BLACK); lcd.drawString("Place tag on reader...",bx+bw/2,by+bh/2);
   uint8_t uid[7]={},uidLen=0,atqa[2]={},sak=0;
-  if(!c.scan14A(uid,&uidLen,atqa,&sak)||sak!=0x08){if(restoreMode)c.setMode(previousMode);render();ShowStatusAction::show("Target must be MFC1K",1500);render();return;}
+  if(!c.scan14A(uid,&uidLen,atqa,&sak)||sak!=0x08){if(restoreMode)c.setMode(previousMode);render();ShowStatusAction::show("Tag must be MFC1K",1500);render();return;}
   // Match PN532 Erase Tag semantics: preserve manufacturer block and every
   // sector trailer (keys/access bits), and clear data blocks only.
   uint8_t keysA[kMfc1kSectors][6]={},keysB[kMfc1kSectors][6]={}; bool foundA[kMfc1kSectors]={},foundB[kMfc1kSectors]={};

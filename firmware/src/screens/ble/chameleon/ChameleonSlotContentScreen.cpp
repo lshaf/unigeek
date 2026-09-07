@@ -150,6 +150,41 @@ void ChameleonSlotContentScreen::_buildPreview() {
   _rowCount = 0;
 
   _addRow("Type", ChameleonClient::tagTypeName(_hfType));
+
+  if (_dump && _dumpLen >= 16) {
+    const uint8_t* b0 = _dump;
+    uint8_t uid[7] = {};
+    uint8_t uidLen = 0;
+    uint8_t sak = 0;
+    uint8_t atqa[2] = {};
+
+    const uint8_t bcc4 = b0[0] ^ b0[1] ^ b0[2] ^ b0[3];
+    if (b0[4] == bcc4 && (b0[6] & 0xC0) == 0x00) {
+      uidLen = 4;
+      memcpy(uid, b0, 4);
+      sak = b0[5];
+      atqa[0] = b0[6]; atqa[1] = b0[7];
+    } else if ((b0[8] & 0xC0) == 0x40) {
+      uidLen = 7;
+      memcpy(uid, b0, 7);
+      sak = b0[7];
+      atqa[0] = b0[8]; atqa[1] = b0[9];
+    }
+
+    if (uidLen) {
+      String uidText;
+      for (uint8_t i = 0; i < uidLen; ++i) {
+        char b[4]; snprintf(b, sizeof(b), "%02X%s", uid[i], i + 1 < uidLen ? ":" : "");
+        uidText += b;
+      }
+      char atqaText[6]; snprintf(atqaText, sizeof(atqaText), "%02X%02X", atqa[0], atqa[1]);
+      char sakText[4]; snprintf(sakText, sizeof(sakText), "%02X", sak);
+      _addRow("UID", uidText);
+      _addRow("ATQA", atqaText);
+      _addRow("SAK", sakText);
+    }
+  }
+
   _addRow("Blocks", String(_blocks));
   _addRow("Dump", String(_dumpLen) + " bytes");
 
@@ -239,6 +274,20 @@ void ChameleonSlotContentScreen::_buildPreview() {
 void ChameleonSlotContentScreen::_buildMfuPreview() {
   _rowCount = 0;
   _addRow("Type", ChameleonClient::tagTypeName(_hfType));
+  if (_dump && _dumpLen >= 8) {
+    const uint8_t uid[7] = {
+      _dump[0], _dump[1], _dump[2],
+      _dump[4], _dump[5], _dump[6], _dump[7]
+    };
+    String uidText;
+    for (uint8_t i = 0; i < 7; ++i) {
+      char b[4]; snprintf(b, sizeof(b), "%02X%s", uid[i], i < 6 ? ":" : "");
+      uidText += b;
+    }
+    _addRow("UID", uidText);
+    _addRow("ATQA", "4400");
+    _addRow("SAK", "00");
+  }
   _addRow("Pages", String(_pages));
   _addRow("Dump", String(_dumpLen) + " bytes");
 
@@ -292,6 +341,60 @@ void ChameleonSlotContentScreen::_run() {
   ChameleonClient::SlotTypes types[8] = {};
   if (!c.getSlotTypes(types)) {
     _addRow("Error", "Could not read slot type");
+    return;
+  }
+
+  if (_lf) {
+    const uint16_t lfType = types[_slot].lfType;
+    _addRow("Type", ChameleonClient::tagTypeName(lfType));
+
+    if (!c.setActiveSlot(_slot)) {
+      _addRow("Error", "Could not select slot");
+      return;
+    }
+    delay(50);
+
+    if (lfType == 100) {
+      uint8_t uid[5] = {};
+      if (c.getEM410XSlot(uid)) {
+        char hex[20];
+        snprintf(hex, sizeof(hex), "%02X:%02X:%02X:%02X:%02X",
+                 uid[0], uid[1], uid[2], uid[3], uid[4]);
+        _addRow("UID", hex);
+      } else {
+        _addRow("UID", "(unavailable)");
+      }
+    } else if (lfType == 200) {
+      uint8_t payload[13] = {};
+      uint8_t payloadLen = 0;
+      if (c.getHIDProxSlot(payload, &payloadLen) && payloadLen) {
+        String value;
+        for (uint8_t i = 0; i < payloadLen; ++i) {
+          char b[3]; snprintf(b, sizeof(b), "%02X", payload[i]);
+          value += b;
+        }
+        _addRow("Payload", value);
+      } else {
+        _addRow("Payload", "(unavailable)");
+      }
+    } else if (lfType == 0) {
+      _addRow("UID", "(empty)");
+    } else {
+      uint8_t uid[4] = {};
+      uint8_t uidLen = 0;
+      if (c.getVikingSlot(uid, &uidLen) && uidLen) {
+        String value;
+        for (uint8_t i = 0; i < uidLen; ++i) {
+          char b[4]; snprintf(b, sizeof(b), "%02X%s",
+                              uid[i], i + 1 < uidLen ? ":" : "");
+          value += b;
+        }
+        _addRow("UID", value);
+      } else {
+        _addRow("UID", "(unavailable)");
+      }
+    }
+    _scrollView.setRows(_rows, _rowCount);
     return;
   }
 
@@ -398,7 +501,7 @@ void ChameleonSlotContentScreen::_run() {
 }
 
 void ChameleonSlotContentScreen::onInit() {
-  snprintf(_title, sizeof(_title), "Slot %d Content", _slot + 1);
+  snprintf(_title, sizeof(_title), "Tag Details");
 
   auto& c = ChameleonClient::get();
   _restoreSlot = c.getActiveSlot(&_previousSlot) && _previousSlot != _slot;
