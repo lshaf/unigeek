@@ -6,7 +6,7 @@
 
 class ChameleonMfcDictScreen : public ListScreen {
 public:
-  const char* title() override { return "MF Dict Attack"; }
+  const char* title() override { return "Dictionary Attack"; }
   bool inhibitPowerOff() override { return _running; }
 
   void onInit()                      override;

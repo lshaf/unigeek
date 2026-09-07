@@ -5,6 +5,7 @@
 #include "ui/templates/ListScreen.h"
 #include "ui/views/BrowseFileView.h"
 #include "ui/views/ScrollListView.h"
+#include "ui/views/LogView.h"
 #include "utils/nfc/NFCUtility.h"
 #include "utils/nfc/MagicCard.h"
 
@@ -42,6 +43,7 @@ private:
     STATE_ULTRALIGHT_TAG_MENU,
     STATE_ULTRALIGHT_NDEF_MENU,
     STATE_MAGIC_MENU,
+    STATE_MAGIC_DETECT,
     STATE_RAW_RESULT,
     STATE_EMULATE,
     STATE_NTAG_MENU,
@@ -131,6 +133,9 @@ private:
     {"Erase NDEF"},
   };
 
+  LogView _magicLog;
+  bool _magicDetectDone = false;
+
   ListItem _magicItems[3] = {
     {"Detect Magic"},
     {"Set UID (Gen3)"},
@@ -200,6 +205,7 @@ private:
   void _goUltralightTag();
   void _goUltralightNdef();
   void _goMagic();
+  void _goDetectMagic();
   void _doNtagMenu();
 
   void _showFirmwareInfo();

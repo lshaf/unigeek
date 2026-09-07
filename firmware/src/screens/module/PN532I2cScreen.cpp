@@ -104,6 +104,7 @@ const char* PN532I2cScreen::title() {
     case STATE_ULTRALIGHT_TAG_MENU:return "Tag Operations";
     case STATE_ULTRALIGHT_NDEF_MENU:return "NDEF Operations";
     case STATE_MAGIC_MENU:      return "Magic Card";
+    case STATE_MAGIC_DETECT:    return "Detect Magic";
     case STATE_RAW_RESULT:      return "Read Pages";
     case STATE_EMULATE:         return "Emulate Card";
     case STATE_NTAG_MENU:       return "Emulate NDEF";
@@ -139,6 +140,17 @@ void PN532I2cScreen::onUpdate() {
         _goScan14A();
       } else {
         _scrollView.onNav(dir);
+      }
+    }
+    return;
+  }
+  if (_state == STATE_MAGIC_DETECT) {
+    if (Uni.Nav->wasPressed()) {
+      auto dir = Uni.Nav->readDirection();
+      if (dir == INavigation::DIR_BACK) {
+        _goMagic();
+      } else if (dir == INavigation::DIR_PRESS && !_magicDetectDone) {
+        _doDetectMagic();
       }
     }
     return;
@@ -219,6 +231,10 @@ void PN532I2cScreen::onUpdate() {
 }
 
 void PN532I2cScreen::onRender() {
+  if (_state == STATE_MAGIC_DETECT) {
+    _magicLog.draw(Uni.Lcd, bodyX(), bodyY(), bodyW(), bodyH());
+    return;
+  }
   if (_state == STATE_INFO || _state == STATE_SCAN_RESULT ||
       _state == STATE_MIFARE_DUMP || _state == STATE_MIFARE_DUMP_HEX ||
       _state == STATE_MIFARE_KEYS || _state == STATE_MIFARE_KEY_DB_VIEW ||
@@ -330,7 +346,7 @@ void PN532I2cScreen::onItemSelected(uint8_t index) {
       break;
     case STATE_MAGIC_MENU:
       switch (index) {
-        case 0: _doDetectMagic(); break;
+        case 0: _goDetectMagic(); break;
         case 1: _doGen3SetUid();  break;
         case 2: _doGen3LockUid(); break;
       }
@@ -356,6 +372,9 @@ void PN532I2cScreen::onBack() {
     case STATE_ULTRALIGHT_MENU:
     case STATE_MAGIC_MENU:
       _goMain();
+      break;
+    case STATE_MAGIC_DETECT:
+      _goMagic();
       break;
     case STATE_MIFARE_TAG_MENU:
     case STATE_MIFARE_NDEF_MENU:
@@ -616,6 +635,15 @@ void PN532I2cScreen::_goNdefParent() {
 void PN532I2cScreen::_goMagic() {
   _state = STATE_MAGIC_MENU;
   setItems(_magicItems);
+  render();
+}
+
+void PN532I2cScreen::_goDetectMagic() {
+  _state = STATE_MAGIC_DETECT;
+  _magicDetectDone = false;
+  _magicLog.clear();
+  _magicLog.addLine("Detect Magic", TFT_CYAN);
+  _magicLog.addLine("[Press] Start", TFT_DARKGREY);
   render();
 }
 
@@ -3217,31 +3245,48 @@ MagicCardType PN532I2cScreen::_detectMagicType() {
 
   if (!_resetAndReselect()) return MagicCardType::NONE;
 
-  // Gen1A wakeup/unlock is transient: 0x40 as 7 bits, followed by 0x43.
-  // Require both ACKs and always reset/reselect afterwards so Scan Tag leaves
-  // the card in a normal selected state. No memory is written by this probe.
+  // Gen1A backdoor sequence. After normal ISO14443A activation the PICC is
+  // ACTIVE, but the 0x40(7-bit) wakeup is expected from HALT. Put the card in
+  // HALT first, with CRC handled explicitly, then send 0x40 / 0x43 with CRC
+  // disabled. This mirrors the established PN532 Gen1A raw-command sequence.
   bool gen1a = false;
-  if (_nfcWriteReg(_nfc, _wire, 0x633D, 0x07)) {
-    static const uint8_t wake[] = {0x40};
-    uint8_t resp[4] = {};
-    uint8_t rlen = sizeof(resp);
-    const bool ack1 = _nfcCommThru(_nfc, _wire, wake, sizeof(wake),
-                                    resp, rlen, 200) &&
-                      rlen >= 1 && resp[0] == 0x0A;
+  uint8_t resp[8] = {};
+  uint8_t rlen = sizeof(resp);
 
-    _nfcWriteReg(_nfc, _wire, 0x633D, 0x00);
+  const bool rawMode =
+      _nfcWriteReg(_nfc, _wire, 0x6302, 0x00) && // TxMode: CRC off, 106A
+      _nfcWriteReg(_nfc, _wire, 0x6303, 0x00);   // RxMode: CRC off, 106A
 
-    if (ack1) {
-      static const uint8_t unlock[] = {0x43};
+  if (rawMode) {
+    // HLTA has CRC_A 0x57CD. A halted card intentionally sends no response;
+    // _nfcCommThru still consumes the PN532 response/status, so ignore its
+    // boolean result here.
+    static const uint8_t halt[] = {0x50, 0x00, 0x57, 0xCD};
+    (void)_nfcCommThru(_nfc, _wire, halt, sizeof(halt), resp, rlen, 200);
+
+    if (_nfcWriteReg(_nfc, _wire, 0x633D, 0x07)) {
+      static const uint8_t wake[] = {0x40};
       rlen = sizeof(resp);
-      gen1a = _nfcCommThru(_nfc, _wire, unlock, sizeof(unlock),
-                           resp, rlen, 200) &&
-              rlen >= 1 && resp[0] == 0x0A;
+      const bool ack1 = _nfcCommThru(_nfc, _wire, wake, sizeof(wake),
+                                      resp, rlen, 250) &&
+                        rlen >= 1 && (resp[0] & 0x0F) == 0x0A;
+
+      _nfcWriteReg(_nfc, _wire, 0x633D, 0x00);
+
+      if (ack1) {
+        static const uint8_t unlock[] = {0x43};
+        rlen = sizeof(resp);
+        gen1a = _nfcCommThru(_nfc, _wire, unlock, sizeof(unlock),
+                             resp, rlen, 250) &&
+                rlen >= 1 && (resp[0] & 0x0F) == 0x0A;
+      }
     }
-  } else {
-    _nfcWriteReg(_nfc, _wire, 0x633D, 0x00);
   }
 
+  // Restore normal ISO14443A CRC/framing before leaving the raw probe.
+  _nfcWriteReg(_nfc, _wire, 0x633D, 0x00);
+  _nfcWriteReg(_nfc, _wire, 0x6302, 0x80);
+  _nfcWriteReg(_nfc, _wire, 0x6303, 0x80);
   _resetAndReselect();
   return gen1a ? MagicCardType::GEN1A : MagicCardType::NONE;
 }
@@ -3267,21 +3312,48 @@ bool PN532I2cScreen::_writeMagicUid(MagicCardType type, const uint8_t* sourceUid
   } else if (type == MagicCardType::GEN1A) {
     const uint8_t bcc = (uint8_t)(sourceUid[0] ^ sourceUid[1] ^ sourceUid[2] ^ sourceUid[3]);
 
-    // Enter the Gen1A backdoor with the exact 7-bit wakeup used by detection.
-    if (!_nfcWriteReg(_nfc, _wire, 0x633D, 0x07)) return false;
+    // Enter the Gen1A backdoor from HALT, using the same raw sequence as
+    // detection. Gen1A 0x40 must be sent as 7 bits with CRC disabled.
     uint8_t resp[8] = {};
     uint8_t rlen = sizeof(resp);
+    const bool rawMode =
+        _nfcWriteReg(_nfc, _wire, 0x6302, 0x00) &&
+        _nfcWriteReg(_nfc, _wire, 0x6303, 0x00);
+    if (!rawMode) {
+      _nfcWriteReg(_nfc, _wire, 0x6302, 0x80);
+      _nfcWriteReg(_nfc, _wire, 0x6303, 0x80);
+      return false;
+    }
+
+    static const uint8_t halt[] = {0x50, 0x00, 0x57, 0xCD};
+    (void)_nfcCommThru(_nfc, _wire, halt, sizeof(halt), resp, rlen, 200);
+
+    if (!_nfcWriteReg(_nfc, _wire, 0x633D, 0x07)) {
+      _nfcWriteReg(_nfc, _wire, 0x6302, 0x80);
+      _nfcWriteReg(_nfc, _wire, 0x6303, 0x80);
+      return false;
+    }
     static const uint8_t wake[] = {0x40};
+    rlen = sizeof(resp);
     const bool ack1 = _nfcCommThru(_nfc, _wire, wake, sizeof(wake),
                                     resp, rlen, 250) &&
-                      rlen >= 1 && resp[0] == 0x0A;
+                      rlen >= 1 && (resp[0] & 0x0F) == 0x0A;
     _nfcWriteReg(_nfc, _wire, 0x633D, 0x00);
-    if (!ack1) { _resetAndReselect(); return false; }
+    if (!ack1) {
+      _nfcWriteReg(_nfc, _wire, 0x6302, 0x80);
+      _nfcWriteReg(_nfc, _wire, 0x6303, 0x80);
+      _resetAndReselect();
+      return false;
+    }
 
     static const uint8_t unlock[] = {0x43};
     rlen = sizeof(resp);
-    if (!_nfcCommThru(_nfc, _wire, unlock, sizeof(unlock),
-                      resp, rlen, 250) || rlen < 1 || resp[0] != 0x0A) {
+    const bool ack2 = _nfcCommThru(_nfc, _wire, unlock, sizeof(unlock),
+                                    resp, rlen, 250) &&
+                      rlen >= 1 && (resp[0] & 0x0F) == 0x0A;
+    _nfcWriteReg(_nfc, _wire, 0x6302, 0x80);
+    _nfcWriteReg(_nfc, _wire, 0x6303, 0x80);
+    if (!ack2) {
       _resetAndReselect();
       return false;
     }
@@ -3314,35 +3386,57 @@ bool PN532I2cScreen::_writeMagicUid(MagicCardType type, const uint8_t* sourceUid
 }
 
 void PN532I2cScreen::_doDetectMagic() {
-  ShowStatusAction::show("Place card on reader...", 0);
-  uint8_t uid[7]; uint8_t uidLen;
+  _magicLog.addLine("Scanning card...", TFT_WHITE);
+  render();
+
+  uint8_t uid[7] = {};
+  uint8_t uidLen = 0;
   uint32_t start = millis();
   bool ok = false;
   while (millis() - start < 5000) {
     Uni.update();
     if (Uni.Nav->wasPressed() &&
-        Uni.Nav->readDirection() == INavigation::DIR_BACK) { _goMagic(); return; }
-    if (_nfc->readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLen, 200)) { ok = true; break; }
+        Uni.Nav->readDirection() == INavigation::DIR_BACK) {
+      _goMagic();
+      return;
+    }
+    if (_nfc->readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLen, 200)) {
+      ok = true;
+      break;
+    }
     delay(50);
   }
-  if (!ok) { ShowStatusAction::show("No card"); _goMagic(); return; }
 
-  const uint16_t atqa = ((uint16_t)pn532_packetbuffer[9] << 8) | pn532_packetbuffer[10];
-  const uint8_t sak = pn532_packetbuffer[11];
-  (void)atqa;
-  if (sak != 0x09 && sak != 0x08 && sak != 0x18) {
-    ShowStatusAction::show("Not MIFARE Classic");
-    _goMagic();
+  if (!ok) {
+    _magicLog.addLine("No card", TFT_DARKGREY);
+    _magicDetectDone = true;
+    render();
     return;
   }
 
+  const uint8_t sak = pn532_packetbuffer[11];
+  if (sak != 0x09 && sak != 0x08 && sak != 0x18) {
+    _magicLog.addLine("Not MIFARE Classic", TFT_DARKGREY);
+    _magicDetectDone = true;
+    render();
+    return;
+  }
+
+  _magicLog.addLine("Checking Magic type...", TFT_WHITE);
+  render();
+
   const MagicCardType magic = _detectMagicType();
+  _magicLog.addLine("Magic type:", TFT_CYAN);
+  _magicLog.addLine(magicCardTypeName(magic),
+                    magic == MagicCardType::NONE ? TFT_DARKGREY : TFT_GREEN);
+
   if (magic != MagicCardType::NONE) {
     int n = Achievement.inc("pn532_magic_detect");
     if (n == 1) Achievement.unlock("pn532_magic_detect");
   }
-  ShowStatusAction::show(magicCardTypeName(magic));
-  _goMagic();
+
+  _magicDetectDone = true;
+  render();
 }
 
 void PN532I2cScreen::_doGen3SetUid() {
@@ -3745,7 +3839,25 @@ void PN532I2cScreen::_doSaveDump() {
 
   String uid = _hexUid(_uid, _uidLen);
   uid.replace(":", "");
-  String path = String(_dumpPath) + "/" + uid + ".bin";
+
+  // Match the Chameleon Classic dump naming convention exactly:
+  // MF-Mini_<UID>, MF-1K_<UID>, or MF-4K_<UID>.
+  const char* typeName = (_sak == 0x09) ? "MF-Mini"
+                       : (_sak == 0x18) ? "MF-4K"
+                                        : "MF-1K";
+  String suggested = String(typeName) + "_" + uid;
+
+  String name = InputTextAction::popup("Save dump", suggested);
+  if (InputTextAction::wasCancelled() || name.length() == 0) {
+    render();
+    return;
+  }
+
+  // Keep the editor focused on the basename, as in the Chameleon dump flow.
+  // The storage format remains a raw .bin file.
+  if (name.endsWith(".bin")) name.remove(name.length() - 4);
+  String filename = name + ".bin";
+  String path = String(_dumpPath) + "/" + filename;
 
   fs::File f = Uni.Storage->open(path.c_str(), "w");
   if (!f) { ShowStatusAction::show("Save failed"); render(); return; }
@@ -3755,12 +3867,15 @@ void PN532I2cScreen::_doSaveDump() {
     render();
     return;
   }
-  f.write(_dumpImg, _dumpLen);
+  const bool ok = f.write(_dumpImg, _dumpLen) == _dumpLen;
   f.close();
 
-  char msg[48];
-  snprintf(msg, sizeof(msg), "Saved: %s.bin", uid.c_str());
-  ShowStatusAction::show(msg);
+  if (ok) {
+    String msg = String("Saved: ") + filename;
+    ShowStatusAction::show(msg.c_str());
+  } else {
+    ShowStatusAction::show("Save failed");
+  }
   render();
 }
 

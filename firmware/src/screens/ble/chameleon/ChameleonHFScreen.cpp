@@ -33,13 +33,11 @@ void ChameleonHFScreen::_draw() {
   sp.fillSprite(TFT_BLACK);
   sp.setTextDatum(MC_DATUM);
 
-  sp.setTextColor(TFT_CYAN, TFT_BLACK);
-  sp.drawString("HF Card Reader", bw / 2, bh / 2 - 28);
   sp.setTextColor(TFT_DARKGREY, TFT_BLACK);
-  sp.drawString("Place ISO14443 card near", bw / 2, bh / 2 - 10);
-  sp.drawString("Chameleon reader face", bw / 2, bh / 2 + 6);
+  sp.drawString("Place ISO14443A tag near", bw / 2, bh / 2 - 10);
+  sp.drawString("Chameleon reader", bw / 2, bh / 2 + 6);
   sp.setTextColor(TFT_WHITE, TFT_BLACK);
-  sp.drawString("Press to scan", bw / 2, bh / 2 + 24);
+  sp.drawString("[Press] Scan", bw / 2, bh / 2 + 24);
 
   sp.pushSprite(bx, by);
   sp.deleteSprite();

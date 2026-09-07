@@ -4,7 +4,7 @@
 
 class ChameleonHFScreen : public BaseScreen {
 public:
-  const char* title() override { return "HF Reader"; }
+  const char* title() override { return "Scan Tag"; }
   bool inhibitPowerOff() override { return _scanning; }
 
   void onInit()   override;

@@ -19,8 +19,6 @@ void ChameleonLFScreen::_draw() {
   sp.fillSprite(TFT_BLACK);
   sp.setTextDatum(MC_DATUM);
 
-  sp.setTextColor(TFT_CYAN, TFT_BLACK);
-  sp.drawString("LF Card Reader", bw / 2, bh / 2 - 28);
   sp.setTextColor(TFT_DARKGREY, TFT_BLACK);
   sp.drawString("Place EM410X card near", bw / 2, bh / 2 - 10);
   sp.drawString("Chameleon reader", bw / 2, bh / 2 + 6);

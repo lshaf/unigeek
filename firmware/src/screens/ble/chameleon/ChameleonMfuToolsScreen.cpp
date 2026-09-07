@@ -97,8 +97,8 @@ void ChameleonMfuToolsScreen::_writeFromSlot() {
 
 void ChameleonMfuToolsScreen::_writeTag() {
   static const InputSelectAction::Option opts[] = {
-    {"from File", "file"},
-    {"from Slot", "slot"},
+    {"From File", "file"},
+    {"From Slot", "slot"},
   };
   const char* r = InputSelectAction::popup("Write to Tag", opts, 2, nullptr);
   if (!r) { render(); return; }
