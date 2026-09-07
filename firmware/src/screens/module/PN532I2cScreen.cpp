@@ -3634,7 +3634,18 @@ void PN532I2cScreen::_doWriteDumpFileSelected(uint8_t fileIndex) {
   if (!dump) { f.close(); ShowStatusAction::show("Out of memory"); _goMifareTag(); return; }
   size_t got = f.read(dump, len); f.close();
   if (got != len) { free(dump); ShowStatusAction::show("Read failed"); _goMifareTag(); return; }
-  _showWriteDumpPreview(dump, len, nullptr, 0, true);
+
+  // A raw MIFARE Classic dump carries the original 4-byte UID in block 0.
+  // Trust it only when the manufacturer-block BCC is valid; otherwise keep
+  // the conservative file-source behaviour (UID Unknown / target preserved).
+  uint8_t sourceUid[4] = { dump[0], dump[1], dump[2], dump[3] };
+  const bool sourceUidKnown =
+      dump[4] == (uint8_t)(sourceUid[0] ^ sourceUid[1] ^ sourceUid[2] ^ sourceUid[3]);
+
+  _showWriteDumpPreview(dump, len,
+                        sourceUidKnown ? sourceUid : nullptr,
+                        sourceUidKnown ? 4 : 0,
+                        true);
   free(dump);
 }
 

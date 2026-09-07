@@ -670,10 +670,35 @@ void ChameleonSlotEditScreen::_downloadDump() {
     return;
   }
 
+  // Use the same dump basename convention as Read Tag -> Save Dump:
+  // <canonical tag type>_<UID>. Keep tagTypeName() spelling exactly
+  // (MF-1K, MF-4K, NTAG215, ...).
   String typeName = ChameleonClient::tagTypeName(_hfType);
-  typeName.toLowerCase();
-  typeName.replace("-", "");
-  String suggested = typeName + "_slot_" + String(_slot + 1);
+  String uid;
+
+  if (_isMfClassicType(_hfType) && dumpSize >= 16) {
+    const uint8_t bcc = dump[0] ^ dump[1] ^ dump[2] ^ dump[3];
+    if (dump[4] == bcc) {
+      char uidBuf[9];
+      snprintf(uidBuf, sizeof(uidBuf), "%02X%02X%02X%02X",
+               dump[0], dump[1], dump[2], dump[3]);
+      uid = uidBuf;
+    }
+  } else if (dumpSize >= 12) {
+    // Type-2 manufacturer pages: UID0..2/BCC0, UID3..6, BCC1.
+    const uint8_t bcc0 = 0x88 ^ dump[0] ^ dump[1] ^ dump[2];
+    const uint8_t bcc1 = dump[4] ^ dump[5] ^ dump[6] ^ dump[7];
+    if (dump[3] == bcc0 && dump[8] == bcc1) {
+      char uidBuf[15];
+      snprintf(uidBuf, sizeof(uidBuf), "%02X%02X%02X%02X%02X%02X%02X",
+               dump[0], dump[1], dump[2], dump[4], dump[5], dump[6], dump[7]);
+      uid = uidBuf;
+    }
+  }
+
+  String suggested = uid.length()
+      ? typeName + "_" + uid
+      : typeName + "_slot_" + String(_slot + 1);
 
   String name = InputTextAction::popup("File name", suggested);
   if (InputTextAction::wasCancelled()) {
