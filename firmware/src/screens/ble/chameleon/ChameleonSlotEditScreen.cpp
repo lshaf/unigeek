@@ -743,7 +743,7 @@ void ChameleonSlotEditScreen::_writeContent() {
       if (n == 1) Achievement.unlock("chameleon_slot_loaded");
     }
   } else {
-    String hex = InputTextAction::popup("EM410X UID (10 hex)");
+    String hex = InputTextAction::popup("EM410X UID (10 hex)", "", InputTextAction::INPUT_HEX);
     if (InputTextAction::wasCancelled() || hex.length() == 0) { render(); return; }
 
     // Restore the Slot Edit screen before the blocking BLE write begins.
