@@ -77,6 +77,11 @@ static bool _nfcDataExch(Adafruit_PN532* nfc, TwoWire* wire,
 
 // ── title ──────────────────────────────────────────────────────────────────
 
+static void renderOperationTitle(const char* title) {
+  Header header;
+  header.render(title);
+}
+
 const char* PN532I2cScreen::title() {
   switch (_state) {
     case STATE_MAIN_MENU:       return "PN532 I2C";
@@ -278,6 +283,7 @@ void PN532I2cScreen::onItemSelected(uint8_t index) {
           _ndefTarget = NDEF_TARGET_MIFARE_CLASSIC;
           // Standalone Format NDEF must establish the same card context as
           // Read/Write NDEF before checking Classic dimensions.
+          renderOperationTitle("Format NDEF");
           if (_scanCardOrShow(5000)) _formatClassic1kNdef();
           _goMifareNdef();
           break;
@@ -1093,6 +1099,7 @@ void PN532I2cScreen::_doAuthenticate() {
 }
 
 void PN532I2cScreen::_doReadTag() {
+  renderOperationTitle("Read Tag");
   if (!_scanCardOrShow(5000)) { _goMifareTag(); return; }
   if (_mfDims(_sak).first == 0) { ShowStatusAction::show("Not MIFARE Classic"); _goMifareTag(); return; }
 
@@ -1638,6 +1645,7 @@ void PN532I2cScreen::_doDictionaryAttackWithFile(uint8_t fileIndex) {
 }
 
 void PN532I2cScreen::_doUltralightDump() {
+  renderOperationTitle("Read Pages");
   ShowStatusAction::show("Place UL/NTAG on reader...", 0);
   uint8_t uid[7]; uint8_t uidLen;
   uint32_t start = millis();
@@ -1723,6 +1731,7 @@ void PN532I2cScreen::_doUltralightWrite() {
 
 
 void PN532I2cScreen::_doReadNdef() {
+  renderOperationTitle("Read NDEF");
   _ndefTarget = NDEF_TARGET_ULTRALIGHT;
   _hasNdef = false;
   _ndefLen = 0;
@@ -2132,6 +2141,7 @@ bool PN532I2cScreen::_classicReadNdefArea(const uint8_t* sectors,
 }
 
 void PN532I2cScreen::_doReadClassicNdef() {
+  renderOperationTitle("Read NDEF");
   _ndefTarget = NDEF_TARGET_MIFARE_CLASSIC;
   _hasNdef = false;
   _ndefLen = 0;
@@ -2467,6 +2477,7 @@ bool PN532I2cScreen::_writeClassicNdefRecord(const uint8_t* ndef, size_t ndefLen
 }
 
 void PN532I2cScreen::_doEraseClassicNdef() {
+  renderOperationTitle("Erase NDEF");
   _ndefTarget = NDEF_TARGET_MIFARE_CLASSIC;
 
   if (!_scanCardOrShow(5000)) {
@@ -2522,6 +2533,7 @@ void PN532I2cScreen::_doEraseClassicNdef() {
 
 
 bool PN532I2cScreen::_writeNdefRecord(const uint8_t* ndef, size_t ndefLen) {
+  renderOperationTitle("Write NDEF");
   if (_ndefTarget == NDEF_TARGET_MIFARE_CLASSIC) {
     return _writeClassicNdefRecord(ndef, ndefLen);
   }
@@ -3039,6 +3051,7 @@ void PN532I2cScreen::_doWriteNdefFileSelected(uint8_t fileIndex) {
 }
 
 void PN532I2cScreen::_doEraseNdef() {
+  renderOperationTitle("Erase NDEF");
   _ndefTarget = NDEF_TARGET_ULTRALIGHT;
   ShowStatusAction::show("Place UL/NTAG on reader...", 0);
 
@@ -3293,6 +3306,7 @@ bool PN532I2cScreen::_tryWriteMifareBlock(uint16_t block, const uint8_t data[16]
 }
 
 void PN532I2cScreen::_doWriteDumpToTag(const uint8_t* dump, size_t len) {
+  renderOperationTitle("Write to Tag");
   if (!dump || (len != 320 && len != 1024 && len != 4096)) {
     ShowStatusAction::show("Invalid dump"); return;
   }
@@ -3363,6 +3377,7 @@ void PN532I2cScreen::_doWriteDumpToTag(const uint8_t* dump, size_t len) {
 }
 
 void PN532I2cScreen::_doEraseTag() {
+  renderOperationTitle("Erase Tag");
   if (!_scanCardOrShow(5000)) { _goMifareTag(); return; }
   auto dims = _mfDims(_sak);
   if (dims.first == 0) { ShowStatusAction::show("Not MIFARE Classic"); _goMifareTag(); return; }

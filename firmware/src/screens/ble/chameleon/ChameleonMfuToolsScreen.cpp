@@ -5,6 +5,7 @@
 #include "core/ScreenManager.h"
 #include "ui/actions/InputSelectAction.h"
 #include "ui/actions/ShowStatusAction.h"
+#include "ui/components/Header.h"
 #include "ui/views/ProgressView.h"
 #include "utils/nfc/NfcDumpBuilder.h"
 
@@ -107,6 +108,7 @@ void ChameleonMfuToolsScreen::_writeTag() {
 
 
 void ChameleonMfuToolsScreen::_eraseTag() {
+  Header header; header.render("Erase Tag");
   auto& c = ChameleonClient::get();
 
   uint8_t previousMode = 0;

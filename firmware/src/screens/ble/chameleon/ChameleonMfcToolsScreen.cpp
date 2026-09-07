@@ -5,6 +5,7 @@
 #include "core/ScreenManager.h"
 #include "ui/actions/InputSelectAction.h"
 #include "ui/actions/ShowStatusAction.h"
+#include "ui/components/Header.h"
 #include "ui/views/ProgressView.h"
 
 
@@ -135,6 +136,7 @@ void ChameleonMfcToolsScreen::_writeTag() {
 
 
 void ChameleonMfcToolsScreen::_eraseTag() {
+  Header header; header.render("Erase Tag");
   auto& c = ChameleonClient::get();
   uint8_t previousMode = 0; const bool restoreMode = c.getMode(&previousMode); c.setMode(1);
   auto& lcd = Uni.Lcd; const int bx=bodyX(),by=bodyY(),bw=bodyW(),bh=bodyH();

@@ -7,12 +7,14 @@
 #include "ui/actions/InputSelectAction.h"
 #include "ui/actions/InputTextAction.h"
 #include "ui/actions/ShowStatusAction.h"
+#include "ui/components/Header.h"
 #include "ui/views/ProgressView.h"
 
 #include <cstring>
 #include <ctype.h>
 
 namespace {
+static void renderOperationTitle(const char* title) { Header header; header.render(title); }
 static constexpr uint8_t MAD_KEY_A[6] = {0xA0,0xA1,0xA2,0xA3,0xA4,0xA5};
 static constexpr uint8_t NFC_KEY_A[6] = {0xD3,0xF7,0xD3,0xF7,0xD3,0xF7};
 
@@ -97,6 +99,7 @@ void ChameleonMfcNdefScreen::onItemSelected(uint8_t index) {
     else if (index == 2) _doErase();
     else if (index == 3) {
       _running = true;
+      renderOperationTitle("Format NDEF");
       if (_scanClassic()) _formatClassic1kNdef();
       _running = false;
       ChameleonClient::get().setMode(0);
@@ -279,6 +282,7 @@ bool ChameleonMfcNdefScreen::_readNdefArea(const uint8_t* sectors,
 }
 
 void ChameleonMfcNdefScreen::_doRead() {
+  renderOperationTitle("Read NDEF");
   _running = true;
   _hasNdef = false;
   _ndefLen = 0;
@@ -503,6 +507,7 @@ bool ChameleonMfcNdefScreen::_formatClassic1kNdef() {
 }
 
 bool ChameleonMfcNdefScreen::_writeNdefRecord(const uint8_t* ndef, size_t ndefLen) {
+  renderOperationTitle("Write NDEF");
   if (!ndef || !ndefLen || ndefLen > MAX_NDEF_BYTES) {
     ShowStatusAction::show("NDEF too large"); return false;
   }
@@ -584,6 +589,7 @@ bool ChameleonMfcNdefScreen::_writeNdefRecord(const uint8_t* ndef, size_t ndefLe
 }
 
 void ChameleonMfcNdefScreen::_doErase() {
+  renderOperationTitle("Erase NDEF");
   _running = true;
   if (!_scanClassic()) { _running = false; _goMenu(); return; }
   uint8_t sectors[39] = {}; size_t count = 0;

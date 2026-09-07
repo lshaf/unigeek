@@ -20,7 +20,7 @@ private:
   ScrollListView _view; ScrollListView::Row _rows[24]; String _l[24],_v[24]; uint8_t _n=0;
   BrowseFileView _browser; String _pickDir;
   void goMenu(); void goWrite(); bool readImage(uint8_t*& img,size_t& len,uint8_t uid[7]);
-  bool writeRecord(const uint8_t* ndef,size_t len); bool format(); void read(); void erase();
+  bool writeRecord(const uint8_t* ndef,size_t len,const char* opTitle); bool format(const char* opTitle); void read(); void erase();
   void show(const uint8_t* ndef,size_t len,const uint8_t uid[7]); void add(const String&,const String&);
   void writeBuilt(uint8_t kind); void files(); void fileSelected(uint8_t index);
 };

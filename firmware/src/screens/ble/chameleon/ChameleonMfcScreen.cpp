@@ -6,6 +6,7 @@
 #include "ui/actions/ShowStatusAction.h"
 #include "ui/actions/InputTextAction.h"
 #include "ui/actions/InputSelectAction.h"
+#include "ui/components/Header.h"
 #include "ui/views/ProgressView.h"
 #include "ChameleonMfcWriteScreen.h"
 #include "utils/nfc/NdefParser.h"
@@ -64,11 +65,11 @@ uint16_t ChameleonMfcScreen::_totalBlocks() {
 
 const char* ChameleonMfcScreen::title() {
   switch (_state) {
-    case STATE_AUTH:               return "MF Classic";
+    case STATE_AUTH:               return "Read Tag";
     case STATE_MF_MENU:            return "MIFARE Classic";
     case STATE_SHOW_KEYS:          return "Discovered Keys";
-    case STATE_DUMP:
-    case STATE_DUMP_RESULT:        return "Dump Memory";
+    case STATE_DUMP:               return "Read Tag";
+    case STATE_DUMP_RESULT:        return "Tag Details";
     case STATE_DICT_SEL:
     case STATE_DICT_RUN:
     case STATE_DICT_LOG:           return "Dictionary Attack";
@@ -708,6 +709,7 @@ void ChameleonMfcScreen::_buildDumpHex() {
 }
 
 void ChameleonMfcScreen::_loadDumpToSlot() {
+  Header header; header.render("Load Dump to Slot");
   if (!_dump || !_dumpLen) return;
   const uint16_t tagType = _sectors == 5 ? 1000 : (_sectors == 40 ? 1003 : 1001);
 
