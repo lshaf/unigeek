@@ -30,10 +30,10 @@ void ChameleonMfuToolsScreen::onInit() {
 
 void ChameleonMfuToolsScreen::_writeFromFile() {
   static constexpr uint8_t kMax = 10;
-  uint8_t n = _browser.load(this, "/unigeek/nfc/dumps", ".bin");
+  uint8_t n = _browser.load(this, "/unigeek/nfc/dumps", BrowseFileView::Mode(BrowseFileView::Mode::FILE_ONLY, ".bin", 540));
   if (!n) {
     render();
-    ShowStatusAction::show("No .bin in nfc/dumps", 1500);
+    ShowStatusAction::show("No NTAG215 .bin", 1500);
     render();
     return;
   }

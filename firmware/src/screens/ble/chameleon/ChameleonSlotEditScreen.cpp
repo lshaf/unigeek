@@ -317,17 +317,41 @@ bool ChameleonSlotEditScreen::_writeHfFromBin(const char* path) {
   }
 
   if (_isMfClassicType(tagType)) {
-    // Existing Classic path: block 0 carries the anti-collision fields used by
-    // UniGeek's Classic .bin format.
+    // Raw Classic block 0 carries UID/SAK/ATQA using one of the standard
+    // 4-byte or 7-byte UID layouts. Do not assume a 4-byte UID: .bin files
+    // can come from the PN532, CU, or external tools.
     uint8_t block0[16] = {};
     if (f.read(block0, 16) != 16) { f.close(); restoreContext(); return false; }
-    const uint8_t uidLen = 4;
-    uint8_t acoPayload[11] = {};
+
+    uint8_t uid[7] = {};
+    uint8_t uidLen = 0;
+    uint8_t sak = 0;
+    uint8_t atqa0 = 0, atqa1 = 0;
+    const uint8_t bcc4 = block0[0] ^ block0[1] ^ block0[2] ^ block0[3];
+    if (block0[4] == bcc4 && (block0[6] & 0xC0) == 0x00) {
+      uidLen = 4;
+      memcpy(uid, block0, 4);
+      sak = block0[5];
+      atqa0 = block0[6];
+      atqa1 = block0[7];
+    } else if ((block0[8] & 0xC0) == 0x40) {
+      uidLen = 7;
+      memcpy(uid, block0, 7);
+      sak = block0[7];
+      atqa0 = block0[8];
+      atqa1 = block0[9];
+    } else {
+      f.close();
+      restoreContext();
+      return false;
+    }
+
+    uint8_t acoPayload[12] = {};
     acoPayload[0] = uidLen;
-    memcpy(acoPayload + 1, block0, uidLen);
-    acoPayload[1 + uidLen] = block0[6];
-    acoPayload[2 + uidLen] = block0[7];
-    acoPayload[3 + uidLen] = block0[5];
+    memcpy(acoPayload + 1, uid, uidLen);
+    acoPayload[1 + uidLen] = atqa0;
+    acoPayload[2 + uidLen] = atqa1;
+    acoPayload[3 + uidLen] = sak;
     acoPayload[4 + uidLen] = 0;
     uint16_t st = 0;
     if (!c.sendCommand(ChameleonClient::CMD_MF1_SET_ANTI_COLL,
@@ -706,7 +730,7 @@ void ChameleonSlotEditScreen::_writeContent() {
   if (strcmp(f, "hf") == 0) {
     // Pick a .bin file from the dumps dir via BrowseFileView (sorted + filtered).
     static constexpr uint8_t kMax = 10;
-    uint8_t n = _browser.load(this, "/unigeek/nfc/dumps", ".bin");
+    uint8_t n = _browser.load(this, "/unigeek/nfc/dumps", BrowseFileView::Mode(BrowseFileView::Mode::FILE_ONLY, ".bin"));
     if (n == 0) {
       render();
       ShowStatusAction::show("No .bin in nfc/dumps", 1500);

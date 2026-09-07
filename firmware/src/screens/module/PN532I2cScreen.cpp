@@ -3460,9 +3460,9 @@ void PN532I2cScreen::_doWriteDumpFromFilePicker() {
   if (_dumpPickDir.length() == 0) _dumpPickDir = _dumpPath;
   _browser.root = _dumpPath;
 
-  uint8_t n = _browser.load(this, _dumpPickDir, ".bin");
+  uint8_t n = _browser.load(this, _dumpPickDir, BrowseFileView::Mode(".bin", 320, 1024, 4096));
   if (n == 0 && _dumpPickDir == _dumpPath) {
-    ShowStatusAction::show("No .bin in nfc/dumps");
+    ShowStatusAction::show("No compatible Classic .bin");
     _goMifareTag();
     return;
   }

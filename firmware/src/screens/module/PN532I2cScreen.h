@@ -133,8 +133,8 @@ private:
 
   ListItem _magicItems[3] = {
     {"Detect Magic"},
-    {"Gen3 Set UID"},
-    {"Gen3 Lock UID"},
+    {"Set UID (Gen3)"},
+    {"Lock UID (Gen3)"},
   };
 
   ListItem _ntagItems[2] = {

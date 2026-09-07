@@ -16,19 +16,13 @@
 void ChameleonMagicScreen::onInit() {
   _done = false;
   _log.clear();
-  _log.addLine("Magic Card Detect", TFT_CYAN);
-  _log.addLine("[OK] start  [Hold] back", TFT_DARKGREY);
+  _log.addLine("Detect Magic", TFT_CYAN);
+  _log.addLine("[Press] Start", TFT_DARKGREY);
   _needsDraw = true;
 }
 
 void ChameleonMagicScreen::onUpdate() {
   if (_running) return;
-
-  if (Uni.Nav->isPressed() && Uni.Nav->heldDuration() >= 1000) {
-    Uni.Nav->suppressCurrentPress();
-    Screen.goBack();
-    return;
-  }
 
   if (Uni.Nav->wasPressed()) {
     auto dir = Uni.Nav->readDirection();
@@ -36,9 +30,8 @@ void ChameleonMagicScreen::onUpdate() {
       Screen.goBack();
       return;
     }
-    if (dir == INavigation::DIR_PRESS) {
-      if (!_done) _run();
-      else Screen.goBack();
+    if (dir == INavigation::DIR_PRESS && !_done) {
+      _run();
     }
   }
 }
@@ -66,7 +59,7 @@ void ChameleonMagicScreen::_run() {
   } else if (sak != 0x01 && sak != 0x08 && sak != 0x18) {
     _log.addLine("Not MIFARE Classic", TFT_DARKGREY);
   } else {
-    _log.addLine("Read-only Magic probes...", TFT_WHITE);
+    _log.addLine("Checking Magic type...", TFT_WHITE);
     _needsDraw = true; onRender();
 
     const MagicCardType magic = c.detectMagicType();
