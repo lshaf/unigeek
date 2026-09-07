@@ -149,7 +149,7 @@ void ChameleonMfcScreen::_callAuth() {
     c.setMode(0);
     _running = false;
     render();
-    ShowStatusAction::show("No card detected", 1200);
+    ShowStatusAction::show("No tag detected", 1200);
     Screen.goBack();
     return;
   }
@@ -1095,7 +1095,7 @@ void ChameleonMfcScreen::_callStaticNested() {
   // ── Confirm static nonce via mf1NTLevel (1=static, 2=weak, 3=hard) ────────
   uint8_t ntLevel = 0;
   if (!c.mf1NTLevel(&ntLevel) || ntLevel != 1) {
-    snprintf(m, sizeof(m), "Not a static-nonce card (NTLevel=%d) — abort", (int)ntLevel);
+    snprintf(m, sizeof(m), "Not a static-nonce tag (NTLevel=%d) — abort", (int)ntLevel);
     _log(m, ntLevel == 0 ? TFT_RED : TFT_YELLOW);
     c.setMode(0);
     _running = false; _state = STATE_STATIC_NESTED_LOG; return;

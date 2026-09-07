@@ -172,7 +172,7 @@ bool ChameleonMfcNdefScreen::_scanClassic() {
   uint8_t atqa[2] = {}, sak = 0;
   if (!c.scan14A(_uid, &_uidLen, atqa, &sak)) {
     c.setMode(0);
-    ShowStatusAction::show("No card detected");
+    ShowStatusAction::show("No tag detected");
     return false;
   }
   if (!c.mf1Support()) {

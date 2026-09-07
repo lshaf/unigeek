@@ -50,12 +50,12 @@ void ChameleonMagicScreen::_run() {
   const bool restoreMode = c.getMode(&previousMode);
   c.setMode(1);
 
-  _log.addLine("Scanning card...", TFT_WHITE);
+  _log.addLine("Scanning tag...", TFT_WHITE);
   _needsDraw = true; onRender();
 
   uint8_t uid[7] = {}, uidLen = 0, atqa[2] = {}, sak = 0;
   if (!c.scan14A(uid, &uidLen, atqa, &sak)) {
-    _log.addLine("No card", TFT_DARKGREY);
+    _log.addLine("No tag", TFT_DARKGREY);
   } else if (sak != 0x01 && sak != 0x08 && sak != 0x18) {
     _log.addLine("Not MIFARE Classic", TFT_DARKGREY);
   } else {
