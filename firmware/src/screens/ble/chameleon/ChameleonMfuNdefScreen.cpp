@@ -11,7 +11,7 @@
 #include "ui/views/ProgressView.h"
 
 namespace { void operationTitle(const char* t){Header h;h.render(t);} void prog(uint16_t d,uint16_t t){char m[36];snprintf(m,sizeof(m),"Writing pages (%u/%u)...",(unsigned)d,(unsigned)t);ProgressView::progress(m,t?(int)((uint32_t)d*100u/t):0);} }
-const char* ChameleonMfuNdefScreen::title(){return _state==WRITE_MENU?"Write NDEF":_state==RESULT?"NDEF Result":_state==FILE_SELECT?"NDEF Files":"NDEF Operations";}
+const char* ChameleonMfuNdefScreen::title(){return _state==WRITE_MENU?"Write NDEF":_state==RESULT?"NDEF Details":_state==FILE_SELECT?"NDEF Files":"NDEF Operations";}
 void ChameleonMfuNdefScreen::onInit(){goMenu();}
 void ChameleonMfuNdefScreen::goMenu(){_state=MENU;setItems(_menu);render();}
 void ChameleonMfuNdefScreen::goWrite(){_state=WRITE_MENU;setItems(_write);render();}

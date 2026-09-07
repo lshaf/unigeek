@@ -108,7 +108,7 @@ const char* PN532I2cScreen::title() {
     case STATE_EMULATE:         return "Emulate Card";
     case STATE_NTAG_MENU:       return "Emulate NDEF";
     case STATE_NDEF_WRITE_MENU: return "Write NDEF";
-    case STATE_NDEF_RESULT:     return "NDEF Result";
+    case STATE_NDEF_RESULT:     return "NDEF Details";
     case STATE_NDEF_FILE_SELECT:return "NDEF Files";
   }
   return "PN532 I2C";
@@ -2481,12 +2481,12 @@ void PN532I2cScreen::_doEraseClassicNdef() {
   _ndefTarget = NDEF_TARGET_MIFARE_CLASSIC;
 
   if (!_scanCardOrShow(5000)) {
-    _goMifare();
+    _goMifareNdef();
     return;
   }
   if (_mfDims(_sak).first == 0) {
     ShowStatusAction::show("Not MIFARE Classic");
-    _goMifare();
+    _goMifareNdef();
     return;
   }
 
@@ -2494,7 +2494,7 @@ void PN532I2cScreen::_doEraseClassicNdef() {
   size_t sectorCount = 0;
   if (!_classicNdefSectors(sectors, sizeof(sectors), sectorCount)) {
     ShowStatusAction::show("Not NDEF formatted");
-    _goMifare();
+    _goMifareNdef();
     return;
   }
 
@@ -2504,7 +2504,7 @@ void PN532I2cScreen::_doEraseClassicNdef() {
 
   if (!_classicAuthSector(sectors[0], NFC_KEY_A)) {
     ShowStatusAction::show("NDEF sector locked");
-    _goMifare();
+    _goMifareNdef();
     return;
   }
 
@@ -2514,7 +2514,7 @@ void PN532I2cScreen::_doEraseClassicNdef() {
   uint8_t block[16] = {};
   if (!_nfc->mifareclassic_ReadDataBlock(blockNo, block)) {
     ShowStatusAction::show("Read failed");
-    _goMifare();
+    _goMifareNdef();
     return;
   }
 
@@ -2528,7 +2528,7 @@ void PN532I2cScreen::_doEraseClassicNdef() {
   _hasNdef = false;
   _ndefLen = 0;
   ShowStatusAction::show(success ? "NDEF erased" : "NDEF erase failed");
-  _goMifare();
+  _goMifareNdef();
 }
 
 
@@ -3064,7 +3064,7 @@ void PN532I2cScreen::_doEraseNdef() {
     Uni.update();
     if (Uni.Nav->wasPressed() &&
         Uni.Nav->readDirection() == INavigation::DIR_BACK) {
-      _goUltralight();
+      _goUltralightNdef();
       return;
     }
 
@@ -3077,7 +3077,7 @@ void PN532I2cScreen::_doEraseNdef() {
 
   if (!ok) {
     ShowStatusAction::show("No card");
-    _goUltralight();
+    _goUltralightNdef();
     return;
   }
 
@@ -3085,13 +3085,13 @@ void PN532I2cScreen::_doEraseNdef() {
   uint8_t cc[4] = {};
   if (!_nfc->mifareultralight_ReadPage(3, cc)) {
     ShowStatusAction::show("Failed to read CC");
-    _goUltralight();
+    _goUltralightNdef();
     return;
   }
 
   if (cc[0] != 0xE1) {
     ShowStatusAction::show("Not NDEF formatted");
-    _goUltralight();
+    _goUltralightNdef();
     return;
   }
 
@@ -3106,7 +3106,7 @@ void PN532I2cScreen::_doEraseNdef() {
   bool success = _nfc->mifareultralight_WritePage(4, emptyNdef);
 
   ShowStatusAction::show(success ? "NDEF erased" : "NDEF erase failed");
-  _goUltralight();
+  _goUltralightNdef();
 }
 
 void PN532I2cScreen::_doDetectGen1a() {

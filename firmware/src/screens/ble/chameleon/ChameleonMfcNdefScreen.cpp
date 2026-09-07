@@ -32,7 +32,7 @@ static uint8_t madCrc8(const uint8_t* data, size_t len) {
 const char* ChameleonMfcNdefScreen::title() {
   switch (_state) {
     case STATE_WRITE_MENU: return "Write NDEF";
-    case STATE_RESULT: return "NDEF Result";
+    case STATE_RESULT: return "NDEF Details";
     case STATE_FILE_SELECT: return "NDEF Files";
     default: return "NDEF Operations";
   }
