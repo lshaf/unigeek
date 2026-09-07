@@ -1153,12 +1153,11 @@ void PN532I2cScreen::_doDumpMemory() {
     memcpy(&_dumpImg[trailerBlock * 16], kTrailer, 16);
   }
 
-  _dumpImg[0] = _uid[0]; _dumpImg[1] = _uid[1];
-  _dumpImg[2] = _uid[2]; _dumpImg[3] = _uid[3];
-  _dumpImg[4] = _uid[0] ^ _uid[1] ^ _uid[2] ^ _uid[3];
-  _dumpImg[5] = _sak;
-  _dumpImg[6] = (_atqa >> 8) & 0xFF;
-  _dumpImg[7] = _atqa & 0xFF;
+  // Keep block 0 as raw memory. SAK and ATQA are anticollision metadata and
+  // are not part of the MIFARE Classic manufacturer block. The normal read
+  // loop below fills all 16 bytes when block 0 is readable; otherwise the
+  // zero-initialized bytes correctly remain unknown instead of fabricating
+  // a non-standard manufacturer block.
 
   int readCount = 0;
   ProgressView::init();
@@ -1195,6 +1194,26 @@ void PN532I2cScreen::_doDumpMemory() {
     if (!_nfc->mifareclassic_ReadDataBlock((uint8_t)blk, data)) continue;
     readCount++;
     memcpy(&_dumpImg[blk * 16], data, 16);
+  }
+
+  // A MIFARE Classic trailer read does not expose Key A as ordinary memory,
+  // and Key B may also be hidden by the access conditions. Reinsert keys that
+  // UniGeek actually discovered so the saved raw image is useful as a complete
+  // Classic dump, matching the Chameleon Ultra dump path. Preserve the access
+  // bits and GPB exactly as read.
+  for (size_t sector = 0; sector < totalSectors; ++sector) {
+    const size_t trailerBlock =
+        (sector < 32) ? (sector * 4 + 3)
+                      : (128 + (sector - 32) * 16 + 15);
+    uint8_t* trailer = &_dumpImg[trailerBlock * 16];
+    if (_mfKeys[sector].first) {
+      const auto& keyA = _mfKeys[sector].first.value();
+      memcpy(trailer, keyA.data(), 6);
+    }
+    if (_mfKeys[sector].second) {
+      const auto& keyB = _mfKeys[sector].second.value();
+      memcpy(trailer + 10, keyB.data(), 6);
+    }
   }
 
   _dumpComplete = (readCount == (int)totalBlocks);
@@ -3427,12 +3446,9 @@ void PN532I2cScreen::_doWriteDumpFromFilePicker() {
   if (_dumpPickDir.length() == 0) _dumpPickDir = _dumpPath;
   _browser.root = _dumpPath;
 
-  uint8_t n = _browser.load(this, _dumpPickDir, ".dump");
+  uint8_t n = _browser.load(this, _dumpPickDir, ".bin");
   if (n == 0 && _dumpPickDir == _dumpPath) {
-    n = _browser.load(this, _dumpPickDir, ".bin");
-  }
-  if (n == 0 && _dumpPickDir == _dumpPath) {
-    ShowStatusAction::show("No dump files");
+    ShowStatusAction::show("No .bin in nfc/dumps");
     _goMifareTag();
     return;
   }
@@ -3715,7 +3731,7 @@ void PN532I2cScreen::_doSaveDump() {
 
   String uid = _hexUid(_uid, _uidLen);
   uid.replace(":", "");
-  String path = String(_dumpPath) + "/" + uid + ".dump";
+  String path = String(_dumpPath) + "/" + uid + ".bin";
 
   fs::File f = Uni.Storage->open(path.c_str(), "w");
   if (!f) { ShowStatusAction::show("Save failed"); render(); return; }
@@ -3729,7 +3745,7 @@ void PN532I2cScreen::_doSaveDump() {
   f.close();
 
   char msg[48];
-  snprintf(msg, sizeof(msg), "Saved: %s.dump", uid.c_str());
+  snprintf(msg, sizeof(msg), "Saved: %s.bin", uid.c_str());
   ShowStatusAction::show(msg);
   render();
 }
