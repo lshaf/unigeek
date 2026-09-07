@@ -3249,9 +3249,9 @@ MagicCardType PN532I2cScreen::_detectMagicType() {
 
 bool PN532I2cScreen::_writeMagicUid(MagicCardType type, const uint8_t* sourceUid,
                                        uint8_t sourceUidLen, const uint8_t block0[16]) {
-  if (!sourceUid || !block0 || !_nfc || !_wire ||
+  if (!sourceUid || !_nfc || !_wire ||
       (sourceUidLen != 4 && sourceUidLen != 7)) return false;
-  if (type == MagicCardType::GEN1A && sourceUidLen != 4) return false;
+  if (type == MagicCardType::GEN1A && (!block0 || sourceUidLen != 4)) return false;
 
   if (!_resetAndReselect()) return false;
 
@@ -3359,6 +3359,13 @@ void PN532I2cScreen::_doGen3SetUid() {
   }
   if (!ok) { ShowStatusAction::show("No card"); _goMagic(); return; }
 
+  // Fail early instead of asking for a UID that cannot be applied to this tag.
+  if (_detectMagicType() != MagicCardType::GEN3) {
+    ShowStatusAction::show("Target is not Gen3");
+    _goMagic();
+    return;
+  }
+
   String hex = InputTextAction::popup("New UID (8 or 14 hex)", "", InputTextAction::INPUT_HEX);
   if (InputTextAction::wasCancelled()) { _goMagic(); return; }
   hex.replace(" ", ""); hex.replace(":", "");
@@ -3377,24 +3384,10 @@ void PN532I2cScreen::_doGen3SetUid() {
     newUid[i] = (uint8_t)v;
   }
 
-  // Gen3 Set UID: 90 FB CC CC <len> <uid bytes> 00
-  uint8_t cmd[12];
-  cmd[0] = 0x90; cmd[1] = 0xFB; cmd[2] = 0xCC; cmd[3] = 0xCC;
-  cmd[4] = newUidLen;
-  memcpy(&cmd[5], newUid, newUidLen);
-  cmd[5 + newUidLen] = 0x00;
-  uint8_t resp[8]; uint8_t rlen = sizeof(resp);
-
-  // Restore the Magic Card screen after the UID keyboard before the
-  // blocking PN532 exchange.
+  // Use the same verified Gen3 UID writer as Write to Tag. It performs a
+  // fresh activation before the command and verifies the new UID afterwards.
   render();
-
-  bool ok2 = _nfcDataExch(_nfc, _wire, cmd, 6 + newUidLen, resp, rlen);
-
-  if (ok2) {
-    int n = Achievement.inc("pn532_magic_detect");
-    if (n == 1) Achievement.unlock("pn532_magic_detect");
-  }
+  const bool ok2 = _writeMagicUid(MagicCardType::GEN3, newUid, newUidLen, nullptr);
   ShowStatusAction::show(ok2 ? "Gen3 UID set" : "Set UID failed");
   _goMagic();
 }
@@ -3412,6 +3405,27 @@ void PN532I2cScreen::_doGen3LockUid() {
     delay(50);
   }
   if (!ok) { ShowStatusAction::show("No card"); _goMagic(); return; }
+
+  if (_detectMagicType() != MagicCardType::GEN3) {
+    ShowStatusAction::show("Target is not Gen3");
+    _goMagic();
+    return;
+  }
+
+  static const InputSelectAction::Option opts[] = {
+    {"Lock UID permanently", "lock"},
+  };
+  const char* choice = InputSelectAction::popup("Permanent UID lock", opts, 1, nullptr);
+  render();
+  if (!choice || strcmp(choice, "lock") != 0) { _goMagic(); return; }
+
+  // The confirmation overlay may leave the card idle; use a fresh activation
+  // before issuing the irreversible Gen3 lock command.
+  if (!_resetAndReselect()) {
+    ShowStatusAction::show("Card lost");
+    _goMagic();
+    return;
+  }
 
   static const uint8_t cmd[] = {0x90, 0xFD, 0x11, 0x11, 0x00};
   uint8_t resp[8]; uint8_t rlen = sizeof(resp);

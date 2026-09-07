@@ -22,6 +22,6 @@ inline const char* magicCardTypeName(MagicCardType type) {
     case MagicCardType::GEN4:  return "Gen4";
     case MagicCardType::UNKNOWN:return "Unknown Magic";
     case MagicCardType::NONE:
-    default:                   return "None";
+    default:                   return "Not detected";
   }
 }
