@@ -99,8 +99,21 @@ void BLEFoxHuntScreen::_doScan()
   _scanResults = _bleScan->start(kScanSeconds, false);
 
   _devCount = min((int)_scanResults.getCount(), (int)kMaxDevices);
+  for (int i = 0; i < _devCount; i++) _devices[i] = _scanResults.getDevice(i);
+
+  // Keep the target list stable, but order the completed scan by RSSI so the
+  // strongest nearby devices are shown first.
+  for (int i = 1; i < _devCount; ++i) {
+    NimBLEAdvertisedDevice dev = _devices[i];
+    int j = i;
+    while (j > 0 && _devices[j - 1].getRSSI() < dev.getRSSI()) {
+      _devices[j] = _devices[j - 1];
+      --j;
+    }
+    _devices[j] = dev;
+  }
+
   for (int i = 0; i < _devCount; i++) {
-    _devices[i] = _scanResults.getDevice(i);
     std::string n = _devices[i].getName();
     String addr = _devices[i].getAddress().toString().c_str();
 

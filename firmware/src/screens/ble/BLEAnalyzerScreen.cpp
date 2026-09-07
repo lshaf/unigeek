@@ -457,6 +457,18 @@ void BLEAnalyzerScreen::_doScan()
   _devCount = min((int)_scanResults.getCount(), (int)kMaxDevices);
   for (int i = 0; i < _devCount; i++) _devices[i] = _scanResults.getDevice(i);
 
+  // Present the one-shot scan snapshot from strongest to weakest signal.
+  // Insertion sort keeps equal-RSSI devices in their original scan order.
+  for (int i = 1; i < _devCount; ++i) {
+    NimBLEAdvertisedDevice dev = _devices[i];
+    int j = i;
+    while (j > 0 && _devices[j - 1].getRSSI() < dev.getRSSI()) {
+      _devices[j] = _devices[j - 1];
+      --j;
+    }
+    _devices[j] = dev;
+  }
+
   if (_devCount == 0) ShowStatusAction::show("No devices found");
 
   int ns = Achievement.inc("ble_analyzer_scan");
