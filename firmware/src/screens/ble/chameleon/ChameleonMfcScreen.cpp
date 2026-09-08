@@ -71,6 +71,7 @@ const char* ChameleonMfcScreen::title() {
     case STATE_SHOW_KEYS:          return "Check Known Keys";
     case STATE_DUMP:               return "Read Tag";
     case STATE_DUMP_RESULT:        return "Tag Details";
+    case STATE_DUMP_HEX:           return "Memory Dump";
     case STATE_DICT_SEL:
     case STATE_DICT_RUN:
     case STATE_DICT_LOG:           return "Dictionary Attack";
@@ -653,24 +654,24 @@ void ChameleonMfcScreen::_buildDumpPreview() {
         break;
       case NdefParser::RECORD_URL:
         addRow("NDEF", "URL");
-        addRow("URL", parsed.uri);
+        addWrappedRow("URL", parsed.uri);
         break;
       case NdefParser::RECORD_PHONE:
         addRow("NDEF", "Phone");
-        addRow("Phone", parsed.phone);
+        addWrappedRow("Phone", parsed.phone);
         break;
       case NdefParser::RECORD_EMAIL:
         addRow("NDEF", "Email");
-        addRow("Email", parsed.email);
+        addWrappedRow("Email", parsed.email);
         break;
       case NdefParser::RECORD_VCARD:
         addRow("NDEF", "vCard");
-        if (parsed.contact.length()) addRow("Contact", parsed.contact);
-        if (parsed.company.length()) addRow("Company", parsed.company);
-        if (parsed.address.length()) addRow("Address", parsed.address);
-        if (parsed.phone.length()) addRow("Phone", parsed.phone);
-        if (parsed.email.length()) addRow("Email", parsed.email);
-        if (parsed.website.length()) addRow("Website", parsed.website);
+        if (parsed.contact.length()) addWrappedRow("Contact", parsed.contact);
+        if (parsed.company.length()) addWrappedRow("Company", parsed.company);
+        if (parsed.address.length()) addWrappedRow("Address", parsed.address);
+        if (parsed.phone.length()) addWrappedRow("Phone", parsed.phone);
+        if (parsed.email.length()) addWrappedRow("Email", parsed.email);
+        if (parsed.website.length()) addWrappedRow("Website", parsed.website);
         break;
       default:
         addRow("NDEF", "Unsupported");
@@ -792,7 +793,7 @@ void ChameleonMfcScreen::_showDumpActions() {
   render();
   if (strcmp(r, "view") == 0) {
     _buildDumpHex();
-    _state = STATE_DUMP;
+    _state = STATE_DUMP_HEX;
     render();
   } else if (strcmp(r, "save") == 0) {
     _saveDump();
@@ -1523,7 +1524,7 @@ void ChameleonMfcScreen::onUpdate() {
     return;
   }
 
-  if (_state == STATE_DUMP) {
+  if (_state == STATE_DUMP_HEX) {
     if (Uni.Nav->wasPressed()) {
       auto dir = Uni.Nav->readDirection();
       if (dir == INavigation::DIR_BACK) {
@@ -1567,7 +1568,7 @@ void ChameleonMfcScreen::onRender() {
     _authLog.draw(Uni.Lcd, bodyX(), bodyY(), bodyW(), bodyH(), _authStatusBarCb, this);
     return;
   }
-  if (_state == STATE_SHOW_KEYS || _state == STATE_DUMP_RESULT || _state == STATE_DUMP) {
+  if (_state == STATE_SHOW_KEYS || _state == STATE_DUMP_RESULT || _state == STATE_DUMP_HEX) {
     _scrollView.render(bodyX(), bodyY(), bodyW(), bodyH());
     return;
   }

@@ -101,6 +101,16 @@ bool ChameleonMfcWriteScreen::_loadFile() {
   f.close();
   if (n != kClassic1KBytes) { _freeDump(); return false; }
   _dumpLen = kClassic1KBytes;
+
+  // Match the PN532 file-source behaviour: a raw Classic 1K dump carries
+  // the original 4-byte UID in manufacturer block 0. Trust it only when
+  // the BCC is valid; otherwise keep the target UID preserved.
+  const uint8_t bcc = (uint8_t)(_dump[0] ^ _dump[1] ^ _dump[2] ^ _dump[3]);
+  if (_dump[4] == bcc) {
+    memcpy(_sourceUid, _dump, 4);
+    _sourceUidLen = 4;
+    _sourceUidKnown = true;
+  }
   return true;
 }
 
@@ -231,17 +241,35 @@ void ChameleonMfcWriteScreen::_buildSourcePreview() {
     };
 
     switch (parsed.kind) {
-      case NdefParser::RECORD_TEXT: _addRow("NDEF", "Text"); if (parsed.text.length()) addWrappedRow("Text", parsed.text); break;
-      case NdefParser::RECORD_URL: _addRow("NDEF", "URL"); _addRow("URL", parsed.uri); break;
-      case NdefParser::RECORD_PHONE: _addRow("NDEF", "Phone"); _addRow("Phone", parsed.phone); break;
-      case NdefParser::RECORD_EMAIL: _addRow("NDEF", "Email"); _addRow("Email", parsed.email); break;
+      case NdefParser::RECORD_TEXT:
+        _addRow("NDEF", "Text");
+        if (parsed.language.length()) _addRow("Language", parsed.language);
+        if (parsed.text.length()) addWrappedRow("Text", parsed.text);
+        break;
+      case NdefParser::RECORD_URL:
+        _addRow("NDEF", "URL");
+        addWrappedRow("URL", parsed.uri);
+        break;
+      case NdefParser::RECORD_PHONE:
+        _addRow("NDEF", "Phone");
+        addWrappedRow("Phone", parsed.phone);
+        break;
+      case NdefParser::RECORD_EMAIL:
+        _addRow("NDEF", "Email");
+        addWrappedRow("Email", parsed.email);
+        break;
       case NdefParser::RECORD_VCARD:
         _addRow("NDEF", "vCard");
-        if (parsed.contact.length()) _addRow("Contact", parsed.contact);
-        if (parsed.phone.length()) _addRow("Phone", parsed.phone);
-        if (parsed.email.length()) _addRow("Email", parsed.email);
+        if (parsed.contact.length()) addWrappedRow("Contact", parsed.contact);
+        if (parsed.company.length()) addWrappedRow("Company", parsed.company);
+        if (parsed.address.length()) addWrappedRow("Address", parsed.address);
+        if (parsed.phone.length()) addWrappedRow("Phone", parsed.phone);
+        if (parsed.email.length()) addWrappedRow("Email", parsed.email);
+        if (parsed.website.length()) addWrappedRow("Website", parsed.website);
         break;
-      default: _addRow("NDEF", "Unsupported"); break;
+      default:
+        _addRow("NDEF", "Unsupported");
+        break;
     }
   } else _addRow("NDEF", "Not found");
   if (ndef) free(ndef);

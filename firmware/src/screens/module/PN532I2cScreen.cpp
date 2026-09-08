@@ -196,12 +196,36 @@ void PN532I2cScreen::onUpdate() {
         if (_writePreviewFromFile) _doWriteDumpFromFilePicker();
         else _showTagDetails();
       } else if (dir == INavigation::DIR_PRESS) {
-        _doWriteDumpToTag(_dumpImg, _dumpLen,
-                          _writePreviewSourceUidKnown ? _writePreviewSourceUid : nullptr,
-                          _writePreviewSourceUidKnown ? _writePreviewSourceUidLen : 0);
-        // Writing scans the destination and updates the PN532 card context, so
-        // do not redisplay the source dump with destination UID/ATQA metadata.
-        _goMifareTag();
+        // Preserve the source Tag Details context: writing scans the target and
+        // updates _uid/_atqa/_sak. The CU write screen returns to the source
+        // Tag Details after a successful in-memory copy, so mirror that here.
+        uint8_t sourceContextUid[7] = {};
+        const uint8_t sourceContextUidLen = _uidLen;
+        const uint8_t sourceContextSak = _sak;
+        const uint16_t sourceContextAtqa = _atqa;
+        const auto sourceContextKeys = _mfKeys;
+        if (sourceContextUidLen) memcpy(sourceContextUid, _uid, sourceContextUidLen);
+
+        const bool ok = _doWriteDumpToTag(
+            _dumpImg, _dumpLen,
+            _writePreviewSourceUidKnown ? _writePreviewSourceUid : nullptr,
+            _writePreviewSourceUidKnown ? _writePreviewSourceUidLen : 0);
+        if (!_writePreviewFromFile) {
+          memcpy(_uid, sourceContextUid, sourceContextUidLen);
+          _uidLen = sourceContextUidLen;
+          _sak = sourceContextSak;
+          _atqa = sourceContextAtqa;
+          _mfKeys = sourceContextKeys;
+        }
+
+        if (ok) {
+          if (_writePreviewFromFile) _goMifareTag();
+          else _showTagDetails();
+        } else {
+          // Match CU: failed writes remain on the source preview so the user
+          // can retry or back out without rebuilding the source selection.
+          render();
+        }
       } else {
         _scrollView.onNav(dir);
       }
@@ -217,7 +241,7 @@ void PN532I2cScreen::onUpdate() {
           _ndefWritePreview = false;
           _ndefWritePreviewFromFile = false;
           if (fromFile) _doWriteNdefFromFile();
-          else _goNdefParent();
+          else _goNdefWrite();
         } else {
           _goNdefParent();
         }
@@ -466,7 +490,7 @@ void PN532I2cScreen::onBack() {
         _ndefWritePreview = false;
         _ndefWritePreviewFromFile = false;
         if (fromFile) _doWriteNdefFromFile();
-        else _goNdefParent();
+        else _goNdefWrite();
       } else {
         _goNdefParent();
       }
@@ -1323,19 +1347,28 @@ void PN532I2cScreen::_appendDumpNdefDetails() {
   if (!_hasDump || !_dumpComplete) return;
 
   auto dims = _mfDims(_sak);
-  if (dims.first == 0 || _dumpLen < dims.second * 16u) return;
+  if (dims.first == 0) return;
+  _appendDumpNdefDetails(_dumpImg, _dumpLen, dims.first);
+}
+
+void PN532I2cScreen::_appendDumpNdefDetails(const uint8_t* dump, size_t dumpLen,
+                                              size_t totalSectors) {
+  if (!dump || totalSectors == 0) return;
+  const size_t totalBlocks = totalSectors == 5 ? 20u :
+                             (totalSectors == 40 ? 256u : 64u);
+  if (dumpLen < totalBlocks * 16u) return;
 
   uint8_t sectors[39] = {};
   size_t sectorCount = 0;
 
   auto addIfNdef = [&](uint8_t sector, uint8_t lo, uint8_t hi) {
-    if (sector >= dims.first || sectorCount >= sizeof(sectors)) return;
+    if (sector >= totalSectors || sectorCount >= sizeof(sectors)) return;
     if (lo == 0x03 && hi == 0xE1) sectors[sectorCount++] = sector;
   };
 
   // MAD1: block 1 maps sectors 1..7; block 2 maps sectors 8..15.
-  const uint8_t* b1 = &_dumpImg[1u * 16u];
-  const uint8_t* b2 = &_dumpImg[2u * 16u];
+  const uint8_t* b1 = &dump[1u * 16u];
+  const uint8_t* b2 = &dump[2u * 16u];
   for (uint8_t sector = 1; sector <= 7; ++sector) {
     const size_t off = 2u + (size_t)(sector - 1u) * 2u;
     addIfNdef(sector, b1[off], b1[off + 1u]);
@@ -1346,10 +1379,10 @@ void PN532I2cScreen::_appendDumpNdefDetails() {
   }
 
   // MAD2 lives in sector 16 on Classic 4K and maps sectors 17..39.
-  if (dims.first > 16 && _dumpLen >= 67u * 16u) {
-    const uint8_t* m0 = &_dumpImg[64u * 16u];
-    const uint8_t* m1 = &_dumpImg[65u * 16u];
-    const uint8_t* m2 = &_dumpImg[66u * 16u];
+  if (totalSectors > 16 && dumpLen >= 67u * 16u) {
+    const uint8_t* m0 = &dump[64u * 16u];
+    const uint8_t* m1 = &dump[65u * 16u];
+    const uint8_t* m2 = &dump[66u * 16u];
     for (uint8_t sector = 17; sector <= 23; ++sector) {
       const size_t off = 2u + (size_t)(sector - 17u) * 2u;
       addIfNdef(sector, m0[off], m0[off + 1u]);
@@ -1365,7 +1398,7 @@ void PN532I2cScreen::_appendDumpNdefDetails() {
   }
 
   if (sectorCount == 0) {
-    _pushRow("NDEF", "None");
+    _pushRow("NDEF", "Not found");
     return;
   }
 
@@ -1387,7 +1420,7 @@ void PN532I2cScreen::_appendDumpNdefDetails() {
         : 128u + (size_t)(sector - 32u) * 16u;
     const uint8_t dataBlocks = (sector < 32) ? 3 : 15;
     for (uint8_t bi = 0; bi < dataBlocks; ++bi) {
-      memcpy(area + out, &_dumpImg[(firstBlock + bi) * 16u], 16u);
+      memcpy(area + out, &dump[(firstBlock + bi) * 16u], 16u);
       out += 16u;
     }
   }
@@ -1417,7 +1450,7 @@ void PN532I2cScreen::_appendDumpNdefDetails() {
   }
 
   if (!ndef) {
-    _pushRow("NDEF", "None");
+    _pushRow("NDEF", "Not found");
     delete[] area;
     return;
   }
@@ -1437,12 +1470,13 @@ void PN532I2cScreen::_appendDumpNdefDetails() {
   switch (parsed.kind) {
     case NdefParser::RECORD_TEXT:
       _pushRow("NDEF", "Text");
+      if (parsed.language.length()) _pushRow("Language", parsed.language);
       if (parsed.encoding == "UTF-16") _pushRow("Text", "(UTF-16 raw)");
-      else _pushWrappedRow("Text", parsed.text);
+      else if (parsed.text.length()) _pushWrappedRow("Text", parsed.text);
       break;
     case NdefParser::RECORD_URL:
-      _pushRow("NDEF", "URI");
-      _pushWrappedRow("URI", parsed.uri);
+      _pushRow("NDEF", "URL");
+      _pushWrappedRow("URL", parsed.uri);
       break;
     case NdefParser::RECORD_PHONE:
       _pushRow("NDEF", "Phone");
@@ -1450,17 +1484,19 @@ void PN532I2cScreen::_appendDumpNdefDetails() {
       break;
     case NdefParser::RECORD_EMAIL:
       _pushRow("NDEF", "Email");
-      _pushWrappedRow("Mail", parsed.email);
+      _pushWrappedRow("Email", parsed.email);
       break;
     case NdefParser::RECORD_VCARD:
       _pushRow("NDEF", "vCard");
       if (parsed.contact.length()) _pushWrappedRow("Contact", parsed.contact);
+      if (parsed.company.length()) _pushWrappedRow("Company", parsed.company);
+      if (parsed.address.length()) _pushWrappedRow("Address", parsed.address);
       if (parsed.phone.length()) _pushWrappedRow("Phone", parsed.phone);
-      if (parsed.email.length()) _pushWrappedRow("Mail", parsed.email);
+      if (parsed.email.length()) _pushWrappedRow("Email", parsed.email);
+      if (parsed.website.length()) _pushWrappedRow("Website", parsed.website);
       break;
     default:
       _pushRow("NDEF", "Unsupported");
-      _pushRow("Type", parsed.type.length() ? parsed.type : "(empty)");
       break;
   }
 
@@ -1984,28 +2020,19 @@ void PN532I2cScreen::_showNdefResult(const uint8_t* uid, uint8_t uidLen,
     return;
   }
 
-  char tnfBuf[8];
-  snprintf(tnfBuf, sizeof(tnfBuf), "%u", parsed.tnf);
-  _pushRow("TNF", tnfBuf);
-  _pushRow("Type", parsed.type.length() ? parsed.type : "(empty)");
-
+  // Keep NDEF Details aligned with the Chameleon Ultra presentation.
+  // Transport/parser metadata (TNF, raw type and encoding) is intentionally
+  // omitted here: the user-facing result focuses on the decoded record.
   switch (parsed.kind) {
     case NdefParser::RECORD_TEXT:
       _pushRow("Record", "Text");
-      _pushRow("Encoding", parsed.encoding);
       if (parsed.language.length()) _pushRow("Language", parsed.language);
-      if (parsed.encoding == "UTF-16") {
-        _pushRow("Text", "(UTF-16 raw)");
-        uint8_t rawLen = (uint8_t)(parsed.payloadLen < 32 ? parsed.payloadLen : 32);
-        _pushRow("Raw", _hexBlock(parsed.payload, rawLen));
-      } else {
-        _pushWrappedRow("Text", parsed.text);
-      }
+      _pushWrappedRow("Text", parsed.text);
       break;
 
     case NdefParser::RECORD_URL:
-      _pushRow("Record", "URI");
-      _pushWrappedRow("URI", parsed.uri);
+      _pushRow("Record", "URL");
+      _pushWrappedRow("URL", parsed.uri);
       break;
 
     case NdefParser::RECORD_PHONE:
@@ -2015,35 +2042,22 @@ void PN532I2cScreen::_showNdefResult(const uint8_t* uid, uint8_t uidLen,
 
     case NdefParser::RECORD_EMAIL:
       _pushRow("Record", "Email");
-      _pushWrappedRow("Mail", parsed.email);
+      _pushWrappedRow("Email", parsed.email);
       break;
 
     case NdefParser::RECORD_VCARD:
       _pushRow("Record", "vCard");
-      if (parsed.contact.length()) _pushWrappedRow("Contact name", parsed.contact);
+      if (parsed.contact.length()) _pushWrappedRow("Contact", parsed.contact);
       if (parsed.company.length()) _pushWrappedRow("Company", parsed.company);
       if (parsed.address.length()) _pushWrappedRow("Address", parsed.address);
       if (parsed.phone.length()) _pushWrappedRow("Phone", parsed.phone);
-      if (parsed.email.length()) _pushWrappedRow("Mail", parsed.email);
+      if (parsed.email.length()) _pushWrappedRow("Email", parsed.email);
       if (parsed.website.length()) _pushWrappedRow("Website", parsed.website);
-      if (!parsed.contact.length() && !parsed.company.length() &&
-          !parsed.address.length() && !parsed.phone.length() &&
-          !parsed.email.length() && !parsed.website.length()) {
-        String vcard;
-        vcard.reserve(parsed.payloadLen);
-        for (size_t i = 0; i < parsed.payloadLen; ++i) vcard += (char)parsed.payload[i];
-        vcard.replace("\r\n", "\n");
-        vcard.replace("\r", "\n");
-        _pushWrappedRow("vCard", vcard);
-      }
       break;
 
-    default: {
+    default:
       _pushRow("Record", "Unsupported");
-      uint8_t rawLen = (uint8_t)(parsed.payloadLen < 32 ? parsed.payloadLen : 32);
-      _pushRow("Payload", _hexBlock(parsed.payload, rawLen));
       break;
-    }
   }
 
   if (_hasNdef) {
@@ -2418,6 +2432,33 @@ bool PN532I2cScreen::_formatClassic1kNdef() {
     const uint8_t sector = (uint8_t)(block / 4u); // Classic 1K only here.
     auto& keyA = _mfKeys[sector].first;
     auto& keyB = _mfKeys[sector].second;
+    const bool madDataBlock = (sector == 0 && (block == 1 || block == 2));
+
+    // MAD1 data blocks use NFC Forum access conditions where authentication
+    // with Key A may succeed even though Key A is not permitted to write.
+    // On PN532 that can look like a successful write while leaving the MAD
+    // unchanged, so exhaust every Key B credential before trying Key A.
+    if (madDataBlock) {
+      if (keyB) {
+        const auto kb = keyB.value();
+        if (_tryWriteMifareBlock(block, data, (const uint8_t*)kb.data(), true)) {
+          ++done;
+          return true;
+        }
+      }
+      if (sectorKeyB[sector] &&
+          _tryWriteMifareBlock(block, data, sectorKey[sector], true)) {
+        ++done;
+        return true;
+      }
+      for (const auto& key : candidates) {
+        if (_tryWriteMifareBlock(block, data, key, true)) {
+          ++done;
+          return true;
+        }
+      }
+    }
+
     if (keyA) {
       const auto ka = keyA.value();
       if (_tryWriteMifareBlock(block, data, (const uint8_t*)ka.data(), false)) {
@@ -2425,21 +2466,22 @@ bool PN532I2cScreen::_formatClassic1kNdef() {
         return true;
       }
     }
-    if (keyB) {
+    if (!madDataBlock && keyB) {
       const auto kb = keyB.value();
       if (_tryWriteMifareBlock(block, data, (const uint8_t*)kb.data(), true)) {
         ++done;
         return true;
       }
     }
-    if (_tryWriteMifareBlock(block, data, sectorKey[sector], sectorKeyB[sector])) {
+    if (!madDataBlock &&
+        _tryWriteMifareBlock(block, data, sectorKey[sector], sectorKeyB[sector])) {
       ++done;
       return true;
     }
 
     for (const auto& key : candidates) {
       if (_tryWriteMifareBlock(block, data, key, false) ||
-          _tryWriteMifareBlock(block, data, key, true)) {
+          (!madDataBlock && _tryWriteMifareBlock(block, data, key, true))) {
         ++done;
         return true;
       }
@@ -3683,22 +3725,9 @@ void PN532I2cScreen::_showWriteDumpPreview(const uint8_t* dump, size_t len,
   _pushRow("Blocks", String((unsigned)(len / 16u)));
   _pushRow("Dump", String((unsigned)len) + " bytes");
 
-  // Match the CU preview for Classic 1K by surfacing NDEF presence from MAD1.
-  if (len == 1024) {
-    uint8_t sectors[15] = {};
-    size_t sectorCount = 0;
-    const uint8_t* b1 = _dumpImg + 16u;
-    const uint8_t* b2 = _dumpImg + 32u;
-    for (uint8_t sec = 1; sec <= 7; ++sec) {
-      size_t off = 2u + (size_t)(sec - 1u) * 2u;
-      if (b1[off] == 0x03 && b1[off + 1u] == 0xE1) sectors[sectorCount++] = sec;
-    }
-    for (uint8_t sec = 8; sec <= 15; ++sec) {
-      size_t off = (size_t)(sec - 8u) * 2u;
-      if (b2[off] == 0x03 && b2[off + 1u] == 0xE1) sectors[sectorCount++] = sec;
-    }
-    _pushRow("NDEF", sectorCount ? "Present" : "Not found");
-  }
+  // Use the same parsed NDEF presentation as Tag Details / Chameleon Ultra.
+  const size_t totalSectors = len == 320 ? 5u : (len == 4096 ? 40u : 16u);
+  _appendDumpNdefDetails(_dumpImg, len, totalSectors);
 
   _pushRow("[Press]", "Write to Tag");
   _scrollView.setRows(_rows, _rowCount);
@@ -3732,7 +3761,7 @@ bool PN532I2cScreen::_tryWriteMifareBlock(uint16_t block, const uint8_t data[16]
       (uint8_t)block, const_cast<uint8_t*>(data));
 }
 
-void PN532I2cScreen::_doWriteDumpToTag(const uint8_t* dump, size_t len,
+bool PN532I2cScreen::_doWriteDumpToTag(const uint8_t* dump, size_t len,
                                          const uint8_t* sourceUid, uint8_t sourceUidLen) {
   // Copy source identity before scanning the destination: _scanCardOrShow()
   // updates the screen's _uid/_uidLen members with the target tag.
@@ -3742,12 +3771,12 @@ void PN532I2cScreen::_doWriteDumpToTag(const uint8_t* dump, size_t len,
 
   renderOperationTitle("Write to Tag");
   if (!dump || (len != 320 && len != 1024 && len != 4096)) {
-    ShowStatusAction::show("Invalid dump"); return;
+    ShowStatusAction::show("Invalid dump"); return false;
   }
   renderTagPrompt("Place tag on reader...", bodyX(), bodyY(), bodyW(), bodyH());
-  if (!_scanCardOrShow(5000)) { render(); return; }
+  if (!_scanCardOrShow(5000)) { render(); return false; }
   auto dims = _mfDims(_sak);
-  if (dims.second * 16u != len) { ShowStatusAction::show("Tag size mismatch"); render(); return; }
+  if (dims.second * 16u != len) { ShowStatusAction::show("Tag size mismatch"); render(); return false; }
 
   MagicCardType magic = MagicCardType::NONE;
   bool restoreUid = false;
@@ -3783,21 +3812,34 @@ void PN532I2cScreen::_doWriteDumpToTag(const uint8_t* dump, size_t len,
       const uint8_t* blockData = dump + (size_t)block * 16u;
       bool ok = false;
 
-      // First try the keys carried by the source dump, then the standard
-      // dictionary.  Each attempt re-selects the PICC, so Key B can be tried
-      // cleanly when the sector access bits do not allow writes with Key A.
-      ok = _tryWriteMifareBlock(block, blockData, srcTrailer, false) ||
-           _tryWriteMifareBlock(block, blockData, srcTrailer + 10, true);
-      if (!ok) {
+      // MAD directory blocks on NFC Forum-formatted Classic tags are
+      // normally writable with Key B.  The PN532/Adafruit path can report a
+      // successful write after Key-A authentication even when the access bits
+      // deny the actual write, leaving MAD unchanged and making copied NDEF
+      // data invisible. Prefer Key B for MAD1 (1/2) and MAD2 (64..66), just as
+      // Erase Tag already does for MAD1, and only fall back to Key A last.
+      const bool madWrite = (block == 1u || block == 2u) ||
+                            (dims.first > 16 && block >= 64u && block <= 66u);
+
+      auto tryDefaults = [&](bool useKeyB) {
         for (const auto& k : defaults) {
           auto kv = k.value();
           const uint8_t* key = (const uint8_t*)kv.data();
-          if (_tryWriteMifareBlock(block, blockData, key, false) ||
-              _tryWriteMifareBlock(block, blockData, key, true)) {
-            ok = true;
-            break;
-          }
+          if (_tryWriteMifareBlock(block, blockData, key, useKeyB)) return true;
         }
+        return false;
+      };
+
+      if (madWrite) {
+        ok = _tryWriteMifareBlock(block, blockData, srcTrailer + 10, true) ||
+             tryDefaults(true) ||
+             _tryWriteMifareBlock(block, blockData, srcTrailer, false) ||
+             tryDefaults(false);
+      } else {
+        ok = _tryWriteMifareBlock(block, blockData, srcTrailer, false) ||
+             _tryWriteMifareBlock(block, blockData, srcTrailer + 10, true) ||
+             tryDefaults(false) ||
+             tryDefaults(true);
       }
 
       if (!ok) {
@@ -3806,7 +3848,7 @@ void PN532I2cScreen::_doWriteDumpToTag(const uint8_t* dump, size_t len,
         char err[32]; snprintf(err, sizeof(err), "Write failed: block %u", (unsigned)block);
         ShowStatusAction::show(err);
         render();
-        return;
+        return false;
       }
       written++;
     }
@@ -3821,7 +3863,7 @@ void PN532I2cScreen::_doWriteDumpToTag(const uint8_t* dump, size_t len,
     if (!_writeMagicUid(magic, sourceUidCopy, sourceUidLen, dump)) {
       ShowStatusAction::show("UID write failed");
       render();
-      return;
+      return false;
     }
   }
 
@@ -3829,11 +3871,9 @@ void PN532I2cScreen::_doWriteDumpToTag(const uint8_t* dump, size_t len,
   // ShowStatusAction wipes only its own rectangle on dismissal, which made
   // remnants of the progress UI briefly visible during Write to Tag.
   Uni.Lcd.fillRect(bodyX(), bodyY(), bodyW(), bodyH(), TFT_BLACK);
-  char msg[48];
-  if (restoreUid) snprintf(msg, sizeof(msg), "Wrote %u blocks + UID", (unsigned)written);
-  else snprintf(msg, sizeof(msg), "Wrote %u blocks", (unsigned)written);
-  ShowStatusAction::show(msg);
+  ShowStatusAction::show(restoreUid ? "Tag + UID written" : "Tag written");
   render();
+  return true;
 }
 
 void PN532I2cScreen::_doEraseTag() {
@@ -3939,10 +3979,9 @@ void PN532I2cScreen::_doEraseTag() {
   }
 
   Uni.Lcd.fillRect(bodyX(), bodyY(), bodyW(), bodyH(), TFT_BLACK);
-  char msg[40]; snprintf(msg, sizeof(msg), "Erased %u data blocks", (unsigned)erased);
   _hasCard = false;
   _mfKeys.fill({});
-  ShowStatusAction::show(msg);
+  ShowStatusAction::show("Tag erased");
   _goMifareTag();
 }
 

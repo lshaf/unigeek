@@ -224,9 +224,10 @@ private:
   void _doDumpMemory();
   void _showTagDetails();
   void _appendDumpNdefDetails();
+  void _appendDumpNdefDetails(const uint8_t* dump, size_t dumpLen, size_t totalSectors);
   void _showDumpHex();
   void _showDumpActions();
-  void _doWriteDumpToTag(const uint8_t* dump, size_t len,
+  bool _doWriteDumpToTag(const uint8_t* dump, size_t len,
                          const uint8_t* sourceUid = nullptr, uint8_t sourceUidLen = 0);
   bool _tryWriteMifareBlock(uint16_t block, const uint8_t data[16],
                             const uint8_t key[6], bool useKeyB);

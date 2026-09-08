@@ -684,18 +684,18 @@ void ChameleonMfcNdefScreen::_showResult(const uint8_t* ndef, size_t ndefLen) {
     case NdefParser::RECORD_TEXT:
       _addRow("Record", "Text"); if (parsed.language.length()) _addRow("Language", parsed.language); _addWrapped("Text", parsed.text); break;
     case NdefParser::RECORD_URL:
-      _addRow("Record", "URI"); _addWrapped("URI", parsed.uri); break;
+      _addRow("Record", "URL"); _addWrapped("URL", parsed.uri); break;
     case NdefParser::RECORD_PHONE:
       _addRow("Record", "Phone"); _addWrapped("Phone", parsed.phone); break;
     case NdefParser::RECORD_EMAIL:
-      _addRow("Record", "Email"); _addWrapped("Mail", parsed.email); break;
+      _addRow("Record", "Email"); _addWrapped("Email", parsed.email); break;
     case NdefParser::RECORD_VCARD:
       _addRow("Record", "vCard");
       if (parsed.contact.length()) _addWrapped("Contact", parsed.contact);
       if (parsed.company.length()) _addWrapped("Company", parsed.company);
       if (parsed.address.length()) _addWrapped("Address", parsed.address);
       if (parsed.phone.length()) _addWrapped("Phone", parsed.phone);
-      if (parsed.email.length()) _addWrapped("Mail", parsed.email);
+      if (parsed.email.length()) _addWrapped("Email", parsed.email);
       if (parsed.website.length()) _addWrapped("Website", parsed.website);
       break;
     default: _addRow("Record", "Unsupported"); break;

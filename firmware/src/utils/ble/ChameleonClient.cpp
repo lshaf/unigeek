@@ -444,14 +444,21 @@ MagicCardType ChameleonClient::detectMagicType() {
     }
   }
 
-  // Start the Gen1A backdoor with 0x40 sent as 7 bits, then require the
-  // second 0x43 ACK as well. This changes only transient RF/card state; no
-  // memory is written. Always reselect afterwards to leave the card normal.
+  // Gen1A 0x40/0x43 must be entered from HALT. Mirror the sequence used by
+  // writeMagicUid() and by the PN532 backend; probing from the ACTIVE state
+  // can make a genuine Magic Gen1A tag look like a normal card.
   if (!reselect()) return finish(MagicCardType::NONE);
   bool gen1a = false;
   {
     uint8_t resp[16] = {};
     uint16_t respLen = 0;
+
+    uint8_t halt[2] = {0x50, 0x00};
+    uint16_t haltLen = 0;
+    uint16_t haltSt = 0;
+    (void)hf14ARaw(64 | 32 | 8, 200, 16, halt, sizeof(halt),
+                   resp, &haltLen, sizeof(resp), &haltSt);
+
     uint8_t wake = 0x40;
     const bool ack1 = hf14ARaw(128 | 64 | 8, 200, 7, &wake, 1,
                                resp, &respLen, sizeof(resp)) &&
