@@ -29,6 +29,7 @@ private:
   uint8_t _sourceUid[7] = {};
   uint8_t _sourceUidLen = 0;
   bool _sourceUidKnown = false;
+  bool _replaceUid = true;
 
   uint8_t _previousSlot = 0;
   bool _restoreSlot = false;

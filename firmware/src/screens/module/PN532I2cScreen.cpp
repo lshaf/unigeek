@@ -196,6 +196,24 @@ void PN532I2cScreen::onUpdate() {
         if (_writePreviewFromFile) _doWriteDumpFromFilePicker();
         else _showTagDetails();
       } else if (dir == INavigation::DIR_PRESS) {
+        if (_writePreviewSourceUidKnown) {
+          static constexpr InputSelectAction::Option uidOpts[] = {
+            {"Replace UID", "replace"},
+            {"Preserve UID", "preserve"},
+          };
+          const char* choice = InputSelectAction::popup(
+              "UID", uidOpts, 2, _writePreviewReplaceUid ? "replace" : "preserve");
+          if (!choice) { render(); return; }
+          _writePreviewReplaceUid = strcmp(choice, "replace") == 0;
+          for (uint8_t i = 0; i < _rowCount; ++i) {
+            if (_rowLabels[i] == "UID Action") {
+              _rowValues[i] = _writePreviewReplaceUid ? "Replace" : "Preserve";
+              _rows[i] = { _rowLabels[i].c_str(), _rowValues[i] };
+              break;
+            }
+          }
+          render();
+        }
         // Preserve the source Tag Details context: writing scans the target and
         // updates _uid/_atqa/_sak. The CU write screen returns to the source
         // Tag Details after a successful in-memory copy, so mirror that here.
@@ -3710,6 +3728,7 @@ void PN532I2cScreen::_showWriteDumpPreview(const uint8_t* dump, size_t len,
   _writePreviewFromFile = fromFile;
   _writePreviewSourceUidKnown = sourceUid && (sourceUidLen == 4 || sourceUidLen == 7);
   _writePreviewSourceUidLen = _writePreviewSourceUidKnown ? sourceUidLen : 0;
+  _writePreviewReplaceUid = _writePreviewSourceUidKnown;
   memset(_writePreviewSourceUid, 0, sizeof(_writePreviewSourceUid));
   if (_writePreviewSourceUidKnown) memcpy(_writePreviewSourceUid, sourceUid, sourceUidLen);
 
@@ -3721,7 +3740,7 @@ void PN532I2cScreen::_showWriteDumpPreview(const uint8_t* dump, size_t len,
   _pushRow("Type", type);
   _pushRow("UID", _writePreviewSourceUidKnown ?
                     _hexUid(_writePreviewSourceUid, _writePreviewSourceUidLen) : String("Unknown"));
-  _pushRow("Target UID", _writePreviewSourceUidKnown ? "Replace if Magic" : "Preserved");
+  _pushRow("UID Action", _writePreviewSourceUidKnown ? (_writePreviewReplaceUid ? "Replace" : "Preserve") : "Preserved");
   _pushRow("Blocks", String((unsigned)(len / 16u)));
   _pushRow("Dump", String((unsigned)len) + " bytes");
 
@@ -3780,10 +3799,12 @@ bool PN532I2cScreen::_doWriteDumpToTag(const uint8_t* dump, size_t len,
 
   MagicCardType magic = MagicCardType::NONE;
   bool restoreUid = false;
-  if (sourceUidKnown) {
+  bool uidDiffers = false;
+  const bool replaceUidRequested = sourceUidKnown && _writePreviewReplaceUid;
+  if (replaceUidRequested) {
     magic = _detectMagicType();
-    const bool uidDiffers = _uidLen != sourceUidLen ||
-                            (_uidLen == sourceUidLen && memcmp(_uid, sourceUidCopy, _uidLen) != 0);
+    uidDiffers = _uidLen != sourceUidLen ||
+                 (_uidLen == sourceUidLen && memcmp(_uid, sourceUidCopy, _uidLen) != 0);
     restoreUid = uidDiffers &&
                  ((magic == MagicCardType::GEN1A && sourceUidLen == 4) ||
                   (magic == MagicCardType::GEN3 && (sourceUidLen == 4 || sourceUidLen == 7)));
@@ -3871,7 +3892,9 @@ bool PN532I2cScreen::_doWriteDumpToTag(const uint8_t* dump, size_t len,
   // ShowStatusAction wipes only its own rectangle on dismissal, which made
   // remnants of the progress UI briefly visible during Write to Tag.
   Uni.Lcd.fillRect(bodyX(), bodyY(), bodyW(), bodyH(), TFT_BLACK);
-  ShowStatusAction::show(restoreUid ? "Tag + UID written" : "Tag written");
+  const char* status = restoreUid ? "Tag + UID written" :
+                       (replaceUidRequested && uidDiffers ? "Tag written; UID preserved" : "Tag written");
+  ShowStatusAction::show(status);
   render();
   return true;
 }

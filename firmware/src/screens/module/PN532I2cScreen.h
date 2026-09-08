@@ -172,6 +172,7 @@ private:
   bool     _writePreviewSourceUidKnown = false;
   uint8_t  _writePreviewSourceUid[7] = {};
   uint8_t  _writePreviewSourceUidLen = 0;
+  bool     _writePreviewReplaceUid = true;
 
   enum NdefTarget_e {
     NDEF_TARGET_ULTRALIGHT,
