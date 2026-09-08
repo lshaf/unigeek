@@ -11,6 +11,7 @@
 #include "ChameleonMfcWriteScreen.h"
 #include "utils/nfc/NdefParser.h"
 
+#include "utils/nfc/MfcKeyStore.h"
 extern "C" {
 #include "utils/crypto/crapto1.h"
 }
@@ -67,7 +68,7 @@ const char* ChameleonMfcScreen::title() {
   switch (_state) {
     case STATE_AUTH:               return "Read Tag";
     case STATE_MF_MENU:            return "MIFARE Classic";
-    case STATE_SHOW_KEYS:          return "Discovered Keys";
+    case STATE_SHOW_KEYS:          return "Check Known Keys";
     case STATE_DUMP:               return "Read Tag";
     case STATE_DUMP_RESULT:        return "Tag Details";
     case STATE_DICT_SEL:
@@ -171,7 +172,7 @@ void ChameleonMfcScreen::_callAuth() {
 
   char msg[64];
 
-  // Discovered Keys is a viewer: after resolving the UID, load persisted
+  // Known Keys is a viewer: after resolving the UID, load persisted
   // results and display them without authenticating or running an attack.
   if (_startAction == ACTION_SHOW_KEYS) {
     _loadKeys();
@@ -295,7 +296,7 @@ void ChameleonMfcScreen::_continueRead() {
   _loadDictPicker();
 }
 
-// ── Discovered Keys ──
+// ── Known Keys ──
 
 void ChameleonMfcScreen::_buildKeyRows() {
   _rowCount = 0;
@@ -443,8 +444,10 @@ void ChameleonMfcScreen::_saveKeys() {
       buf += line;
     }
   }
-  if (buf.length() > 0)
+  if (buf.length() > 0) {
     Uni.Storage->writeFile(path.c_str(), buf.c_str());
+    MfcKeyStore::updateDiscoveredDictionary(Uni.Storage, buf);
+  }
 }
 
 // Helper: log a line then immediately redraw the action log so the user sees it live.
@@ -917,11 +920,12 @@ void ChameleonMfcScreen::_callDump() {
 void ChameleonMfcScreen::_loadDictPicker() {
   if (_dictPickDir.length() == 0) _dictPickDir = _kDictDir;
   _browser.root = _kDictDir;
-  uint8_t n = _browser.load(this, _dictPickDir, ".txt");
+  uint8_t n = _browser.load(this, _dictPickDir, ".txt", nullptr, BrowseFileView::STEM_CAPITALIZED,
+                            _dictPickDir == _kDictDir ? "discovered.txt" : nullptr);
 
   uint8_t baseOffset = 0;
   if (_dictPickDir == _kDictDir) {
-    _dictItems[0] = {"Built-in keys"};
+    _dictItems[0] = {"Built-in Keys"};
     baseOffset    = 1;
   }
   for (uint8_t i = 0; i < n; i++) _dictItems[i + baseOffset] = _browser.items()[i];

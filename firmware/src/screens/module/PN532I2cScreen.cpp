@@ -12,6 +12,7 @@
 #include "../../utils/nfc/NdefBuilder.h"
 #include "../../utils/nfc/NdefParser.h"
 
+#include "utils/nfc/MfcKeyStore.h"
 // ── raw I2C helpers for Gen1a / Gen3 ──────────────────────────────────────
 // Adafruit_PN532 exposes sendCommandCheckAck() publicly but readdata() is
 // private. These helpers build commands in pn532_packetbuffer (the library's
@@ -102,11 +103,11 @@ const char* PN532I2cScreen::title() {
     case STATE_MIFARE_NDEF_MENU:return "NDEF Operations";
     case STATE_MIFARE_ATTACKS_MENU:return "Attacks";
     case STATE_MIFARE_KEYS_MENU:return "Keys";
-    case STATE_MIFARE_KEY_DB_SELECT:return "Key Databases";
-    case STATE_MIFARE_KEY_DB_VIEW:return _keyDbViewTitle.length() ? _keyDbViewTitle.c_str() : "Key Database";
+    case STATE_MIFARE_KEY_DB_SELECT:return "Dictionaries";
+    case STATE_MIFARE_KEY_DB_VIEW:return _keyDbViewTitle.length() ? _keyDbViewTitle.c_str() : "Dictionary";
     case STATE_MIFARE_DUMP:     return "Tag Details";
     case STATE_MIFARE_DUMP_HEX: return "Memory Dump";
-    case STATE_MIFARE_KEYS:     return "Discovered Keys";
+    case STATE_MIFARE_KEYS:     return "Check Known Keys";
     case STATE_MIFARE_DUMP_SELECT:return "Dump Files";
     case STATE_MIFARE_WRITE_PREVIEW:return "Write to Tag";
     case STATE_DICT_SELECT:     return "Dictionary Attack";
@@ -1074,7 +1075,10 @@ void PN532I2cScreen::_saveKeys() {
       buf += line;
     }
   }
-  if (buf.length() > 0) Uni.Storage->writeFile(path.c_str(), buf.c_str());
+  if (buf.length() > 0) {
+    Uni.Storage->writeFile(path.c_str(), buf.c_str());
+    MfcKeyStore::updateDiscoveredDictionary(Uni.Storage, buf);
+  }
 }
 
 bool PN532I2cScreen::_discoverDefaultKeys(bool checkingProgress) {
@@ -1485,7 +1489,7 @@ void PN532I2cScreen::_showDumpHex() {
 }
 
 void PN532I2cScreen::_doShowKeys() {
-  // Discovered Keys is a read-only view of persisted keys for the scanned UID.
+  // Known Keys is a read-only view of persisted keys for the scanned UID.
   // No authentication or attack is needed to inspect the saved results.
   if (!_scanCardOrShow(5000)) { _goMifareKeys(); return; }
   auto dims = _mfDims(_sak);
@@ -1521,10 +1525,11 @@ void PN532I2cScreen::_openKeyDatabases() {
   _state = STATE_MIFARE_KEY_DB_SELECT;
   if (!_keyDbPickDir.length()) _keyDbPickDir = _dictPath;
   _browser.root = _dictPath;
-  uint8_t n = _browser.load(this, _keyDbPickDir, ".txt");
+  uint8_t n = _browser.load(this, _keyDbPickDir, ".txt", nullptr, BrowseFileView::STEM_CAPITALIZED,
+                            _keyDbPickDir == _dictPath ? "discovered.txt" : nullptr);
   setItems(_browser.items(), n);
   render();
-  if (!n && _keyDbPickDir == _dictPath) ShowStatusAction::show("No key databases");
+  if (!n && _keyDbPickDir == _dictPath) ShowStatusAction::show("No dictionaries");
 }
 
 void PN532I2cScreen::_openKeyDatabase(uint8_t index) {
@@ -1545,7 +1550,7 @@ void PN532I2cScreen::_openKeyDatabase(uint8_t index) {
     pos = nl + 1;
   }
   if (!_rowCount) { ShowStatusAction::show("No keys in file"); return; }
-  _keyDbViewTitle = e.name;
+  _keyDbViewTitle = e.label;
   _state = STATE_MIFARE_KEY_DB_VIEW;
   _scrollView.resetScroll();
   _scrollView.setRows(_rows, _rowCount);
@@ -1568,7 +1573,7 @@ void PN532I2cScreen::_doDictionaryPicker() {
       return;
     }
     // Start from the persisted per-UID state.  The standalone attack should
-    // test only slots that are not already in Discovered Keys; clearing the
+    // test only slots that are not already in Known Keys; clearing the
     // whole table here made the PN532 rediscover and report the same 32 keys
     // on every run.  This is intentionally lighter than the CU pre-check:
     // PN532 authentication is slower and needs frequent PICC re-selection, so
@@ -1715,7 +1720,7 @@ void PN532I2cScreen::_doDictionaryAttackWithFile(uint8_t fileIndex) {
     if (n == 1) Achievement.unlock("nfc_dict_attack");
   }
   char msg[48];
-  if (recovered > 0) snprintf(msg, sizeof(msg), "%d new key%s added to Discovered Keys", recovered, recovered == 1 ? "" : "s");
+  if (recovered > 0) snprintf(msg, sizeof(msg), "%d new key%s saved to Known Keys", recovered, recovered == 1 ? "" : "s");
   else snprintf(msg, sizeof(msg), "No new keys found");
   ShowStatusAction::show(msg);
   if (_resumeReadAfterDict) {
@@ -2338,7 +2343,7 @@ bool PN532I2cScreen::_formatClassic1kNdef() {
     {0x12,0x34,0x56,0x78,0x9A,0xBC}, {0xBD,0x49,0x3A,0x39,0x62,0xB6},
   };
 
-  // Prefer the current tag's persisted Discovered Keys, then preflight the
+  // Prefer the current tag's persisted known keys, then preflight the
   // same candidate set used by Chameleon Ultra. Formatting touches only
   // sectors 0, 1 and 2, so validate one credential per sector up front.
   _mfKeys.fill({});

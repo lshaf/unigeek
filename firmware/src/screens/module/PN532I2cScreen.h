@@ -101,8 +101,8 @@ private:
   };
 
   ListItem _mfKeysItems[2] = {
-    {"Discovered Keys"},
-    {"Key Databases"},
+    {"Check Known Keys"},
+    {"Dictionaries"},
   };
 
   ListItem _mfTagItems[3] = {

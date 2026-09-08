@@ -66,7 +66,7 @@ private:
 
   // MF submenu
   ListItem _mfItems[5] = {
-    {"Discovered Keys"},
+    {"Check Known Keys"},
     {"Dump Memory"},
     {"Dictionary Attack"},
     {"Static Nested"},

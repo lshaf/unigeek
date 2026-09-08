@@ -7,6 +7,7 @@
 #include "core/ConfigManager.h"
 #include "ui/actions/ShowStatusAction.h"
 
+#include "utils/nfc/MfcKeyStore.h"
 // Builtin default Mifare Classic key list (trimmed from upstream gMifareClassicKeysList)
 static constexpr uint8_t kBuiltinKeys[][6] = {
   {0xFF,0xFF,0xFF,0xFF,0xFF,0xFF},
@@ -39,12 +40,13 @@ uint8_t ChameleonMfcDictScreen::_trailerBlock(uint8_t sector) {
 void ChameleonMfcDictScreen::_loadFilePicker() {
   if (_pickDir.length() == 0) _pickDir = kDictDir;
   _browser.root = kDictDir;
-  uint8_t n = _browser.load(this, _pickDir, ".txt");
+  uint8_t n = _browser.load(this, _pickDir, ".txt", nullptr, BrowseFileView::STEM_CAPITALIZED,
+                            _pickDir == kDictDir ? "discovered.txt" : nullptr);
 
-  // "Built-in keys" only at the default kDictDir — pinned at index 0.
+  // "Built-in Keys" only at the default kDictDir — pinned at index 0.
   uint8_t baseOffset = 0;
   if (_pickDir == kDictDir) {
-    _items[0]   = {"Built-in keys"};
+    _items[0]   = {"Built-in Keys"};
     baseOffset  = 1;
   }
   for (uint8_t i = 0; i < n; i++) _items[i + baseOffset] = _browser.items()[i];
@@ -137,7 +139,7 @@ void ChameleonMfcDictScreen::onRender() {
 void ChameleonMfcDictScreen::onItemSelected(uint8_t index) {
   if (_state != STATE_SELECT) return;
 
-  // Index 0 is "Built-in keys" only when in the default kDictDir.
+  // Index 0 is "Built-in Keys" only when in the default kDictDir.
   uint8_t baseOffset = (_pickDir == kDictDir) ? 1 : 0;
 
   char srcLabel[40];
@@ -411,5 +413,8 @@ void ChameleonMfcDictScreen::_saveKeys() {
       buf += line;
     }
   }
-  Uni.Storage->writeFile(path.c_str(), buf.c_str());
+  if (buf.length() > 0) {
+    Uni.Storage->writeFile(path.c_str(), buf.c_str());
+    MfcKeyStore::updateDiscoveredDictionary(Uni.Storage, buf);
+  }
 }

@@ -32,7 +32,7 @@ String BrowseFileView::prettifyTitle(const String& filename)
 
 uint8_t BrowseFileView::load(BaseScreen* host, String dir,
                               Mode mode, const char* fileSublabel,
-                              LabelStyle style)
+                              LabelStyle style, const char* preferredFile)
 {
   _count = 0;
 
@@ -65,8 +65,16 @@ uint8_t BrowseFileView::load(BaseScreen* host, String dir,
     while (j >= 0) {
       bool swap = false;
       if (tmp.isDir && !raw[j].isDir) swap = true;
-      else if (tmp.isDir == raw[j].isDir &&
-               strcasecmp(tmp.name.c_str(), raw[j].name.c_str()) < 0) swap = true;
+      else if (tmp.isDir == raw[j].isDir) {
+        // An optional preferred file is pinned before the other files while
+        // preserving the normal alphabetical order for everything else.
+        bool tmpPreferred = preferredFile && !tmp.isDir &&
+                            strcasecmp(tmp.name.c_str(), preferredFile) == 0;
+        bool curPreferred = preferredFile && !raw[j].isDir &&
+                            strcasecmp(raw[j].name.c_str(), preferredFile) == 0;
+        if (tmpPreferred != curPreferred) swap = tmpPreferred;
+        else if (strcasecmp(tmp.name.c_str(), raw[j].name.c_str()) < 0) swap = true;
+      }
       if (!swap) break;
       raw[j + 1] = raw[j];
       j--;
@@ -91,9 +99,17 @@ uint8_t BrowseFileView::load(BaseScreen* host, String dir,
       if (!accepted) continue;
     }
     _entries[_count].name  = raw[i].name;
-    _entries[_count].label = (style == TITLE && !raw[i].isDir)
-                               ? prettifyTitle(raw[i].name)
-                               : raw[i].name;
+    if (style == TITLE && !raw[i].isDir) {
+      _entries[_count].label = prettifyTitle(raw[i].name);
+    } else if ((style == STEM || style == STEM_CAPITALIZED) && !raw[i].isDir) {
+      int dot = raw[i].name.lastIndexOf('.');
+      _entries[_count].label = (dot > 0) ? raw[i].name.substring(0, dot) : raw[i].name;
+      if (style == STEM_CAPITALIZED && _entries[_count].label.length() > 0) {
+        _entries[_count].label.setCharAt(0, toupper((unsigned char)_entries[_count].label[0]));
+      }
+    } else {
+      _entries[_count].label = raw[i].name;
+    }
     _entries[_count].path  = base + "/" + raw[i].name;
     _entries[_count].isDir = raw[i].isDir;
     _listItems[_count]     = { _entries[_count].label.c_str(),

@@ -5,7 +5,7 @@
 #include "ui/actions/ShowStatusAction.h"
 
 const char* ChameleonMfcKeysScreen::title() {
-  if (_state == STATE_DATABASES) return "Key Databases";
+  if (_state == STATE_DATABASES) return "Dictionaries";
   if (_state == STATE_VIEW && _viewTitle.length()) return _viewTitle.c_str();
   return "Keys";
 }
@@ -18,8 +18,8 @@ void ChameleonMfcKeysScreen::onInit() {
 
 void ChameleonMfcKeysScreen::_goMenu() {
   _state   = STATE_MENU;
-  _menu[0] = {"Discovered Keys"};
-  _menu[1] = {"Key Databases"};
+  _menu[0] = {"Check Known Keys"};
+  _menu[1] = {"Dictionaries"};
   setItems(_menu);
   render();
 }
@@ -29,11 +29,12 @@ void ChameleonMfcKeysScreen::_loadDatabases() {
   if (!_pickDir.length()) _pickDir = kDictDir;
 
   _browser.root = kDictDir;
-  uint8_t n = _browser.load(this, _pickDir, ".txt");
+  uint8_t n = _browser.load(this, _pickDir, ".txt", nullptr, BrowseFileView::STEM_CAPITALIZED,
+                            _pickDir == kDictDir ? "discovered.txt" : nullptr);
   setItems(_browser.items(), n);
   render();
 
-  if (!n && _pickDir == kDictDir) ShowStatusAction::show("No key databases");
+  if (!n && _pickDir == kDictDir) ShowStatusAction::show("No dictionaries");
 }
 
 void ChameleonMfcKeysScreen::_openDatabase(const String& path, const String& name) {
@@ -98,7 +99,7 @@ void ChameleonMfcKeysScreen::onItemSelected(uint8_t index) {
       _pickDir = e.path;
       _loadDatabases();
     } else {
-      _openDatabase(e.path, e.name);
+      _openDatabase(e.path, e.label);
     }
   }
 }
