@@ -16,9 +16,8 @@ public:
   enum class InitialView : int8_t {
     None     = -1,
     Deauth   = 0,
-    Probes   = 1,
-    Flood    = 2,
-    EvilTwin = 3
+    Flood    = 1,
+    EvilTwin = 2
   };
 
   explicit WifiWatchdogScreen(InitialView initialView = InitialView::None)
@@ -58,13 +57,6 @@ public:
     bool          isDisassoc = false;
   };
 
-  struct ProbeEntry {
-    char          ssids[3][33] = {};
-    uint8_t       ssidCount    = 0;
-    int           count        = 0;
-    unsigned long timestamp    = 0;
-  };
-
   struct BeaconWindow {
     char     ssid[33] = {};
     uint16_t count    = 0;
@@ -84,7 +76,6 @@ public:
   static std::unordered_map<MacAddr, std::string,                MacHash, MacEqual> _ssidMap;
   static std::unordered_map<std::string, std::vector<BssidInfo>>                    _twinMap;
   static std::unordered_map<MacAddr, DeauthEntry,   MacHash, MacEqual> _deauthMap;
-  static std::unordered_map<MacAddr, ProbeEntry,    MacHash, MacEqual> _probeMap;
   static std::unordered_map<MacAddr, BeaconWindow,  MacHash, MacEqual> _beaconWindow;
   static std::unordered_map<MacAddr, BeaconEntry,   MacHash, MacEqual> _beaconMap;
 
@@ -97,13 +88,13 @@ private:
   static constexpr int           MAX_RING        = 64;
   static constexpr int           MAX_BEACON_RING = 128;
   static constexpr int           FLOOD_THRESHOLD = 50;
-  // Hard cap on distinct MACs/SSIDs tracked at once. Beacon/probe/deauth spam
+  // Hard cap on distinct MACs/SSIDs tracked at once. Beacon/deauth spam
   // tools commonly randomize the source MAC per frame, which would otherwise
   // grow these maps without bound (and past WINDOW_MS pruning, since a live
   // flood keeps refreshing "last seen") until the heap is exhausted.
   static constexpr size_t        MAX_TRACKED_MAC = 256;
 
-  enum View  { VIEW_OVERALL, VIEW_DEAUTH, VIEW_PROBES, VIEW_FLOOD, VIEW_EVILTWIN };
+  enum View  { VIEW_OVERALL, VIEW_DEAUTH, VIEW_FLOOD, VIEW_EVILTWIN };
 
   struct DeauthEvent {
     MacAddr       mac;
@@ -117,12 +108,6 @@ private:
     uint8_t channel;
   };
 
-  struct ProbeEvent {
-    MacAddr       src;
-    char          ssid[33];
-    unsigned long timestamp;
-  };
-
   struct BeaconEvent {
     MacAddr bssid;
   };
@@ -134,10 +119,6 @@ private:
   static SsidEvent       _ssidRing[MAX_RING];
   static volatile int    _ssidRingHead;
   static volatile int    _ssidRingTail;
-
-  static ProbeEvent      _probeRing[MAX_RING];
-  static volatile int    _probeRingHead;
-  static volatile int    _probeRingTail;
 
   static BeaconEvent     _beaconRing[MAX_BEACON_RING];
   static volatile int    _beaconRingHead;
@@ -167,7 +148,6 @@ private:
   void _renderOverall();
   void _drawGridCell(int idx, int count);
   void _renderDeauth();
-  void _renderProbes();
   void _renderFlood();
   void _renderEviltwin();
   void _setListState(int newCount);

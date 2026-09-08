@@ -740,12 +740,13 @@ void WifiEapolBruteForceScreen::_renderCracking() {
     lcd.setTextColor(TFT_WHITE, TFT_BLACK);
     lcd.drawString(_ctx.hs.ssid, bodyX() + 40, bodyY() + 4);
 
+#ifndef DEVICE_HAS_KEYBOARD
+    static constexpr int FOOTER_H = 12;
+    const int footerY = bodyY() + bodyH() - FOOTER_H;
+    lcd.drawFastHLine(bodyX(), footerY - 1, bodyW(), TFT_DARKGREY);
     lcd.setTextDatum(BC_DATUM);
     lcd.setTextColor(TFT_DARKGREY, TFT_BLACK);
-#ifdef DEVICE_HAS_KEYBOARD
-    lcd.drawString("BACK / ENTER: Stop", bodyX() + bodyW() / 2, bodyY() + bodyH());
-#else
-    lcd.drawString("Any btn: Stop", bodyX() + bodyW() / 2, bodyY() + bodyH());
+    lcd.drawString("[Any button] Stop", bodyX() + bodyW() / 2, footerY + 7);
 #endif
 
     _chromeDrawn = true;

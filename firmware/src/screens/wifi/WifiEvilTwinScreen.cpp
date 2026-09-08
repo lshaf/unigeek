@@ -113,19 +113,19 @@ void WifiEvilTwinScreen::onItemSelected(uint8_t index)
     _showMenu();
   } else if (_state == STATE_SELECT_WIFI) {
     if (index == 0) {
-      _selectWifi();
+      _selectWifi(true);
       return;
     }
 
-    const int apIndex = (int)index - 1;
-    if (apIndex >= 0 && apIndex < _scanCount) {
-      _target.ssid    = WiFi.SSID(apIndex);
-      _target.channel = WiFi.channel(apIndex);
-      sscanf(_scanValues[apIndex], "%hhx:%hhx:%hhx:%hhx:%hhx:%hhx",
-             &_target.bssid[0], &_target.bssid[1], &_target.bssid[2],
-             &_target.bssid[3], &_target.bssid[4], &_target.bssid[5]);
-      _showMenu();
-    }
+    const int scanIndex = (int)index - 1;
+    if (scanIndex < 0 || scanIndex >= _scanCount) return;
+
+    _target.ssid    = _scanSsids[scanIndex];
+    _target.channel = _scanChannels[scanIndex];
+    sscanf(_scanValues[scanIndex], "%hhx:%hhx:%hhx:%hhx:%hhx:%hhx",
+           &_target.bssid[0], &_target.bssid[1], &_target.bssid[2],
+           &_target.bssid[3], &_target.bssid[4], &_target.bssid[5]);
+    _showMenu();
   }
 }
 
@@ -207,35 +207,57 @@ void WifiEvilTwinScreen::_showMenu()
 
 // ── WiFi Scan ───────────────────────────────────────────────────────────────
 
-void WifiEvilTwinScreen::_selectWifi()
+void WifiEvilTwinScreen::_showScanResults()
 {
   _state = STATE_SELECT_WIFI;
-  ShowStatusAction::show("Scanning...", 0);
-
-  WiFi.mode(WIFI_STA);
-  const int total = WiFi.scanNetworks();
-
-  if (total == 0) {
-    ShowStatusAction::show("No networks found");
-    _showMenu();
-    return;
-  }
-
-  _scanCount = total > MAX_SCAN ? MAX_SCAN : total;
   _scanItems[0] = {"Rescan"};
 
   for (int i = 0; i < _scanCount; i++) {
-    snprintf(_scanLabels[i], sizeof(_scanLabels[i]), "%s",
-             WiFi.SSID(i).c_str());
-    snprintf(_scanValues[i], sizeof(_scanValues[i]), "%s",
-             WiFi.BSSIDstr(i).c_str());
-    _scanItems[i + 1]         = {_scanLabels[i]};
-    _scanItems[i + 1].rssi    = (int16_t)WiFi.RSSI(i);
-    _scanItems[i + 1].hasRssi = true;
+    _scanItems[i + 1] = {_scanLabels[i], _scanValues[i]};
+    _scanItems[i + 1].rssi            = _scanRssi[i];
+    _scanItems[i + 1].hasRssi         = true;
+    _scanItems[i + 1].sublabelMarquee = true;
   }
 
   setItems(_scanItems, _scanCount + 1);
 }
+
+void WifiEvilTwinScreen::_selectWifi(bool forceScan)
+{
+  if (_scanValid && !forceScan) {
+    _showScanResults();
+    return;
+  }
+
+  _state = STATE_SELECT_WIFI;
+  ShowStatusAction::show("Scanning...", 0);
+
+  WiFi.mode(WIFI_STA);
+  WiFi.scanDelete();
+  const int total = WiFi.scanNetworks();
+
+  _scanCount = total > MAX_SCAN ? MAX_SCAN : (total > 0 ? total : 0);
+  for (int i = 0; i < _scanCount; i++) {
+    const String ssid = WiFi.SSID(i);
+    snprintf(_scanSsids[i], sizeof(_scanSsids[i]), "%s",
+             ssid.length() > 0 ? ssid.c_str() : "(hidden)");
+    snprintf(_scanLabels[i], sizeof(_scanLabels[i]), "%s", _scanSsids[i]);
+    _scanChannels[i] = (uint8_t)WiFi.channel(i);
+    snprintf(_scanValues[i], sizeof(_scanValues[i]), "%s",
+             WiFi.BSSIDstr(i).c_str());
+    _scanRssi[i] = (int16_t)WiFi.RSSI(i);
+  }
+
+  WiFi.scanDelete();
+  _scanValid = true;
+
+  if (_scanCount == 0) {
+    ShowStatusAction::show("No networks found");
+  }
+
+  _showScanResults();
+}
+
 
 // ── Try Password ────────────────────────────────────────────────────────────
 
@@ -383,7 +405,6 @@ void WifiEvilTwinScreen::_startAttack()
   }
 
   _log.addLine("Web server started");
-  _log.addLine("BACK/Press to stop");
   _drawLog();
 }
 

@@ -124,14 +124,30 @@ void WhisperPairScreen::_showList()
   for (int i = 0; i < total && _devCount < kMaxDevices; i++) {
     NimBLEAdvertisedDevice dev = _scanResults.getDevice(i);
     if (!dev.isAdvertisingService(fpUUID)) continue;
-
-    _scanIdx[_devCount]  = (uint8_t)i;
-    _devLabel[_devCount] = dev.getAddress().toString().c_str();
-    String name          = dev.getName().c_str();
-    _devSub[_devCount]   = name.length() > 0 ? name : "Unknown";
-    _devItems[_devCount] = {_devLabel[_devCount].c_str(), _devSub[_devCount].c_str()};
-    _devCount++;
+    _scanIdx[_devCount++] = (uint8_t)i;
     _hasFpDevices = true;
+  }
+
+  // Sort only the filtered Fast Pair result indices. This preserves the raw
+  // NimBLE scan results used later by _runTest(), while presenting strongest
+  // devices first. Equal RSSI values retain their original scan order.
+  for (int i = 1; i < _devCount; ++i) {
+    uint8_t scanIdx = _scanIdx[i];
+    const int rssi = _scanResults.getDevice(scanIdx).getRSSI();
+    int j = i;
+    while (j > 0 && _scanResults.getDevice(_scanIdx[j - 1]).getRSSI() < rssi) {
+      _scanIdx[j] = _scanIdx[j - 1];
+      --j;
+    }
+    _scanIdx[j] = scanIdx;
+  }
+
+  for (int i = 0; i < _devCount; ++i) {
+    NimBLEAdvertisedDevice dev = _scanResults.getDevice(_scanIdx[i]);
+    _devLabel[i] = dev.getAddress().toString().c_str();
+    String name = dev.getName().c_str();
+    _devSub[i] = name.length() > 0 ? name : "Unknown";
+    _devItems[i] = {_devLabel[i].c_str(), _devSub[i].c_str()};
   }
 
   if (_devCount == 0) {
@@ -158,9 +174,7 @@ void WhisperPairScreen::_runTest()
   _state = STATE_RESULT;
   _log.addLine(_isVulnerable ? ">> VULNERABLE <<" : ">> Safe <<");
 #ifdef DEVICE_HAS_KEYBOARD
-  _log.addLine("ENTER/BACK: Back");
 #else
-  _log.addLine("Press: Back");
 #endif
   render();
   if (Uni.Speaker) Uni.Speaker->beep();

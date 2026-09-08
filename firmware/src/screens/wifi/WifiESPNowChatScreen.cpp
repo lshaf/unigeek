@@ -86,25 +86,22 @@ void WifiESPNowChatScreen::onRender()
 {
   const uint16_t themeColor = Config.getThemeColor();
   const int      LINE_H     = 9;
-  const int      HINT_H     = 10;
+  const int      FOOTER_H   = 12;
 
   auto& lcd = Uni.Lcd;
   lcd.fillRect(bodyX(), bodyY(), bodyW(), bodyH(), TFT_BLACK);
 
-  // Hint bar
-  lcd.drawFastHLine(bodyX(), bodyY() + bodyH() - HINT_H - 1, bodyW(), TFT_DARKGREY);
+  // Dedicated control footer.
+  const int footerY = bodyY() + bodyH() - FOOTER_H;
+  lcd.drawFastHLine(bodyX(), footerY - 1, bodyW(), TFT_DARKGREY);
   lcd.setTextColor(TFT_DARKGREY, TFT_BLACK);
-  lcd.setTextDatum(BL_DATUM);
+  lcd.setTextDatum(MC_DATUM);
   lcd.setTextSize(1);
-#ifdef DEVICE_HAS_KEYBOARD
-  lcd.drawString("ENTER:Msg  \\b:Exit", bodyX(), bodyY() + bodyH());
-#else
-  lcd.drawString("PRESS:Msg  BACK:Exit", bodyX(), bodyY() + bodyH());
-#endif
+  lcd.drawString("[Press] Msg", bodyX() + bodyW() / 2, footerY + 7);
 
   // Messages: newest at bottom, oldest at top
   portENTER_CRITICAL(&_lock);
-  int y = bodyH() - HINT_H - 2 - LINE_H;
+  int y = bodyH() - FOOTER_H - 2 - LINE_H;
   for (int i = _msgCount - 1; i >= 0 && y >= 0; i--) {
     const Entry& e = _messages[i];
 

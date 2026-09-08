@@ -77,7 +77,6 @@ void MassStorageScreen::onRender()
     lcd.drawString("Internal flash can't be", cx, bodyY() + bodyH() / 2 + 4);
     lcd.drawString("exposed as a USB drive.", cx, bodyY() + bodyH() / 2 + 16);
     lcd.setTextColor(TFT_DARKGREY, TFT_BLACK);
-    lcd.drawString("PRESS / BACK: exit", cx, bodyY() + bodyH() / 2 + 34);
     return;
   }
 
@@ -99,12 +98,17 @@ void MassStorageScreen::onRender()
   auto& msc = UsbMscUtil::instance();
   const bool ejected = msc.hostEjected();
 
+  static constexpr int FOOTER_H = 12;
+  const int contentH = bodyH() - FOOTER_H - 1;
+
   if (!_chromeDrawn) {
     lcd.fillRect(bodyX(), bodyY(), bodyW(), bodyH(), TFT_BLACK);
+    const int footerY = bodyY() + bodyH() - FOOTER_H;
+    lcd.drawFastHLine(bodyX(), footerY - 1, bodyW(), TFT_DARKGREY);
     lcd.setTextSize(1);
     lcd.setTextColor(TFT_DARKGREY, TFT_BLACK);
     lcd.setTextDatum(BC_DATUM);
-    lcd.drawString("BACK: Eject", cx, bodyY() + bodyH());
+    lcd.drawString("[Back] Eject", cx, footerY + 7);
     _chromeDrawn = true;
   }
   _lastReads   = msc.sectorReads();
@@ -133,7 +137,7 @@ void MassStorageScreen::onRender()
   sp.setTextColor(TFT_DARKGREY, TFT_BLACK);
   sp.drawString(buf, bodyW() / 2, 54);
 
-  sp.pushSprite(bodyX(), bodyY() + (bodyH() - spH) / 2 - 6);
+  sp.pushSprite(bodyX(), bodyY() + (contentH - spH) / 2);
   sp.deleteSprite();
 }
 

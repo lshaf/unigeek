@@ -1,4 +1,4 @@
-#include "WifiDeautherScreen.h"
+#include "WifiDeauthDisassocScreen.h"
 #include "core/Device.h"
 #include "core/ScreenManager.h"
 #include "core/AchievementManager.h"
@@ -10,13 +10,13 @@
 
 // ── Static definitions ────────────────────────────────────────────────────
 
-WifiDeautherScreen::ApEntry WifiDeautherScreen::_allTargets[MAX_ALL] = {};
-int          WifiDeautherScreen::_allCount = 0;
-portMUX_TYPE WifiDeautherScreen::_allLock  = portMUX_INITIALIZER_UNLOCKED;
+WifiDeauthDisassocScreen::ApEntry WifiDeauthDisassocScreen::_allTargets[MAX_ALL] = {};
+int          WifiDeauthDisassocScreen::_allCount = 0;
+portMUX_TYPE WifiDeauthDisassocScreen::_allLock  = portMUX_INITIALIZER_UNLOCKED;
 
 // ── Destructor ────────────────────────────────────────────────────────────
 
-WifiDeautherScreen::~WifiDeautherScreen()
+WifiDeauthDisassocScreen::~WifiDeauthDisassocScreen()
 {
   if (_attacker) {
     delete _attacker;
@@ -26,13 +26,13 @@ WifiDeautherScreen::~WifiDeautherScreen()
 
 // ── Lifecycle ─────────────────────────────────────────────────────────────
 
-void WifiDeautherScreen::onInit()
+void WifiDeauthDisassocScreen::onInit()
 {
   _state = STATE_MAIN;
   _showMain();
 }
 
-void WifiDeautherScreen::onItemSelected(uint8_t index)
+void WifiDeauthDisassocScreen::onItemSelected(uint8_t index)
 {
   if (_state == STATE_MAIN) {
     if (index == 0) {
@@ -46,23 +46,23 @@ void WifiDeautherScreen::onItemSelected(uint8_t index)
     }
   } else if (_state == STATE_SELECT_WIFI) {
     if (index == 0) {
-      _selectWifi();
+      _selectWifi(true);
       return;
     }
 
-    const int apIndex = (int)index - 1;
-    if (apIndex >= 0 && apIndex < _scanCount) {
-      _target.ssid    = _scanLabels[apIndex];
-      _target.channel = _scanChannels[apIndex];
-      sscanf(_scanValues[apIndex], "%hhx:%hhx:%hhx:%hhx:%hhx:%hhx",
-             &_target.bssid[0], &_target.bssid[1], &_target.bssid[2],
-             &_target.bssid[3], &_target.bssid[4], &_target.bssid[5]);
-      _showMain();
-    }
+    const int scanIndex = (int)index - 1;
+    if (scanIndex < 0 || scanIndex >= _scanCount) return;
+
+    _target.ssid    = _scanLabels[scanIndex];
+    _target.channel = _scanChannels[scanIndex];
+    sscanf(_scanValues[scanIndex], "%hhx:%hhx:%hhx:%hhx:%hhx:%hhx",
+           &_target.bssid[0], &_target.bssid[1], &_target.bssid[2],
+           &_target.bssid[3], &_target.bssid[4], &_target.bssid[5]);
+    _showMain();
   }
 }
 
-void WifiDeautherScreen::onUpdate()
+void WifiDeauthDisassocScreen::onUpdate()
 {
   if (_state != STATE_DEAUTHING) {
     ListScreen::onUpdate();
@@ -93,7 +93,7 @@ void WifiDeautherScreen::onUpdate()
   }
 }
 
-void WifiDeautherScreen::onBack()
+void WifiDeauthDisassocScreen::onBack()
 {
   if (_state == STATE_SELECT_WIFI) {
     _showMain();
@@ -106,13 +106,13 @@ void WifiDeautherScreen::onBack()
 
 // ── Private ───────────────────────────────────────────────────────────────
 
-void WifiDeautherScreen::onRender()
+void WifiDeauthDisassocScreen::onRender()
 {
   if (_state == STATE_DEAUTHING) { _drawStatus(_statusMsg.c_str()); return; }
   ListScreen::onRender();
 }
 
-void WifiDeautherScreen::_showMain()
+void WifiDeauthDisassocScreen::_showMain()
 {
   _state = STATE_MAIN;
   _modeSub = (_mode == MODE_TARGET) ? "Target" : "All";
@@ -129,39 +129,56 @@ void WifiDeautherScreen::_showMain()
   }
 }
 
-void WifiDeautherScreen::_selectWifi()
+void WifiDeauthDisassocScreen::_showScanResults()
 {
   _state = STATE_SELECT_WIFI;
-  ShowStatusAction::show("Scanning...", 0);
-
-  WiFi.mode(WIFI_STA);
-  const int total = WiFi.scanNetworks();
-
-  if (total == 0) {
-    ShowStatusAction::show("No networks found");
-    _showMain();
-    return;
-  }
-
-  _scanCount = total > MAX_SCAN ? MAX_SCAN : total;
   _scanItems[0] = {"Rescan"};
 
   for (int i = 0; i < _scanCount; i++) {
-    snprintf(_scanLabels[i], sizeof(_scanLabels[i]), "%s",
-             WiFi.SSID(i).c_str());
-    snprintf(_scanValues[i], sizeof(_scanValues[i]), "%s",
-             WiFi.BSSIDstr(i).c_str());
-    _scanChannels[i] = (uint8_t)WiFi.channel(i);
-
-    _scanItems[i + 1]         = {_scanLabels[i]};
-    _scanItems[i + 1].rssi    = (int16_t)WiFi.RSSI(i);
-    _scanItems[i + 1].hasRssi = true;
+    _scanItems[i + 1] = {_scanLabels[i], _scanValues[i]};
+    _scanItems[i + 1].rssi            = _scanRssi[i];
+    _scanItems[i + 1].hasRssi         = true;
+    _scanItems[i + 1].sublabelMarquee = true;
   }
 
   setItems(_scanItems, _scanCount + 1);
 }
 
-void WifiDeautherScreen::_startDeauth()
+void WifiDeauthDisassocScreen::_selectWifi(bool forceScan)
+{
+  if (_scanValid && !forceScan) {
+    _showScanResults();
+    return;
+  }
+
+  _state = STATE_SELECT_WIFI;
+  ShowStatusAction::show("Scanning...", 0);
+
+  WiFi.mode(WIFI_STA);
+  WiFi.scanDelete();
+  const int total = WiFi.scanNetworks();
+
+  _scanCount = total > MAX_SCAN ? MAX_SCAN : (total > 0 ? total : 0);
+  for (int i = 0; i < _scanCount; i++) {
+    snprintf(_scanLabels[i], sizeof(_scanLabels[i]), "%s",
+             WiFi.SSID(i).c_str());
+    _scanChannels[i] = (uint8_t)WiFi.channel(i);
+    snprintf(_scanValues[i], sizeof(_scanValues[i]), "%s",
+             WiFi.BSSIDstr(i).c_str());
+    _scanRssi[i] = (int16_t)WiFi.RSSI(i);
+  }
+
+  WiFi.scanDelete();
+  _scanValid = true;
+
+  if (_scanCount == 0) {
+    ShowStatusAction::show("No networks found");
+  }
+
+  _showScanResults();
+}
+
+void WifiDeauthDisassocScreen::_startDeauth()
 {
   if (_mode == MODE_TARGET) {
     const MacAddr blank = {0, 0, 0, 0, 0, 0};
@@ -192,7 +209,7 @@ void WifiDeautherScreen::_startDeauth()
     portEXIT_CRITICAL(&_allLock);
 
     esp_wifi_set_promiscuous(true);
-    esp_wifi_set_promiscuous_rx_cb(&WifiDeautherScreen::_beaconCb);
+    esp_wifi_set_promiscuous_rx_cb(&WifiDeauthDisassocScreen::_beaconCb);
     _statusMsg = "[...] Scanning for APs...";
   } else {
     _statusMsg = "Deauthing " + _target.ssid + "...";
@@ -201,7 +218,7 @@ void WifiDeautherScreen::_startDeauth()
 }
 
 
-void WifiDeautherScreen::_stopDeauth()
+void WifiDeauthDisassocScreen::_stopDeauth()
 {
   if (_mode == MODE_ALL) {
     esp_wifi_set_promiscuous_rx_cb(nullptr);
@@ -214,13 +231,11 @@ void WifiDeautherScreen::_stopDeauth()
   _spinIdx     = 0;
   _allChanHop  = 0;
   _allCount    = 0;
-  _statusMsg = "Deauth stopped.";
-  render();
-  delay(1000);
+  ShowStatusAction::show("Deauth stopped.", 1000);
   _showMain();
 }
 
-void WifiDeautherScreen::_deauthAll()
+void WifiDeauthDisassocScreen::_deauthAll()
 {
   if (!_attacker) return;
 
@@ -244,7 +259,7 @@ void WifiDeautherScreen::_deauthAll()
   _attacker->setChannel(_allChanHop);
 }
 
-void WifiDeautherScreen::_drawStatus(const char* msg)
+void WifiDeauthDisassocScreen::_drawStatus(const char* msg)
 {
   auto& lcd = Uni.Lcd;
 
@@ -252,26 +267,63 @@ void WifiDeautherScreen::_drawStatus(const char* msg)
     lcd.fillRect(bodyX(), bodyY(), bodyW(), bodyH(), TFT_BLACK);
     lcd.setTextDatum(BC_DATUM);
     lcd.setTextColor(TFT_DARKGREY, TFT_BLACK);
-    lcd.drawString("BACK / ENTER: Stop", bodyX() + bodyW() / 2, bodyY() + bodyH());
     _chromeDrawn = true;
   }
 
-  const int labelH = lcd.fontHeight() + 4;
-  const int cy     = bodyY() + bodyH() / 2;
+  String displayMsg(msg);
+  String titleLine;
+  String detailLine;
+
+  // Targeted deauth status reads better with the AP name on its own line.
+  // Keep the all-AP counter on one line (e.g. "Deauthing 4 APs...").
+  const int deauthPos = displayMsg.indexOf("Deauthing ");
+  const bool isAllAps = displayMsg.indexOf(" APs") >= 0;
+  if (deauthPos >= 0 && !isAllAps) {
+    const int detailPos = deauthPos + 10;  // strlen("Deauthing ")
+    titleLine  = displayMsg.substring(0, detailPos - 1);
+    detailLine = displayMsg.substring(detailPos);
+    if (detailLine.endsWith("...")) detailLine.remove(detailLine.length() - 3);
+  }
+
+  const int lineH = lcd.fontHeight();
+  const bool twoLines = !detailLine.isEmpty();
+  const int labelH = twoLines ? (lineH * 2 + 6) : (lineH + 4);
+  const int cy = bodyY() + bodyH() / 2;
 
   Sprite sp(&Uni.Lcd);
-  sp.createSprite(bodyW(), labelH);
+  if (!sp.createSprite(bodyW(), labelH)) return;
   sp.fillSprite(TFT_BLACK);
+  sp.setTextSize(1);
   sp.setTextDatum(MC_DATUM);
   sp.setTextColor(TFT_WHITE, TFT_BLACK);
-  sp.drawString(msg, bodyW() / 2, labelH / 2);
+
+  const int maxTextW = bodyW() - 8;
+  auto fitLine = [&](String& text) {
+    if (sp.textWidth(text.c_str()) <= maxTextW) return;
+    while (text.length() > 1 &&
+           sp.textWidth((text + "...").c_str()) > maxTextW) {
+      text.remove(text.length() - 1);
+    }
+    text += "...";
+  };
+
+  if (twoLines) {
+    fitLine(titleLine);
+    fitLine(detailLine);
+    sp.drawString(titleLine.c_str(), bodyW() / 2, lineH / 2 + 1);
+    sp.drawString(detailLine.c_str(), bodyW() / 2, lineH + lineH / 2 + 5);
+  } else {
+    fitLine(displayMsg);
+    sp.drawString(displayMsg.c_str(), bodyW() / 2, labelH / 2);
+  }
+
   sp.pushSprite(bodyX(), cy - labelH / 2);
   sp.deleteSprite();
 }
 
 // ── Beacon callback ────────────────────────────────────────────────────────
 
-void WifiDeautherScreen::_beaconCb(void* buf, wifi_promiscuous_pkt_type_t type)
+void WifiDeauthDisassocScreen::_beaconCb(void* buf, wifi_promiscuous_pkt_type_t type)
 {
   if (type != WIFI_PKT_MGMT || buf == nullptr) return;
 

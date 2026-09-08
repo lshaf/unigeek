@@ -248,7 +248,7 @@ void WifiAPScreen::_showLog()
   }
 
   _log.addLine("");
-  _log.addLine("DOWN 3x (2s) for WiFi QR");
+  _log.addLine("[Down 3x (2s)] WiFi QR");
   _log.addLine("Waiting for clients...");
 
   _pressCount = 0;

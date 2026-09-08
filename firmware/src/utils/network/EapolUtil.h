@@ -4,7 +4,7 @@
 #include <cstring>
 
 // Shared EAPOL-Key (WPA/WPA2 4-way handshake) frame parser, used by
-// WifiEapolCaptureScreen and WifiUnigotchiScreen so both features classify
+// WifiEapolScreen and WifiUnigotchiScreen so both features classify
 // and pair messages identically instead of keeping separate hand-rolled
 // copies that can (and did) disagree.
 class EapolUtil {

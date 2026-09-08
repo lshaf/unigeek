@@ -375,7 +375,6 @@ void ClaudeBuddyScreen::onRender() {
   sp.setTextColor(TFT_WHITE, 0x1082);
 #ifdef DEVICE_HAS_KEYBOARD
   sp.setCursor(bw - 60, fy + 2);
-  sp.print("BACK: quit");
 #else
   sp.setCursor(bw - 72, fy + 2);
   sp.print("hold B: quit");

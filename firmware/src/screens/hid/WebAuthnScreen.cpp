@@ -151,8 +151,6 @@ void WebAuthnScreen::onRender()
     lcd.drawString(">  Generate BIP39",          cx, y);
     lcd.setTextDatum(BC_DATUM);
     lcd.setTextColor(TFT_DARKGREY, TFT_BLACK);
-    lcd.drawString("PRESS / BACK: exit",
-                   bodyX() + bodyW() / 2, bodyY() + bodyH() - 4);
     return;
   }
 
@@ -160,10 +158,6 @@ void WebAuthnScreen::onRender()
 
   if (!_chromeDrawn) {
     lcd.fillRect(bodyX(), bodyY(), bodyW(), bodyH(), TFT_BLACK);
-    lcd.setTextSize(1);
-    lcd.setTextColor(TFT_DARKGREY, TFT_BLACK);
-    lcd.setTextDatum(BC_DATUM);
-    lcd.drawString("BACK: Stop", bodyX() + bodyW() / 2, bodyY() + bodyH());
     _chromeDrawn   = true;
     _lastConnected = !connected;  // force first status paint
     _lastTxDrawn   = (uint32_t)-1;
@@ -181,7 +175,7 @@ void WebAuthnScreen::onRender()
     sp.setTextColor(TFT_LIGHTGREY, TFT_BLACK);
     sp.drawString(_promptRpId ? _promptRpId : "(unknown)", bodyW() / 2, 36);
     sp.setTextColor(TFT_GREEN, TFT_BLACK);
-    sp.drawString("PRESS to allow / BACK to deny", bodyW() / 2, 52);
+    sp.drawString("[Press] Allow / [Back] Deny", bodyW() / 2, 52);
     sp.pushSprite(bodyX(), bodyY() + (bodyH() - 64) / 2 - 6);
     sp.deleteSprite();
     return;
@@ -193,7 +187,6 @@ void WebAuthnScreen::onRender()
   //   │            [ Active ]      ← size 3 │
   //   │            Tx: N           ← size 1 │
   //   │                                     │
-  //   │            BACK: Stop      ← footer │
   //   └─────────────────────────────────────┘
   const int centerX = bodyX() + bodyW() / 2;
   const int statusY = bodyY() + bodyH() / 2 - 12;

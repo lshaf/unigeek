@@ -326,11 +326,11 @@ void MFRC522Screen::_callScanUid() {
   lcd.setTextSize(1);
   #ifdef DEVICE_HAS_KEYBOARD
     lcd.setTextColor(TFT_WHITE, TFT_BLACK);
-    lcd.drawString("ENTER: Scan  BACK: Menu", bodyX() + bodyW() / 2, bodyY() + bodyH() - 10);
+    lcd.drawString("[Press] Scan", bodyX() + bodyW() / 2, bodyY() + bodyH() - 10);
   #else
     lcd.fillRect(bodyX(), bodyY() + bodyH() - 16, bodyW(), 16, Config.getThemeColor());
     lcd.setTextColor(TFT_WHITE, Config.getThemeColor());
-    lcd.drawString("PRESS: Scan", bodyX() + bodyW() / 2, bodyY() + bodyH() - 8);
+    lcd.drawString("[Press] Scan", bodyX() + bodyW() / 2, bodyY() + bodyH() - 8);
   #endif
 }
 

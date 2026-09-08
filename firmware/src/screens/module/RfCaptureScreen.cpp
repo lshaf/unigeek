@@ -138,18 +138,17 @@ void RfCaptureScreen::onRender() {
       _radioFreqLabel(freqStr, sizeof(freqStr));
       lcd.drawString(freqStr, bodyX() + bodyW() / 2, bodyY() + bodyH() / 2 - 20);
       lcd.drawString("Waiting for signal...", bodyX() + bodyW() / 2, bodyY() + bodyH() / 2);
-      lcd.fillRect(bodyX(), bodyY() + bodyH() - 16, bodyW(), 16, Config.getThemeColor());
-      lcd.setTextColor(TFT_WHITE, Config.getThemeColor());
-      const char* filterLabel = (_radioGetRxFilter() == CC1101Util::RX_FILTER_CODE)
-                                ? "> Filter: Code" : "> Filter: RAW";
-      lcd.setTextDatum(ML_DATUM);
-      #ifdef DEVICE_HAS_KEYBOARD
-        lcd.drawString("BACK: Stop", bodyX() + 4, bodyY() + bodyH() - 8);
-      #else
-        lcd.drawString("< Stop", bodyX() + 4, bodyY() + bodyH() - 8);
-      #endif
-      lcd.setTextDatum(MR_DATUM);
-      lcd.drawString(filterLabel, bodyX() + bodyW() - 4, bodyY() + bodyH() - 8);
+      static constexpr int FOOTER_H = 12;
+      const int footerY = bodyY() + bodyH() - FOOTER_H;
+      lcd.drawFastHLine(bodyX(), footerY - 1, bodyW(), TFT_DARKGREY);
+      lcd.setTextColor(TFT_DARKGREY, TFT_BLACK);
+      const bool fourWay = Uni.Nav->is4Way();
+      const bool codeFilter = _radioGetRxFilter() == CC1101Util::RX_FILTER_CODE;
+      char filterLabel[28];
+      snprintf(filterLabel, sizeof(filterLabel), "%s Filter: %s",
+               fourWay ? "[Lt/Rt]" : "[Hold]", codeFilter ? "Code" : "RAW");
+      lcd.setTextDatum(MC_DATUM);
+      lcd.drawString(filterLabel, bodyX() + bodyW() / 2, footerY + 7);
       _chromeDrawn = true;
     } else {
       ListScreen::onRender();
@@ -181,13 +180,6 @@ void RfCaptureScreen::onRender() {
       lcd.drawString("Jamming...", bodyX() + bodyW() / 2, cy);
     }
 
-    #ifdef DEVICE_HAS_KEYBOARD
-      lcd.drawString("BACK: Stop", bodyX() + bodyW() / 2, bodyY() + bodyH() - 10);
-    #else
-      lcd.fillRect(bodyX(), bodyY() + bodyH() - 16, bodyW(), 16, Config.getThemeColor());
-      lcd.setTextColor(TFT_WHITE, Config.getThemeColor());
-      lcd.drawString("< Stop", bodyX() + bodyW() / 2, bodyY() + bodyH() - 8);
-    #endif
     _chromeDrawn = true;
     return;
   }

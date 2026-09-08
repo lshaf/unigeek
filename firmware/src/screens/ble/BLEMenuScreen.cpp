@@ -2,7 +2,7 @@
 #include "core/Device.h"
 #include "core/ScreenManager.h"
 #include "screens/MainMenuScreen.h"
-#include "screens/ble/BLEAnalysisDetectionMenuScreen.h"
+#include "screens/ble/BLEMonitoringDetectionMenuScreen.h"
 #include "screens/ble/BLEAttacksMenuScreen.h"
 #include "screens/ble/BLEExtensionsMenuScreen.h"
 #include "core/ScreenMirror.h"
@@ -18,7 +18,7 @@ void BLEMenuScreen::onInit()
 void BLEMenuScreen::onItemSelected(uint8_t index)
 {
   switch (index) {
-    case 0: Screen.push(new BLEAnalysisDetectionMenuScreen()); break;
+    case 0: Screen.push(new BLEMonitoringDetectionMenuScreen()); break;
     case 1: Screen.push(new BLEAttacksMenuScreen());           break;
     case 2: Screen.push(new BLEExtensionsMenuScreen());        break;
     case 3: _toggleRemoteDevice();                             break;

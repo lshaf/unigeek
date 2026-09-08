@@ -95,9 +95,10 @@ void NetworkMenuScreen::_showWifiList() {
   _scannedItems[0] = {"Rescan"};
 
   for (int i = 0; i < _scannedCount; i++) {
-    _scannedItems[i + 1]         = {_scanned[i].ssid, _scanned[i].bssid};
-    _scannedItems[i + 1].rssi    = _scanned[i].rssi;
-    _scannedItems[i + 1].hasRssi = true;
+    _scannedItems[i + 1]                 = {_scanned[i].ssid, _scanned[i].bssid};
+    _scannedItems[i + 1].rssi            = _scanned[i].rssi;
+    _scannedItems[i + 1].hasRssi         = true;
+    _scannedItems[i + 1].sublabelMarquee = true;
   }
 
   _scanning = false;

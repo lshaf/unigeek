@@ -144,10 +144,8 @@ void BonjourSpamScreen::_toggleCategory(uint8_t idx) {
 //   y=0..7      ● BROADCASTING                  00:42       size 1 (6×8)
 //   y=14..37    [counter]                                   size 3 (18×24)
 //   y=42..49    "packets sent"                              size 1, dim
-//   ...gap...
-//   y=H-32..H-25  Last instance (cyan, centered)            size 1
-//   y=H-19..H-11  Last category (dim, centered)             size 1
-//   y=H-8 ..H     OK / BACK = stop (BC_DATUM, dark grey)    size 1
+//   y=56..63    Last instance (cyan, centered)             size 1
+//   y=67..74    Last category (dim, centered)               size 1
 
 void BonjourSpamScreen::_drawStatus() {
   using B = BonjourSpamUtil;
@@ -156,67 +154,70 @@ void BonjourSpamScreen::_drawStatus() {
   const int W = bodyW();
   const int H = bodyH();
 
+  // Center the approved content block as a unit. Internal spacing stays fixed:
+  // counter y=14, label y=42, instance y=56, category y=67.
+  const int contentTop = 9 + ((H - 9 - 62) / 2);
+  const int contentDy  = contentTop - 14;
+
+  // Avoid a full-body 16-bit sprite here: on tighter devices (notably the
+  // Cardputer ADV) that allocation can fail once WiFi is active, leaving the
+  // status screen black.  Draw the small dynamic regions directly instead.
   if (!_statusChrome) {
     lcd.fillRect(bodyX(), bodyY(), W, H, TFT_BLACK);
+
+    lcd.setTextSize(1);
+    lcd.setTextDatum(TL_DATUM);
+    lcd.setTextColor(TFT_GREEN, TFT_BLACK);
+    lcd.fillCircle(bodyX() + 8, bodyY() + 2, 3, TFT_GREEN);
+    lcd.drawString("BROADCASTING", bodyX() + 16, bodyY());
+
+    lcd.setTextDatum(TC_DATUM);
+    lcd.setTextColor(0x7BEF, TFT_BLACK);
+    lcd.drawString("packets sent", bodyX() + W / 2, bodyY() + 42 + contentDy);
+
     _statusChrome = true;
   }
 
-  Sprite sp(&lcd);
-  if (!sp.createSprite(W, H)) return;
-  sp.fillSprite(TFT_BLACK);
-
-  // ── Status row (y = 0..7) ────────────────────────────────────────────────
-  sp.fillCircle(8, 2, 3, TFT_GREEN);
-
-  sp.setTextSize(1);
-  sp.setTextDatum(TL_DATUM);
-  sp.setTextColor(TFT_GREEN, TFT_BLACK);
-  sp.drawString("BROADCASTING", 16, 0);
-
+  // Elapsed time.
   uint32_t elapsedSec = (millis() - _spamStartMs) / 1000;
   char tbuf[12];
   snprintf(tbuf, sizeof(tbuf), "%02lu:%02lu",
            (unsigned long)(elapsedSec / 60),
            (unsigned long)(elapsedSec % 60));
-  sp.setTextDatum(TR_DATUM);
-  sp.setTextColor(TFT_WHITE, TFT_BLACK);
-  sp.drawString(tbuf, W - 2, 0);
+  lcd.fillRect(bodyX() + W - 42, bodyY(), 42, 9, TFT_BLACK);
+  lcd.setTextSize(1);
+  lcd.setTextDatum(TR_DATUM);
+  lcd.setTextColor(TFT_WHITE, TFT_BLACK);
+  lcd.drawString(tbuf, bodyX() + W - 2, bodyY());
 
-  // ── Counter (y = 14..37, size 3 = 24 px tall) ───────────────────────────
+  // Packet counter.
   uint32_t total = B::packetsSent();
   char nbuf[16];
   snprintf(nbuf, sizeof(nbuf), "%lu", (unsigned long)total);
-  sp.setTextSize(3);
-  sp.setTextDatum(TC_DATUM);
-  sp.setTextColor(Config.getThemeColor(), TFT_BLACK);
-  sp.drawString(nbuf, W / 2, 14);
+  lcd.fillRect(bodyX(), bodyY() + 14 + contentDy, W, 25, TFT_BLACK);
+  lcd.setTextSize(3);
+  lcd.setTextDatum(TC_DATUM);
+  lcd.setTextColor(Config.getThemeColor(), TFT_BLACK);
+  lcd.drawString(nbuf, bodyX() + W / 2, bodyY() + 14 + contentDy);
 
-  // ── Suffix label (y = 42..49, size 1) ───────────────────────────────────
-  sp.setTextSize(1);
-  sp.setTextColor(0x7BEF, TFT_BLACK);   // mid-grey
-  sp.drawString("packets sent", W / 2, 42);
-
-  // ── Last broadcast (anchored to bottom) ─────────────────────────────────
-  int catTop  = H - 19;
-  int instTop = H - 32;
+  // Last broadcast. Keep this block close to the packet counter instead of
+  // anchoring it to the bottom, which leaves a large visual gap on short/wide
+  // displays such as the Cardputer ADV.
+  const int instTop = bodyY() + 56 + contentDy;
+  const int catTop  = bodyY() + 67 + contentDy;
+  lcd.fillRect(bodyX(), instTop, W, (catTop - instTop) + 9, TFT_BLACK);
 
   String lastInst = B::lastInstance();
   if (lastInst.isEmpty()) lastInst = "(waiting...)";
-  while (sp.textWidth(lastInst.c_str()) > W - 8 && lastInst.length() > 1) {
+  lcd.setTextSize(1);
+  while (lcd.textWidth(lastInst.c_str()) > W - 8 && lastInst.length() > 1) {
     lastInst.remove(lastInst.length() - 1);
   }
-  sp.setTextDatum(TC_DATUM);
-  sp.setTextColor(TFT_CYAN, TFT_BLACK);
-  sp.drawString(lastInst.c_str(), W / 2, instTop);
 
-  sp.setTextColor(0x7BEF, TFT_BLACK);
-  sp.drawString(B::categoryLabel(B::lastCategory()), W / 2, catTop);
+  lcd.setTextDatum(TC_DATUM);
+  lcd.setTextColor(TFT_CYAN, TFT_BLACK);
+  lcd.drawString(lastInst.c_str(), bodyX() + W / 2, instTop);
 
-  // ── Bottom hint (y = H-8..H) ────────────────────────────────────────────
-  sp.setTextDatum(BC_DATUM);
-  sp.setTextColor(TFT_DARKGREY, TFT_BLACK);
-  sp.drawString("OK / BACK = stop", W / 2, H);
-
-  sp.pushSprite(bodyX(), bodyY());
-  sp.deleteSprite();
+  lcd.setTextColor(0x7BEF, TFT_BLACK);
+  lcd.drawString(B::categoryLabel(B::lastCategory()), bodyX() + W / 2, catTop);
 }

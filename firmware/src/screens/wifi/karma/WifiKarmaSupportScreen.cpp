@@ -134,7 +134,6 @@ void WifiKarmaSupportScreen::onRender()
 
 #ifdef DEVICE_HAS_KEYBOARD
     lcd.setTextDatum(BL_DATUM);
-    lcd.drawString("\\b exit", bodyX() + 2, bodyY() + bodyH() - 2);
 #endif
 
     _chromeDrawn = true;

@@ -500,7 +500,8 @@ void GameMusicComposerScreen::_renderEditor() {
 
   // ── Mini-strip: 9 steps centered on cursor ────────────────────────────────
   static constexpr int STRIP_H = 14;
-  int stripY = h - STRIP_H - 10;
+  const bool fourWay = Uni.Nav->is4Way();
+  int stripY = h - STRIP_H - (fourWay ? 18 : 10);
   int slots  = 9;
   int slotW  = w / slots;
   for (int i = 0; i < slots; i++) {
@@ -527,9 +528,14 @@ void GameMusicComposerScreen::_renderEditor() {
 
   // ── Bottom hint ────────────────────────────────────────────────────────────
   sp.setTextColor(TFT_DARKGREY);
-  sp.setTextDatum(BC_DATUM);
-  if (Uni.Nav->is4Way()) sp.drawString("LR step  UPDN pitch  PRESS menu", w / 2, h - 1);
-  else                   sp.drawString("UPDN pitch  PRESS menu",           w / 2, h - 1);
+  if (fourWay) {
+    sp.setTextDatum(BL_DATUM);
+    sp.drawString("[Lt/Rt] Step  [Up/Dn] Pitch", 0, h - 9);
+    sp.drawString("[Press] Menu", 0, h - 1);
+  } else {
+    sp.setTextDatum(BC_DATUM);
+    sp.drawString("[Up/Dn] Pitch  [Press] Menu", w / 2, h - 1);
+  }
 
   sp.pushSprite(x, y);
   sp.deleteSprite();

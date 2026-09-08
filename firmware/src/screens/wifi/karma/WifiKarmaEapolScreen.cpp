@@ -489,7 +489,6 @@ void WifiKarmaEapolScreen::_startAttack()
   if (nk == 1) Achievement.unlock("wifi_karma_eapol_started");
 
   _log.addLine("[*] Karma EAPOL started");
-  _log.addLine("[*] BACK/Press to stop");
   _initEspNow();
   _startSniffingLight();
   _drawLog();

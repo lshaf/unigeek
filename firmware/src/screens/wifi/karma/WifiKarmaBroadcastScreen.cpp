@@ -119,7 +119,6 @@ void WifiKarmaBroadcastScreen::_startAttack()
   _log.addLine(_wpa2 ? "[*] Mimicry WPA2 (RSN)" : "[*] Mimicry open");
   if (_autoKarma) _log.addLine("[*] Karma responses ON");
   if (_deauth)    _log.addLine("[*] Integrated deauth ON");
-  _log.addLine("[*] </> ch  OK pause  BACK stop");
   render();
 }
 
@@ -417,7 +416,11 @@ void WifiKarmaBroadcastScreen::onBack()
 
 void WifiKarmaBroadcastScreen::_drawLog()
 {
-  _log.draw(Uni.Lcd, bodyX(), bodyY(), bodyW(), bodyH(),
+  static constexpr int FOOTER_H = 12;
+  const int footerY = bodyY() + bodyH() - FOOTER_H;
+  const int logH = bodyH() - FOOTER_H - 1;
+
+  _log.draw(Uni.Lcd, bodyX(), bodyY(), bodyW(), logH,
     [](Sprite& sp, int barY, int w, void* ud) {
       auto* s = static_cast<WifiKarmaBroadcastScreen*>(ud);
       sp.setTextColor(s->_paused ? TFT_ORANGE : TFT_GREEN, TFT_BLACK);
@@ -432,6 +435,16 @@ void WifiKarmaBroadcastScreen::_drawLog()
                       : s->_paused ? "PAUSED" : s->_modeName();
       sp.drawString(tag, w - 2, barY);
     }, this);
+
+  auto& lcd = Uni.Lcd;
+  lcd.drawFastHLine(bodyX(), footerY - 1, bodyW(), TFT_DARKGREY);
+  lcd.setTextSize(1);
+  lcd.setTextColor(TFT_DARKGREY, TFT_BLACK);
+  lcd.setTextDatum(BC_DATUM);
+  const char* controls = Uni.Nav->is4Way()
+                       ? "[Lt/Rt] Channel  [Press] Options"
+                       : "[Up/Dn] Channel  [Press] Options";
+  lcd.drawString(controls, bodyX() + bodyW() / 2, footerY + 7);
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -750,7 +763,6 @@ void WifiKarmaBroadcastScreen::_showStats()
   line(String("Channel: ")  + _channel + "  Mode: " + _modeName(), TFT_CYAN);
   line(String("Evil AP: ")  + (_evilAp ? _evilApSsid : String("off")), TFT_CYAN);
   y += 4;
-  line("PRESS/BACK: back", TFT_DARKGREY);
 
   // Wait for any key, then let the caller redraw the dashboard.
   while (true) {

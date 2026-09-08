@@ -3,7 +3,6 @@
 #include "ui/templates/ListScreen.h"
 #include "ui/views/TextScrollView.h"
 #include <NimBLEDevice.h>
-#include <vector>
 
 class BLEAnalyzerScreen : public ListScreen {
 public:
@@ -33,13 +32,13 @@ private:
 
   NimBLEScan*       _bleScan           = nullptr;
   NimBLEScanResults _scanResults;
+  NimBLEAdvertisedDevice _devices[kMaxDevices];
   int               _selectedDeviceIdx = -1;
 
   // Device list storage
   String   _devLabel[kMaxDevices];
   String   _devSub[kMaxDevices];
-  ListItem _devItems[kMaxDevices + 1];  // Rescan + snapshot devices
-  std::vector<NimBLEAdvertisedDevice> _devices;
+  ListItem _devItems[kMaxDevices + 1];
   uint8_t  _devCount = 0;
 
   void _doScan();

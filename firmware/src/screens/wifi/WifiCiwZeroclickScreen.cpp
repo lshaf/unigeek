@@ -371,27 +371,12 @@ void WifiCiwZeroclickScreen::_drawBroadcasting()
 {
   auto& lcd = Uni.Lcd;
 
-#ifdef DEVICE_HAS_KEYBOARD
-  static constexpr int footerH = 14;
-#else
-  static constexpr int footerH = 16;
-#endif
   static constexpr int rowH = 14;
   const int contentY = bodyY() + 4;
-  const int contentH = bodyH() - footerH - 4;
+  const int contentH = bodyH() - 4;
 
   if (!_chromeDrawn) {
     lcd.fillRect(bodyX(), bodyY(), bodyW(), bodyH(), TFT_BLACK);
-#ifdef DEVICE_HAS_KEYBOARD
-    lcd.setTextDatum(BC_DATUM);
-    lcd.setTextColor(TFT_DARKGREY, TFT_BLACK);
-    lcd.drawString("BACK: Stop", bodyX() + bodyW() / 2, bodyY() + bodyH());
-#else
-    lcd.fillRect(bodyX(), bodyY() + bodyH() - footerH, bodyW(), footerH, Config.getThemeColor());
-    lcd.setTextDatum(BC_DATUM);
-    lcd.setTextColor(TFT_WHITE, Config.getThemeColor());
-    lcd.drawString("< Back", bodyX() + bodyW() / 2, bodyY() + bodyH() - 3);
-#endif
     _chromeDrawn = true;
   }
 

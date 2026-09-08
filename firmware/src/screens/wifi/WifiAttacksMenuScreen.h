@@ -12,13 +12,14 @@ public:
   void onBack() override;
 
 private:
-  ListItem _items[7] = {
+  ListItem _items[8] = {
+    {"Beacon Flood"},
+    {"Deauth/Disassoc"},
     {"Rogue Access Point"},
     {"Evil Twin"},
-    {"Karma Attack"},
-    {"Deauth Attack"},
-    {"Beacon Attack"},
-    {"CIW Zeroclick"},
+    {"Karma"},
+    {"EAPOL Capture"},
     {"EAPOL Brute Force"},
+    {"CIW Zeroclick"},
   };
 };

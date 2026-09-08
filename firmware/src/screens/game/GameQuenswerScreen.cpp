@@ -469,7 +469,7 @@ void GameQuenswerScreen::_renderPlay()
 
   // Previous guesses (most recent first), colour-coded, fitted to one row each.
   if (_histCount > 0 && _answerLen > 0) {
-    const int chipH = 9, lineH = 11, hintTop = H - 11;
+    const int chipH = 9, lineH = 11, hintTop = H - (noKb ? 19 : 11);
     int cw = (W - 4) / _answerLen;
     if (cw > 10) cw = 10;
     if (cw < 4)  cw = 4;
@@ -496,10 +496,15 @@ void GameQuenswerScreen::_renderPlay()
     }
   }
 
-  sp.setTextDatum(BC_DATUM);
   sp.setTextColor(TFT_DARKGREY, TFT_BLACK);
-  sp.drawString(noKb ? "UP/DN pick  OK place  BACK erase"
-                     : "Type  ENTER guess  BACK erase", W / 2, H - 1);
+  if (noKb) {
+    sp.setTextDatum(BL_DATUM);
+    sp.drawString("[Up/Dn] Pick  [Press] Place", 0, H - 9);
+    sp.drawString("[Back] Erase", 0, H - 1);
+  } else {
+    sp.setTextDatum(BC_DATUM);
+    sp.drawString("Type  [Enter] Guess  [Back] Erase", W / 2, H - 1);
+  }
 
   sp.pushSprite(bodyX(), bodyY());
   sp.deleteSprite();

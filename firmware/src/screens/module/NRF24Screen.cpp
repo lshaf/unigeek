@@ -547,6 +547,8 @@ void NRF24Screen::_jamStep() {
 void NRF24Screen::_renderJammerStatus() {
   auto& lcd = Uni.Lcd;
   int bx = bodyX(), by = bodyY(), bw = bodyW(), bh = bodyH();
+  static constexpr int FOOTER_H = 12;
+  const int contentH = bh - FOOTER_H - 1;
 
   // Static chrome — redrawn when mode / hop change (via _chromeDrawn = false)
   if (!_chromeDrawn) {
@@ -560,14 +562,16 @@ void NRF24Screen::_renderJammerStatus() {
     char line[28];
     lcd.setTextColor(TFT_YELLOW, TFT_BLACK);
     snprintf(line, sizeof(line), "MODE: %s", kJamModeNames[_jamModeIndex]);
-    lcd.drawString(line, bx + 4, by + 4 + bh / 5, 1);
+    lcd.drawString(line, bx + 4, by + 4 + contentH / 5, 1);
 
     lcd.setTextColor(TFT_DARKGREY, TFT_BLACK);
     snprintf(line, sizeof(line), "HOP : %s", _jamHopMode == 0 ? "Sequential" : "FHSS");
-    lcd.drawString(line, bx + 4, by + 4 + bh / 5 * 2, 1);
+    lcd.drawString(line, bx + 4, by + 4 + contentH / 5 * 2, 1);
 
-    lcd.drawString("</>: Mode  OK: Hop", bx + 4, by + bh - 22, 1);
-    lcd.drawString("<: Stop",            bx + 4, by + bh - 12, 1);
+    const int footerY = by + bh - FOOTER_H;
+    lcd.drawFastHLine(bx, footerY - 1, bw, TFT_DARKGREY);
+    lcd.setTextDatum(MC_DATUM);
+    lcd.drawString("[Lt/Rt] Mode  [Press] Hop", bx + bw / 2, footerY + 7, 1);
     _chromeDrawn = true;
   }
 }
@@ -782,7 +786,7 @@ void NRF24Screen::_renderMjScan() {
   }
   if (_mjCount > 0) {
     lcd.setTextColor(TFT_DARKGREY, TFT_BLACK);
-    lcd.drawCentreString("OK: inject text", bx + bw / 2, by + bh - 10, 1);
+    lcd.drawCentreString("[Press] Inject text", bx + bw / 2, by + bh - 10, 1);
   }
 }
 

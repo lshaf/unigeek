@@ -217,14 +217,13 @@ void UartTerminalScreen::_configApName() {
 
 void UartTerminalScreen::_configNetwork() {
   WifiUtility::ScannedWifi nets[WifiUtility::MAX_WIFI];
-  ShowStatusAction::show("Scanning WiFi...", 0);
+  ShowStatusAction::show("Scanning...", 0);
   int n = WifiUtility::scan(nets, WifiUtility::MAX_WIFI);
   if (n == 0) { ShowStatusAction::show("No networks found", 1500); render(); return; }
 
   InputSelectAction::Option opts[WifiUtility::MAX_WIFI];
   for (int i = 0; i < n; i++) {
-    opts[i].label = nets[i].label;
-    opts[i].value = nets[i].ssid;
+    opts[i] = {nets[i].ssid, nets[i].ssid, nets[i].bssid, nets[i].rssi, true};
   }
   const char* sel = InputSelectAction::popup("Network", opts, n, _networkSSID.c_str());
   if (!sel) { render(); return; }

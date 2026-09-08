@@ -497,7 +497,7 @@ void PasswordManagerScreen::_renderView()
   }
 
   static constexpr int LABEL_H = 10;
-  static constexpr int HINT_H  = 10;
+  static constexpr int HINT_H  = 12;
   static constexpr int PAD     = 4;
 
   // Label
@@ -559,16 +559,18 @@ void PasswordManagerScreen::_renderView()
     sp.deleteSprite();
   }
 
-  // Hint
+  // Control footer
   {
+    const int footerY = y + h - HINT_H - PAD;
+    lcd.drawFastHLine(x, footerY - 1, w, TFT_DARKGREY);
     Sprite sp(&lcd);
     sp.createSprite(w, HINT_H);
     sp.fillSprite(TFT_BLACK);
     sp.setTextColor(TFT_DARKGREY);
     sp.setTextSize(1);
     sp.setTextDatum(TC_DATUM);
-    sp.drawString("PRESS:type  HOLD:options", w / 2, 1);
-    sp.pushSprite(x, y + h - HINT_H - PAD);
+    sp.drawString("[Press] Type  [Hold] Options", w / 2, 3);
+    sp.pushSprite(x, footerY);
     sp.deleteSprite();
   }
 }

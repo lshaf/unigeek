@@ -685,7 +685,7 @@ bool WifiUnigotchiScreen::_extractPmkid(const uint8_t* data, uint16_t len) {
   return false;
 }
 
-// Pairing via EapolUtil (shared with WifiEapolCaptureScreen). A pair is only
+// Pairing via EapolUtil (shared with WifiEapolScreen). A pair is only
 // "validated" when the M1/M3 and M2 share BOTH the station MAC *and* the
 // EAPOL Replay Counter — MAC alone isn't enough, since active mode deauths
 // clients to force retries, and a stale M1/M3 from one attempt paired with
