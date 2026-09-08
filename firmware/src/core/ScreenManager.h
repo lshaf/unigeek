@@ -66,7 +66,7 @@ public:
   }
 
 private:
-  static constexpr uint8_t kMaxDepth = 8;
+  static constexpr uint8_t kMaxDepth = 12;
   IScreen* _stack[kMaxDepth] = {};
   uint8_t  _stackTop   = 0;
   IScreen* _current    = nullptr;

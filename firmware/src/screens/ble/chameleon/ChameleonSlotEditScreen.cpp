@@ -57,7 +57,7 @@ void ChameleonSlotEditScreen::_rebuildLabels() {
   snprintf(_labels[7], sizeof(_labels[7]), "Save Nicks");
   _subs[7][0] = 0;
 
-  snprintf(_labels[8], sizeof(_labels[8]), "View Content");
+  snprintf(_labels[8], sizeof(_labels[8]), "Tag Details");
   _subs[8][0] = 0;
   snprintf(_labels[9], sizeof(_labels[9]), "View Data");
   _subs[9][0] = 0;
@@ -317,17 +317,41 @@ bool ChameleonSlotEditScreen::_writeHfFromBin(const char* path) {
   }
 
   if (_isMfClassicType(tagType)) {
-    // Existing Classic path: block 0 carries the anti-collision fields used by
-    // UniGeek's Classic .bin format.
+    // Raw Classic block 0 carries UID/SAK/ATQA using one of the standard
+    // 4-byte or 7-byte UID layouts. Do not assume a 4-byte UID: .bin files
+    // can come from the PN532, CU, or external tools.
     uint8_t block0[16] = {};
     if (f.read(block0, 16) != 16) { f.close(); restoreContext(); return false; }
-    const uint8_t uidLen = 4;
-    uint8_t acoPayload[11] = {};
+
+    uint8_t uid[7] = {};
+    uint8_t uidLen = 0;
+    uint8_t sak = 0;
+    uint8_t atqa0 = 0, atqa1 = 0;
+    const uint8_t bcc4 = block0[0] ^ block0[1] ^ block0[2] ^ block0[3];
+    if (block0[4] == bcc4 && (block0[6] & 0xC0) == 0x00) {
+      uidLen = 4;
+      memcpy(uid, block0, 4);
+      sak = block0[5];
+      atqa0 = block0[6];
+      atqa1 = block0[7];
+    } else if ((block0[8] & 0xC0) == 0x40) {
+      uidLen = 7;
+      memcpy(uid, block0, 7);
+      sak = block0[7];
+      atqa0 = block0[8];
+      atqa1 = block0[9];
+    } else {
+      f.close();
+      restoreContext();
+      return false;
+    }
+
+    uint8_t acoPayload[12] = {};
     acoPayload[0] = uidLen;
-    memcpy(acoPayload + 1, block0, uidLen);
-    acoPayload[1 + uidLen] = block0[6];
-    acoPayload[2 + uidLen] = block0[7];
-    acoPayload[3 + uidLen] = block0[5];
+    memcpy(acoPayload + 1, uid, uidLen);
+    acoPayload[1 + uidLen] = atqa0;
+    acoPayload[2 + uidLen] = atqa1;
+    acoPayload[3 + uidLen] = sak;
     acoPayload[4 + uidLen] = 0;
     uint16_t st = 0;
     if (!c.sendCommand(ChameleonClient::CMD_MF1_SET_ANTI_COLL,
@@ -507,8 +531,14 @@ bool ChameleonSlotEditScreen::_writeLfFromHex(const char* hex) {
 }
 
 void ChameleonSlotEditScreen::_viewContent() {
-  // First implementation: interpreted HF content for MIFARE Classic slots.
-  Screen.push(new ChameleonSlotContentScreen(_slot));
+  static const InputSelectAction::Option opts[] = {
+    {"HF Tag", "hf"},
+    {"LF Tag", "lf"},
+  };
+  const char* r = InputSelectAction::popup("Tag Details", opts, 2, nullptr);
+  if (!r) { render(); return; }
+  const bool lf = strcmp(r, "lf") == 0;
+  Screen.push(new ChameleonSlotContentScreen(_slot, lf));
 }
 
 void ChameleonSlotEditScreen::_viewData() {
@@ -640,10 +670,35 @@ void ChameleonSlotEditScreen::_downloadDump() {
     return;
   }
 
+  // Use the same dump basename convention as Read Tag -> Save Dump:
+  // <canonical tag type>_<UID>. Keep tagTypeName() spelling exactly
+  // (MF-1K, MF-4K, NTAG215, ...).
   String typeName = ChameleonClient::tagTypeName(_hfType);
-  typeName.toLowerCase();
-  typeName.replace("-", "");
-  String suggested = typeName + "_slot_" + String(_slot + 1);
+  String uid;
+
+  if (_isMfClassicType(_hfType) && dumpSize >= 16) {
+    const uint8_t bcc = dump[0] ^ dump[1] ^ dump[2] ^ dump[3];
+    if (dump[4] == bcc) {
+      char uidBuf[9];
+      snprintf(uidBuf, sizeof(uidBuf), "%02X%02X%02X%02X",
+               dump[0], dump[1], dump[2], dump[3]);
+      uid = uidBuf;
+    }
+  } else if (dumpSize >= 12) {
+    // Type-2 manufacturer pages: UID0..2/BCC0, UID3..6, BCC1.
+    const uint8_t bcc0 = 0x88 ^ dump[0] ^ dump[1] ^ dump[2];
+    const uint8_t bcc1 = dump[4] ^ dump[5] ^ dump[6] ^ dump[7];
+    if (dump[3] == bcc0 && dump[8] == bcc1) {
+      char uidBuf[15];
+      snprintf(uidBuf, sizeof(uidBuf), "%02X%02X%02X%02X%02X%02X%02X",
+               dump[0], dump[1], dump[2], dump[4], dump[5], dump[6], dump[7]);
+      uid = uidBuf;
+    }
+  }
+
+  String suggested = uid.length()
+      ? typeName + "_" + uid
+      : typeName + "_slot_" + String(_slot + 1);
 
   String name = InputTextAction::popup("File name", suggested);
   if (InputTextAction::wasCancelled()) {
@@ -706,7 +761,7 @@ void ChameleonSlotEditScreen::_writeContent() {
   if (strcmp(f, "hf") == 0) {
     // Pick a .bin file from the dumps dir via BrowseFileView (sorted + filtered).
     static constexpr uint8_t kMax = 10;
-    uint8_t n = _browser.load(this, "/unigeek/nfc/dumps", ".bin");
+    uint8_t n = _browser.load(this, "/unigeek/nfc/dumps", BrowseFileView::Mode(BrowseFileView::Mode::FILE_ONLY, ".bin"));
     if (n == 0) {
       render();
       ShowStatusAction::show("No .bin in nfc/dumps", 1500);
@@ -743,7 +798,7 @@ void ChameleonSlotEditScreen::_writeContent() {
       if (n == 1) Achievement.unlock("chameleon_slot_loaded");
     }
   } else {
-    String hex = InputTextAction::popup("EM410X UID (10 hex)");
+    String hex = InputTextAction::popup("EM410X UID (10 hex)", "", InputTextAction::INPUT_HEX);
     if (InputTextAction::wasCancelled() || hex.length() == 0) { render(); return; }
 
     // Restore the Slot Edit screen before the blocking BLE write begins.

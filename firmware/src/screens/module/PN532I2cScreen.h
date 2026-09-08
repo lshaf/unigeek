@@ -5,7 +5,9 @@
 #include "ui/templates/ListScreen.h"
 #include "ui/views/BrowseFileView.h"
 #include "ui/views/ScrollListView.h"
+#include "ui/views/LogView.h"
 #include "utils/nfc/NFCUtility.h"
+#include "utils/nfc/MagicCard.h"
 
 class PN532I2cScreen : public ListScreen
 {
@@ -26,11 +28,23 @@ private:
     STATE_SCAN_RESULT,
     STATE_SCAN_14A,
     STATE_MIFARE_MENU,
+    STATE_MIFARE_TAG_MENU,
+    STATE_MIFARE_NDEF_MENU,
+    STATE_MIFARE_ATTACKS_MENU,
+    STATE_MIFARE_KEYS_MENU,
+    STATE_MIFARE_KEY_DB_SELECT,
+    STATE_MIFARE_KEY_DB_VIEW,
     STATE_MIFARE_DUMP,
+    STATE_MIFARE_DUMP_HEX,
     STATE_MIFARE_KEYS,
+    STATE_MIFARE_DUMP_SELECT,
+    STATE_MIFARE_WRITE_PREVIEW,
     STATE_DICT_SELECT,
     STATE_ULTRALIGHT_MENU,
+    STATE_ULTRALIGHT_TAG_MENU,
+    STATE_ULTRALIGHT_NDEF_MENU,
     STATE_MAGIC_MENU,
+    STATE_MAGIC_DETECT,
     STATE_RAW_RESULT,
     STATE_EMULATE,
     STATE_NTAG_MENU,
@@ -68,35 +82,65 @@ private:
   uint16_t _rowCount = 0;
 
   ListItem _mainItems[5] = {
-    {"Scan ISO14443A"},
+    {"Scan Tag"},
     {"MIFARE Classic"},
     {"Ultralight / NTAG"},
     {"Magic Card"},
     {"Firmware Info"},
   };
 
-  ListItem _mfItems[7] = {
-    {"Read NDEF"},
-    {"Write NDEF"},
-    {"Erase NDEF"},
-    {"Authenticate"},
-    {"Dump Memory"},
-    {"Discovered Keys"},
+  ListItem _mfItems[4] = {
+    {"Tag Operations"},
+    {"NDEF Operations"},
+    {"Attacks"},
+    {"Keys"},
+  };
+
+  ListItem _mfAttackItems[1] = {
     {"Dictionary Attack"},
   };
 
-  ListItem _ulItems[5] = {
+  ListItem _mfKeysItems[2] = {
+    {"Discovered Keys"},
+    {"Key Databases"},
+  };
+
+  ListItem _mfTagItems[3] = {
+    {"Read Tag"},
+    {"Write to Tag"},
+    {"Erase Tag"},
+  };
+
+  ListItem _mfNdefItems[4] = {
     {"Read NDEF"},
     {"Write NDEF"},
     {"Erase NDEF"},
-    {"Read All Pages"},
+    {"Format NDEF"},
+  };
+
+  ListItem _ulItems[2] = {
+    {"Tag Operations"},
+    {"NDEF Operations"},
+  };
+
+  ListItem _ulTagItems[2] = {
+    {"Read Pages"},
     {"Write Page"},
   };
 
+  ListItem _ulNdefItems[3] = {
+    {"Read NDEF"},
+    {"Write NDEF"},
+    {"Erase NDEF"},
+  };
+
+  LogView _magicLog;
+  bool _magicDetectDone = false;
+
   ListItem _magicItems[3] = {
-    {"Detect Gen1a"},
-    {"Gen3 Set UID"},
-    {"Gen3 Lock UID"},
+    {"Detect Magic"},
+    {"Set UID (Gen3)"},
+    {"Lock UID (Gen3)"},
   };
 
   ListItem _ntagItems[2] = {
@@ -121,6 +165,13 @@ private:
   uint8_t  _dumpImg[4096] = {};
   size_t   _dumpLen = 0;
   bool     _hasDump = false;
+  bool     _dumpComplete = false;
+  bool     _resumeReadAfterDict = false;
+  String   _dumpPickDir;
+  bool     _writePreviewFromFile = false;
+  bool     _writePreviewSourceUidKnown = false;
+  uint8_t  _writePreviewSourceUid[7] = {};
+  uint8_t  _writePreviewSourceUidLen = 0;
 
   enum NdefTarget_e {
     NDEF_TARGET_ULTRALIGHT,
@@ -141,19 +192,50 @@ private:
   static constexpr const char* _dictPath = "/unigeek/nfc/dictionaries";
   BrowseFileView _browser;
   String         _dictPickDir;   // current dir in the dict picker
+  String         _keyDbPickDir;  // current dir in the key database browser
+  String         _keyDbViewTitle;
 
   bool _initModule();
   void _cleanup();
   void _goMain();
   void _goMifare();
+  void _goMifareTag();
+  void _goMifareNdef();
+  void _goMifareAttacks();
+  void _goMifareKeys();
+  void _goScan14A();
+  void _openKeyDatabases();
+  void _openKeyDatabase(uint8_t index);
   void _goUltralight();
+  void _goUltralightTag();
+  void _goUltralightNdef();
   void _goMagic();
+  void _goDetectMagic();
   void _doNtagMenu();
 
   void _showFirmwareInfo();
   void _doScan14A();
   void _doAuthenticate();
+  bool _discoverDefaultKeys(bool checkingProgress = false);
+  void _loadSavedKeys();
+  void _saveKeys();
+  bool _hasReadableKeyForEverySector() const;
+  void _doReadTag();
   void _doDumpMemory();
+  void _showTagDetails();
+  void _appendDumpNdefDetails();
+  void _showDumpHex();
+  void _showDumpActions();
+  void _doWriteDumpToTag(const uint8_t* dump, size_t len,
+                         const uint8_t* sourceUid = nullptr, uint8_t sourceUidLen = 0);
+  bool _tryWriteMifareBlock(uint16_t block, const uint8_t data[16],
+                            const uint8_t key[6], bool useKeyB);
+  void _doWriteDumpFromFilePicker();
+  void _doWriteDumpFileSelected(uint8_t fileIndex);
+  void _showWriteDumpPreview(const uint8_t* dump, size_t len,
+                             const uint8_t* sourceUid = nullptr, uint8_t sourceUidLen = 0,
+                             bool fromFile = false);
+  void _doEraseTag();
   void _doShowKeys();
   void _doDictionaryPicker();
   void _doDictionaryAttackWithFile(uint8_t fileIndex);
@@ -181,11 +263,16 @@ private:
   bool _writeNdefRecord(const uint8_t* ndef, size_t ndefLen);
   bool _writeUltralightNdefRecord(const uint8_t* ndef, size_t ndefLen);
   bool _writeClassicNdefRecord(const uint8_t* ndef, size_t ndefLen);
+  bool _formatClassic1kNdef();
   bool _classicNdefSectors(uint8_t* sectors, size_t maxSectors, size_t& count);
   bool _classicAuthSector(uint8_t sector, const uint8_t key[6]);
   bool _classicReadNdefArea(const uint8_t* sectors, size_t sectorCount,
                             uint8_t*& area, size_t& areaLen);
-  void _doDetectGen1a();
+  MagicCardType _detectMagicType();
+  bool _writeMagicUid(MagicCardType type, const uint8_t* sourceUid,
+                      uint8_t sourceUidLen, const uint8_t block0[16]);
+  bool _resetAndReselect();
+  void _doDetectMagic();
   void _doGen3SetUid();
   void _doGen3LockUid();
   void _doSaveDump();

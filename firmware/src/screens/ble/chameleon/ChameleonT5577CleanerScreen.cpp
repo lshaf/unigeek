@@ -25,20 +25,14 @@ static constexpr uint8_t kPwCount = sizeof(kPasswords) / 4;
 void ChameleonT5577CleanerScreen::onInit() {
   _done = false;
   _log.clear();
-  _log.addLine("T5577 Password Cleaner", TFT_CYAN);
+  _log.addLine("T5577 Cleaner", TFT_CYAN);
   _log.addLine("Place T5577 card", TFT_DARKGREY);
-  _log.addLine("[OK] start  [Hold] back", TFT_DARKGREY);
+  _log.addLine("[Press] Start", TFT_DARKGREY);
   _needsDraw = true;
 }
 
 void ChameleonT5577CleanerScreen::onUpdate() {
   if (_running) return;
-
-  if (Uni.Nav->isPressed() && Uni.Nav->heldDuration() >= 1000) {
-    Uni.Nav->suppressCurrentPress();
-    Screen.goBack();
-    return;
-  }
 
   if (Uni.Nav->wasPressed()) {
     auto dir = Uni.Nav->readDirection();
@@ -46,9 +40,8 @@ void ChameleonT5577CleanerScreen::onUpdate() {
       Screen.goBack();
       return;
     }
-    if (dir == INavigation::DIR_PRESS) {
-      if (!_done) _run();
-      else Screen.goBack();
+    if (dir == INavigation::DIR_PRESS && !_done) {
+      _run();
     }
   }
 }

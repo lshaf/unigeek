@@ -5,13 +5,12 @@
 #include "core/ScreenManager.h"
 #include "ui/actions/InputSelectAction.h"
 #include "ui/actions/ShowStatusAction.h"
+#include "ui/components/Header.h"
 #include "ui/views/ProgressView.h"
-#include "utils/nfc/NfcDumpBuilder.h"
 
 
 namespace {
 static constexpr uint8_t kMfc1kSectors = 16;
-static constexpr uint16_t kMfc1kWritableBlocks = 63;
 
 static constexpr uint8_t kEraseKeys[][6] = {
   {0xFF,0xFF,0xFF,0xFF,0xFF,0xFF},
@@ -59,10 +58,10 @@ void ChameleonMfcToolsScreen::onInit() {
 
 void ChameleonMfcToolsScreen::_writeFromFile() {
   static constexpr uint8_t kMax = 10;
-  uint8_t n = _browser.load(this, "/unigeek/nfc/dumps", ".bin");
+  uint8_t n = _browser.load(this, "/unigeek/nfc/dumps", BrowseFileView::Mode(BrowseFileView::Mode::FILE_ONLY, ".bin", 1024));
   if (!n) {
     render();
-    ShowStatusAction::show("No .bin in nfc/dumps", 1500);
+    ShowStatusAction::show("No Classic 1K .bin", 1500);
     render();
     return;
   }
@@ -126,8 +125,8 @@ void ChameleonMfcToolsScreen::_writeFromSlot() {
 
 void ChameleonMfcToolsScreen::_writeTag() {
   static const InputSelectAction::Option opts[] = {
-    {"from File", "file"},
-    {"from Slot", "slot"},
+    {"From File", "file"},
+    {"From Slot", "slot"},
   };
   const char* r = InputSelectAction::popup("Write to Tag", opts, 2, nullptr);
   if (!r) { render(); return; }
@@ -137,60 +136,57 @@ void ChameleonMfcToolsScreen::_writeTag() {
 
 
 void ChameleonMfcToolsScreen::_eraseTag() {
+  Header header;
+  header.render("Erase Tag");
+
   auto& c = ChameleonClient::get();
 
-  uint8_t previousMode = 0;
-  const bool restoreMode = c.getMode(&previousMode);
+  uint8_t    previousMode = 0;
+  const bool restoreMode  = c.getMode(&previousMode);
   c.setMode(1);
 
-  auto& lcd = Uni.Lcd;
+  auto&     lcd = Uni.Lcd;
   const int bx = bodyX(), by = bodyY(), bw = bodyW(), bh = bodyH();
+
   lcd.fillRect(bx, by, bw, bh, TFT_BLACK);
   lcd.setTextDatum(MC_DATUM);
   lcd.setTextSize(1);
   lcd.setTextColor(TFT_YELLOW, TFT_BLACK);
-  lcd.drawString("Place MFC1K tag...", bx + bw / 2, by + bh / 2);
+  lcd.drawString("Place tag on reader...", bx + bw / 2, by + bh / 2);
 
-  uint8_t uid[7] = {};
-  uint8_t uidLen = 0;
-  uint8_t atqa[2] = {};
-  uint8_t sak = 0;
+  uint8_t uid[7] = {}, uidLen = 0, atqa[2] = {}, sak = 0;
   if (!c.scan14A(uid, &uidLen, atqa, &sak) || sak != 0x08) {
     if (restoreMode) c.setMode(previousMode);
     render();
-    ShowStatusAction::show("Target must be MFC1K", 1500);
+    ShowStatusAction::show("Tag must be MFC1K", 1500);
     render();
     return;
   }
 
-  // Resolve at least one working key for every sector before writing anything.
-  uint8_t keysA[kMfc1kSectors][6] = {};
-  uint8_t keysB[kMfc1kSectors][6] = {};
-  bool foundA[kMfc1kSectors] = {};
-  bool foundB[kMfc1kSectors] = {};
+  // Match PN532 Erase Tag semantics: preserve manufacturer block and every
+  // sector trailer (keys/access bits), and clear data blocks only.
+  uint8_t keysA[kMfc1kSectors][6] = {}, keysB[kMfc1kSectors][6] = {};
+  bool    foundA[kMfc1kSectors]   = {}, foundB[kMfc1kSectors]   = {};
 
-  lcd.fillRect(bx, by, bw, bh, TFT_BLACK);
   ProgressView::init();
-  ProgressView::progress("Checking keys 0/16", 0);
-
   bool keysOk = true;
+
+  const uint16_t totalKeys = kMfc1kSectors * 2u;
   for (uint8_t sector = 0; sector < kMfc1kSectors; ++sector) {
     const uint8_t block = sector * 4u;
-    foundA[sector] = c.mf1CheckKeysOfBlock(
-        block, 0x60, &kEraseKeys[0][0], kEraseKeyCount, keysA[sector]);
-    foundB[sector] = c.mf1CheckKeysOfBlock(
-        block, 0x61, &kEraseKeys[0][0], kEraseKeyCount, keysB[sector]);
+    char          msg[40];
 
-    char msg[32];
-    snprintf(msg, sizeof(msg), "Checking keys %u/16",
-             (unsigned)(sector + 1u));
-    ProgressView::progress(
-        msg, (int)((uint32_t)(sector + 1u) * 100u / kMfc1kSectors));
+    const uint16_t keyAIndex = sector * 2u + 1u;
+    snprintf(msg, sizeof(msg), "Checking keys (%u/%u)...", (unsigned)keyAIndex, (unsigned)totalKeys);
+    ProgressView::progress(msg, (int)((uint32_t)(keyAIndex - 1u) * 100u / totalKeys));
+    foundA[sector] = c.mf1CheckKeysOfBlock(block, 0x60, &kEraseKeys[0][0], kEraseKeyCount, keysA[sector]);
 
-    if (!foundA[sector] && !foundB[sector]) {
-      keysOk = false;
-      break;
-    }
+    const uint16_t keyBIndex = keyAIndex + 1u;
+    snprintf(msg, sizeof(msg), "Checking keys (%u/%u)...", (unsigned)keyBIndex, (unsigned)totalKeys);
+    ProgressView::progress(msg, (int)((uint32_t)(keyBIndex - 1u) * 100u / totalKeys));
+    foundB[sector] = c.mf1CheckKeysOfBlock(block, 0x61, &kEraseKeys[0][0], kEraseKeyCount, keysB[sector]);
+
+    if (!foundA[sector] && !foundB[sector]) { keysOk = false; break; }
   }
   ProgressView::finish();
 
@@ -202,88 +198,36 @@ void ChameleonMfcToolsScreen::_eraseTag() {
     return;
   }
 
-  uint8_t* image =
-      (uint8_t*)malloc(NfcDumpBuilder::MIFARE_CLASSIC_1K_SIZE);
-  if (!image) {
-    if (restoreMode) c.setMode(previousMode);
-    render();
-    ShowStatusAction::show("Out of memory", 1500);
-    render();
-    return;
-  }
+  static constexpr uint16_t kDataBlocks = 47;
 
-  uint8_t uid4[4] = {};
-  if (uidLen >= 4) memcpy(uid4, uid, 4);
+  uint8_t  zero[16] = {};
+  uint16_t erased   = 0;
+  bool     ok       = true;
 
-  size_t imageLen = 0;
-  const bool built = NfcDumpBuilder::buildMifareClassic1K(
-      uid4, nullptr, 0, image, imageLen,
-      NfcDumpBuilder::MIFARE_CLASSIC_1K_SIZE);
-
-  if (!built || imageLen != NfcDumpBuilder::MIFARE_CLASSIC_1K_SIZE) {
-    free(image);
-    if (restoreMode) c.setMode(previousMode);
-    render();
-    ShowStatusAction::show("Cannot build empty tag", 1500);
-    render();
-    return;
-  }
-
-  uint16_t written = 0;
-  bool ok = true;
-  lcd.fillRect(bx, by, bw, bh, TFT_BLACK);
   ProgressView::init();
-  ProgressView::progress("Erasing 0/63 blocks", 0);
-
-  // First write every data block. Block 0 is manufacturer data and is preserved.
   for (uint8_t sector = 0; sector < kMfc1kSectors && ok; ++sector) {
-    const uint8_t first = sector * 4u;
-    const uint8_t trailer = _mfcTrailer(sector);
-    for (uint8_t block = first; block < trailer; ++block) {
-      if (block == 0) continue;
-      const uint8_t* data = image + (size_t)block * 16u;
-      ok = _mfcWriteWithKnownKey(
-          c, block, data,
-          keysA[sector], foundA[sector],
-          keysB[sector], foundB[sector]);
-      if (!ok) break;
+    const uint8_t first = sector * 4u, trailer = _mfcTrailer(sector);
 
-      ++written;
+    for (uint8_t block = first; block < trailer; ++block) {
+      if (block == 0) continue;   // manufacturer block stays untouched
+
       char msg[36];
-      snprintf(msg, sizeof(msg), "Erasing %u/63 blocks", (unsigned)written);
-      ProgressView::progress(
-          msg, (int)((uint32_t)written * 100u / kMfc1kWritableBlocks));
+      snprintf(msg, sizeof(msg), "Erasing blocks (%u/%u)...", (unsigned)(erased + 1u), (unsigned)kDataBlocks);
+      ProgressView::progress(msg, (int)((uint32_t)erased * 100u / kDataBlocks));
+
+      ok = _mfcWriteWithKnownKey(c, block, zero, keysA[sector], foundA[sector], keysB[sector], foundB[sector]);
+      if (!ok) break;
+      ++erased;
     }
   }
 
-  // Change access bits/keys only after all data blocks succeeded.
-  for (uint8_t sector = 0; sector < kMfc1kSectors && ok; ++sector) {
-    const uint8_t trailer = _mfcTrailer(sector);
-    const uint8_t* data = image + (size_t)trailer * 16u;
-    ok = _mfcWriteWithKnownKey(
-        c, trailer, data,
-        keysA[sector], foundA[sector],
-        keysB[sector], foundB[sector]);
-    if (!ok) break;
-
-    ++written;
-    char msg[36];
-    snprintf(msg, sizeof(msg), "Erasing %u/63 blocks", (unsigned)written);
-    ProgressView::progress(
-        msg, (int)((uint32_t)written * 100u / kMfc1kWritableBlocks));
-  }
-
-  if (ok && written == kMfc1kWritableBlocks)
-    ProgressView::progress("Erasing 63/63 blocks", 100);
+  const bool complete = ok && erased == kDataBlocks;
+  if (complete) ProgressView::progress("Erase complete", 100);
   ProgressView::finish();
 
-  free(image);
   if (restoreMode) c.setMode(previousMode);
-
   render();
-  ShowStatusAction::show(
-      (ok && written == kMfc1kWritableBlocks) ? "Tag erased" : "Erase failed",
-      1600);
+  ShowStatusAction::show(complete ? "Tag erased" : "Erase failed", 1600);
   render();
 }
 

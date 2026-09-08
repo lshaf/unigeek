@@ -6,6 +6,15 @@
 
 class ChameleonMfcScreen : public ListScreen {
 public:
+  enum StartAction {
+    ACTION_READ_TAG,
+    ACTION_SHOW_KEYS,
+    ACTION_DICTIONARY,
+    ACTION_STATIC_NESTED,
+    ACTION_NESTED,
+  };
+
+  explicit ChameleonMfcScreen(StartAction action = ACTION_READ_TAG) : _startAction(action) {}
   const char* title() override;
   bool inhibitPowerOff() override { return _running; }
 
@@ -32,12 +41,15 @@ private:
   };
 
   State _state   = STATE_AUTH;
+  StartAction _startAction = ACTION_READ_TAG;
+  bool _resumeReadAfterAttack = false;
   bool  _running = false;
 
   // Card info
   uint8_t _uid[7]  = {};
   uint8_t _uidLen  = 0;
   uint8_t _sak     = 0;
+  uint8_t _atqa[2] = {};
   uint8_t _sectors = 16;
 
   // Current MIFARE Classic dump retained in RAM until the user saves it.
@@ -75,7 +87,7 @@ private:
 
   // Keys result view
   ScrollListView _scrollView;
-  static constexpr int MAX_ROWS = 88;
+  static constexpr int MAX_ROWS = 520;
   ScrollListView::Row _rows[MAX_ROWS];
   String _rowLabels[MAX_ROWS];
   String _rowValues[MAX_ROWS];
@@ -94,10 +106,15 @@ private:
   uint8_t  _trailerBlock(uint8_t sector);
   uint16_t _totalBlocks();
   void _goMfMenu();
+  void _dispatchStartAction();
+  void _continueRead();
   void _callAuth();
   void _showDiscoveredKeys();
   void _callDump();
   void _buildDumpPreview();
+  void _buildDumpHex();
+  void _showDumpActions();
+  void _loadDumpToSlot();
   void _saveDump();
   void _freeDump();
   bool _extractDumpNdef(uint8_t** ndef, size_t* ndefLen) const;
@@ -105,6 +122,7 @@ private:
   bool _loadDictFile(const char* path);
   void _runDictAttack();
   void _buildKeyRows();
+  void _loadKeys();
   void _saveKeys();
 
   // Nested attack UI helpers (nonce collection now done firmware-side).

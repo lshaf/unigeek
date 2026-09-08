@@ -1,5 +1,6 @@
 #pragma once
 #include <NimBLEDevice.h>
+#include "utils/nfc/MagicCard.h"
 
 // Singleton BLE GATT client for ChameleonUltra / ChameleonLite.
 // Protocol: NRF UART service with framed commands (SOF + LRC + header + data + CRC).
@@ -66,6 +67,7 @@ public:
   static constexpr uint16_t CMD_MF1_DET_COUNT    = 4005;
   static constexpr uint16_t CMD_MF1_DET_RESULT   = 4006;
   static constexpr uint16_t CMD_MF1_GET_BLOCK    = 4008;
+  static constexpr uint16_t CMD_HF14A_GET_ANTI_COLL = 4018;
   static constexpr uint16_t CMD_MF0_NTAG_READ_EMU_PAGE_DATA  = 4021;
   static constexpr uint16_t CMD_MF0_NTAG_WRITE_EMU_PAGE_DATA = 4022;
   static constexpr uint16_t CMD_MF0_NTAG_GET_PAGE_COUNT      = 4030;
@@ -133,6 +135,18 @@ public:
 
   // ── 14A / MF Classic ──
   bool scan14A(uint8_t uid[7], uint8_t* uidLen, uint8_t atqa[2], uint8_t* sak);
+  // Read-only Magic MIFARE Classic classification. Leaves the target in a
+  // freshly selected state after probes that temporarily enter a backdoor.
+  MagicCardType detectMagicType();
+  struct AntiCollData {
+    uint8_t uid[7] = {};
+    uint8_t uidLen = 0;
+    uint8_t atqa[2] = {};
+    uint8_t sak = 0;
+  };
+  bool getAntiCollData(AntiCollData* out);
+  bool writeMagicUid(MagicCardType type, const uint8_t* sourceUid,
+                     uint8_t sourceUidLen, const uint8_t block0[16]);
   bool mf1Support();
   bool mf1NTLevel(uint8_t* level);
   bool mf1CheckKey(uint8_t block, uint8_t keyType, const uint8_t key[6]);

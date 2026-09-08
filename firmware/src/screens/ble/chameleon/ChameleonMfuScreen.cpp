@@ -11,7 +11,7 @@
 namespace {
 void _mfuProgress(uint16_t pagesDone, uint16_t totalPages) {
   char msg[32];
-  snprintf(msg, sizeof(msg), "Reading %u/%u pages",
+  snprintf(msg, sizeof(msg), "Reading pages (%u/%u)...",
            (unsigned)pagesDone, (unsigned)totalPages);
   const int pct = totalPages
                     ? (int)((uint32_t)pagesDone * 100u / totalPages)
@@ -37,12 +37,8 @@ void ChameleonMfuScreen::_drawIdle() {
   sp.createSprite(bw, bh);
   sp.fillSprite(TFT_BLACK);
   sp.setTextDatum(MC_DATUM);
-  sp.setTextColor(TFT_CYAN, TFT_BLACK);
-  sp.drawString("Ultralight / NTAG", bw / 2, bh / 2 - 28);
-  sp.setTextColor(TFT_DARKGREY, TFT_BLACK);
-  sp.drawString("Place tag near CU reader", bw / 2, bh / 2 - 8);
-  sp.setTextColor(TFT_WHITE, TFT_BLACK);
-  sp.drawString("[Press] Read", bw / 2, bh / 2 + 18);
+  sp.setTextColor(TFT_YELLOW, TFT_BLACK);
+  sp.drawString("Place tag on reader...", bw / 2, bh / 2);
   sp.pushSprite(bx, by);
   sp.deleteSprite();
 }
@@ -171,7 +167,7 @@ void ChameleonMfuScreen::_read() {
   lcd.fillRect(bx, by, bw, bh, TFT_BLACK);
   lcd.setTextDatum(MC_DATUM);
   lcd.setTextColor(TFT_YELLOW, TFT_BLACK);
-  lcd.drawString("Detecting tag...", bx + bw / 2, by + bh / 2);
+  lcd.drawString("Place tag on reader...", bx + bw / 2, by + bh / 2);
 
   auto& c = ChameleonClient::get();
   c.setMode(1);
@@ -202,7 +198,7 @@ void ChameleonMfuScreen::_read() {
 
   ProgressView::init();
   char progressMsg[32];
-  snprintf(progressMsg, sizeof(progressMsg), "Reading 0/%u pages",
+  snprintf(progressMsg, sizeof(progressMsg), "Reading pages (0/%u)...",
            (unsigned)_info.pages);
   ProgressView::progress(progressMsg, 0);
 
@@ -303,6 +299,7 @@ void ChameleonMfuScreen::_resultActions() {
 void ChameleonMfuScreen::onInit() {
   _state = STATE_IDLE;
   _needsDraw = true;
+  _read();
 }
 
 void ChameleonMfuScreen::onUpdate() {

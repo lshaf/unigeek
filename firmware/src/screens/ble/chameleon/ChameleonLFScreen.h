@@ -4,7 +4,7 @@
 
 class ChameleonLFScreen : public BaseScreen {
 public:
-  const char* title() override { return "LF Reader"; }
+  const char* title() override { return "EM410X"; }
   bool inhibitPowerOff() override { return _scanning; }
 
   void onInit()   override;

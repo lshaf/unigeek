@@ -33,13 +33,8 @@ void ChameleonHFScreen::_draw() {
   sp.fillSprite(TFT_BLACK);
   sp.setTextDatum(MC_DATUM);
 
-  sp.setTextColor(TFT_CYAN, TFT_BLACK);
-  sp.drawString("HF Card Reader", bw / 2, bh / 2 - 28);
-  sp.setTextColor(TFT_DARKGREY, TFT_BLACK);
-  sp.drawString("Place ISO14443 card near", bw / 2, bh / 2 - 10);
-  sp.drawString("Chameleon reader face", bw / 2, bh / 2 + 6);
-  sp.setTextColor(TFT_WHITE, TFT_BLACK);
-  sp.drawString("[Press] Scan", bw / 2, bh / 2 + 24);
+  sp.setTextColor(TFT_YELLOW, TFT_BLACK);
+  sp.drawString("Place tag on reader...", bw / 2, bh / 2);
 
   sp.pushSprite(bx, by);
   sp.deleteSprite();
@@ -55,9 +50,7 @@ void ChameleonHFScreen::_doScan() {
   lcd.setTextDatum(MC_DATUM);
   lcd.setTextSize(1);
   lcd.setTextColor(TFT_YELLOW, TFT_BLACK);
-  lcd.drawString("Scanning ISO14443A...", bx + bw / 2, by + bh / 2 - 8);
-  lcd.setTextColor(TFT_DARKGREY, TFT_BLACK);
-  lcd.drawString("Hold card near reader", bx + bw / 2, by + bh / 2 + 8);
+  lcd.drawString("Place tag on reader...", bx + bw / 2, by + bh / 2);
 
   auto& c = ChameleonClient::get();
 
@@ -114,6 +107,14 @@ void ChameleonHFScreen::_doScan() {
     _rows[_rowCount] = {_rowLabels[_rowCount].c_str(), _rowValues[_rowCount]};
     _rowCount++;
 
+    if (_sak == 0x01 || _sak == 0x08 || _sak == 0x18) {
+      const MagicCardType magic = c.detectMagicType();
+      _rowLabels[_rowCount] = "Magic";
+      _rowValues[_rowCount] = magicCardTypeName(magic);
+      _rows[_rowCount] = {_rowLabels[_rowCount].c_str(), _rowValues[_rowCount]};
+      _rowCount++;
+    }
+
     char buf[8];
     snprintf(buf, sizeof(buf), "%02X:%02X", _atqa[0], _atqa[1]);
     _rowLabels[_rowCount] = "ATQA";
@@ -141,10 +142,6 @@ void ChameleonHFScreen::_doScan() {
     _rows[_rowCount] = {_rowLabels[_rowCount].c_str(), _rowValues[_rowCount]};
     _rowCount++;
 
-    _rowLabels[_rowCount] = "[Hold]"; _rowValues[_rowCount] = "Copy to slot";
-    _rows[_rowCount] = {_rowLabels[_rowCount].c_str(), _rowValues[_rowCount]};
-    _rowCount++;
-
     _scrollView.setRows(_rows, _rowCount);
 
     int n = Achievement.inc("chameleon_hf_read");
@@ -155,7 +152,7 @@ void ChameleonHFScreen::_doScan() {
     _state = STATE_IDLE;
     _needsDraw = true;
     render();
-    ShowStatusAction::show("No card found", 1200);
+    ShowStatusAction::show("No tag detected", 1200);
     render();
     return;
   }
@@ -199,19 +196,11 @@ void ChameleonHFScreen::_doClone() {
 void ChameleonHFScreen::onInit() {
   _state     = STATE_IDLE;
   _needsDraw = true;
+  _doScan();
 }
 
 void ChameleonHFScreen::onUpdate() {
   if (_scanning) return;
-
-  // Press-hold anywhere opens the action menu. Works on every board since it
-  // only needs a single PRESS axis.
-  if (!_holdFired && Uni.Nav->isPressed() && Uni.Nav->heldDuration() >= 700) {
-    _holdFired = true;
-    Uni.Nav->suppressCurrentPress();
-    if (_state == STATE_RESULT) _doClone();
-    return;
-  }
 
   if (Uni.Nav->wasPressed()) {
     auto dir = Uni.Nav->readDirection();
@@ -220,13 +209,10 @@ void ChameleonHFScreen::onUpdate() {
       return;
     }
     if (dir == INavigation::DIR_PRESS) {
-      // Tap = scan (or re-scan). Hold = copy (handled above).
       _doScan();
       return;
     }
     if (_state == STATE_RESULT) _scrollView.onNav(dir);
-  } else if (_holdFired && !Uni.Nav->isPressed()) {
-    _holdFired = false;   // consume the release so it doesn't trigger a tap
   }
 }
 

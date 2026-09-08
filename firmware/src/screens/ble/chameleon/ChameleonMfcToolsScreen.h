@@ -4,7 +4,7 @@
 
 class ChameleonMfcToolsScreen : public ListScreen {
 public:
-  const char* title() override { return "MIFARE Classic"; }
+  const char* title() override { return "Tag Operations"; }
   void onInit() override;
   void onItemSelected(uint8_t index) override;
   void onBack() override;

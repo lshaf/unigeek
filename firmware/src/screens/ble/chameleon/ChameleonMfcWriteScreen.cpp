@@ -5,6 +5,15 @@
 #include "ui/views/ProgressView.h"
 #include "utils/nfc/NdefParser.h"
 
+static void renderTagPrompt(const char* message, int bx, int by, int bw, int bh) {
+  auto& lcd = Uni.Lcd;
+  lcd.fillRect(bx, by, bw, bh, TFT_BLACK);
+  lcd.setTextDatum(MC_DATUM);
+  lcd.setTextSize(1);
+  lcd.setTextColor(TFT_YELLOW, TFT_BLACK);
+  lcd.drawString(message, bx + bw / 2, by + bh / 2);
+}
+
 namespace {
 static constexpr uint16_t kClassic1KBytes = 1024;
 static constexpr uint8_t kSectors = 16;
@@ -38,11 +47,17 @@ static uint8_t trailerBlock(uint8_t sector) { return sector * 4u + 3u; }
 
 }
 
-ChameleonMfcWriteScreen::ChameleonMfcWriteScreen(const uint8_t* dump, uint16_t dumpLen)
+ChameleonMfcWriteScreen::ChameleonMfcWriteScreen(const uint8_t* dump, uint16_t dumpLen,
+                                                   const uint8_t* sourceUid, uint8_t sourceUidLen)
     : _source(SOURCE_MEMORY) {
   if (dump && dumpLen) {
     _dump = (uint8_t*)malloc(dumpLen);
     if (_dump) { memcpy(_dump, dump, dumpLen); _dumpLen = dumpLen; }
+  }
+  if (sourceUid && (sourceUidLen == 4 || sourceUidLen == 7)) {
+    memcpy(_sourceUid, sourceUid, sourceUidLen);
+    _sourceUidLen = sourceUidLen;
+    _sourceUidKnown = true;
   }
 }
 
@@ -75,6 +90,8 @@ void ChameleonMfcWriteScreen::_restoreContext() {
 }
 
 bool ChameleonMfcWriteScreen::_loadFile() {
+  _sourceUidKnown = false;
+  _sourceUidLen = 0;
   if (!Uni.Storage) return false;
   fs::File f = Uni.Storage->open(_path.c_str(), "r");
   if (!f || f.size() != kClassic1KBytes) { if (f) f.close(); return false; }
@@ -106,6 +123,18 @@ bool ChameleonMfcWriteScreen::_loadSlot() {
     block += count;
   }
   _dumpLen = kClassic1KBytes;
+
+  // Slot anti-collision data is authoritative for the identity actually
+  // emulated by the CU. It may intentionally differ from memory block 0.
+  ChameleonClient::AntiCollData anti{};
+  _sourceUidKnown = c.getAntiCollData(&anti);
+  if (_sourceUidKnown) {
+    _sourceUidLen = anti.uidLen;
+    memcpy(_sourceUid, anti.uid, anti.uidLen);
+  } else {
+    _sourceUidLen = 0;
+  }
+
   _restoreContext();
   return true;
 }
@@ -163,7 +192,8 @@ void ChameleonMfcWriteScreen::_buildSourcePreview() {
   if (_source == SOURCE_FILE) source = "File"; else if (_source == SOURCE_SLOT) source = String("Slot ") + (_slot + 1);
   _addRow("Source", source);
   _addRow("Type", "MIFARE Classic 1K");
-  _addRow("UID", _uidString(_dump, 4));
+  _addRow("UID", _sourceUidKnown ? _uidString(_sourceUid, _sourceUidLen) : String("Unknown"));
+  _addRow("Target UID", _sourceUidKnown ? "Replace if Magic" : "Preserved");
   _addRow("Blocks", "64");
   _addRow("Dump", String(_dumpLen) + " bytes");
   uint8_t* ndef = nullptr; size_t ndefLen = 0; NdefParser::Result parsed;
@@ -276,12 +306,12 @@ bool ChameleonMfcWriteScreen::_writeTarget(
   auto& c = ChameleonClient::get();
   uint16_t written = 0;
   static constexpr uint16_t totalWrites = 63; // all blocks except immutable block 0
-  ProgressView::init(); ProgressView::progress("Writing 0/63 blocks", 0);
+  ProgressView::init(); ProgressView::progress("Writing blocks (0/63)...", 0);
   for (uint8_t s = 0; s < kSectors; ++s) {
     const uint8_t first = s * 4u; const uint8_t trailer = trailerBlock(s);
     for (uint8_t b = first; b < trailer; ++b) {
       if (b == 0) continue;
-      char msg[36]; snprintf(msg, sizeof(msg), "Writing %u/%u blocks", (unsigned)(written + 1u), (unsigned)totalWrites);
+      char msg[36]; snprintf(msg, sizeof(msg), "Writing blocks (%u/%u)...", (unsigned)(written + 1u), (unsigned)totalWrites);
       ProgressView::progress(msg, (int)((uint32_t)written * 100u / totalWrites));
       const uint8_t* data = _dump + (size_t)b * 16u; bool ok = false;
       if (foundA[s]) ok = c.mf1WriteBlock(b, 0x60, keysA[s], data);
@@ -295,7 +325,7 @@ bool ChameleonMfcWriteScreen::_writeTarget(
     // Trailer last so changing keys/access bits cannot lock us out before the
     // sector data blocks have been written.
     const uint8_t* data = _dump + (size_t)trailer * 16u; bool ok = false;
-    char msg[36]; snprintf(msg, sizeof(msg), "Writing %u/%u blocks", (unsigned)(written + 1u), (unsigned)totalWrites);
+    char msg[36]; snprintf(msg, sizeof(msg), "Writing blocks (%u/%u)...", (unsigned)(written + 1u), (unsigned)totalWrites);
     ProgressView::progress(msg, (int)((uint32_t)written * 100u / totalWrites));
     if (foundA[s]) ok = c.mf1WriteBlock(trailer, 0x60, keysA[s], data);
     if (!ok && foundB[s]) ok = c.mf1WriteBlock(trailer, 0x61, keysB[s], data);
@@ -305,7 +335,7 @@ bool ChameleonMfcWriteScreen::_writeTarget(
     }
     ++written;
   }
-  ProgressView::progress("Writing 63/63 blocks", 100); ProgressView::finish();
+  ProgressView::progress("Writing blocks (63/63)...", 100); ProgressView::finish();
   return true;
 }
 
@@ -313,21 +343,37 @@ void ChameleonMfcWriteScreen::_write() {
   _busy = true; auto& c = ChameleonClient::get();
   if (!_restoreMode && c.getMode(&_previousMode)) _restoreMode = true;
   c.setMode(1);
-  ShowStatusAction::show("Place target tag...", 0);
+  renderTagPrompt("Place tag on reader...", bodyX(), bodyY(), bodyW(), bodyH());
 
   uint8_t uid[7] = {}, uidLen = 0, atqa[2] = {}, sak = 0;
   bool targetOk = c.scan14A(uid, &uidLen, atqa, &sak) && sak == 0x08 && c.mf1Support();
+  MagicCardType magic = MagicCardType::NONE;
+  bool restoreUid = false;
+  if (targetOk && _sourceUidKnown) {
+    magic = c.detectMagicType();
+    const bool uidDiffers = uidLen != _sourceUidLen ||
+                            (uidLen == _sourceUidLen && memcmp(uid, _sourceUid, uidLen) != 0);
+    restoreUid = uidDiffers &&
+                 ((magic == MagicCardType::GEN1A && _sourceUidLen == 4) ||
+                  (magic == MagicCardType::GEN3 && (_sourceUidLen == 4 || _sourceUidLen == 7)));
+  }
   uint8_t keysA[16][6] = {}, keysB[16][6] = {}; bool foundA[16] = {}, foundB[16] = {};
   bool ok = targetOk && _resolveTargetKeys(keysA, foundA, keysB, foundB);
   if (ok) ok = _writeTarget(keysA, foundA, keysB, foundB);
+
+  bool uidWriteFailed = false;
+  if (ok && restoreUid) {
+    ShowStatusAction::show("Writing source UID...", 0);
+    if (!c.writeMagicUid(magic, _sourceUid, _sourceUidLen, _dump)) uidWriteFailed = true;
+  }
   _busy = false; _restoreContext();
 
-  if (ok) {
-    ShowStatusAction::show("Tag written", 1600);
+  if (ok && !uidWriteFailed) {
+    ShowStatusAction::show(restoreUid ? "Tag + UID written" : "Tag written", 1600);
     _freeDump(); Screen.goBack(); return;
   }
   _buildSourcePreview(); render();
-  ShowStatusAction::show("Tag write failed", 1600); render();
+  ShowStatusAction::show(uidWriteFailed ? "UID write failed" : "Tag write failed", 1600); render();
 }
 
 void ChameleonMfcWriteScreen::onInit() {

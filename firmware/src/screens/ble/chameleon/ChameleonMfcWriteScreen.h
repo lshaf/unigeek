@@ -8,7 +8,8 @@ class ChameleonMfcWriteScreen : public BaseScreen {
 public:
   explicit ChameleonMfcWriteScreen(const String& path) : _source(SOURCE_FILE), _path(path) {}
   explicit ChameleonMfcWriteScreen(uint8_t slot) : _source(SOURCE_SLOT), _slot(slot) {}
-  ChameleonMfcWriteScreen(const uint8_t* dump, uint16_t dumpLen);
+  ChameleonMfcWriteScreen(const uint8_t* dump, uint16_t dumpLen,
+                           const uint8_t* sourceUid = nullptr, uint8_t sourceUidLen = 0);
 
   const char* title() override { return "Write to Tag"; }
   bool inhibitPowerOff() override { return _busy; }
@@ -25,6 +26,9 @@ private:
 
   uint8_t* _dump = nullptr;
   uint16_t _dumpLen = 0;
+  uint8_t _sourceUid[7] = {};
+  uint8_t _sourceUidLen = 0;
+  bool _sourceUidKnown = false;
 
   uint8_t _previousSlot = 0;
   bool _restoreSlot = false;

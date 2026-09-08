@@ -5,7 +5,7 @@
 
 class ChameleonMfuScreen : public BaseScreen {
 public:
-  const char* title() override { return "Ultralight / NTAG"; }
+  const char* title() override { return _state == STATE_RESULT ? "Tag Details" : "Read Tag"; }
   bool inhibitPowerOff() override { return _busy; }
 
   void onInit() override;

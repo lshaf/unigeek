@@ -41,13 +41,19 @@ struct BrowseFileView {
   //   DIRECTORY — show directories only
   //   const char* (implicit) — show files matching extension + directories
   struct Mode {
-    enum Kind { ALL, DIRECTORY };
+    enum Kind { ALL, DIRECTORY, FILE_ONLY };
     Kind        kind;
     const char* ext;
+    size_t      sizes[3];
+    uint8_t     sizeCount;
 
-    Mode()              : kind(ALL), ext(nullptr) {}
-    Mode(Kind k)        : kind(k),   ext(nullptr) {}
-    Mode(const char* e) : kind(ALL), ext(e)        {}
+    Mode()              : kind(ALL), ext(nullptr), sizes{0, 0, 0}, sizeCount(0) {}
+    Mode(Kind k)        : kind(k),   ext(nullptr), sizes{0, 0, 0}, sizeCount(0) {}
+    Mode(const char* e) : kind(ALL), ext(e),        sizes{0, 0, 0}, sizeCount(0) {}
+    Mode(const char* e, size_t s1, size_t s2 = 0, size_t s3 = 0)
+      : kind(ALL), ext(e), sizes{s1, s2, s3}, sizeCount(s3 ? 3 : (s2 ? 2 : (s1 ? 1 : 0))) {}
+    Mode(Kind k, const char* e, size_t s1 = 0, size_t s2 = 0, size_t s3 = 0)
+      : kind(k), ext(e), sizes{s1, s2, s3}, sizeCount(s3 ? 3 : (s2 ? 2 : (s1 ? 1 : 0))) {}
   };
 
   struct Entry {
@@ -77,7 +83,8 @@ struct BrowseFileView {
 
   // Load a directory: flash loading, sort dirs-first then alpha, build Item
   // rows. Inserts ".." at index 0 when `dir != root`.
-  //   mode           - ALL, DIRECTORY, or a file extension string like ".ir"
+  //   mode           - ALL, DIRECTORY, FILE_ONLY, a file extension like ".ir", or an
+  //                    extension plus up to three accepted exact file sizes
   //   fileSublabel   - sublabel on file rows; nullptr = none
   //                    Directory rows always get "DIR".
   // Returns populated count. Returns 0 if storage unavailable.

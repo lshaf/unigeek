@@ -77,7 +77,19 @@ uint8_t BrowseFileView::load(BaseScreen* host, String dir,
   String base = (dir == "/") ? "" : dir;
   for (uint8_t i = 0; i < n && _count < kCap; i++) {
     if (mode.kind == Mode::DIRECTORY && !raw[i].isDir) continue;
+    if (mode.kind == Mode::FILE_ONLY && raw[i].isDir) continue;
     if (mode.ext && !raw[i].isDir && !raw[i].name.endsWith(mode.ext)) continue;
+    if (mode.sizeCount && !raw[i].isDir) {
+      String path = ((dir == "/") ? String("") : dir) + "/" + raw[i].name;
+      fs::File f = Uni.Storage->open(path.c_str(), "r");
+      const size_t fileSize = f ? f.size() : 0;
+      if (f) f.close();
+      bool accepted = false;
+      for (uint8_t s = 0; s < mode.sizeCount; ++s) {
+        if (fileSize == mode.sizes[s]) { accepted = true; break; }
+      }
+      if (!accepted) continue;
+    }
     _entries[_count].name  = raw[i].name;
     _entries[_count].label = (style == TITLE && !raw[i].isDir)
                                ? prettifyTitle(raw[i].name)

@@ -8,6 +8,7 @@
 #include "ui/actions/InputNumberAction.h"
 #include "ui/actions/InputSelectAction.h"
 #include "ui/views/ProgressView.h"
+#include "ui/views/LogView.h"
 #include "../../utils/nfc/NdefBuilder.h"
 #include "../../utils/nfc/NdefParser.h"
 
@@ -17,6 +18,8 @@
 // global) and read the response directly over Wire after the ACK is received.
 
 extern byte pn532_packetbuffer[];
+
+static bool _parseHexKeyI2c(const String& line, uint8_t out[6]);
 
 static void _nfcReadI2C(TwoWire* wire, uint8_t* buf, uint8_t n) {
   uint8_t total = n + 1;
@@ -74,23 +77,49 @@ static bool _nfcDataExch(Adafruit_PN532* nfc, TwoWire* wire,
 
 // ── title ──────────────────────────────────────────────────────────────────
 
+static void renderTagPrompt(const char* message, int bx, int by, int bw, int bh) {
+  auto& lcd = Uni.Lcd;
+  lcd.fillRect(bx, by, bw, bh, TFT_BLACK);
+  lcd.setTextDatum(MC_DATUM);
+  lcd.setTextSize(1);
+  lcd.setTextColor(TFT_YELLOW, TFT_BLACK);
+  lcd.drawString(message, bx + bw / 2, by + bh / 2);
+}
+
+static void renderOperationTitle(const char* title) {
+  Header header;
+  header.render(title);
+}
+
 const char* PN532I2cScreen::title() {
   switch (_state) {
     case STATE_MAIN_MENU:       return "PN532 I2C";
     case STATE_INFO:            return "Firmware Info";
-    case STATE_SCAN_RESULT:
-    case STATE_SCAN_14A:        return "HF Reader";
+    case STATE_SCAN_RESULT:     return "Tag Details";
+    case STATE_SCAN_14A:        return "Scan Tag";
     case STATE_MIFARE_MENU:     return "MIFARE Classic";
-    case STATE_MIFARE_DUMP:     return "Memory Dump";
+    case STATE_MIFARE_TAG_MENU: return "Tag Operations";
+    case STATE_MIFARE_NDEF_MENU:return "NDEF Operations";
+    case STATE_MIFARE_ATTACKS_MENU:return "Attacks";
+    case STATE_MIFARE_KEYS_MENU:return "Keys";
+    case STATE_MIFARE_KEY_DB_SELECT:return "Key Databases";
+    case STATE_MIFARE_KEY_DB_VIEW:return _keyDbViewTitle.length() ? _keyDbViewTitle.c_str() : "Key Database";
+    case STATE_MIFARE_DUMP:     return "Tag Details";
+    case STATE_MIFARE_DUMP_HEX: return "Memory Dump";
     case STATE_MIFARE_KEYS:     return "Discovered Keys";
+    case STATE_MIFARE_DUMP_SELECT:return "Dump Files";
+    case STATE_MIFARE_WRITE_PREVIEW:return "Write to Tag";
     case STATE_DICT_SELECT:     return "Dictionary Attack";
     case STATE_ULTRALIGHT_MENU: return "Ultralight / NTAG";
+    case STATE_ULTRALIGHT_TAG_MENU:return "Tag Operations";
+    case STATE_ULTRALIGHT_NDEF_MENU:return "NDEF Operations";
     case STATE_MAGIC_MENU:      return "Magic Card";
-    case STATE_RAW_RESULT:      return "Result";
+    case STATE_MAGIC_DETECT:    return "Detect Magic";
+    case STATE_RAW_RESULT:      return "Read Pages";
     case STATE_EMULATE:         return "Emulate Card";
     case STATE_NTAG_MENU:       return "Emulate NDEF";
     case STATE_NDEF_WRITE_MENU: return "Write NDEF";
-    case STATE_NDEF_RESULT:     return "NDEF Result";
+    case STATE_NDEF_RESULT:     return "NDEF Details";
     case STATE_NDEF_FILE_SELECT:return "NDEF Files";
   }
   return "PN532 I2C";
@@ -104,6 +133,14 @@ void PN532I2cScreen::onInit() {
 }
 
 void PN532I2cScreen::onUpdate() {
+  if (_state == STATE_SCAN_14A) {
+    if (Uni.Nav->wasPressed()) {
+      auto dir = Uni.Nav->readDirection();
+      if (dir == INavigation::DIR_BACK) _goMain();
+      else if (dir == INavigation::DIR_PRESS) _doScan14A();
+    }
+    return;
+  }
   if (_state == STATE_SCAN_RESULT) {
     if (Uni.Nav->wasPressed()) {
       auto dir = Uni.Nav->readDirection();
@@ -117,14 +154,53 @@ void PN532I2cScreen::onUpdate() {
     }
     return;
   }
-  if (_state == STATE_MIFARE_DUMP) {
+  if (_state == STATE_MAGIC_DETECT) {
     if (Uni.Nav->wasPressed()) {
       auto dir = Uni.Nav->readDirection();
       if (dir == INavigation::DIR_BACK) {
-        _hasDump = false;
-        _goMifare();
+        _goMagic();
+      } else if (dir == INavigation::DIR_PRESS && !_magicDetectDone) {
+        _doDetectMagic();
+      }
+    }
+    return;
+  }
+  if (_state == STATE_MIFARE_DUMP || _state == STATE_MIFARE_DUMP_HEX) {
+    if (Uni.Nav->wasPressed()) {
+      auto dir = Uni.Nav->readDirection();
+      if (dir == INavigation::DIR_BACK) {
+        if (_state == STATE_MIFARE_DUMP_HEX) {
+          _showTagDetails();
+        } else {
+          _hasDump = false;
+          _dumpComplete = false;
+          _goMifareTag();
+        }
       } else if (dir == INavigation::DIR_PRESS && _hasDump) {
-        _doSaveDump();
+        if (_dumpComplete) _showDumpActions();
+        else {
+          _resumeReadAfterDict = true;
+          _doDictionaryPicker();
+        }
+      } else {
+        _scrollView.onNav(dir);
+      }
+    }
+    return;
+  }
+  if (_state == STATE_MIFARE_WRITE_PREVIEW) {
+    if (Uni.Nav->wasPressed()) {
+      auto dir = Uni.Nav->readDirection();
+      if (dir == INavigation::DIR_BACK) {
+        if (_writePreviewFromFile) _doWriteDumpFromFilePicker();
+        else _showTagDetails();
+      } else if (dir == INavigation::DIR_PRESS) {
+        _doWriteDumpToTag(_dumpImg, _dumpLen,
+                          _writePreviewSourceUidKnown ? _writePreviewSourceUid : nullptr,
+                          _writePreviewSourceUidKnown ? _writePreviewSourceUidLen : 0);
+        // Writing scans the destination and updates the PN532 card context, so
+        // do not redisplay the source dump with destination UID/ATQA metadata.
+        _goMifareTag();
       } else {
         _scrollView.onNav(dir);
       }
@@ -165,11 +241,14 @@ void PN532I2cScreen::onUpdate() {
     return;
   }
 
-  if (_state == STATE_INFO || _state == STATE_MIFARE_KEYS || _state == STATE_RAW_RESULT) {
+  if (_state == STATE_INFO || _state == STATE_MIFARE_KEYS ||
+      _state == STATE_MIFARE_KEY_DB_VIEW || _state == STATE_RAW_RESULT) {
     if (Uni.Nav->wasPressed()) {
       auto dir = Uni.Nav->readDirection();
       if (dir == INavigation::DIR_BACK) {
-        if (_state == STATE_MIFARE_KEYS) _goMifare();
+        if (_state == STATE_MIFARE_KEYS) _goMifareKeys();
+        else if (_state == STATE_MIFARE_KEY_DB_VIEW) _openKeyDatabases();
+        else if (_state == STATE_RAW_RESULT) _goUltralightTag();
         else _goMain();
       } else {
         _scrollView.onNav(dir);
@@ -181,8 +260,14 @@ void PN532I2cScreen::onUpdate() {
 }
 
 void PN532I2cScreen::onRender() {
+  if (_state == STATE_MAGIC_DETECT) {
+    _magicLog.draw(Uni.Lcd, bodyX(), bodyY(), bodyW(), bodyH());
+    return;
+  }
   if (_state == STATE_INFO || _state == STATE_SCAN_RESULT ||
-      _state == STATE_MIFARE_DUMP || _state == STATE_MIFARE_KEYS ||
+      _state == STATE_MIFARE_DUMP || _state == STATE_MIFARE_DUMP_HEX ||
+      _state == STATE_MIFARE_WRITE_PREVIEW ||
+      _state == STATE_MIFARE_KEYS || _state == STATE_MIFARE_KEY_DB_VIEW ||
       _state == STATE_RAW_RESULT || _state == STATE_NDEF_RESULT ||
       _state == STATE_EMULATE) {
     _scrollView.render(bodyX(), bodyY(), bodyW(), bodyH());
@@ -204,6 +289,31 @@ void PN532I2cScreen::onItemSelected(uint8_t index) {
       break;
     case STATE_MIFARE_MENU:
       switch (index) {
+        case 0: _goMifareTag(); break;
+        case 1: _goMifareNdef(); break;
+        case 2: _goMifareAttacks(); break;
+        case 3: _goMifareKeys(); break;
+      }
+      break;
+    case STATE_MIFARE_ATTACKS_MENU:
+      if (index == 0) { _resumeReadAfterDict = false; _doDictionaryPicker(); }
+      break;
+    case STATE_MIFARE_KEYS_MENU:
+      if (index == 0) _doShowKeys();
+      else if (index == 1) { _keyDbPickDir = _dictPath; _openKeyDatabases(); }
+      break;
+    case STATE_MIFARE_KEY_DB_SELECT:
+      _openKeyDatabase(index);
+      break;
+    case STATE_MIFARE_TAG_MENU:
+      switch (index) {
+        case 0: _doReadTag(); break;
+        case 1: _doWriteDumpFromFilePicker(); break;
+        case 2: _doEraseTag(); break;
+      }
+      break;
+    case STATE_MIFARE_NDEF_MENU:
+      switch (index) {
         case 0:
           _ndefTarget = NDEF_TARGET_MIFARE_CLASSIC;
           _doReadClassicNdef();
@@ -216,13 +326,25 @@ void PN532I2cScreen::onItemSelected(uint8_t index) {
           _ndefTarget = NDEF_TARGET_MIFARE_CLASSIC;
           _doEraseClassicNdef();
           break;
-        case 3: _doAuthenticate();     break;
-        case 4: _doDumpMemory();       break;
-        case 5: _doShowKeys();         break;
-        case 6: _doDictionaryPicker(); break;
+        case 3:
+          _ndefTarget = NDEF_TARGET_MIFARE_CLASSIC;
+          // Standalone Format NDEF must establish the same card context as
+          // Read/Write NDEF before checking Classic dimensions.
+          renderOperationTitle("Format NDEF");
+          if (_scanCardOrShow(5000)) _formatClassic1kNdef();
+          _goMifareNdef();
+          break;
       }
       break;
     case STATE_ULTRALIGHT_MENU:
+      if (index == 0) _goUltralightTag();
+      else if (index == 1) _goUltralightNdef();
+      break;
+    case STATE_ULTRALIGHT_TAG_MENU:
+      if (index == 0) _doUltralightDump();
+      else if (index == 1) _doUltralightWrite();
+      break;
+    case STATE_ULTRALIGHT_NDEF_MENU:
       switch (index) {
         case 0:
           _ndefTarget = NDEF_TARGET_ULTRALIGHT;
@@ -236,9 +358,14 @@ void PN532I2cScreen::onItemSelected(uint8_t index) {
           _ndefTarget = NDEF_TARGET_ULTRALIGHT;
           _doEraseNdef();
           break;
-        case 3: _doUltralightDump();  break;
-        case 4: _doUltralightWrite(); break;
       }
+      break;
+    case STATE_MIFARE_WRITE_PREVIEW:
+      if (_writePreviewFromFile) _doWriteDumpFromFilePicker();
+      else _showTagDetails();
+      break;
+    case STATE_MIFARE_DUMP_SELECT:
+      _doWriteDumpFileSelected(index);
       break;
     case STATE_NDEF_WRITE_MENU:
       if (index == 0) _doWriteNdefText();
@@ -253,7 +380,7 @@ void PN532I2cScreen::onItemSelected(uint8_t index) {
       break;
     case STATE_MAGIC_MENU:
       switch (index) {
-        case 0: _doDetectGen1a(); break;
+        case 0: _goDetectMagic(); break;
         case 1: _doGen3SetUid();  break;
         case 2: _doGen3LockUid(); break;
       }
@@ -280,10 +407,43 @@ void PN532I2cScreen::onBack() {
     case STATE_MAGIC_MENU:
       _goMain();
       break;
+    case STATE_MAGIC_DETECT:
+      _goMagic();
+      break;
+    case STATE_MIFARE_TAG_MENU:
+    case STATE_MIFARE_NDEF_MENU:
+    case STATE_MIFARE_ATTACKS_MENU:
+    case STATE_MIFARE_KEYS_MENU:
+      _goMifare();
+      break;
+    case STATE_ULTRALIGHT_TAG_MENU:
+    case STATE_ULTRALIGHT_NDEF_MENU:
+      _goUltralight();
+      break;
+    case STATE_MIFARE_DUMP_SELECT:
+      if (_dumpPickDir == _dumpPath || _dumpPickDir.length() == 0) {
+        _dumpPickDir = "";
+        _goMifareTag();
+      } else {
+        int slash = _dumpPickDir.lastIndexOf('/');
+        _dumpPickDir = (slash > 0) ? _dumpPickDir.substring(0, slash) : _dumpPath;
+        _doWriteDumpFromFilePicker();
+      }
+      break;
+    case STATE_MIFARE_KEY_DB_SELECT:
+      if (_keyDbPickDir == _dictPath || _keyDbPickDir.length() == 0) {
+        _keyDbPickDir = "";
+        _goMifareKeys();
+      } else {
+        int slash = _keyDbPickDir.lastIndexOf('/');
+        _keyDbPickDir = (slash > 0) ? _keyDbPickDir.substring(0, slash) : _dictPath;
+        _openKeyDatabases();
+      }
+      break;
     case STATE_DICT_SELECT:
       if (_dictPickDir == _dictPath || _dictPickDir.length() == 0) {
         _dictPickDir = "";
-        _goMifare();
+        _goMifareAttacks();
       } else {
         int slash = _dictPickDir.lastIndexOf('/');
         _dictPickDir = (slash > 0) ? _dictPickDir.substring(0, slash) : _dictPath;
@@ -292,6 +452,9 @@ void PN532I2cScreen::onBack() {
       break;
     case STATE_NTAG_MENU:
       _goMain();
+      break;
+    case STATE_RAW_RESULT:
+      _goUltralightTag();
       break;
     case STATE_NDEF_WRITE_MENU:
       _goNdefParent();
@@ -433,9 +596,56 @@ void PN532I2cScreen::_goMifare() {
   render();
 }
 
+void PN532I2cScreen::_goMifareAttacks() {
+  _state = STATE_MIFARE_ATTACKS_MENU;
+  setItems(_mfAttackItems);
+  render();
+}
+
+void PN532I2cScreen::_goMifareKeys() {
+  _state = STATE_MIFARE_KEYS_MENU;
+  setItems(_mfKeysItems);
+  render();
+}
+
+void PN532I2cScreen::_goScan14A() {
+  _state = STATE_SCAN_14A;
+  auto& lcd = Uni.Lcd;
+  const int bx = bodyX(), by = bodyY(), bw = bodyW(), bh = bodyH();
+  lcd.fillRect(bx, by, bw, bh, TFT_BLACK);
+  lcd.setTextDatum(MC_DATUM);
+  lcd.setTextSize(1);
+  lcd.setTextColor(TFT_YELLOW, TFT_BLACK);
+  lcd.drawString("Place tag on reader...", bx + bw / 2, by + bh / 2);
+}
+
+void PN532I2cScreen::_goMifareTag() {
+  _state = STATE_MIFARE_TAG_MENU;
+  setItems(_mfTagItems);
+  render();
+}
+
+void PN532I2cScreen::_goMifareNdef() {
+  _state = STATE_MIFARE_NDEF_MENU;
+  setItems(_mfNdefItems);
+  render();
+}
+
 void PN532I2cScreen::_goUltralight() {
   _state = STATE_ULTRALIGHT_MENU;
   setItems(_ulItems);
+  render();
+}
+
+void PN532I2cScreen::_goUltralightTag() {
+  _state = STATE_ULTRALIGHT_TAG_MENU;
+  setItems(_ulTagItems);
+  render();
+}
+
+void PN532I2cScreen::_goUltralightNdef() {
+  _state = STATE_ULTRALIGHT_NDEF_MENU;
+  setItems(_ulNdefItems);
   render();
 }
 
@@ -448,13 +658,22 @@ void PN532I2cScreen::_goNdefWrite() {
 }
 
 void PN532I2cScreen::_goNdefParent() {
-  if (_ndefTarget == NDEF_TARGET_MIFARE_CLASSIC) _goMifare();
-  else _goUltralight();
+  if (_ndefTarget == NDEF_TARGET_MIFARE_CLASSIC) _goMifareNdef();
+  else _goUltralightNdef();
 }
 
 void PN532I2cScreen::_goMagic() {
   _state = STATE_MAGIC_MENU;
   setItems(_magicItems);
+  render();
+}
+
+void PN532I2cScreen::_goDetectMagic() {
+  _state = STATE_MAGIC_DETECT;
+  _magicDetectDone = false;
+  _magicLog.clear();
+  _magicLog.addLine("Detect Magic", TFT_CYAN);
+  _magicLog.addLine("[Press] Start", TFT_DARKGREY);
   render();
 }
 
@@ -683,7 +902,7 @@ const char* PN532I2cScreen::_inferType2Variant() {
 // ── scan helper ────────────────────────────────────────────────────────────
 
 bool PN532I2cScreen::_scanCardOrShow(uint32_t timeoutMs) {
-  ShowStatusAction::show("Place card on reader...", 0);
+  renderTagPrompt("Place tag on reader...", bodyX(), bodyY(), bodyW(), bodyH());
   uint32_t start = millis();
   while (millis() - start < timeoutMs) {
     Uni.update();
@@ -711,7 +930,7 @@ bool PN532I2cScreen::_scanCardOrShow(uint32_t timeoutMs) {
     }
     delay(50);
   }
-  ShowStatusAction::show("No card found");
+  ShowStatusAction::show("No tag detected");
   return false;
 }
 
@@ -743,9 +962,7 @@ void PN532I2cScreen::_doScan14A() {
   lcd.setTextDatum(MC_DATUM);
   lcd.setTextSize(1);
   lcd.setTextColor(TFT_YELLOW, TFT_BLACK);
-  lcd.drawString("Scanning ISO14443A...", bx + bw / 2, by + bh / 2 - 8);
-  lcd.setTextColor(TFT_DARKGREY, TFT_BLACK);
-  lcd.drawString("Hold card near reader", bx + bw / 2, by + bh / 2 + 8);
+  lcd.drawString("Place tag on reader...", bx + bw / 2, by + bh / 2);
 
   bool ok = false;
   uint32_t start = millis();
@@ -767,7 +984,7 @@ void PN532I2cScreen::_doScan14A() {
     }
     delay(50);
   }
-  if (!ok) { ShowStatusAction::show("No card found", 1200); _goMain(); return; }
+  if (!ok) { ShowStatusAction::show("No tag detected", 1200); _goMain(); return; }
 
   int n = Achievement.inc("nfc_uid_first");
   if (n == 1)  Achievement.unlock("nfc_uid_first");
@@ -783,6 +1000,12 @@ void PN532I2cScreen::_doScan14A() {
     if (concreteType) typeName = concreteType;
   }
   _pushRow("Type", typeName);
+  if (_sak == 0x09 || _sak == 0x08 || _sak == 0x18) {
+    const MagicCardType magic = _detectMagicType();
+    _pushRow("Magic", magicCardTypeName(magic));
+  }
+  const bool supported = (_sak == 0x09 || _sak == 0x08 || _sak == 0x18 || _sak == 0x00);
+  if (!supported) _pushRow("Status", "Tag not supported");
   snprintf(buf, sizeof(buf), "%02X:%02X", (_atqa >> 8) & 0xFF, _atqa & 0xFF);
   _pushRow("ATQA", buf);
   snprintf(buf, sizeof(buf), "%02X", _sak);
@@ -795,14 +1018,74 @@ void PN532I2cScreen::_doScan14A() {
   render();
 }
 
-void PN532I2cScreen::_doAuthenticate() {
-  if (!_hasCard && !_scanCardOrShow(5000)) { _goMifare(); return; }
+void PN532I2cScreen::_loadSavedKeys() {
+  if (!Uni.Storage || !Uni.Storage->isAvailable() || !_hasCard) return;
+
+  String uid = _hexUid(_uid, _uidLen);
+  uid.replace(":", "");
+  String path = String("/unigeek/nfc/keys/") + uid + ".txt";
+  String content = Uni.Storage->readFile(path.c_str());
+  if (content.length() == 0) return;
 
   auto dims = _mfDims(_sak);
-  if (dims.first == 0) { ShowStatusAction::show("Not MIFARE Classic"); _goMifare(); return; }
-  size_t totalSectors = dims.first;
+  int start = 0;
+  while (start < (int)content.length()) {
+    int nl = content.indexOf('\n', start);
+    if (nl < 0) nl = content.length();
+    String line = content.substring(start, nl);
+    line.trim();
 
+    int sector = -1;
+    char keyType = 0;
+    char hex[13] = {};
+    if (sscanf(line.c_str(), "S%d %c %12s", &sector, &keyType, hex) == 3 &&
+        sector >= 0 && sector < (int)dims.first) {
+      uint8_t raw[6];
+      if (_parseHexKeyI2c(String(hex), raw)) {
+        NFCUtility::MIFARE_Key key(raw[0], raw[1], raw[2], raw[3], raw[4], raw[5]);
+        if (keyType == 'A' || keyType == 'a') _mfKeys[sector].first = key;
+        else if (keyType == 'B' || keyType == 'b') _mfKeys[sector].second = key;
+      }
+    }
+    start = nl + 1;
+  }
+}
+
+void PN532I2cScreen::_saveKeys() {
+  if (!Uni.Storage || !Uni.Storage->isAvailable() || !_hasCard) return;
+  auto dims = _mfDims(_sak);
+  if (dims.first == 0) return;
+
+  Uni.Storage->makeDir("/unigeek/nfc/keys");
+  String uid = _hexUid(_uid, _uidLen);
+  uid.replace(":", "");
+  String path = String("/unigeek/nfc/keys/") + uid + ".txt";
+  String buf;
+
+  for (size_t sector = 0; sector < dims.first; ++sector) {
+    for (uint8_t kt = 0; kt < 2; ++kt) {
+      auto& slot = kt ? _mfKeys[sector].second : _mfKeys[sector].first;
+      if (!slot) continue;
+      const auto kv = slot.value();
+      char line[48];
+      snprintf(line, sizeof(line), "S%02u %c %02X%02X%02X%02X%02X%02X\n",
+               (unsigned)sector, kt ? 'B' : 'A',
+               kv[0], kv[1], kv[2], kv[3], kv[4], kv[5]);
+      buf += line;
+    }
+  }
+  if (buf.length() > 0) Uni.Storage->writeFile(path.c_str(), buf.c_str());
+}
+
+bool PN532I2cScreen::_discoverDefaultKeys(bool checkingProgress) {
+  if (!_hasCard) return false;
+  auto dims = _mfDims(_sak);
+  if (dims.first == 0) return false;
+
+  const size_t totalSectors = dims.first;
   _mfKeys.fill({});
+
+  _loadSavedKeys();
   ProgressView::init();
   bool keyFound = false;
 
@@ -810,19 +1093,41 @@ void PN532I2cScreen::_doAuthenticate() {
     uint32_t trailer = (sector < 32) ? (sector * 4 + 3) : (128 + (sector - 32) * 16 + 15);
     for (uint8_t kt = 0; kt < 2; kt++) {
       bool useKeyB = (kt == 1);
+      auto& slot = useKeyB ? _mfKeys[sector].second : _mfKeys[sector].first;
       char msg[48];
-      snprintf(msg, sizeof(msg), "S%d %s", (int)sector, useKeyB ? "B" : "A");
-      int pct = (int)((sector * 2 + kt) * 100 / (totalSectors * 2));
+      const size_t keyIndex = sector * 2u + kt + 1u;
+      const size_t totalKeys = totalSectors * 2u;
+      if (checkingProgress) {
+        snprintf(msg, sizeof(msg), "Checking keys (%u/%u)...",
+                 (unsigned)keyIndex, (unsigned)totalKeys);
+      } else {
+        snprintf(msg, sizeof(msg), "Authenticating sectors (%u/%u)...",
+                 (unsigned)(sector + 1), (unsigned)totalSectors,
+                 useKeyB ? "B" : "A");
+      }
+      int pct = (int)((keyIndex - 1u) * 100u / totalKeys);
       ProgressView::progress(msg, pct);
 
-      bool found = false;
+      // Persisted per-UID keys are tried first, but never trusted blindly.
+      if (slot) {
+        const auto kv = slot.value();
+        if (_nfc->mifareclassic_AuthenticateBlock(
+              _uid, _uidLen, trailer, useKeyB ? 1 : 0, (uint8_t*)kv.data())) {
+          keyFound = true;
+          uint8_t rUid[7]; uint8_t rLen;
+          _nfc->readPassiveTargetID(PN532_MIFARE_ISO14443A, rUid, &rLen, 200);
+          continue;
+        }
+        slot.reset();
+        uint8_t rUid[7]; uint8_t rLen;
+        _nfc->readPassiveTargetID(PN532_MIFARE_ISO14443A, rUid, &rLen, 200);
+      }
+
       for (const auto& key : NFCUtility::getDefaultKeys()) {
         const auto kv = key.value();
         if (_nfc->mifareclassic_AuthenticateBlock(
               _uid, _uidLen, trailer, useKeyB ? 1 : 0, (uint8_t*)kv.data())) {
-          if (useKeyB) _mfKeys[sector].second = key;
-          else         _mfKeys[sector].first  = key;
-          found = true;
+          slot = key;
           if (!keyFound) {
             keyFound = true;
             int n = Achievement.inc("nfc_key_found");
@@ -830,11 +1135,6 @@ void PN532I2cScreen::_doAuthenticate() {
           }
           break;
         }
-        // Re-select card for next key attempt
-        uint8_t rUid[7]; uint8_t rLen;
-        _nfc->readPassiveTargetID(PN532_MIFARE_ISO14443A, rUid, &rLen, 200);
-      }
-      if (!found) {
         uint8_t rUid[7]; uint8_t rLen;
         _nfc->readPassiveTargetID(PN532_MIFARE_ISO14443A, rUid, &rLen, 200);
       }
@@ -842,7 +1142,46 @@ void PN532I2cScreen::_doAuthenticate() {
   }
 
   ProgressView::finish();
+  if (keyFound) _saveKeys();
+  return keyFound;
+}
+
+bool PN532I2cScreen::_hasReadableKeyForEverySector() const {
+  auto dims = _mfDims(_sak);
+  if (dims.first == 0) return false;
+  for (size_t sector = 0; sector < dims.first; ++sector) {
+    if (!_mfKeys[sector].first && !_mfKeys[sector].second) return false;
+  }
+  return true;
+}
+
+void PN532I2cScreen::_doAuthenticate() {
+  if (!_hasCard && !_scanCardOrShow(5000)) { _goMifare(); return; }
+  if (_mfDims(_sak).first == 0) { ShowStatusAction::show("Not MIFARE Classic"); _goMifare(); return; }
+  _discoverDefaultKeys();
   _goMifare();
+}
+
+void PN532I2cScreen::_doReadTag() {
+  renderOperationTitle("Read Tag");
+  if (!_scanCardOrShow(5000)) { _goMifareTag(); return; }
+  if (_mfDims(_sak).first == 0) { ShowStatusAction::show("Not MIFARE Classic"); _goMifareTag(); return; }
+
+  _discoverDefaultKeys();
+  if (!_hasReadableKeyForEverySector()) {
+    static const InputSelectAction::Option opts[] = {
+      {"Dictionary Attack", "dict"},
+      {"Read Partial",      "partial"},
+    };
+    const char* r = InputSelectAction::popup("Missing sector keys", opts, 2, nullptr);
+    if (!r) { _goMifareTag(); return; }
+    if (strcmp(r, "dict") == 0) {
+      _resumeReadAfterDict = true;
+      _doDictionaryPicker();
+      return;
+    }
+  }
+  _doDumpMemory();
 }
 
 void PN532I2cScreen::_doDumpMemory() {
@@ -853,6 +1192,7 @@ void PN532I2cScreen::_doDumpMemory() {
   _state = STATE_MIFARE_DUMP;
   _resetRows();
   _hasDump = false;
+  _dumpComplete = false;
   const size_t totalSectors = dims.first;
   const size_t totalBlocks = dims.second;
   _dumpLen = totalBlocks * 16u;
@@ -868,12 +1208,11 @@ void PN532I2cScreen::_doDumpMemory() {
     memcpy(&_dumpImg[trailerBlock * 16], kTrailer, 16);
   }
 
-  _dumpImg[0] = _uid[0]; _dumpImg[1] = _uid[1];
-  _dumpImg[2] = _uid[2]; _dumpImg[3] = _uid[3];
-  _dumpImg[4] = _uid[0] ^ _uid[1] ^ _uid[2] ^ _uid[3];
-  _dumpImg[5] = _sak;
-  _dumpImg[6] = (_atqa >> 8) & 0xFF;
-  _dumpImg[7] = _atqa & 0xFF;
+  // Keep block 0 as raw memory. SAK and ATQA are anticollision metadata and
+  // are not part of the MIFARE Classic manufacturer block. The normal read
+  // loop below fills all 16 bytes when block 0 is readable; otherwise the
+  // zero-initialized bytes correctly remain unknown instead of fabricating
+  // a non-standard manufacturer block.
 
   int readCount = 0;
   ProgressView::init();
@@ -882,16 +1221,16 @@ void PN532I2cScreen::_doDumpMemory() {
     size_t sector  = (blk < 128) ? (blk / 4) : ((blk - 128) / 16 + 32);
     uint32_t trailer = (sector < 32) ? (sector * 4 + 3) : (128 + (sector - 32) * 16 + 15);
     int pct = (int)(blk * 100 / totalBlocks);
-    char msg[32];
-    snprintf(msg, sizeof(msg), "Block %d", (int)blk);
+    char msg[40];
+    snprintf(msg, sizeof(msg), "Reading blocks (%u/%u)...",
+             (unsigned)(blk + 1), (unsigned)totalBlocks);
     ProgressView::progress(msg, pct);
 
-    String label = "B" + String((int)blk);
     auto& slotA = _mfKeys[sector].first;
     auto& slotB = _mfKeys[sector].second;
     bool useKeyB = !slotA && (bool)slotB;
     auto& slot   = useKeyB ? slotB : slotA;
-    if (!slot) { _pushRow(label, "-"); continue; }
+    if (!slot) continue;
 
     const auto kv = slot.value();
     if (!_nfc->mifareclassic_AuthenticateBlock(
@@ -901,52 +1240,348 @@ void PN532I2cScreen::_doDumpMemory() {
       if (_nfc->readPassiveTargetID(PN532_MIFARE_ISO14443A, rUid, &rLen, 200)) {
         if (!_nfc->mifareclassic_AuthenticateBlock(
               _uid, _uidLen, trailer, useKeyB ? 1 : 0, (uint8_t*)kv.data())) {
-          _pushRow(label, "-"); continue;
+          continue;
         }
-      } else { _pushRow(label, "-"); continue; }
+      } else { continue; }
     }
 
     uint8_t data[16];
-    if (!_nfc->mifareclassic_ReadDataBlock((uint8_t)blk, data)) {
-      _pushRow(label, "-"); continue;
-    }
-    _pushRow(label, _hexBlock(data + 13, 3));
+    if (!_nfc->mifareclassic_ReadDataBlock((uint8_t)blk, data)) continue;
     readCount++;
     memcpy(&_dumpImg[blk * 16], data, 16);
   }
 
-  char summary[32];
-  snprintf(summary, sizeof(summary), "%d/%d blocks", readCount, (int)totalBlocks);
-  _pushRow("Read", summary);
-  _pushRow("[Press]", "Save dump");
+  // A MIFARE Classic trailer read does not expose Key A as ordinary memory,
+  // and Key B may also be hidden by the access conditions. Reinsert keys that
+  // UniGeek actually discovered so the saved raw image is useful as a complete
+  // Classic dump, matching the Chameleon Ultra dump path. Preserve the access
+  // bits and GPB exactly as read.
+  for (size_t sector = 0; sector < totalSectors; ++sector) {
+    const size_t trailerBlock =
+        (sector < 32) ? (sector * 4 + 3)
+                      : (128 + (sector - 32) * 16 + 15);
+    uint8_t* trailer = &_dumpImg[trailerBlock * 16];
+    if (_mfKeys[sector].first) {
+      const auto& keyA = _mfKeys[sector].first.value();
+      memcpy(trailer, keyA.data(), 6);
+    }
+    if (_mfKeys[sector].second) {
+      const auto& keyB = _mfKeys[sector].second.value();
+      memcpy(trailer + 10, keyB.data(), 6);
+    }
+  }
+
+  _dumpComplete = (readCount == (int)totalBlocks);
   _hasDump = true;
 
   int n = Achievement.inc("nfc_dump_memory");
   if (n == 1) Achievement.unlock("nfc_dump_memory");
 
   ProgressView::finish();
+  _showTagDetails();
+}
+
+void PN532I2cScreen::_showTagDetails() {
+  if (!_hasDump) { _goMifareTag(); return; }
+  auto dims = _mfDims(_sak);
+  if (dims.first == 0) { _goMifareTag(); return; }
+
+  _state = STATE_MIFARE_DUMP;
+  _resetRows();
+  _pushRow("Type", _inferType(_sak, _atqa));
+  _pushRow("UID", _hexUid(_uid, _uidLen));
+
+  char atqa[8];
+  snprintf(atqa, sizeof(atqa), "%04X", _atqa);
+  _pushRow("ATQA", atqa);
+  char sak[6];
+  snprintf(sak, sizeof(sak), "%02X", _sak);
+  _pushRow("SAK", sak);
+
+  _pushRow("Size", String((unsigned)_dumpLen) + " bytes");
+  _pushRow("Sectors", String((unsigned)dims.first));
+  _pushRow("Blocks", String((unsigned)dims.second));
+
+  size_t sectorsWithKey = 0;
+  for (size_t s = 0; s < dims.first; s++) {
+    if (_mfKeys[s].first || _mfKeys[s].second) sectorsWithKey++;
+  }
+  _pushRow("Keys", String((unsigned)sectorsWithKey) + "/" + String((unsigned)dims.first) + " sectors");
+  _pushRow("Status", _dumpComplete ? "Complete" : "Partial");
+  if (_dumpComplete) _appendDumpNdefDetails();
+  _pushRow("[Press]", _dumpComplete ? "Actions" : "Dictionary Attack");
+
+  _scrollView.setRows(_rows, _rowCount);
+  render();
+}
+
+void PN532I2cScreen::_appendDumpNdefDetails() {
+  if (!_hasDump || !_dumpComplete) return;
+
+  auto dims = _mfDims(_sak);
+  if (dims.first == 0 || _dumpLen < dims.second * 16u) return;
+
+  uint8_t sectors[39] = {};
+  size_t sectorCount = 0;
+
+  auto addIfNdef = [&](uint8_t sector, uint8_t lo, uint8_t hi) {
+    if (sector >= dims.first || sectorCount >= sizeof(sectors)) return;
+    if (lo == 0x03 && hi == 0xE1) sectors[sectorCount++] = sector;
+  };
+
+  // MAD1: block 1 maps sectors 1..7; block 2 maps sectors 8..15.
+  const uint8_t* b1 = &_dumpImg[1u * 16u];
+  const uint8_t* b2 = &_dumpImg[2u * 16u];
+  for (uint8_t sector = 1; sector <= 7; ++sector) {
+    const size_t off = 2u + (size_t)(sector - 1u) * 2u;
+    addIfNdef(sector, b1[off], b1[off + 1u]);
+  }
+  for (uint8_t sector = 8; sector <= 15; ++sector) {
+    const size_t off = (size_t)(sector - 8u) * 2u;
+    addIfNdef(sector, b2[off], b2[off + 1u]);
+  }
+
+  // MAD2 lives in sector 16 on Classic 4K and maps sectors 17..39.
+  if (dims.first > 16 && _dumpLen >= 67u * 16u) {
+    const uint8_t* m0 = &_dumpImg[64u * 16u];
+    const uint8_t* m1 = &_dumpImg[65u * 16u];
+    const uint8_t* m2 = &_dumpImg[66u * 16u];
+    for (uint8_t sector = 17; sector <= 23; ++sector) {
+      const size_t off = 2u + (size_t)(sector - 17u) * 2u;
+      addIfNdef(sector, m0[off], m0[off + 1u]);
+    }
+    for (uint8_t sector = 24; sector <= 31; ++sector) {
+      const size_t off = (size_t)(sector - 24u) * 2u;
+      addIfNdef(sector, m1[off], m1[off + 1u]);
+    }
+    for (uint8_t sector = 32; sector <= 39; ++sector) {
+      const size_t off = (size_t)(sector - 32u) * 2u;
+      addIfNdef(sector, m2[off], m2[off + 1u]);
+    }
+  }
+
+  if (sectorCount == 0) {
+    _pushRow("NDEF", "None");
+    return;
+  }
+
+  size_t areaLen = 0;
+  for (size_t i = 0; i < sectorCount; ++i)
+    areaLen += (sectors[i] < 32) ? 48u : 240u;
+
+  uint8_t* area = new uint8_t[areaLen];
+  if (!area) {
+    _pushRow("NDEF", "Present");
+    return;
+  }
+
+  size_t out = 0;
+  for (size_t i = 0; i < sectorCount; ++i) {
+    const uint8_t sector = sectors[i];
+    const size_t firstBlock = (sector < 32)
+        ? (size_t)sector * 4u
+        : 128u + (size_t)(sector - 32u) * 16u;
+    const uint8_t dataBlocks = (sector < 32) ? 3 : 15;
+    for (uint8_t bi = 0; bi < dataBlocks; ++bi) {
+      memcpy(area + out, &_dumpImg[(firstBlock + bi) * 16u], 16u);
+      out += 16u;
+    }
+  }
+
+  const uint8_t* ndef = nullptr;
+  size_t ndefLen = 0;
+  size_t pos = 0;
+  while (pos < out) {
+    const uint8_t tlv = area[pos++];
+    if (tlv == 0x00) continue;
+    if (tlv == 0xFE) break;
+    if (pos >= out) break;
+
+    size_t len = area[pos++];
+    if (len == 0xFF) {
+      if (pos + 1 >= out) break;
+      len = ((size_t)area[pos] << 8) | area[pos + 1];
+      pos += 2;
+    }
+    if (pos + len > out) break;
+    if (tlv == 0x03) {
+      ndef = area + pos;
+      ndefLen = len;
+      break;
+    }
+    pos += len;
+  }
+
+  if (!ndef) {
+    _pushRow("NDEF", "None");
+    delete[] area;
+    return;
+  }
+  if (ndefLen == 0) {
+    _pushRow("NDEF", "Empty");
+    delete[] area;
+    return;
+  }
+
+  NdefParser::Result parsed;
+  if (!NdefParser::parse(ndef, ndefLen, parsed)) {
+    _pushRow("NDEF", "Invalid record");
+    delete[] area;
+    return;
+  }
+
+  switch (parsed.kind) {
+    case NdefParser::RECORD_TEXT:
+      _pushRow("NDEF", "Text");
+      if (parsed.encoding == "UTF-16") _pushRow("Text", "(UTF-16 raw)");
+      else _pushWrappedRow("Text", parsed.text);
+      break;
+    case NdefParser::RECORD_URL:
+      _pushRow("NDEF", "URI");
+      _pushWrappedRow("URI", parsed.uri);
+      break;
+    case NdefParser::RECORD_PHONE:
+      _pushRow("NDEF", "Phone");
+      _pushWrappedRow("Phone", parsed.phone);
+      break;
+    case NdefParser::RECORD_EMAIL:
+      _pushRow("NDEF", "Email");
+      _pushWrappedRow("Mail", parsed.email);
+      break;
+    case NdefParser::RECORD_VCARD:
+      _pushRow("NDEF", "vCard");
+      if (parsed.contact.length()) _pushWrappedRow("Contact", parsed.contact);
+      if (parsed.phone.length()) _pushWrappedRow("Phone", parsed.phone);
+      if (parsed.email.length()) _pushWrappedRow("Mail", parsed.email);
+      break;
+    default:
+      _pushRow("NDEF", "Unsupported");
+      _pushRow("Type", parsed.type.length() ? parsed.type : "(empty)");
+      break;
+  }
+
+  delete[] area;
+}
+
+void PN532I2cScreen::_showDumpHex() {
+  if (!_hasDump) { _showTagDetails(); return; }
+
+  _state = STATE_MIFARE_DUMP_HEX;
+  _resetRows();
+  _scrollView.resetScroll();
+  const size_t blocks = _dumpLen / 16u;
+  for (size_t blk = 0; blk < blocks; blk++) {
+    // A full 16-byte block does not fit beside the row label in
+    // ScrollListView. Split it into two 8-byte rows so View Dump always
+    // shows every byte instead of clipping the left side of the hex string.
+    _pushRow("B" + String((unsigned)blk) + " 0-7",
+             _hexBlock(&_dumpImg[blk * 16], 8));
+    _pushRow("B" + String((unsigned)blk) + " 8-F",
+             _hexBlock(&_dumpImg[blk * 16 + 8], 8));
+  }
+  _pushRow("[Press]", "Actions");
   _scrollView.setRows(_rows, _rowCount);
   render();
 }
 
 void PN532I2cScreen::_doShowKeys() {
-  if (!_hasCard) { ShowStatusAction::show("Authenticate first"); _goMifare(); return; }
+  // Discovered Keys is a read-only view of persisted keys for the scanned UID.
+  // No authentication or attack is needed to inspect the saved results.
+  if (!_scanCardOrShow(5000)) { _goMifareKeys(); return; }
   auto dims = _mfDims(_sak);
-  if (dims.first == 0) { ShowStatusAction::show("Not MIFARE Classic"); _goMifare(); return; }
+  if (dims.first == 0) { ShowStatusAction::show("Not MIFARE Classic"); _goMifareKeys(); return; }
+  _mfKeys.fill({});
+  _loadSavedKeys();
 
   _state = STATE_MIFARE_KEYS;
   _resetRows();
   _pushRow("UID", _hexUid(_uid, _uidLen));
-  for (size_t s = 0; s < dims.first; s++) {
-    _pushRow("S" + String((int)s) + " A", String(_mfKeys[s].first.c_str().c_str()));
-    _pushRow("S" + String((int)s) + " B", String(_mfKeys[s].second.c_str().c_str()));
+  char sak[8]; snprintf(sak, sizeof(sak), "%02X", _sak);
+  _pushRow("SAK", sak);
+  size_t known = 0;
+  for (size_t sector = 0; sector < dims.first; ++sector) {
+    if (_mfKeys[sector].first) ++known;
+    if (_mfKeys[sector].second) ++known;
   }
+  char count[16]; snprintf(count, sizeof(count), "%u / %u", (unsigned)known, (unsigned)(dims.first * 2u));
+  _pushRow("Keys", count);
+  for (size_t sector = 0; sector < dims.first; ++sector) {
+    String a = "---", b = "---";
+    if (_mfKeys[sector].first) a = String(_mfKeys[sector].first.c_str().c_str());
+    if (_mfKeys[sector].second) b = String(_mfKeys[sector].second.c_str().c_str());
+    _pushRow("S" + String((int)sector) + " A", a);
+    _pushRow("S" + String((int)sector) + " B", b);
+  }
+  _scrollView.resetScroll();
+  _scrollView.setRows(_rows, _rowCount);
+  render();
+}
+
+void PN532I2cScreen::_openKeyDatabases() {
+  _state = STATE_MIFARE_KEY_DB_SELECT;
+  if (!_keyDbPickDir.length()) _keyDbPickDir = _dictPath;
+  _browser.root = _dictPath;
+  uint8_t n = _browser.load(this, _keyDbPickDir, ".txt");
+  setItems(_browser.items(), n);
+  render();
+  if (!n && _keyDbPickDir == _dictPath) ShowStatusAction::show("No key databases");
+}
+
+void PN532I2cScreen::_openKeyDatabase(uint8_t index) {
+  if (index >= _browser.count()) return;
+  const auto& e = _browser.entry(index);
+  if (e.isDir) { _keyDbPickDir = e.path; _openKeyDatabases(); return; }
+  if (!Uni.Storage || !Uni.Storage->isAvailable()) { ShowStatusAction::show("Storage unavailable"); return; }
+  String content = Uni.Storage->readFile(e.path.c_str());
+  _resetRows();
+  int pos = 0;
+  while (pos < (int)content.length() && _rowCount < MAX_ROWS) {
+    int nl = content.indexOf('\n', pos);
+    if (nl < 0) nl = content.length();
+    String line = content.substring(pos, nl); line.trim();
+    if (line.length() && !line.startsWith("#")) {
+      _pushRow(String((unsigned)(_rowCount + 1u)), line);
+    }
+    pos = nl + 1;
+  }
+  if (!_rowCount) { ShowStatusAction::show("No keys in file"); return; }
+  _keyDbViewTitle = e.name;
+  _state = STATE_MIFARE_KEY_DB_VIEW;
+  _scrollView.resetScroll();
   _scrollView.setRows(_rows, _rowCount);
   render();
 }
 
 void PN532I2cScreen::_doDictionaryPicker() {
-  if (!_hasCard) { ShowStatusAction::show("Authenticate first"); _goMifare(); return; }
+  // Standalone Dictionary Attack always scans the tag now. This gives it the
+  // same valid UID/SAK context as the Read Tag -> Dictionary Attack path and
+  // avoids accidentally reusing a previous tag still cached in _hasCard.
+  if (_resumeReadAfterDict) {
+    if (!_hasCard && !_scanCardOrShow(5000)) {
+      _resumeReadAfterDict = false;
+      _goMifareAttacks();
+      return;
+    }
+  } else {
+    if (!_scanCardOrShow(5000)) {
+      _goMifareAttacks();
+      return;
+    }
+    // Start from the persisted per-UID state.  The standalone attack should
+    // test only slots that are not already in Discovered Keys; clearing the
+    // whole table here made the PN532 rediscover and report the same 32 keys
+    // on every run.  This is intentionally lighter than the CU pre-check:
+    // PN532 authentication is slower and needs frequent PICC re-selection, so
+    // persisted slots are used as the baseline and missing slots are attacked.
+    _mfKeys.fill({});
+    _loadSavedKeys();
+  }
+  if (_mfDims(_sak).first == 0) {
+    _resumeReadAfterDict = false;
+    ShowStatusAction::show("Not MIFARE Classic");
+    _goMifareAttacks();
+    return;
+  }
 
   _state = STATE_DICT_SELECT;
   if (_dictPickDir.length() == 0) _dictPickDir = _dictPath;
@@ -954,7 +1589,7 @@ void PN532I2cScreen::_doDictionaryPicker() {
   uint8_t n = _browser.load(this, _dictPickDir, ".txt");
   if (n == 0 && _dictPickDir == _dictPath) {
     ShowStatusAction::show("No dictionary files");
-    _goMifare();
+    _goMifareAttacks();
     return;
   }
   setItems(_browser.items(), n);
@@ -1006,7 +1641,26 @@ void PN532I2cScreen::_doDictionaryAttackWithFile(uint8_t fileIndex) {
   size_t totalSectors = dims.first;
   int recovered = 0;
 
-  ProgressView::init();
+  // Match the Chameleon Ultra dictionary-attack UX: live scrolling key
+  // attempts with a status/progress bar, rather than a progress-only screen.
+  LogView actionLog;
+  actionLog.clear();
+  struct DictUiCtx { const char* status; int pct; } ui = {"Starting...", 0};
+  auto statusCb = [](Sprite& sp, int barY, int width, void* userData) {
+    auto* ctx = static_cast<DictUiCtx*>(userData);
+    sp.setTextDatum(TL_DATUM);
+    sp.setTextColor(TFT_CYAN);
+    sp.drawString(ctx->status, 2, barY);
+    char pctBuf[8];
+    snprintf(pctBuf, sizeof(pctBuf), "%d%%", ctx->pct);
+    sp.setTextDatum(TR_DATUM);
+    sp.setTextColor(TFT_WHITE);
+    sp.drawString(pctBuf, width - 2, barY);
+  };
+  char liveStatus[48] = "Starting...";
+  ui.status = liveStatus;
+  actionLog.draw(Uni.Lcd, bodyX(), bodyY(), bodyW(), bodyH(), statusCb, &ui);
+
   for (size_t sector = 0; sector < totalSectors; sector++) {
     uint32_t trailer = (sector < 32) ? (sector * 4 + 3) : (128 + (sector - 32) * 16 + 15);
     for (uint8_t kt = 0; kt < 2; kt++) {
@@ -1014,38 +1668,67 @@ void PN532I2cScreen::_doDictionaryAttackWithFile(uint8_t fileIndex) {
       auto& slot = useKeyB ? _mfKeys[sector].second : _mfKeys[sector].first;
       if (slot) continue;
 
-      char msg[48];
-      snprintf(msg, sizeof(msg), "Dict S%d %s", (int)sector, useKeyB ? "B" : "A");
-      int pct = (int)((sector * 2 + kt) * 100 / (totalSectors * 2));
-      ProgressView::progress(msg, pct);
-
+      ui.pct = (int)((sector * 2 + kt) * 100 / (totalSectors * 2));
+      bool found = false;
       for (uint8_t k = 0; k < keyCount; k++) {
-        if (_nfc->mifareclassic_AuthenticateBlock(
-              _uid, _uidLen, trailer, useKeyB ? 1 : 0, keys[k])) {
+        snprintf(liveStatus, sizeof(liveStatus), "S%u %c %02X%02X%02X%02X%02X%02X",
+                 (unsigned)sector, useKeyB ? 'B' : 'A',
+                 keys[k][0], keys[k][1], keys[k][2], keys[k][3], keys[k][4], keys[k][5]);
+        actionLog.draw(Uni.Lcd, bodyX(), bodyY(), bodyW(), bodyH(), statusCb, &ui);
+
+        bool ok = _nfc->mifareclassic_AuthenticateBlock(
+              _uid, _uidLen, trailer, useKeyB ? 1 : 0, keys[k]);
+        char line[48];
+        snprintf(line, sizeof(line), "S%u %c: %02X%02X%02X%02X%02X%02X",
+                 (unsigned)sector, useKeyB ? 'B' : 'A',
+                 keys[k][0], keys[k][1], keys[k][2], keys[k][3], keys[k][4], keys[k][5]);
+        actionLog.addLine(line, ok ? TFT_GREEN : TFT_RED);
+        actionLog.draw(Uni.Lcd, bodyX(), bodyY(), bodyW(), bodyH(), statusCb, &ui);
+
+        if (ok) {
           slot = NFCUtility::MIFARE_Key(keys[k][0], keys[k][1], keys[k][2],
                                         keys[k][3], keys[k][4], keys[k][5]);
           recovered++;
+          found = true;
           break;
         }
         uint8_t rUid[7]; uint8_t rLen;
         _nfc->readPassiveTargetID(PN532_MIFARE_ISO14443A, rUid, &rLen, 200);
       }
+      if (!found) {
+        char nf[32];
+        snprintf(nf, sizeof(nf), "  S%u %c: not found",
+                 (unsigned)sector, useKeyB ? 'B' : 'A');
+        actionLog.addLine(nf, TFT_RED);
+        actionLog.draw(Uni.Lcd, bodyX(), bodyY(), bodyW(), bodyH(), statusCb, &ui);
+      }
     }
   }
 
-  ProgressView::finish();
+  ui.pct = 100;
+  snprintf(liveStatus, sizeof(liveStatus), recovered > 0 ? "Keys updated: %d new" : "No new keys found", recovered);
+  actionLog.addLine(liveStatus, recovered > 0 ? TFT_GREEN : TFT_RED);
+  actionLog.draw(Uni.Lcd, bodyX(), bodyY(), bodyW(), bodyH(), statusCb, &ui);
   if (recovered > 0) {
+    _saveKeys();
     int n = Achievement.inc("nfc_dict_attack");
     if (n == 1) Achievement.unlock("nfc_dict_attack");
   }
   char msg[48];
-  snprintf(msg, sizeof(msg), "Recovered %d keys", recovered);
+  if (recovered > 0) snprintf(msg, sizeof(msg), "%d new key%s added to Discovered Keys", recovered, recovered == 1 ? "" : "s");
+  else snprintf(msg, sizeof(msg), "No new keys found");
   ShowStatusAction::show(msg);
-  _goMifare();
+  if (_resumeReadAfterDict) {
+    _resumeReadAfterDict = false;
+    _doDumpMemory();
+  } else {
+    _goMifareAttacks();
+  }
 }
 
 void PN532I2cScreen::_doUltralightDump() {
-  ShowStatusAction::show("Place UL/NTAG on reader...", 0);
+  renderOperationTitle("Read Tag");
+  renderTagPrompt("Place tag on reader...", bodyX(), bodyY(), bodyW(), bodyH());
   uint8_t uid[7]; uint8_t uidLen;
   uint32_t start = millis();
   bool ok = false;
@@ -1056,9 +1739,9 @@ void PN532I2cScreen::_doUltralightDump() {
     if (_nfc->readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLen, 200)) { ok = true; break; }
     delay(50);
   }
-  if (!ok) { ShowStatusAction::show("No card"); _goUltralight(); return; }
+  if (!ok) { ShowStatusAction::show("No tag detected"); _goUltralight(); return; }
 
-  _state = STATE_NDEF_RESULT;
+  _state = STATE_RAW_RESULT;
   _resetRows();
   memcpy(_uid, uid, uidLen);
   _uidLen = uidLen;
@@ -1075,7 +1758,7 @@ void PN532I2cScreen::_doUltralightDump() {
     const uint8_t currentPage = page + 1;
     int pct = (int)((uint16_t)page * 100u / TOTAL_PAGES);
     char msg[32];
-    snprintf(msg, sizeof(msg), "Reading %u/%u pages",
+    snprintf(msg, sizeof(msg), "Reading pages (%u/%u)...",
              (unsigned)currentPage, (unsigned)TOTAL_PAGES);
     ProgressView::progress(msg, pct);
     uint8_t data[4];
@@ -1088,7 +1771,8 @@ void PN532I2cScreen::_doUltralightDump() {
 }
 
 void PN532I2cScreen::_doUltralightWrite() {
-  ShowStatusAction::show("Place UL/NTAG on reader...", 0);
+  renderOperationTitle("Write Page");
+  renderTagPrompt("Place tag on reader...", bodyX(), bodyY(), bodyW(), bodyH());
   uint8_t uid[7]; uint8_t uidLen;
   uint32_t start = millis();
   bool ok = false;
@@ -1099,7 +1783,7 @@ void PN532I2cScreen::_doUltralightWrite() {
     if (_nfc->readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLen, 200)) { ok = true; break; }
     delay(50);
   }
-  if (!ok) { ShowStatusAction::show("No card"); _goUltralight(); return; }
+  if (!ok) { ShowStatusAction::show("No tag detected"); _goUltralight(); return; }
 
   int page = InputNumberAction::popup("Page (4..63)", 4, 63, 4);
   if (InputNumberAction::wasCancelled()) { _goUltralight(); return; }
@@ -1130,11 +1814,12 @@ void PN532I2cScreen::_doUltralightWrite() {
 
 
 void PN532I2cScreen::_doReadNdef() {
+  renderOperationTitle("Read NDEF");
   _ndefTarget = NDEF_TARGET_ULTRALIGHT;
   _hasNdef = false;
   _ndefLen = 0;
   _ndefCapacity = 0;
-  ShowStatusAction::show("Place UL/NTAG on reader...", 0);
+  renderTagPrompt("Place tag on reader...", bodyX(), bodyY(), bodyW(), bodyH());
 
   uint8_t uid[7];
   uint8_t uidLen = 0;
@@ -1157,7 +1842,7 @@ void PN532I2cScreen::_doReadNdef() {
   }
 
   if (!ok) {
-    ShowStatusAction::show("No card");
+    ShowStatusAction::show("No tag detected");
     _goUltralight();
     return;
   }
@@ -1184,7 +1869,7 @@ void PN532I2cScreen::_doReadNdef() {
   for (uint8_t page = FIRST_PAGE; page <= LAST_PAGE; page++) {
     const uint8_t currentPage = page - FIRST_PAGE + 1;
     char msg[32];
-    snprintf(msg, sizeof(msg), "Reading %u/%u pages",
+    snprintf(msg, sizeof(msg), "Reading pages (%u/%u)...",
              (unsigned)currentPage, (unsigned)totalPages);
     ProgressView::progress(msg,
                            (int)((uint16_t)(currentPage - 1) * 100u / totalPages));
@@ -1364,6 +2049,18 @@ void PN532I2cScreen::_showNdefResult(const uint8_t* uid, uint8_t uidLen,
   render();
 }
 
+namespace {
+static uint8_t _classicMadCrc8(const uint8_t* data, size_t len) {
+  uint8_t crc = 0xC7;
+  for (size_t i = 0; i < len; ++i) {
+    crc ^= data[i];
+    for (uint8_t bit = 0; bit < 8; ++bit)
+      crc = (crc & 0x80) ? (uint8_t)((crc << 1) ^ 0x1D) : (uint8_t)(crc << 1);
+  }
+  return crc;
+}
+}
+
 // ── MIFARE Classic NDEF ─────────────────────────────────────────────────────
 //
 // NFC Forum formatted MIFARE Classic uses MAD AID 0x03E1 to mark NFC sectors.
@@ -1405,58 +2102,58 @@ bool PN532I2cScreen::_classicNdefSectors(uint8_t* sectors,
   auto dims = _mfDims(_sak);
   if (dims.first == 0) return false;
 
-  static const uint8_t MAD_KEY_A[6] = {
-    0xA0, 0xA1, 0xA2, 0xA3, 0xA4, 0xA5
+  static const uint8_t madKeys[][6] = {
+    {0xA0,0xA1,0xA2,0xA3,0xA4,0xA5},
+    {0xFF,0xFF,0xFF,0xFF,0xFF,0xFF},
+    {0xD3,0xF7,0xD3,0xF7,0xD3,0xF7},
   };
 
-  // MAD1 lives in sector 0. Block 1: CRC, Info, AIDs S1..S7.
-  // Block 2: AIDs S8..S15. AID bytes are stored low byte first.
-  if (!_classicAuthSector(0, MAD_KEY_A)) return false;
+  auto readMadBlock = [&](uint16_t block, uint8_t out[16]) {
+    const uint8_t sector = (block < 128) ? (uint8_t)(block / 4u)
+                                         : (uint8_t)(32u + (block - 128u) / 16u);
+    for (const auto& key : madKeys) {
+      if (_classicAuthSector(sector, key) && _nfc->mifareclassic_ReadDataBlock(block, out))
+        return true;
+    }
+    return false;
+  };
 
   uint8_t b1[16] = {};
   uint8_t b2[16] = {};
-  if (!_nfc->mifareclassic_ReadDataBlock(1, b1) ||
-      !_nfc->mifareclassic_ReadDataBlock(2, b2)) {
-    return false;
-  }
+  if (!readMadBlock(1, b1) || !readMadBlock(2, b2)) return false;
 
-  auto addIfNdef = [&](uint8_t sector, uint8_t lo, uint8_t hi) {
-    if (sector >= dims.first) return;
-    if (lo == 0x03 && hi == 0xE1 && count < maxSectors) {
+  auto addIfNdef = [&](uint8_t sector, uint8_t application, uint8_t cluster) {
+    if (sector >= dims.first || count >= maxSectors) return;
+    if ((application == 0x03 && cluster == 0xE1) ||
+        (application == 0xE1 && cluster == 0x03))
       sectors[count++] = sector;
-    }
   };
 
-  for (uint8_t s = 1; s <= 7; s++) {
-    size_t off = 2 + (size_t)(s - 1) * 2;
-    addIfNdef(s, b1[off], b1[off + 1]);
+  for (uint8_t sec = 1; sec <= 7; ++sec) {
+    const size_t off = 2u + (size_t)(sec - 1u) * 2u;
+    addIfNdef(sec, b1[off], b1[off + 1u]);
   }
-  for (uint8_t s = 8; s <= 15; s++) {
-    size_t off = (size_t)(s - 8) * 2;
-    addIfNdef(s, b2[off], b2[off + 1]);
+  for (uint8_t sec = 8; sec <= 15; ++sec) {
+    const size_t off = (size_t)(sec - 8u) * 2u;
+    addIfNdef(sec, b2[off], b2[off + 1u]);
   }
 
-  // MAD2 uses sector 16 on Classic 4K and maps sectors 17..39.
   if (dims.first > 16) {
-    if (_classicAuthSector(16, MAD_KEY_A)) {
-      uint8_t m0[16] = {};
-      uint8_t m1[16] = {};
-      uint8_t m2[16] = {};
-      if (_nfc->mifareclassic_ReadDataBlock(64, m0) &&
-          _nfc->mifareclassic_ReadDataBlock(65, m1) &&
-          _nfc->mifareclassic_ReadDataBlock(66, m2)) {
-        for (uint8_t s = 17; s <= 23; s++) {
-          size_t off = 2 + (size_t)(s - 17) * 2;
-          addIfNdef(s, m0[off], m0[off + 1]);
-        }
-        for (uint8_t s = 24; s <= 31; s++) {
-          size_t off = (size_t)(s - 24) * 2;
-          addIfNdef(s, m1[off], m1[off + 1]);
-        }
-        for (uint8_t s = 32; s <= 39; s++) {
-          size_t off = (size_t)(s - 32) * 2;
-          addIfNdef(s, m2[off], m2[off + 1]);
-        }
+    uint8_t m0[16] = {};
+    uint8_t m1[16] = {};
+    uint8_t m2[16] = {};
+    if (readMadBlock(64, m0) && readMadBlock(65, m1) && readMadBlock(66, m2)) {
+      for (uint8_t sec = 17; sec <= 23; ++sec) {
+        const size_t off = 2u + (size_t)(sec - 17u) * 2u;
+        addIfNdef(sec, m0[off], m0[off + 1u]);
+      }
+      for (uint8_t sec = 24; sec <= 31; ++sec) {
+        const size_t off = (size_t)(sec - 24u) * 2u;
+        addIfNdef(sec, m1[off], m1[off + 1u]);
+      }
+      for (uint8_t sec = 32; sec <= 39; ++sec) {
+        const size_t off = (size_t)(sec - 32u) * 2u;
+        addIfNdef(sec, m2[off], m2[off + 1u]);
       }
     }
   }
@@ -1527,20 +2224,21 @@ bool PN532I2cScreen::_classicReadNdefArea(const uint8_t* sectors,
 }
 
 void PN532I2cScreen::_doReadClassicNdef() {
+  renderOperationTitle("Read NDEF");
   _ndefTarget = NDEF_TARGET_MIFARE_CLASSIC;
   _hasNdef = false;
   _ndefLen = 0;
   _ndefCapacity = 0;
 
   if (!_scanCardOrShow(5000)) {
-    _goMifare();
+    _goMifareNdef();
     return;
   }
 
   auto dims = _mfDims(_sak);
   if (dims.first == 0) {
     ShowStatusAction::show("Not MIFARE Classic");
-    _goMifare();
+    _goMifareNdef();
     return;
   }
 
@@ -1548,7 +2246,7 @@ void PN532I2cScreen::_doReadClassicNdef() {
   size_t sectorCount = 0;
   if (!_classicNdefSectors(sectors, sizeof(sectors), sectorCount)) {
     ShowStatusAction::show("No NDEF sectors in MAD");
-    _goMifare();
+    _goMifareNdef();
     return;
   }
 
@@ -1561,7 +2259,7 @@ void PN532I2cScreen::_doReadClassicNdef() {
   size_t areaLen = 0;
   if (!_classicReadNdefArea(sectors, sectorCount, area, areaLen)) {
     ShowStatusAction::show("Failed to read NDEF sectors");
-    _goMifare();
+    _goMifareNdef();
     return;
   }
 
@@ -1596,6 +2294,182 @@ void PN532I2cScreen::_doReadClassicNdef() {
   delete[] area;
 }
 
+bool PN532I2cScreen::_formatClassic1kNdef() {
+  auto dims = _mfDims(_sak);
+  if (dims.first != 16) {
+    ShowStatusAction::show("Format supports Classic 1K");
+    return false;
+  }
+
+  // NFC Forum INITIALISED layout (AN1305): sectors 1 and 2 are NFC
+  // sectors, all remaining sectors stay free.
+  uint8_t madPayload[31] = {};
+  madPayload[0] = 0x01;
+  madPayload[1] = 0x03; madPayload[2] = 0xE1;
+  madPayload[3] = 0x03; madPayload[4] = 0xE1;
+
+  uint8_t mad1[16] = {};
+  uint8_t mad2[16] = {};
+  mad1[0] = _classicMadCrc8(madPayload, sizeof(madPayload));
+  memcpy(mad1 + 1, madPayload, 15);
+  memcpy(mad2, madPayload + 15, 16);
+
+  static const uint8_t madTrailer[16] = {
+    0xA0,0xA1,0xA2,0xA3,0xA4,0xA5,
+    0x78,0x77,0x88,0xC1,
+    0xFF,0xFF,0xFF,0xFF,0xFF,0xFF
+  };
+  static const uint8_t nfcTrailer[16] = {
+    0xD3,0xF7,0xD3,0xF7,0xD3,0xF7,
+    0x7F,0x07,0x88,0x40,
+    0xFF,0xFF,0xFF,0xFF,0xFF,0xFF
+  };
+  // Keep formatter authentication aligned with the physically validated
+  // Chameleon Ultra path instead of limiting it to the four NFC defaults.
+  static const uint8_t candidates[][6] = {
+    {0xFF,0xFF,0xFF,0xFF,0xFF,0xFF}, {0xA0,0xA1,0xA2,0xA3,0xA4,0xA5},
+    {0xD3,0xF7,0xD3,0xF7,0xD3,0xF7}, {0x00,0x00,0x00,0x00,0x00,0x00},
+    {0xB0,0xB1,0xB2,0xB3,0xB4,0xB5}, {0x4D,0x3A,0x99,0xC3,0x51,0xDD},
+    {0x1A,0x98,0x2C,0x7E,0x45,0x9A}, {0xAA,0xBB,0xCC,0xDD,0xEE,0xFF},
+    {0x71,0x4C,0x5C,0x88,0x6E,0x97}, {0x58,0x7E,0xE5,0xF9,0x35,0x0F},
+    {0xA0,0x47,0x8C,0xC3,0x90,0x91}, {0x53,0x3C,0xB6,0xC7,0x23,0xF6},
+    {0x8F,0xD0,0xA4,0xF2,0x56,0xE9}, {0x00,0x00,0x00,0x00,0x00,0x01},
+    {0x11,0x22,0x33,0x44,0x55,0x66}, {0x26,0x97,0x34,0x3B,0x00,0x00},
+    {0x12,0x34,0x56,0x78,0x9A,0xBC}, {0xBD,0x49,0x3A,0x39,0x62,0xB6},
+  };
+
+  // Prefer the current tag's persisted Discovered Keys, then preflight the
+  // same candidate set used by Chameleon Ultra. Formatting touches only
+  // sectors 0, 1 and 2, so validate one credential per sector up front.
+  _mfKeys.fill({});
+  _loadSavedKeys();
+
+  auto authSectorKey = [&](uint8_t block, const uint8_t key[6], bool useKeyB) {
+    // Failed MIFARE authentication can halt the PICC. Start every probe from
+    // a fresh selection, just like _tryWriteMifareBlock() does for writes.
+    uint8_t uid[7] = {};
+    uint8_t uidLen = 0;
+    if (!_nfc->readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLen, 300)) {
+      return false;
+    }
+    if (uidLen != _uidLen || memcmp(uid, _uid, uidLen) != 0) return false;
+    return _nfc->mifareclassic_AuthenticateBlock(
+        _uid, _uidLen, block, useKeyB ? 1 : 0, const_cast<uint8_t*>(key)) != 0;
+  };
+
+  uint8_t sectorKey[3][6] = {};
+  bool sectorKeyB[3] = {};
+  for (uint8_t sector = 0; sector < 3; ++sector) {
+    const uint8_t block = (uint8_t)(sector * 4u);
+    bool found = false;
+
+    auto& savedA = _mfKeys[sector].first;
+    auto& savedB = _mfKeys[sector].second;
+    if (savedA) {
+      const auto ka = savedA.value();
+      if (authSectorKey(block, (const uint8_t*)ka.data(), false)) {
+        memcpy(sectorKey[sector], ka.data(), 6);
+        sectorKeyB[sector] = false;
+        found = true;
+      }
+    }
+    if (!found && savedB) {
+      const auto kb = savedB.value();
+      if (authSectorKey(block, (const uint8_t*)kb.data(), true)) {
+        memcpy(sectorKey[sector], kb.data(), 6);
+        sectorKeyB[sector] = true;
+        found = true;
+      }
+    }
+
+    for (uint8_t kt = 0; kt < 2 && !found; ++kt) {
+      for (const auto& key : candidates) {
+        if (authSectorKey(block, key, kt != 0)) {
+          memcpy(sectorKey[sector], key, 6);
+          sectorKeyB[sector] = (kt != 0);
+          found = true;
+          break;
+        }
+      }
+    }
+    if (!found) {
+      ShowStatusAction::show("Format: unknown sector key");
+      return false;
+    }
+  }
+
+  uint8_t zero[16] = {};
+  uint8_t emptyNdef[16] = {0x03,0x00,0xFE};
+  uint16_t done = 0;
+  static constexpr uint16_t total = 11;
+  ProgressView::init();
+
+  auto writeWithKnownKey = [&](uint16_t block, const uint8_t data[16]) {
+    char msg[40];
+    snprintf(msg, sizeof(msg), "Formatting blocks (%u/%u)...",
+             (unsigned)(done + 1u), (unsigned)total);
+    ProgressView::progress(msg, (int)((uint32_t)done * 100u / total));
+
+    const uint8_t sector = (uint8_t)(block / 4u); // Classic 1K only here.
+    auto& keyA = _mfKeys[sector].first;
+    auto& keyB = _mfKeys[sector].second;
+    if (keyA) {
+      const auto ka = keyA.value();
+      if (_tryWriteMifareBlock(block, data, (const uint8_t*)ka.data(), false)) {
+        ++done;
+        return true;
+      }
+    }
+    if (keyB) {
+      const auto kb = keyB.value();
+      if (_tryWriteMifareBlock(block, data, (const uint8_t*)kb.data(), true)) {
+        ++done;
+        return true;
+      }
+    }
+    if (_tryWriteMifareBlock(block, data, sectorKey[sector], sectorKeyB[sector])) {
+      ++done;
+      return true;
+    }
+
+    for (const auto& key : candidates) {
+      if (_tryWriteMifareBlock(block, data, key, false) ||
+          _tryWriteMifareBlock(block, data, key, true)) {
+        ++done;
+        return true;
+      }
+    }
+    return false;
+  };
+
+  bool ok = writeWithKnownKey(1, mad1) && writeWithKnownKey(2, mad2);
+
+  for (uint8_t sector = 1; sector <= 2 && ok; ++sector) {
+    const uint16_t first = (uint16_t)sector * 4u;
+    for (uint8_t bi = 0; bi < 3 && ok; ++bi) {
+      const uint8_t* data = (sector == 1 && bi == 0) ? emptyNdef : zero;
+      ok = writeWithKnownKey(first + bi, data);
+    }
+  }
+
+  if (ok) ok = writeWithKnownKey(3, madTrailer);
+  if (ok) ok = writeWithKnownKey(7, nfcTrailer);
+  if (ok) ok = writeWithKnownKey(11, nfcTrailer);
+
+  if (ok) ProgressView::progress("Format complete", 100);
+  ProgressView::finish();
+  ShowStatusAction::show(ok ? "NDEF formatted" : "NDEF format failed");
+
+  if (ok) {
+    // Trailer writes change authentication state. Force a fresh select before
+    // the caller verifies MAD and continues with the requested NDEF write.
+    uint8_t uid[7] = {};
+    uint8_t uidLen = 0;
+    _nfc->readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLen, 400);
+  }
+  return ok;
+}
+
 bool PN532I2cScreen::_writeClassicNdefRecord(const uint8_t* ndef, size_t ndefLen) {
   if (!ndef || ndefLen == 0 || ndefLen > MAX_NDEF_BYTES) {
     ShowStatusAction::show("NDEF too large");
@@ -1611,8 +2485,23 @@ bool PN532I2cScreen::_writeClassicNdefRecord(const uint8_t* ndef, size_t ndefLen
   uint8_t sectors[39] = {};
   size_t sectorCount = 0;
   if (!_classicNdefSectors(sectors, sizeof(sectors), sectorCount)) {
-    ShowStatusAction::show("Not NDEF formatted");
-    return false;
+    static const InputSelectAction::Option opts[] = {
+      {"Format NDEF", "format"},
+    };
+    const char* choice = InputSelectAction::popup("Not NDEF formatted", opts, 1, nullptr);
+    render();
+    if (!choice || strcmp(choice, "format") != 0 || !_formatClassic1kNdef()) {
+      return false;
+    }
+    // Formatting changes the sector trailers and therefore invalidates the
+    // PN532 Crypto1/authentication state. Re-select the tag and then return to
+    // the same MAD discovery + write path used by the original, physically
+    // validated Write NDEF implementation.
+    if (!_scanCardOrShow(5000) ||
+        !_classicNdefSectors(sectors, sizeof(sectors), sectorCount)) {
+      ShowStatusAction::show("Format verification failed");
+      return false;
+    }
   }
 
   size_t capacity = 0;
@@ -1724,15 +2613,16 @@ bool PN532I2cScreen::_writeClassicNdefRecord(const uint8_t* ndef, size_t ndefLen
 }
 
 void PN532I2cScreen::_doEraseClassicNdef() {
+  renderOperationTitle("Erase NDEF");
   _ndefTarget = NDEF_TARGET_MIFARE_CLASSIC;
 
   if (!_scanCardOrShow(5000)) {
-    _goMifare();
+    _goMifareNdef();
     return;
   }
   if (_mfDims(_sak).first == 0) {
     ShowStatusAction::show("Not MIFARE Classic");
-    _goMifare();
+    _goMifareNdef();
     return;
   }
 
@@ -1740,7 +2630,7 @@ void PN532I2cScreen::_doEraseClassicNdef() {
   size_t sectorCount = 0;
   if (!_classicNdefSectors(sectors, sizeof(sectors), sectorCount)) {
     ShowStatusAction::show("Not NDEF formatted");
-    _goMifare();
+    _goMifareNdef();
     return;
   }
 
@@ -1750,7 +2640,7 @@ void PN532I2cScreen::_doEraseClassicNdef() {
 
   if (!_classicAuthSector(sectors[0], NFC_KEY_A)) {
     ShowStatusAction::show("NDEF sector locked");
-    _goMifare();
+    _goMifareNdef();
     return;
   }
 
@@ -1760,7 +2650,7 @@ void PN532I2cScreen::_doEraseClassicNdef() {
   uint8_t block[16] = {};
   if (!_nfc->mifareclassic_ReadDataBlock(blockNo, block)) {
     ShowStatusAction::show("Read failed");
-    _goMifare();
+    _goMifareNdef();
     return;
   }
 
@@ -1774,11 +2664,12 @@ void PN532I2cScreen::_doEraseClassicNdef() {
   _hasNdef = false;
   _ndefLen = 0;
   ShowStatusAction::show(success ? "NDEF erased" : "NDEF erase failed");
-  _goMifare();
+  _goMifareNdef();
 }
 
 
 bool PN532I2cScreen::_writeNdefRecord(const uint8_t* ndef, size_t ndefLen) {
+  renderOperationTitle("Write NDEF");
   if (_ndefTarget == NDEF_TARGET_MIFARE_CLASSIC) {
     return _writeClassicNdefRecord(ndef, ndefLen);
   }
@@ -1786,12 +2677,13 @@ bool PN532I2cScreen::_writeNdefRecord(const uint8_t* ndef, size_t ndefLen) {
 }
 
 bool PN532I2cScreen::_writeUltralightNdefRecord(const uint8_t* ndef, size_t ndefLen) {
+  renderOperationTitle("Write NDEF");
   if (!ndef || ndefLen == 0 || ndefLen > 254) {
     ShowStatusAction::show("NDEF too large");
     return false;
   }
 
-  ShowStatusAction::show("Place UL/NTAG on reader...", 0);
+  renderTagPrompt("Place tag on reader...", bodyX(), bodyY(), bodyW(), bodyH());
 
   uint8_t uid[7];
   uint8_t uidLen = 0;
@@ -1813,7 +2705,7 @@ bool PN532I2cScreen::_writeUltralightNdefRecord(const uint8_t* ndef, size_t ndef
   }
 
   if (!ok) {
-    ShowStatusAction::show("No card");
+    ShowStatusAction::show("No tag detected");
     return false;
   }
 
@@ -1867,7 +2759,7 @@ bool PN532I2cScreen::_writeUltralightNdefRecord(const uint8_t* ndef, size_t ndef
     const size_t currentPage = offset / 4 + 1;
 
     char msg[32];
-    snprintf(msg, sizeof(msg), "Writing %u/%u pages",
+    snprintf(msg, sizeof(msg), "Writing pages (%u/%u)...",
              (unsigned)currentPage, (unsigned)totalPages);
     ProgressView::progress(msg, (int)(offset * 100 / paddedLen));
 
@@ -2296,8 +3188,9 @@ void PN532I2cScreen::_doWriteNdefFileSelected(uint8_t fileIndex) {
 }
 
 void PN532I2cScreen::_doEraseNdef() {
+  renderOperationTitle("Erase NDEF");
   _ndefTarget = NDEF_TARGET_ULTRALIGHT;
-  ShowStatusAction::show("Place UL/NTAG on reader...", 0);
+  renderTagPrompt("Place tag on reader...", bodyX(), bodyY(), bodyW(), bodyH());
 
   uint8_t uid[7];
   uint8_t uidLen = 0;
@@ -2308,7 +3201,7 @@ void PN532I2cScreen::_doEraseNdef() {
     Uni.update();
     if (Uni.Nav->wasPressed() &&
         Uni.Nav->readDirection() == INavigation::DIR_BACK) {
-      _goUltralight();
+      _goUltralightNdef();
       return;
     }
 
@@ -2320,8 +3213,8 @@ void PN532I2cScreen::_doEraseNdef() {
   }
 
   if (!ok) {
-    ShowStatusAction::show("No card");
-    _goUltralight();
+    ShowStatusAction::show("No tag detected");
+    _goUltralightNdef();
     return;
   }
 
@@ -2329,13 +3222,13 @@ void PN532I2cScreen::_doEraseNdef() {
   uint8_t cc[4] = {};
   if (!_nfc->mifareultralight_ReadPage(3, cc)) {
     ShowStatusAction::show("Failed to read CC");
-    _goUltralight();
+    _goUltralightNdef();
     return;
   }
 
   if (cc[0] != 0xE1) {
     ShowStatusAction::show("Not NDEF formatted");
-    _goUltralight();
+    _goUltralightNdef();
     return;
   }
 
@@ -2350,43 +3243,256 @@ void PN532I2cScreen::_doEraseNdef() {
   bool success = _nfc->mifareultralight_WritePage(4, emptyNdef);
 
   ShowStatusAction::show(success ? "NDEF erased" : "NDEF erase failed");
-  _goUltralight();
+  _goUltralightNdef();
 }
 
-void PN532I2cScreen::_doDetectGen1a() {
-  ShowStatusAction::show("Place card on reader...", 0);
-  uint8_t uid[7]; uint8_t uidLen;
+bool PN532I2cScreen::_resetAndReselect() {
+  if (!_nfc || !_nfc->SAMConfig()) return false;
+  uint8_t uid[7] = {}, uidLen = 0;
+  for (uint8_t attempt = 0; attempt < 3; ++attempt) {
+    if (_nfc->readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLen, 250))
+      return true;
+    delay(30);
+  }
+  return false;
+}
+
+MagicCardType PN532I2cScreen::_detectMagicType() {
+  // Probe Gen3 first. Gen3 / APDU cards accept a direct READ of block 0
+  // without MIFARE authentication; a prior Gen1A unlock would make the same
+  // read possible and could cause a false Gen3 positive.
+  {
+    static const uint8_t readBlock0[] = {0x30, 0x00};
+    uint8_t resp[20] = {};
+    uint8_t rlen = sizeof(resp);
+    if (_nfcDataExch(_nfc, _wire, readBlock0, sizeof(readBlock0), resp, rlen, 500) &&
+        rlen >= 16) {
+      _resetAndReselect();
+      return MagicCardType::GEN3;
+    }
+  }
+
+  if (!_resetAndReselect()) return MagicCardType::NONE;
+
+  // Gen1A backdoor sequence. After normal ISO14443A activation the PICC is
+  // ACTIVE, but the 0x40(7-bit) wakeup is expected from HALT. Put the card in
+  // HALT first, with CRC handled explicitly, then send 0x40 / 0x43 with CRC
+  // disabled. This mirrors the established PN532 Gen1A raw-command sequence.
+  bool gen1a = false;
+  uint8_t resp[8] = {};
+  uint8_t rlen = sizeof(resp);
+
+  const bool rawMode =
+      _nfcWriteReg(_nfc, _wire, 0x6302, 0x00) && // TxMode: CRC off, 106A
+      _nfcWriteReg(_nfc, _wire, 0x6303, 0x00);   // RxMode: CRC off, 106A
+
+  if (rawMode) {
+    // HLTA has CRC_A 0x57CD. A halted card intentionally sends no response;
+    // _nfcCommThru still consumes the PN532 response/status, so ignore its
+    // boolean result here.
+    static const uint8_t halt[] = {0x50, 0x00, 0x57, 0xCD};
+    (void)_nfcCommThru(_nfc, _wire, halt, sizeof(halt), resp, rlen, 200);
+
+    if (_nfcWriteReg(_nfc, _wire, 0x633D, 0x07)) {
+      static const uint8_t wake[] = {0x40};
+      rlen = sizeof(resp);
+      const bool ack1 = _nfcCommThru(_nfc, _wire, wake, sizeof(wake),
+                                      resp, rlen, 250) &&
+                        rlen >= 1 && (resp[0] & 0x0F) == 0x0A;
+
+      _nfcWriteReg(_nfc, _wire, 0x633D, 0x00);
+
+      if (ack1) {
+        static const uint8_t unlock[] = {0x43};
+        rlen = sizeof(resp);
+        gen1a = _nfcCommThru(_nfc, _wire, unlock, sizeof(unlock),
+                             resp, rlen, 250) &&
+                rlen >= 1 && (resp[0] & 0x0F) == 0x0A;
+      }
+    }
+  }
+
+  // Restore normal ISO14443A CRC/framing before leaving the raw probe.
+  _nfcWriteReg(_nfc, _wire, 0x633D, 0x00);
+  _nfcWriteReg(_nfc, _wire, 0x6302, 0x80);
+  _nfcWriteReg(_nfc, _wire, 0x6303, 0x80);
+  _resetAndReselect();
+  return gen1a ? MagicCardType::GEN1A : MagicCardType::NONE;
+}
+
+
+bool PN532I2cScreen::_writeMagicUid(MagicCardType type, const uint8_t* sourceUid,
+                                       uint8_t sourceUidLen, const uint8_t block0[16]) {
+  if (!sourceUid || !_nfc || !_wire ||
+      (sourceUidLen != 4 && sourceUidLen != 7)) return false;
+  if (type == MagicCardType::GEN1A && (!block0 || sourceUidLen != 4)) return false;
+
+  if (!_resetAndReselect()) return false;
+
+  if (type == MagicCardType::GEN3) {
+    // Reuse the same command family already used by Magic -> Gen3 Set UID.
+    uint8_t cmd[13] = {0x90, 0xFB, 0xCC, 0xCC, sourceUidLen};
+    memcpy(cmd + 5, sourceUid, sourceUidLen);
+    cmd[5 + sourceUidLen] = 0x00;
+    const uint8_t cmdLen = (uint8_t)(6u + sourceUidLen);
+    uint8_t resp[8] = {};
+    uint8_t rlen = sizeof(resp);
+    if (!_nfcDataExch(_nfc, _wire, cmd, cmdLen, resp, rlen, 500)) return false;
+  } else if (type == MagicCardType::GEN1A) {
+    const uint8_t bcc = (uint8_t)(sourceUid[0] ^ sourceUid[1] ^ sourceUid[2] ^ sourceUid[3]);
+
+    // Enter the Gen1A backdoor from HALT, using the same raw sequence as
+    // detection. Gen1A 0x40 must be sent as 7 bits with CRC disabled.
+    uint8_t resp[8] = {};
+    uint8_t rlen = sizeof(resp);
+    const bool rawMode =
+        _nfcWriteReg(_nfc, _wire, 0x6302, 0x00) &&
+        _nfcWriteReg(_nfc, _wire, 0x6303, 0x00);
+    if (!rawMode) {
+      _nfcWriteReg(_nfc, _wire, 0x6302, 0x80);
+      _nfcWriteReg(_nfc, _wire, 0x6303, 0x80);
+      return false;
+    }
+
+    static const uint8_t halt[] = {0x50, 0x00, 0x57, 0xCD};
+    (void)_nfcCommThru(_nfc, _wire, halt, sizeof(halt), resp, rlen, 200);
+
+    if (!_nfcWriteReg(_nfc, _wire, 0x633D, 0x07)) {
+      _nfcWriteReg(_nfc, _wire, 0x6302, 0x80);
+      _nfcWriteReg(_nfc, _wire, 0x6303, 0x80);
+      return false;
+    }
+    static const uint8_t wake[] = {0x40};
+    rlen = sizeof(resp);
+    const bool ack1 = _nfcCommThru(_nfc, _wire, wake, sizeof(wake),
+                                    resp, rlen, 250) &&
+                      rlen >= 1 && (resp[0] & 0x0F) == 0x0A;
+    _nfcWriteReg(_nfc, _wire, 0x633D, 0x00);
+    if (!ack1) {
+      _nfcWriteReg(_nfc, _wire, 0x6302, 0x80);
+      _nfcWriteReg(_nfc, _wire, 0x6303, 0x80);
+      _resetAndReselect();
+      return false;
+    }
+
+    static const uint8_t unlock[] = {0x43};
+    rlen = sizeof(resp);
+    const bool ack2 = _nfcCommThru(_nfc, _wire, unlock, sizeof(unlock),
+                                    resp, rlen, 250) &&
+                      rlen >= 1 && (resp[0] & 0x0F) == 0x0A;
+    // MIFARE WRITE command/data frames need CRC-A on TX, but the PICC ACKs
+    // are only 4 bits and carry no CRC. Keep RX CRC disabled until both ACKs
+    // have been consumed; otherwise the PN532 can report a CRC/framing error
+    // even though the card accepted the transmitted frame.
+    _nfcWriteReg(_nfc, _wire, 0x6302, 0x80); // TxMode: CRC-A enabled
+    _nfcWriteReg(_nfc, _wire, 0x6303, 0x00); // RxMode: raw 4-bit ACK
+    if (!ack2) {
+      _nfcWriteReg(_nfc, _wire, 0x6303, 0x80);
+      _resetAndReselect();
+      return false;
+    }
+
+    // MIFARE WRITE is a two-frame exchange. Sending A0 00 and the 16-byte
+    // manufacturer block in one InDataExchange frame is not equivalent and
+    // leaves block 0 unchanged on Gen1A cards. Keep the backdoor session open
+    // and perform both RF exchanges explicitly.
+    uint8_t write0[2] = {0xA0, 0x00};
+    rlen = sizeof(resp);
+    const bool writeAck = _nfcCommThru(_nfc, _wire, write0, sizeof(write0),
+                                       resp, rlen, 400) &&
+                          rlen >= 1 && (resp[0] & 0x0F) == 0x0A;
+    if (!writeAck) {
+      _nfcWriteReg(_nfc, _wire, 0x6303, 0x80);
+      _resetAndReselect();
+      return false;
+    }
+
+    uint8_t safeBlock0[16];
+    memcpy(safeBlock0, block0, sizeof(safeBlock0));
+    memcpy(safeBlock0, sourceUid, 4);
+    safeBlock0[4] = bcc;
+    rlen = sizeof(resp);
+    const bool dataAck = _nfcCommThru(_nfc, _wire, safeBlock0, sizeof(safeBlock0),
+                                      resp, rlen, 700) &&
+                         rlen >= 1 && (resp[0] & 0x0F) == 0x0A;
+    // Restore normal CRC handling before leaving the raw MIFARE exchange.
+    _nfcWriteReg(_nfc, _wire, 0x6303, 0x80);
+    if (!dataAck) {
+      _resetAndReselect();
+      return false;
+    }
+  } else {
+    return false;
+  }
+
+  // Force a fresh activation and verify that the source UID is now presented.
+  if (!_nfc->SAMConfig()) return false;
+  uint8_t uid[7] = {};
+  uint8_t uidLen = 0;
+  for (uint8_t attempt = 0; attempt < 3; ++attempt) {
+    if (_nfc->readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLen, 300))
+      return uidLen == sourceUidLen && memcmp(uid, sourceUid, sourceUidLen) == 0;
+    delay(30);
+  }
+  return false;
+}
+
+void PN532I2cScreen::_doDetectMagic() {
+  _magicLog.addLine("Scanning tag...", TFT_WHITE);
+  render();
+
+  uint8_t uid[7] = {};
+  uint8_t uidLen = 0;
   uint32_t start = millis();
   bool ok = false;
   while (millis() - start < 5000) {
     Uni.update();
     if (Uni.Nav->wasPressed() &&
-        Uni.Nav->readDirection() == INavigation::DIR_BACK) { _goMagic(); return; }
-    if (_nfc->readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLen, 200)) { ok = true; break; }
+        Uni.Nav->readDirection() == INavigation::DIR_BACK) {
+      _goMagic();
+      return;
+    }
+    if (_nfc->readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLen, 200)) {
+      ok = true;
+      break;
+    }
     delay(50);
   }
-  if (!ok) { ShowStatusAction::show("No card"); _goMagic(); return; }
 
-  // Set CIU_BitFraming TxLastBits=7 so the magic byte is sent as 7 bits
-  _nfcWriteReg(_nfc, _wire, 0x633D, 0x07);
+  if (!ok) {
+    _magicLog.addLine("No tag detected", TFT_DARKGREY);
+    _magicDetectDone = true;
+    render();
+    return;
+  }
 
-  static const uint8_t magic1[] = {0x40};
-  uint8_t resp[4]; uint8_t rlen = sizeof(resp);
-  bool isGen1a = _nfcCommThru(_nfc, _wire, magic1, 1, resp, rlen, 200);
-  isGen1a = isGen1a && rlen >= 1 && resp[0] == 0x0A;
+  const uint8_t sak = pn532_packetbuffer[11];
+  if (sak != 0x09 && sak != 0x08 && sak != 0x18) {
+    _magicLog.addLine("Not MIFARE Classic", TFT_DARKGREY);
+    _magicDetectDone = true;
+    render();
+    return;
+  }
 
-  _nfcWriteReg(_nfc, _wire, 0x633D, 0x00); // restore bit framing
+  _magicLog.addLine("Checking Magic type...", TFT_WHITE);
+  render();
 
-  if (isGen1a) {
+  const MagicCardType magic = _detectMagicType();
+  _magicLog.addLine("Magic type:", TFT_CYAN);
+  _magicLog.addLine(magicCardTypeName(magic),
+                    magic == MagicCardType::NONE ? TFT_DARKGREY : TFT_GREEN);
+
+  if (magic != MagicCardType::NONE) {
     int n = Achievement.inc("pn532_magic_detect");
     if (n == 1) Achievement.unlock("pn532_magic_detect");
   }
-  ShowStatusAction::show(isGen1a ? "Gen1a detected" : "Not Gen1a");
-  _goMagic();
+
+  _magicDetectDone = true;
+  render();
 }
 
 void PN532I2cScreen::_doGen3SetUid() {
-  ShowStatusAction::show("Place Gen3 card...", 0);
+  ShowStatusAction::show("Place Gen3 tag...", 0);
   uint8_t uid[7]; uint8_t uidLen;
   uint32_t start = millis();
   bool ok = false;
@@ -2397,7 +3503,14 @@ void PN532I2cScreen::_doGen3SetUid() {
     if (_nfc->readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLen, 200)) { ok = true; break; }
     delay(50);
   }
-  if (!ok) { ShowStatusAction::show("No card"); _goMagic(); return; }
+  if (!ok) { ShowStatusAction::show("No tag detected"); _goMagic(); return; }
+
+  // Fail early instead of asking for a UID that cannot be applied to this tag.
+  if (_detectMagicType() != MagicCardType::GEN3) {
+    ShowStatusAction::show("Tag is not Gen3");
+    _goMagic();
+    return;
+  }
 
   String hex = InputTextAction::popup("New UID (8 or 14 hex)", "", InputTextAction::INPUT_HEX);
   if (InputTextAction::wasCancelled()) { _goMagic(); return; }
@@ -2417,30 +3530,16 @@ void PN532I2cScreen::_doGen3SetUid() {
     newUid[i] = (uint8_t)v;
   }
 
-  // Gen3 Set UID: 90 FB CC CC <len> <uid bytes> 00
-  uint8_t cmd[12];
-  cmd[0] = 0x90; cmd[1] = 0xFB; cmd[2] = 0xCC; cmd[3] = 0xCC;
-  cmd[4] = newUidLen;
-  memcpy(&cmd[5], newUid, newUidLen);
-  cmd[5 + newUidLen] = 0x00;
-  uint8_t resp[8]; uint8_t rlen = sizeof(resp);
-
-  // Restore the Magic Card screen after the UID keyboard before the
-  // blocking PN532 exchange.
+  // Use the same verified Gen3 UID writer as Write to Tag. It performs a
+  // fresh activation before the command and verifies the new UID afterwards.
   render();
-
-  bool ok2 = _nfcDataExch(_nfc, _wire, cmd, 6 + newUidLen, resp, rlen);
-
-  if (ok2) {
-    int n = Achievement.inc("pn532_magic_detect");
-    if (n == 1) Achievement.unlock("pn532_magic_detect");
-  }
+  const bool ok2 = _writeMagicUid(MagicCardType::GEN3, newUid, newUidLen, nullptr);
   ShowStatusAction::show(ok2 ? "Gen3 UID set" : "Set UID failed");
   _goMagic();
 }
 
 void PN532I2cScreen::_doGen3LockUid() {
-  ShowStatusAction::show("Place Gen3 card...", 0);
+  ShowStatusAction::show("Place Gen3 tag...", 0);
   uint8_t uid[7]; uint8_t uidLen;
   uint32_t start = millis();
   bool ok = false;
@@ -2451,13 +3550,395 @@ void PN532I2cScreen::_doGen3LockUid() {
     if (_nfc->readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLen, 200)) { ok = true; break; }
     delay(50);
   }
-  if (!ok) { ShowStatusAction::show("No card"); _goMagic(); return; }
+  if (!ok) { ShowStatusAction::show("No tag detected"); _goMagic(); return; }
+
+  if (_detectMagicType() != MagicCardType::GEN3) {
+    ShowStatusAction::show("Tag is not Gen3");
+    _goMagic();
+    return;
+  }
+
+  static const InputSelectAction::Option opts[] = {
+    {"Lock UID permanently", "lock"},
+  };
+  const char* choice = InputSelectAction::popup("Permanent UID lock", opts, 1, nullptr);
+  render();
+  if (!choice || strcmp(choice, "lock") != 0) { _goMagic(); return; }
+
+  // The confirmation overlay may leave the card idle; use a fresh activation
+  // before issuing the irreversible Gen3 lock command.
+  if (!_resetAndReselect()) {
+    ShowStatusAction::show("Tag lost");
+    _goMagic();
+    return;
+  }
 
   static const uint8_t cmd[] = {0x90, 0xFD, 0x11, 0x11, 0x00};
   uint8_t resp[8]; uint8_t rlen = sizeof(resp);
   bool locked = _nfcDataExch(_nfc, _wire, cmd, sizeof(cmd), resp, rlen);
   ShowStatusAction::show(locked ? "Gen3 UID locked" : "Lock failed");
   _goMagic();
+}
+
+void PN532I2cScreen::_showDumpActions() {
+  static const InputSelectAction::Option opts[] = {
+    {"View Dump",    "view"},
+    {"Save Dump",    "save"},
+    {"Write to Tag", "write"},
+  };
+  const char* r = InputSelectAction::popup("Dump Actions", opts, 3, nullptr);
+  if (!r) { render(); return; }
+  if (strcmp(r, "view") == 0) {
+    _showDumpHex();
+    return;
+  }
+
+  // Restore Tag Details before opening another modal/progress screen. The
+  // popup only clears its own rectangle, so launching Save/Write immediately
+  // could leave fragments of Dump Actions visible underneath the next UI.
+  render();
+  if (strcmp(r, "save") == 0) _doSaveDump();
+  else _showWriteDumpPreview(_dumpImg, _dumpLen, _uid, _uidLen, false);
+}
+
+void PN532I2cScreen::_doWriteDumpFromFilePicker() {
+  _state = STATE_MIFARE_DUMP_SELECT;
+  if (_dumpPickDir.length() == 0) _dumpPickDir = _dumpPath;
+  _browser.root = _dumpPath;
+
+  uint8_t n = _browser.load(this, _dumpPickDir, BrowseFileView::Mode(".bin", 320, 1024, 4096));
+  if (n == 0 && _dumpPickDir == _dumpPath) {
+    ShowStatusAction::show("No compatible Classic .bin");
+    _goMifareTag();
+    return;
+  }
+  setItems(_browser.items(), n);
+}
+
+void PN532I2cScreen::_doWriteDumpFileSelected(uint8_t fileIndex) {
+  if (fileIndex >= _browser.count()) return;
+  const auto& e = _browser.entry(fileIndex);
+  if (e.isDir) {
+    _dumpPickDir = e.path;
+    _doWriteDumpFromFilePicker();
+    return;
+  }
+  if (!Uni.Storage) { ShowStatusAction::show("Storage unavailable"); _goMifareTag(); return; }
+  fs::File f = Uni.Storage->open(e.path.c_str(), "r");
+  if (!f) { ShowStatusAction::show("Open failed"); _goMifareTag(); return; }
+  size_t len = f.size();
+  if (len != 320 && len != 1024 && len != 4096) {
+    f.close(); ShowStatusAction::show("Unsupported dump size"); _goMifareTag(); return;
+  }
+  uint8_t* dump = (uint8_t*)malloc(len);
+  if (!dump) { f.close(); ShowStatusAction::show("Out of memory"); _goMifareTag(); return; }
+  size_t got = f.read(dump, len); f.close();
+  if (got != len) { free(dump); ShowStatusAction::show("Read failed"); _goMifareTag(); return; }
+
+  // A raw MIFARE Classic dump carries the original 4-byte UID in block 0.
+  // Trust it only when the manufacturer-block BCC is valid; otherwise keep
+  // the conservative file-source behaviour (UID Unknown / target preserved).
+  uint8_t sourceUid[4] = { dump[0], dump[1], dump[2], dump[3] };
+  const bool sourceUidKnown =
+      dump[4] == (uint8_t)(sourceUid[0] ^ sourceUid[1] ^ sourceUid[2] ^ sourceUid[3]);
+
+  _showWriteDumpPreview(dump, len,
+                        sourceUidKnown ? sourceUid : nullptr,
+                        sourceUidKnown ? 4 : 0,
+                        true);
+  free(dump);
+}
+
+
+void PN532I2cScreen::_showWriteDumpPreview(const uint8_t* dump, size_t len,
+                                             const uint8_t* sourceUid, uint8_t sourceUidLen,
+                                             bool fromFile) {
+  if (!dump || (len != 320 && len != 1024 && len != 4096)) {
+    ShowStatusAction::show("Invalid dump");
+    return;
+  }
+
+  memcpy(_dumpImg, dump, len);
+  _dumpLen = len;
+  _writePreviewFromFile = fromFile;
+  _writePreviewSourceUidKnown = sourceUid && (sourceUidLen == 4 || sourceUidLen == 7);
+  _writePreviewSourceUidLen = _writePreviewSourceUidKnown ? sourceUidLen : 0;
+  memset(_writePreviewSourceUid, 0, sizeof(_writePreviewSourceUid));
+  if (_writePreviewSourceUidKnown) memcpy(_writePreviewSourceUid, sourceUid, sourceUidLen);
+
+  _state = STATE_MIFARE_WRITE_PREVIEW;
+  _resetRows();
+  _pushRow("Source", fromFile ? "File" : "Read Tag");
+  const char* type = len == 320 ? "MIFARE Classic Mini" :
+                     (len == 4096 ? "MIFARE Classic 4K" : "MIFARE Classic 1K");
+  _pushRow("Type", type);
+  _pushRow("UID", _writePreviewSourceUidKnown ?
+                    _hexUid(_writePreviewSourceUid, _writePreviewSourceUidLen) : String("Unknown"));
+  _pushRow("Target UID", _writePreviewSourceUidKnown ? "Replace if Magic" : "Preserved");
+  _pushRow("Blocks", String((unsigned)(len / 16u)));
+  _pushRow("Dump", String((unsigned)len) + " bytes");
+
+  // Match the CU preview for Classic 1K by surfacing NDEF presence from MAD1.
+  if (len == 1024) {
+    uint8_t sectors[15] = {};
+    size_t sectorCount = 0;
+    const uint8_t* b1 = _dumpImg + 16u;
+    const uint8_t* b2 = _dumpImg + 32u;
+    for (uint8_t sec = 1; sec <= 7; ++sec) {
+      size_t off = 2u + (size_t)(sec - 1u) * 2u;
+      if (b1[off] == 0x03 && b1[off + 1u] == 0xE1) sectors[sectorCount++] = sec;
+    }
+    for (uint8_t sec = 8; sec <= 15; ++sec) {
+      size_t off = (size_t)(sec - 8u) * 2u;
+      if (b2[off] == 0x03 && b2[off + 1u] == 0xE1) sectors[sectorCount++] = sec;
+    }
+    _pushRow("NDEF", sectorCount ? "Present" : "Not found");
+  }
+
+  _pushRow("[Press]", "Write to Tag");
+  _scrollView.setRows(_rows, _rowCount);
+  render();
+}
+
+
+bool PN532I2cScreen::_tryWriteMifareBlock(uint16_t block, const uint8_t data[16],
+                                           const uint8_t key[6], bool useKeyB) {
+  if (!data || !key) return false;
+
+  // Start every write attempt from a freshly selected PICC.  A previous
+  // authenticate/write leaves the card in an active Crypto1 session; trying
+  // to authenticate a second block without re-selecting is unreliable on the
+  // PN532.  Re-selecting also gives us a clean retry path with Key B when the
+  // access conditions do not permit writes with Key A.
+  uint8_t uid[7] = {};
+  uint8_t uidLen = 0;
+  if (!_nfc->readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLen, 300)) {
+    return false;
+  }
+  if (uidLen != _uidLen || memcmp(uid, _uid, uidLen) != 0) return false;
+
+  if (!_nfc->mifareclassic_AuthenticateBlock(
+        _uid, _uidLen, (uint8_t)block, useKeyB ? 1 : 0,
+        const_cast<uint8_t*>(key))) {
+    return false;
+  }
+
+  return _nfc->mifareclassic_WriteDataBlock(
+      (uint8_t)block, const_cast<uint8_t*>(data));
+}
+
+void PN532I2cScreen::_doWriteDumpToTag(const uint8_t* dump, size_t len,
+                                         const uint8_t* sourceUid, uint8_t sourceUidLen) {
+  // Copy source identity before scanning the destination: _scanCardOrShow()
+  // updates the screen's _uid/_uidLen members with the target tag.
+  uint8_t sourceUidCopy[7] = {};
+  const bool sourceUidKnown = sourceUid && (sourceUidLen == 4 || sourceUidLen == 7);
+  if (sourceUidKnown) memcpy(sourceUidCopy, sourceUid, sourceUidLen);
+
+  renderOperationTitle("Write to Tag");
+  if (!dump || (len != 320 && len != 1024 && len != 4096)) {
+    ShowStatusAction::show("Invalid dump"); return;
+  }
+  renderTagPrompt("Place tag on reader...", bodyX(), bodyY(), bodyW(), bodyH());
+  if (!_scanCardOrShow(5000)) { render(); return; }
+  auto dims = _mfDims(_sak);
+  if (dims.second * 16u != len) { ShowStatusAction::show("Tag size mismatch"); render(); return; }
+
+  MagicCardType magic = MagicCardType::NONE;
+  bool restoreUid = false;
+  if (sourceUidKnown) {
+    magic = _detectMagicType();
+    const bool uidDiffers = _uidLen != sourceUidLen ||
+                            (_uidLen == sourceUidLen && memcmp(_uid, sourceUidCopy, _uidLen) != 0);
+    restoreUid = uidDiffers &&
+                 ((magic == MagicCardType::GEN1A && sourceUidLen == 4) ||
+                  (magic == MagicCardType::GEN3 && (sourceUidLen == 4 || sourceUidLen == 7)));
+  }
+
+  const auto defaults = NFCUtility::getDefaultKeys();
+  uint8_t zeroKey[6] = {};
+  ProgressView::init();
+  size_t written = 0;
+  const size_t totalWritableBlocks = dims.second - 1u;
+
+  for (size_t sector = 0; sector < dims.first; ++sector) {
+    const uint16_t first = (sector < 32) ? (uint16_t)(sector * 4) : (uint16_t)(128 + (sector - 32) * 16);
+    const uint16_t trailer = (sector < 32) ? (uint16_t)(first + 3) : (uint16_t)(first + 15);
+    const uint8_t* srcTrailer = dump + (size_t)trailer * 16u;
+
+    for (uint16_t block = first; block <= trailer; ++block) {
+      if (block == 0) continue; // manufacturer block is not normally writable
+      const size_t currentWrite = written + 1u;
+      int pct = (int)((currentWrite - 1u) * 100u / totalWritableBlocks);
+      char msg[40];
+      snprintf(msg, sizeof(msg), "Writing blocks (%u/%u)...",
+               (unsigned)currentWrite, (unsigned)totalWritableBlocks);
+      ProgressView::progress(msg, pct);
+
+      const uint8_t* blockData = dump + (size_t)block * 16u;
+      bool ok = false;
+
+      // First try the keys carried by the source dump, then the standard
+      // dictionary.  Each attempt re-selects the PICC, so Key B can be tried
+      // cleanly when the sector access bits do not allow writes with Key A.
+      ok = _tryWriteMifareBlock(block, blockData, srcTrailer, false) ||
+           _tryWriteMifareBlock(block, blockData, srcTrailer + 10, true);
+      if (!ok) {
+        for (const auto& k : defaults) {
+          auto kv = k.value();
+          const uint8_t* key = (const uint8_t*)kv.data();
+          if (_tryWriteMifareBlock(block, blockData, key, false) ||
+              _tryWriteMifareBlock(block, blockData, key, true)) {
+            ok = true;
+            break;
+          }
+        }
+      }
+
+      if (!ok) {
+        ProgressView::finish();
+        Uni.Lcd.fillRect(bodyX(), bodyY(), bodyW(), bodyH(), TFT_BLACK);
+        char err[32]; snprintf(err, sizeof(err), "Write failed: block %u", (unsigned)block);
+        ShowStatusAction::show(err);
+        render();
+        return;
+      }
+      written++;
+    }
+  }
+  ProgressView::finish();
+
+  // Magic Gen1A/Gen3 can reproduce the source identity as well as blocks
+  // 1..N. Do this last: a failed data write must never change the target UID.
+  if (restoreUid) {
+    Uni.Lcd.fillRect(bodyX(), bodyY(), bodyW(), bodyH(), TFT_BLACK);
+    ShowStatusAction::show("Writing source UID...", 0);
+    if (!_writeMagicUid(magic, sourceUidCopy, sourceUidLen, dump)) {
+      ShowStatusAction::show("UID write failed");
+      render();
+      return;
+    }
+  }
+
+  // Do not leave the completed progress view behind the modal status box.
+  // ShowStatusAction wipes only its own rectangle on dismissal, which made
+  // remnants of the progress UI briefly visible during Write to Tag.
+  Uni.Lcd.fillRect(bodyX(), bodyY(), bodyW(), bodyH(), TFT_BLACK);
+  char msg[48];
+  if (restoreUid) snprintf(msg, sizeof(msg), "Wrote %u blocks + UID", (unsigned)written);
+  else snprintf(msg, sizeof(msg), "Wrote %u blocks", (unsigned)written);
+  ShowStatusAction::show(msg);
+  render();
+}
+
+void PN532I2cScreen::_doEraseTag() {
+  renderOperationTitle("Erase Tag");
+  if (!_scanCardOrShow(5000)) { _goMifareTag(); return; }
+  auto dims = _mfDims(_sak);
+  if (dims.first == 0) { ShowStatusAction::show("Not MIFARE Classic"); _goMifareTag(); return; }
+  _discoverDefaultKeys(true);
+  if (!_hasReadableKeyForEverySector()) {
+    ShowStatusAction::show("Erase failed: missing key"); _goMifareTag(); return;
+  }
+
+  uint8_t zero[16] = {};
+  size_t erased = 0;
+  const size_t totalDataBlocks = dims.second - dims.first - 1u;
+  ProgressView::init();
+  for (size_t sector = 0; sector < dims.first; ++sector) {
+    uint16_t first = (sector < 32) ? (uint16_t)(sector * 4) : (uint16_t)(128 + (sector - 32) * 16);
+    uint16_t trailer = (sector < 32) ? (uint16_t)(first + 3) : (uint16_t)(first + 15);
+    auto& a = _mfKeys[sector].first;
+    auto& b = _mfKeys[sector].second;
+    for (uint16_t block = first; block < trailer; ++block) {
+      if (block == 0) continue;
+      const size_t currentErase = erased + 1u;
+      char msg[40];
+      snprintf(msg, sizeof(msg), "Erasing blocks (%u/%u)...",
+               (unsigned)currentErase, (unsigned)totalDataBlocks);
+      ProgressView::progress(
+          msg, (int)((currentErase - 1u) * 100u / totalDataBlocks));
+
+      bool ok = false;
+      // NFC Forum MAD1 uses access bits 78 77 88.  On formatted cards Key A
+      // can authenticate/read the MAD data blocks, while write permission is
+      // normally granted through Key B.  The CU command path reports denied
+      // writes reliably; the PN532/Adafruit path can acknowledge the command
+      // after a Key-A authentication without the MAD bytes actually changing.
+      // Prefer Key B specifically for MAD1 blocks 1/2, then fall back to A.
+      const bool madWrite = (sector == 0 && (block == 1 || block == 2));
+      if (madWrite && b) {
+        auto kb = b.value();
+        ok = _tryWriteMifareBlock(block, zero, (const uint8_t*)kb.data(), true);
+      }
+      if (!ok && a) {
+        auto ka = a.value();
+        ok = _tryWriteMifareBlock(block, zero, (const uint8_t*)ka.data(), false);
+      }
+      if (!ok && !madWrite && b) {
+        auto kb = b.value();
+        ok = _tryWriteMifareBlock(block, zero, (const uint8_t*)kb.data(), true);
+      }
+      if (!ok) {
+        ProgressView::finish();
+        Uni.Lcd.fillRect(bodyX(), bodyY(), bodyW(), bodyH(), TFT_BLACK);
+        char err[32]; snprintf(err, sizeof(err), "Erase failed: block %u", (unsigned)block);
+        ShowStatusAction::show(err);
+        _goMifareTag();
+        return;
+      }
+      erased++;
+    }
+  }
+  ProgressView::finish();
+
+  // The CU path validated on hardware defines Erase Tag as clearing every
+  // data block while preserving block 0 and all sector trailers.  Blocks 1
+  // and 2 are MAD1 on Classic 1K; if either one is not actually zero after
+  // the writes above, PN532 Read NDEF can still see the old NDEF allocation.
+  // Read them back before reporting success so a transport-level "write OK"
+  // cannot leave a silently formatted tag behind.
+  if (dims.first == 16) {
+    auto verifyZeroBlock = [&](uint8_t block) -> bool {
+      auto& a = _mfKeys[0].first;
+      auto& b = _mfKeys[0].second;
+      uint8_t data[16] = {};
+
+      auto tryRead = [&](const NFCUtility::mfKey& key, bool useKeyB) -> bool {
+        uint8_t uid[7] = {};
+        uint8_t uidLen = 0;
+        if (!_nfc->readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLen, 300))
+          return false;
+        if (uidLen != _uidLen || memcmp(uid, _uid, uidLen) != 0) return false;
+        if (!_nfc->mifareclassic_AuthenticateBlock(
+              _uid, _uidLen, block, useKeyB ? 1 : 0,
+              const_cast<uint8_t*>(key.data())))
+          return false;
+        return _nfc->mifareclassic_ReadDataBlock(block, data);
+      };
+
+      bool read = false;
+      if (a) read = tryRead(a.value(), false);
+      if (!read && b) read = tryRead(b.value(), true);
+      if (!read) return false;
+      for (uint8_t v : data) if (v != 0) return false;
+      return true;
+    };
+
+    if (!verifyZeroBlock(1) || !verifyZeroBlock(2)) {
+      Uni.Lcd.fillRect(bodyX(), bodyY(), bodyW(), bodyH(), TFT_BLACK);
+      ShowStatusAction::show("Erase failed: MAD remains");
+      _goMifareTag();
+      return;
+    }
+  }
+
+  Uni.Lcd.fillRect(bodyX(), bodyY(), bodyW(), bodyH(), TFT_BLACK);
+  char msg[40]; snprintf(msg, sizeof(msg), "Erased %u data blocks", (unsigned)erased);
+  _hasCard = false;
+  _mfKeys.fill({});
+  ShowStatusAction::show(msg);
+  _goMifareTag();
 }
 
 void PN532I2cScreen::_doSaveDump() {
@@ -2471,7 +3952,25 @@ void PN532I2cScreen::_doSaveDump() {
 
   String uid = _hexUid(_uid, _uidLen);
   uid.replace(":", "");
-  String path = String(_dumpPath) + "/" + uid + ".bin";
+
+  // Match the Chameleon Classic dump naming convention exactly:
+  // MF-Mini_<UID>, MF-1K_<UID>, or MF-4K_<UID>.
+  const char* typeName = (_sak == 0x09) ? "MF-Mini"
+                       : (_sak == 0x18) ? "MF-4K"
+                                        : "MF-1K";
+  String suggested = String(typeName) + "_" + uid;
+
+  String name = InputTextAction::popup("Save dump", suggested);
+  if (InputTextAction::wasCancelled() || name.length() == 0) {
+    render();
+    return;
+  }
+
+  // Keep the editor focused on the basename, as in the Chameleon dump flow.
+  // The storage format remains a raw .bin file.
+  if (name.endsWith(".bin")) name.remove(name.length() - 4);
+  String filename = name + ".bin";
+  String path = String(_dumpPath) + "/" + filename;
 
   fs::File f = Uni.Storage->open(path.c_str(), "w");
   if (!f) { ShowStatusAction::show("Save failed"); render(); return; }
@@ -2481,12 +3980,15 @@ void PN532I2cScreen::_doSaveDump() {
     render();
     return;
   }
-  f.write(_dumpImg, _dumpLen);
+  const bool ok = f.write(_dumpImg, _dumpLen) == _dumpLen;
   f.close();
 
-  char msg[48];
-  snprintf(msg, sizeof(msg), "Saved: %s.bin", uid.c_str());
-  ShowStatusAction::show(msg);
+  if (ok) {
+    String msg = String("Saved: ") + filename;
+    ShowStatusAction::show(msg.c_str());
+  } else {
+    ShowStatusAction::show("Save failed");
+  }
   render();
 }
 

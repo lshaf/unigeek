@@ -103,17 +103,22 @@ private:
     _setCount = 0;
 
     if (_mode == INPUT_HEX) {
-      // rows 0-2: 0-9, A-E  row 3: CNCL F · DEL SAVE
-      static constexpr const char* hexDigits[] = {
-        "0","1","2","3","4","5","6","7","8","9","A","B","C","D","E",
+      // Match the Phone/Numeric keyboard geometry:
+      // rows 0-1: 1-9,0  row 2: A-E  row 3: F · BKSP SAVE EXIT
+      static constexpr const char* hexChars[] = {
+        "1","2","3","4","5",
+        "6","7","8","9","0",
+        "A","B","C","D","E",
+        "F",
       };
-      for (int i = 0; i < 15; i++)
-        _sets[_setCount++] = { hexDigits[i], hexDigits[i], false, SP_SAVE };
-      _sets[_setCount++] = { nullptr, "CNCL", true,  SP_CANCEL };
-      _sets[_setCount++] = { "F",     "F",    false, SP_SAVE   };
-      _sets[_setCount++] = { " ",     " ",    false, SP_SAVE   };
-      _sets[_setCount++] = { nullptr, "DEL",  true,  SP_DELETE };
-      _sets[_setCount++] = { nullptr, "SAVE", true,  SP_SAVE   };
+      for (int i = 0; i < 16; i++)
+        _sets[_setCount++] = { hexChars[i], hexChars[i], false, SP_SAVE };
+
+      // True spacer: unlike a literal space character, this draws no key box.
+      _sets[_setCount++] = { nullptr, "", false, SP_SAVE };
+      _sets[_setCount++] = { nullptr, "BKSP", true, SP_DELETE };
+      _sets[_setCount++] = { nullptr, "SAVE", true, SP_SAVE };
+      _sets[_setCount++] = { nullptr, "EXIT", true, SP_CANCEL };
 
     } else if (_mode == INPUT_IP_ADDRESS) {
       // Match the Phone keyboard geometry:

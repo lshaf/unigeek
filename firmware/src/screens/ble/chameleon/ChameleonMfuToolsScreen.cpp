@@ -5,6 +5,7 @@
 #include "core/ScreenManager.h"
 #include "ui/actions/InputSelectAction.h"
 #include "ui/actions/ShowStatusAction.h"
+#include "ui/components/Header.h"
 #include "ui/views/ProgressView.h"
 #include "utils/nfc/NfcDumpBuilder.h"
 
@@ -13,7 +14,7 @@ static constexpr uint16_t kNtag215WritablePages = 126;
 
 void _mfuEraseProgress(uint16_t done, uint16_t total) {
   char msg[36];
-  snprintf(msg, sizeof(msg), "Erasing %u/%u pages",
+  snprintf(msg, sizeof(msg), "Erasing pages (%u/%u)...",
            (unsigned)done, (unsigned)kNtag215WritablePages);
   const int pct = total ? (int)((uint32_t)done * 100u / total) : 0;
   ProgressView::progress(msg, pct);
@@ -29,10 +30,10 @@ void ChameleonMfuToolsScreen::onInit() {
 
 void ChameleonMfuToolsScreen::_writeFromFile() {
   static constexpr uint8_t kMax = 10;
-  uint8_t n = _browser.load(this, "/unigeek/nfc/dumps", ".bin");
+  uint8_t n = _browser.load(this, "/unigeek/nfc/dumps", BrowseFileView::Mode(BrowseFileView::Mode::FILE_ONLY, ".bin", 540));
   if (!n) {
     render();
-    ShowStatusAction::show("No .bin in nfc/dumps", 1500);
+    ShowStatusAction::show("No NTAG215 .bin", 1500);
     render();
     return;
   }
@@ -96,8 +97,8 @@ void ChameleonMfuToolsScreen::_writeFromSlot() {
 
 void ChameleonMfuToolsScreen::_writeTag() {
   static const InputSelectAction::Option opts[] = {
-    {"from File", "file"},
-    {"from Slot", "slot"},
+    {"From File", "file"},
+    {"From Slot", "slot"},
   };
   const char* r = InputSelectAction::popup("Write to Tag", opts, 2, nullptr);
   if (!r) { render(); return; }
@@ -107,6 +108,7 @@ void ChameleonMfuToolsScreen::_writeTag() {
 
 
 void ChameleonMfuToolsScreen::_eraseTag() {
+  Header header; header.render("Erase Tag");
   auto& c = ChameleonClient::get();
 
   uint8_t previousMode = 0;
@@ -119,7 +121,7 @@ void ChameleonMfuToolsScreen::_eraseTag() {
   lcd.setTextDatum(MC_DATUM);
   lcd.setTextSize(1);
   lcd.setTextColor(TFT_YELLOW, TFT_BLACK);
-  lcd.drawString("Place NTAG215...", bx + bw / 2, by + bh / 2);
+  lcd.drawString("Place tag on reader...", bx + bw / 2, by + bh / 2);
 
   ChameleonClient::MfuTagInfo info = {};
   if (!c.mfuDetect(&info) ||
@@ -127,7 +129,7 @@ void ChameleonMfuToolsScreen::_eraseTag() {
       info.pages != 135) {
     if (restoreMode) c.setMode(previousMode);
     render();
-    ShowStatusAction::show("Target must be NTAG215", 1500);
+    ShowStatusAction::show("Tag must be NTAG215", 1500);
     render();
     return;
   }
@@ -156,7 +158,7 @@ void ChameleonMfuToolsScreen::_eraseTag() {
 
   lcd.fillRect(bx, by, bw, bh, TFT_BLACK);
   ProgressView::init();
-  ProgressView::progress("Erasing 0/126 pages", 0);
+  ProgressView::progress("Erasing pages (0/126)...", 0);
   const bool ok = c.mfuWriteNtag215User(
       image, (uint16_t)imageLen, _mfuEraseProgress, &info);
   ProgressView::finish();
