@@ -71,6 +71,9 @@ private:
   String      _input;
   String      _pendingChar;
 
+  // Chosen once per popup so the layout cannot change mid-entry.
+  bool        _classicKb   = false;
+
   CharSet     _sets[MAX_SETS];
   char        _keyChars[30][3]  = {};
   char        _keyLabels[30][2] = {};
@@ -96,6 +99,8 @@ private:
   explicit InputTextAction(const char* title, const String& defaultValue, Mode mode)
   : _title(title), _input(defaultValue), _mode(mode)
   {
+    _classicKb = Config.get(APP_CONFIG_KEYBOARD_STYLE,
+                            APP_CONFIG_KEYBOARD_STYLE_DEFAULT) == "classic";
     _buildSets();
   }
 
@@ -158,6 +163,31 @@ private:
       _sets[_setCount++] = { nullptr, "SAVE", true, SP_SAVE };
       _sets[_setCount++] = { nullptr, "EXIT", true, SP_CANCEL };
 
+    } else if (_classicKb) {
+      // Classic phone pad: 10 multi-tap keys + 5 actions, as before the
+      // keyboard rework. The multi-tap engine below is shared with the full
+      // layout, so the grouped labels need no special handling.
+      static constexpr const char* charLabels[] = {
+        " 0",    ",.1",   "abc2",  "def3",  "ghi4",
+        "jkl5",  "mno6",  "pqrs7", "tuv8",  "wxyz9",
+      };
+      static constexpr const char* symbolLabels[] = {
+        " ",     ",.'- ", "*/\\@", "+-=_",  ":;?",
+        "!$#",   "\"&%|", "()[]",  "<>{}",  "^~`",
+      };
+
+      const char* const* sets = _symbolMode ? symbolLabels : charLabels;
+      for (int i = 0; i < 10; i++)
+        _sets[_setCount++] = { sets[i], sets[i], false, SP_SAVE };
+
+      static constexpr const char* classicLabels[5] = {
+        "CNCL", "DEL", "CAPS", "SYM", "SAVE"
+      };
+      static constexpr Special classicMap[5] = {
+        SP_CANCEL, SP_DELETE, SP_CAPS, SP_SYMBOL, SP_SAVE
+      };
+      for (int i = 0; i < 5; i++)
+        _sets[_setCount++] = { nullptr, classicLabels[i], true, classicMap[i] };
     } else {
       // Compact 6x5 grid optimized for small displays.
       // Two ASCII pages: ABC <-> SYM.
@@ -241,10 +271,14 @@ private:
 
   // ── grid scroll mode ────────────────────────────────────────────────────────
 
-  int _gridCols() const { return _mode == INPUT_TEXT ? 6 : 5; }
+  // Classic keeps the old 5-wide pad (10 char keys + 5 actions).
+  int _gridCols() const {
+    return (_mode == INPUT_TEXT && !_classicKb) ? 6 : 5;
+  }
 
   int _charCount() const {
-    return _mode == INPUT_TEXT ? 30 : _setCount;
+    if (_mode != INPUT_TEXT) return _setCount;
+    return _classicKb ? 10 : 30;
   }
 
   int _charRows() const {
@@ -252,7 +286,8 @@ private:
   }
 
   int _actionCount() const {
-    return _mode == INPUT_TEXT ? 6 : 0;
+    if (_mode != INPUT_TEXT) return 0;
+    return _classicKb ? 5 : 6;
   }
 
   int _gridRows() const {
@@ -507,11 +542,14 @@ private:
           break;
 
         case SP_SYMBOL:
-          if (_mode == INPUT_TEXT && _scrollPos == 30) {
+          // Both layouts keep a fixed set count across pages, so the cursor
+          // stays on the key that was pressed after the rebuild.
+          if (_mode == INPUT_TEXT) {
+            const int keep = _scrollPos;
             _page = (_page == PAGE_ABC) ? PAGE_SYM : PAGE_ABC;
             _symbolMode = (_page == PAGE_SYM);
             _buildSets();
-            _scrollPos = 30;
+            _scrollPos = keep;
           }
           break;
 

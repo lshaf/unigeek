@@ -34,6 +34,7 @@ private:
     SETT_NAV_SOUND,
     SETT_SPEAKER_TEST,
 #endif
+    SETT_KEYBOARD,
     SETT_COLOR,
     SETT_MASCOT,
 #ifdef DEVICE_HAS_LED_RING
@@ -74,6 +75,7 @@ private:
 #ifdef DEVICE_HAS_SOUND
   String _navSndSub;
 #endif
+  String _kbdSub;
   String _colorSub;
   String _mascotSub;
 #ifdef DEVICE_HAS_LED_RING
@@ -106,6 +108,7 @@ private:
     {"Navigation Sound", ""},
     {"Speaker Test"},
 #endif
+    {"Keyboard",         ""},
     {"Primary Color",    ""},
     {"Mascot",           ""},
 #ifdef DEVICE_HAS_LED_RING

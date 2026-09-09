@@ -24,6 +24,10 @@
 #define APP_CONFIG_VOLUME_DEFAULT               "75"
 #define APP_CONFIG_NAV_SOUND                    "nav_sound"
 #define APP_CONFIG_NAV_SOUND_DEFAULT            "1"
+// On-screen text keyboard layout. "full" is the 6x5 per-letter grid; "classic"
+// restores the phone-style 12-key multi-tap pad used before the keyboard rework.
+#define APP_CONFIG_KEYBOARD_STYLE               "kbd_style"
+#define APP_CONFIG_KEYBOARD_STYLE_DEFAULT       "full"
 #define APP_CONFIG_PRIMARY_COLOR                "primary_color"
 #define APP_CONFIG_PRIMARY_COLOR_DEFAULT        "Blue"
 #define APP_CONFIG_NAV_MODE                     "nav_mode"

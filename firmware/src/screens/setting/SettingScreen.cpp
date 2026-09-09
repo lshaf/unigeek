@@ -47,6 +47,8 @@ void SettingScreen::_refresh() {
 #ifdef DEVICE_HAS_SOUND
   _navSndSub   = Config.get(APP_CONFIG_NAV_SOUND,            APP_CONFIG_NAV_SOUND_DEFAULT).toInt() ? "On" : "Off";
 #endif
+  _kbdSub      = Config.get(APP_CONFIG_KEYBOARD_STYLE,       APP_CONFIG_KEYBOARD_STYLE_DEFAULT) == "classic"
+                   ? "Classic" : "Full";
   _colorSub    = Config.get(APP_CONFIG_PRIMARY_COLOR,        APP_CONFIG_PRIMARY_COLOR_DEFAULT);
   _mascotSub   = Mascot::current().label;
 #ifdef DEVICE_HAS_LED_RING
@@ -83,6 +85,7 @@ void SettingScreen::_refresh() {
 #ifdef DEVICE_HAS_SOUND
   _items[SETT_NAV_SOUND].sublabel = _navSndSub.c_str();
 #endif
+  _items[SETT_KEYBOARD].sublabel     = _kbdSub.c_str();
   _items[SETT_COLOR].sublabel        = _colorSub.c_str();
   _items[SETT_MASCOT].sublabel       = _mascotSub.c_str();
 #ifdef DEVICE_HAS_LED_RING
@@ -185,6 +188,16 @@ void SettingScreen::onItemSelected(uint8_t index) {
       break;
     }
 #endif
+
+    case SETT_KEYBOARD: {
+      // Full = 6x5 per-letter grid; Classic = phone-style 12-key multi-tap.
+      bool classic = Config.get(APP_CONFIG_KEYBOARD_STYLE,
+                                APP_CONFIG_KEYBOARD_STYLE_DEFAULT) == "classic";
+      Config.set(APP_CONFIG_KEYBOARD_STYLE, classic ? "full" : "classic");
+      Config.save(Uni.Storage);
+      _refresh();
+      break;
+    }
 
 #ifdef DEVICE_HAS_SOUND
     case SETT_NAV_SOUND: {
