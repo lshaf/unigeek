@@ -11,6 +11,7 @@
 #include "ui/views/LogView.h"
 #include "../../utils/nfc/NdefBuilder.h"
 #include "../../utils/nfc/NdefParser.h"
+#include "../../utils/nfc/NfcDumpBuilder.h"
 
 #include "utils/nfc/MfcKeyStore.h"
 // ── raw I2C helpers for Gen1a / Gen3 ──────────────────────────────────────
@@ -76,6 +77,54 @@ static bool _nfcDataExch(Adafruit_PN532* nfc, TwoWire* wire,
   return true;
 }
 
+static bool _pn532Type2ReadPage(Adafruit_PN532* nfc, TwoWire* wire,
+                                   uint8_t page, uint8_t out[4]) {
+  const uint8_t cmd[2] = {0x30, page};
+  uint8_t rsp[18] = {};
+  uint8_t len = sizeof(rsp);
+  if (!_nfcDataExch(nfc, wire, cmd, sizeof(cmd), rsp, len, 500)) {
+    len = sizeof(rsp);
+    if (!_nfcCommThru(nfc, wire, cmd, sizeof(cmd), rsp, len, 500)) return false;
+  }
+  if (len < 16) return false;
+  memcpy(out, rsp, 4);
+  return true;
+}
+
+static bool _pn532Type2ReadPageTailSafe(Adafruit_PN532* nfc, TwoWire* wire,
+                                           uint16_t page, uint16_t totalPages,
+                                           uint8_t out[4]) {
+  if (!totalPages || page >= totalPages || totalPages > 256) return false;
+  uint16_t start = page;
+  uint8_t skip = 0;
+  if (page + 3 >= totalPages) {
+    start = totalPages >= 4 ? totalPages - 4 : 0;
+    skip = (uint8_t)(page - start);
+  }
+  const uint8_t cmd[2] = {0x30, (uint8_t)start};
+  uint8_t rsp[18] = {};
+  uint8_t len = sizeof(rsp);
+  if (!_nfcDataExch(nfc, wire, cmd, sizeof(cmd), rsp, len, 500)) {
+    len = sizeof(rsp);
+    if (!_nfcCommThru(nfc, wire, cmd, sizeof(cmd), rsp, len, 500)) return false;
+  }
+  if (len < 16) return false;
+  memcpy(out, rsp + skip * 4u, 4);
+  return true;
+}
+
+static bool _pn532Type2WritePage(Adafruit_PN532* nfc, TwoWire* wire,
+                                    uint8_t page, const uint8_t data[4]) {
+  uint8_t cmd[6] = {0xA2, page, data[0], data[1], data[2], data[3]};
+  uint8_t rsp[4] = {};
+  uint8_t len = sizeof(rsp);
+  if (!_nfcDataExch(nfc, wire, cmd, sizeof(cmd), rsp, len, 500)) {
+    len = sizeof(rsp);
+    if (!_nfcCommThru(nfc, wire, cmd, sizeof(cmd), rsp, len, 500)) return false;
+  }
+  return len == 0 || (len >= 1 && (rsp[0] & 0x0F) == 0x0A);
+}
+
 // ── title ──────────────────────────────────────────────────────────────────
 
 static void renderTagPrompt(const char* message, int bx, int by, int bw, int bh) {
@@ -117,6 +166,7 @@ const char* PN532I2cScreen::title() {
     case STATE_MAGIC_MENU:      return "Magic Card";
     case STATE_MAGIC_DETECT:    return "Detect Magic";
     case STATE_RAW_RESULT:      return "Read Pages";
+    case STATE_ULTRALIGHT_DUMP: return "Tag Details";
     case STATE_EMULATE:         return "Emulate Card";
     case STATE_NTAG_MENU:       return "Emulate NDEF";
     case STATE_NDEF_WRITE_MENU: return "Write NDEF";
@@ -284,6 +334,20 @@ void PN532I2cScreen::onUpdate() {
     return;
   }
 
+  if (_state == STATE_ULTRALIGHT_DUMP) {
+    if (Uni.Nav->wasPressed()) {
+      auto dir = Uni.Nav->readDirection();
+      if (dir == INavigation::DIR_BACK) {
+        _goUltralightTag();
+      } else if (dir == INavigation::DIR_PRESS) {
+        _showUltralightDumpActions();
+      } else {
+        _scrollView.onNav(dir);
+      }
+    }
+    return;
+  }
+
   if (_state == STATE_INFO || _state == STATE_MIFARE_KEYS ||
       _state == STATE_MIFARE_KEY_DB_VIEW || _state == STATE_RAW_RESULT) {
     if (Uni.Nav->wasPressed()) {
@@ -311,7 +375,7 @@ void PN532I2cScreen::onRender() {
       _state == STATE_MIFARE_DUMP || _state == STATE_MIFARE_DUMP_HEX ||
       _state == STATE_MIFARE_WRITE_PREVIEW ||
       _state == STATE_MIFARE_KEYS || _state == STATE_MIFARE_KEY_DB_VIEW ||
-      _state == STATE_RAW_RESULT || _state == STATE_NDEF_RESULT ||
+      _state == STATE_RAW_RESULT || _state == STATE_ULTRALIGHT_DUMP || _state == STATE_NDEF_RESULT ||
       _state == STATE_EMULATE) {
     _scrollView.render(bodyX(), bodyY(), bodyW(), bodyH());
     return;
@@ -384,8 +448,11 @@ void PN532I2cScreen::onItemSelected(uint8_t index) {
       else if (index == 1) _goUltralightNdef();
       break;
     case STATE_ULTRALIGHT_TAG_MENU:
-      if (index == 0) _doUltralightDump();
-      else if (index == 1) _doUltralightWrite();
+      if (index == 0) _doUltralightReadTag();
+      else if (index == 1) _doUltralightWriteTag();
+      else if (index == 2) _doUltralightEraseTag();
+      else if (index == 3) _doUltralightReadPages();
+      else if (index == 4) _doUltralightWritePage();
       break;
     case STATE_ULTRALIGHT_NDEF_MENU:
       switch (index) {
@@ -497,6 +564,7 @@ void PN532I2cScreen::onBack() {
       _goMain();
       break;
     case STATE_RAW_RESULT:
+    case STATE_ULTRALIGHT_DUMP:
       _goUltralightTag();
       break;
     case STATE_NDEF_WRITE_MENU:
@@ -1785,43 +1853,301 @@ void PN532I2cScreen::_doDictionaryAttackWithFile(uint8_t fileIndex) {
   }
 }
 
-void PN532I2cScreen::_doUltralightDump() {
-  renderOperationTitle("Read Tag");
-  renderTagPrompt("Place tag on reader...", bodyX(), bodyY(), bodyW(), bodyH());
-  uint8_t uid[7]; uint8_t uidLen;
-  uint32_t start = millis();
-  bool ok = false;
+
+bool PN532I2cScreen::_detectUltralightTag(uint16_t& pages, const char*& typeName) {
+  pages = 0;
+  typeName = nullptr;
+  uint8_t uid[7] = {};
+  uint8_t uidLen = 0;
+  bool found = false;
+  const uint32_t start = millis();
   while (millis() - start < 5000) {
     Uni.update();
-    if (Uni.Nav->wasPressed() &&
-        Uni.Nav->readDirection() == INavigation::DIR_BACK) { _goUltralight(); return; }
-    if (_nfc->readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLen, 200)) { ok = true; break; }
-    delay(50);
+    if (_nfc->readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLen, 200)) {
+      found = true;
+      break;
+    }
+    delay(40);
   }
-  if (!ok) { ShowStatusAction::show("No tag detected"); _goUltralight(); return; }
+  if (!found) return false;
+
+  memcpy(_uid, uid, uidLen);
+  _uidLen = uidLen;
+  _atqa = ((uint16_t)pn532_packetbuffer[9] << 8) | pn532_packetbuffer[10];
+  _sak = pn532_packetbuffer[11];
+  _hasCard = true;
+  if (_sak != 0x00) return false;
+
+  typeName = _inferType2Variant();
+  if (!typeName) return false;
+
+  if (strcmp(typeName, "NTAG210") == 0) pages = 20;
+  else if (strcmp(typeName, "NTAG212") == 0) pages = 41;
+  else if (strcmp(typeName, "NTAG213") == 0) pages = 45;
+  else if (strcmp(typeName, "NTAG215") == 0) pages = 135;
+  else if (strcmp(typeName, "NTAG216") == 0) pages = 231;
+  else if (strcmp(typeName, "Ultralight EV1 11") == 0) pages = 20;
+  else if (strcmp(typeName, "Ultralight EV1 21") == 0) pages = 41;
+  else if (strcmp(typeName, "Ultralight C") == 0) pages = 48;
+  else if (strcmp(typeName, "Ultralight") == 0) pages = 16;
+  return pages != 0;
+}
+
+bool PN532I2cScreen::_readUltralightDump(uint16_t pages) {
+  const size_t bytes = (size_t)pages * 4u;
+  if (!pages || bytes > sizeof(_dumpImg)) return false;
+  memset(_dumpImg, 0, bytes);
+
+  ProgressView::init();
+  for (uint16_t page = 0; page < pages; ++page) {
+    char msg[36];
+    snprintf(msg, sizeof(msg), "Reading pages (%u/%u)...",
+             (unsigned)(page + 1), (unsigned)pages);
+    ProgressView::progress(msg, (int)((uint32_t)page * 100u / pages));
+    uint8_t data[4] = {};
+    if (!_pn532Type2ReadPageTailSafe(_nfc, _wire, page, pages, data)) {
+      // Ultralight C pages 44..47 contain the 3DES key and are intentionally
+      // unreadable. Preserve a complete image with zeroes in that region.
+      if (pages == 48 && page >= 44) continue;
+      ProgressView::finish();
+      _dumpLen = 0;
+      _hasDump = false;
+      return false;
+    }
+    memcpy(_dumpImg + page * 4u, data, 4);
+  }
+  ProgressView::finish();
+  _dumpLen = bytes;
+  _hasDump = true;
+  _dumpComplete = true;
+  return true;
+}
+
+void PN532I2cScreen::_showUltralightTagDetails(const char* typeName, uint16_t pages) {
+  _ulTypeName = typeName ? typeName : "Ultralight / NTAG";
+  _ulPages = pages;
+  _state = STATE_ULTRALIGHT_DUMP;
+  _resetRows();
+  _pushRow("Type", _ulTypeName);
+  _pushRow("UID", _hexUid(_uid, _uidLen));
+  _pushRow("Pages", String(pages));
+  _pushRow("Dump", String(_dumpLen) + " bytes");
+
+  const uint8_t* ndef = nullptr;
+  size_t ndefLen = 0;
+  NdefParser::Result parsed;
+  if (NdefParser::extractType2Ndef(_dumpImg, _dumpLen, &ndef, &ndefLen) &&
+      NdefParser::parse(ndef, ndefLen, parsed)) {
+    switch (parsed.kind) {
+      case NdefParser::RECORD_TEXT:  _pushRow("NDEF", "Text"); break;
+      case NdefParser::RECORD_URL:   _pushRow("NDEF", "URL"); break;
+      case NdefParser::RECORD_PHONE: _pushRow("NDEF", "Phone"); break;
+      case NdefParser::RECORD_EMAIL: _pushRow("NDEF", "Email"); break;
+      case NdefParser::RECORD_VCARD: _pushRow("NDEF", "vCard"); break;
+      default: _pushRow("NDEF", "Unsupported"); break;
+    }
+  } else {
+    _pushRow("NDEF", "Not found");
+  }
+  _pushRow("[Press]", "Actions");
+  _scrollView.setRows(_rows, _rowCount);
+  render();
+}
+
+void PN532I2cScreen::_saveUltralightDump(const char* typeName) {
+  if (!_hasDump || !_dumpLen || !Uni.Storage || !Uni.Storage->isAvailable()) {
+    ShowStatusAction::show("Storage unavailable");
+    render();
+    return;
+  }
+  Uni.Storage->makeDir("/unigeek/nfc");
+  Uni.Storage->makeDir(_dumpPath);
+  String uid = _hexUid(_uid, _uidLen); uid.replace(":", "");
+  String safeType = typeName ? String(typeName) : String("Ultralight");
+  safeType.replace(" / ", "-"); safeType.replace(" ", "-");
+  String name = InputTextAction::popup("Save dump", safeType + "_" + uid);
+  if (InputTextAction::wasCancelled() || name.length() == 0) { render(); return; }
+  if (name.endsWith(".bin")) name.remove(name.length() - 4);
+  const String filename = name + ".bin";
+  fs::File f = Uni.Storage->open((String(_dumpPath) + "/" + filename).c_str(), "w");
+  const bool ok = f && f.write(_dumpImg, _dumpLen) == _dumpLen;
+  if (f) f.close();
+  ShowStatusAction::show(ok ? (String("Saved: ") + filename).c_str() : "Save failed");
+  render();
+}
+
+bool PN532I2cScreen::_writeUltralightNtag215Dump(const uint8_t* dump, size_t len) {
+  static constexpr uint16_t kBytes = 135u * 4u;
+  static constexpr uint8_t kFirst = 4;
+  static constexpr uint8_t kLast = 129;
+  if (!dump || len != kBytes) return false;
+
+  renderOperationTitle("Write to Tag");
+  renderTagPrompt("Place tag on reader...", bodyX(), bodyY(), bodyW(), bodyH());
+  uint16_t pages = 0; const char* typeName = nullptr;
+  if (!_detectUltralightTag(pages, typeName) || pages != 135 ||
+      !typeName || strcmp(typeName, "NTAG215") != 0) {
+    ShowStatusAction::show("Tag must be NTAG215");
+    return false;
+  }
+
+  ProgressView::init();
+  bool ok = true;
+  for (uint16_t page = kFirst; page <= kLast; ++page) {
+    char msg[36];
+    const uint16_t done = page - kFirst + 1;
+    snprintf(msg, sizeof(msg), "Writing pages (%u/126)...", (unsigned)done);
+    ProgressView::progress(msg, (int)((uint32_t)(done - 1) * 100u / 126u));
+    if (!_pn532Type2WritePage(_nfc, _wire, (uint8_t)page, dump + page * 4u)) {
+      ok = false;
+      break;
+    }
+  }
+  ProgressView::finish();
+  ShowStatusAction::show(ok ? "Tag written" : "Tag write failed");
+  return ok;
+}
+
+void PN532I2cScreen::_showUltralightDumpActions() {
+  static const InputSelectAction::Option opts[] = {
+    {"Save Dump", "save"},
+    {"Write to Tag", "write"},
+  };
+  const char* r = InputSelectAction::popup("Dump Actions", opts, 2, nullptr);
+  if (!r) { render(); return; }
+  if (strcmp(r, "save") == 0) {
+    _saveUltralightDump(_ulTypeName.c_str());
+  } else {
+    if (_ulTypeName != "NTAG215" || _ulPages != 135 || _dumpLen != 540) {
+      ShowStatusAction::show("Write supports NTAG215");
+      render();
+      return;
+    }
+    uint8_t sourceUid[7] = {};
+    const uint8_t sourceUidLen = _uidLen;
+    const uint16_t sourceAtqa = _atqa;
+    const uint8_t sourceSak = _sak;
+    if (sourceUidLen) memcpy(sourceUid, _uid, sourceUidLen);
+    _writeUltralightNtag215Dump(_dumpImg, _dumpLen);
+    memcpy(_uid, sourceUid, sourceUidLen);
+    _uidLen = sourceUidLen;
+    _atqa = sourceAtqa;
+    _sak = sourceSak;
+    _showUltralightTagDetails("NTAG215", 135);
+  }
+}
+
+void PN532I2cScreen::_doUltralightReadTag() {
+  renderOperationTitle("Read Tag");
+  renderTagPrompt("Place tag on reader...", bodyX(), bodyY(), bodyW(), bodyH());
+  uint16_t pages = 0; const char* typeName = nullptr;
+  if (!_detectUltralightTag(pages, typeName)) {
+    ShowStatusAction::show("Unsupported / no tag");
+    _goUltralightTag();
+    return;
+  }
+  if (!_readUltralightDump(pages)) {
+    ShowStatusAction::show("Read failed");
+    _goUltralightTag();
+    return;
+  }
+  _showUltralightTagDetails(typeName, pages);
+}
+
+void PN532I2cScreen::_doUltralightWriteTag() {
+  const uint8_t n = _browser.load(this, _dumpPath,
+      BrowseFileView::Mode(BrowseFileView::Mode::FILE_ONLY, ".bin", 540));
+  if (!n) { ShowStatusAction::show("No NTAG215 .bin"); _goUltralightTag(); return; }
+  const uint8_t count = min((uint8_t)10, n);
+  InputSelectAction::Option opts[10];
+  String vals[10];
+  for (uint8_t i = 0; i < count; ++i) {
+    vals[i] = String(i);
+    opts[i] = {_browser.entry(i).name.c_str(), vals[i].c_str()};
+  }
+  const char* r = InputSelectAction::popup("NTAG215 dump", opts, count, nullptr);
+  if (!r) { render(); return; }
+  const uint8_t idx = (uint8_t)atoi(r);
+  if (idx >= count || !Uni.Storage) { render(); return; }
+  fs::File f = Uni.Storage->open(_browser.entry(idx).path.c_str(), "r");
+  if (!f || f.size() != 540) { if (f) f.close(); ShowStatusAction::show("Invalid NTAG215 dump"); render(); return; }
+  uint8_t dump[540];
+  const bool loaded = f.read(dump, sizeof(dump)) == sizeof(dump);
+  f.close();
+  if (!loaded) { ShowStatusAction::show("Read file failed"); render(); return; }
+  _writeUltralightNtag215Dump(dump, sizeof(dump));
+  _goUltralightTag();
+}
+
+void PN532I2cScreen::_doUltralightEraseTag() {
+  renderOperationTitle("Erase Tag");
+  renderTagPrompt("Place tag on reader...", bodyX(), bodyY(), bodyW(), bodyH());
+  uint16_t pages = 0; const char* typeName = nullptr;
+  if (!_detectUltralightTag(pages, typeName) || pages != 135 ||
+      !typeName || strcmp(typeName, "NTAG215") != 0) {
+    ShowStatusAction::show("Tag must be NTAG215");
+    _goUltralightTag();
+    return;
+  }
+
+  uint8_t image[NfcDumpBuilder::NTAG215_SIZE] = {};
+  size_t imageLen = 0;
+  if (!NfcDumpBuilder::buildNtag215(_uid, nullptr, 0, image, imageLen,
+                                    NfcDumpBuilder::NTAG215_SIZE) || imageLen != 540) {
+    ShowStatusAction::show("Cannot build empty tag");
+    _goUltralightTag();
+    return;
+  }
+
+  ProgressView::init();
+  bool ok = true;
+  for (uint16_t page = 4; page <= 129; ++page) {
+    char msg[36];
+    const uint16_t done = page - 3;
+    snprintf(msg, sizeof(msg), "Erasing pages (%u/126)...", (unsigned)done);
+    ProgressView::progress(msg, (int)((uint32_t)(done - 1) * 100u / 126u));
+    if (!_pn532Type2WritePage(_nfc, _wire, (uint8_t)page, image + page * 4u)) {
+      ok = false;
+      break;
+    }
+  }
+  ProgressView::finish();
+  _hasDump = false; _dumpLen = 0;
+  ShowStatusAction::show(ok ? "Tag erased" : "Erase failed");
+  _goUltralightTag();
+}
+
+void PN532I2cScreen::_doUltralightReadPages() {
+  renderOperationTitle("Read Pages");
+  renderTagPrompt("Place tag on reader...", bodyX(), bodyY(), bodyW(), bodyH());
+  uint16_t pages = 0; const char* typeName = nullptr;
+  if (!_detectUltralightTag(pages, typeName)) {
+    ShowStatusAction::show("Unsupported / no tag");
+    _goUltralightTag();
+    return;
+  }
 
   _state = STATE_RAW_RESULT;
   _resetRows();
-  memcpy(_uid, uid, uidLen);
-  _uidLen = uidLen;
-  _pushRow("UID", _hexUid(uid, uidLen));
-
-  memcpy(_uid, uid, uidLen);
-  _uidLen = uidLen;
-  _hasNdef = false;
-  _ndefLen = 0;
+  _pushRow("Type", typeName);
+  _pushRow("UID", _hexUid(_uid, _uidLen));
+  _pushRow("Pages", String(pages));
 
   ProgressView::init();
-  static constexpr uint8_t TOTAL_PAGES = 64;
-  for (uint8_t page = 0; page < TOTAL_PAGES; page++) {
-    const uint8_t currentPage = page + 1;
-    int pct = (int)((uint16_t)page * 100u / TOTAL_PAGES);
-    char msg[32];
+  for (uint16_t page = 0; page < pages; ++page) {
+    char msg[36];
     snprintf(msg, sizeof(msg), "Reading pages (%u/%u)...",
-             (unsigned)currentPage, (unsigned)TOTAL_PAGES);
-    ProgressView::progress(msg, pct);
-    uint8_t data[4];
-    if (!_nfc->mifareultralight_ReadPage(page, data)) break;
+             (unsigned)(page + 1), (unsigned)pages);
+    ProgressView::progress(msg, (int)((uint32_t)page * 100u / pages));
+    uint8_t data[4] = {};
+    if (!_pn532Type2ReadPageTailSafe(_nfc, _wire, page, pages, data)) {
+      if (pages == 48 && page >= 44) {
+        _pushRow("P" + String(page), "Unreadable (key)");
+        continue;
+      }
+      _pushRow("P" + String(page), "Read failed");
+      break;
+    }
     _pushRow("P" + String(page), _hexBlock(data, 4));
   }
   ProgressView::finish();
@@ -1829,48 +2155,38 @@ void PN532I2cScreen::_doUltralightDump() {
   render();
 }
 
-void PN532I2cScreen::_doUltralightWrite() {
+void PN532I2cScreen::_doUltralightWritePage() {
   renderOperationTitle("Write Page");
   renderTagPrompt("Place tag on reader...", bodyX(), bodyY(), bodyW(), bodyH());
-  uint8_t uid[7]; uint8_t uidLen;
-  uint32_t start = millis();
-  bool ok = false;
-  while (millis() - start < 5000) {
-    Uni.update();
-    if (Uni.Nav->wasPressed() &&
-        Uni.Nav->readDirection() == INavigation::DIR_BACK) { _goUltralight(); return; }
-    if (_nfc->readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLen, 200)) { ok = true; break; }
-    delay(50);
+  uint16_t pages = 0; const char* typeName = nullptr;
+  if (!_detectUltralightTag(pages, typeName)) {
+    ShowStatusAction::show("Unsupported / no tag");
+    _goUltralightTag();
+    return;
   }
-  if (!ok) { ShowStatusAction::show("No tag detected"); _goUltralight(); return; }
+  if (pages <= 4) { ShowStatusAction::show("No writable pages"); _goUltralightTag(); return; }
 
-  int page = InputNumberAction::popup("Page (4..63)", 4, 63, 4);
-  if (InputNumberAction::wasCancelled()) { _goUltralight(); return; }
+  const int page = InputNumberAction::popup(
+      (String("Page (4..") + String(pages - 1) + ")").c_str(), 4, pages - 1, 4);
+  if (InputNumberAction::wasCancelled()) { _goUltralightTag(); return; }
 
   String hex = InputTextAction::popup("Page data (8 hex)", "", InputTextAction::INPUT_HEX);
-  if (InputTextAction::wasCancelled()) { _goUltralight(); return; }
-  hex.replace(" ", "");
-  if (hex.length() != 8) { ShowStatusAction::show("Need 8 hex chars"); _goUltralight(); return; }
+  if (InputTextAction::wasCancelled()) { _goUltralightTag(); return; }
+  hex.replace(" ", ""); hex.replace(":", "");
+  if (hex.length() != 8) { ShowStatusAction::show("Need 8 hex chars"); _goUltralightTag(); return; }
 
-  uint8_t data[4];
-  for (int i = 0; i < 4; i++) {
-    char b[3] = { hex[i * 2], hex[i * 2 + 1], 0 };
-    char* end; unsigned long v = strtoul(b, &end, 16);
-    if (*end != 0) { ShowStatusAction::show("Bad hex"); _goUltralight(); return; }
+  uint8_t data[4] = {};
+  for (int i = 0; i < 4; ++i) {
+    char b[3] = {hex[i * 2], hex[i * 2 + 1], 0};
+    char* e = nullptr; unsigned long v = strtoul(b, &e, 16);
+    if (!e || *e) { ShowStatusAction::show("Bad hex"); _goUltralightTag(); return; }
     data[i] = (uint8_t)v;
   }
-
-  // Restore the Ultralight screen after the input overlays before I/O.
   render();
-
-  if (_nfc->mifareultralight_WritePage((uint8_t)page, data)) {
-    ShowStatusAction::show("Write OK");
-  } else {
-    ShowStatusAction::show("Write failed");
-  }
-  _goUltralight();
+  const bool ok = _pn532Type2WritePage(_nfc, _wire, (uint8_t)page, data);
+  ShowStatusAction::show(ok ? "Page written" : "Write failed");
+  _goUltralightTag();
 }
-
 
 void PN532I2cScreen::_doReadNdef() {
   renderOperationTitle("Read NDEF");
@@ -1909,7 +2225,7 @@ void PN532I2cScreen::_doReadNdef() {
   // NFC Forum Type 2 Capability Container (page 3).
   // Byte 2 gives the data-area capacity in units of 8 bytes.
   uint8_t cc[4] = {};
-  if (_nfc->mifareultralight_ReadPage(3, cc) && cc[0] == 0xE1) {
+  if (_pn532Type2ReadPage(_nfc, _wire, 3, cc) && cc[0] == 0xE1) {
     _ndefCapacity = (size_t)cc[2] * 8;
   }
 
@@ -1934,7 +2250,7 @@ void PN532I2cScreen::_doReadNdef() {
                            (int)((uint16_t)(currentPage - 1) * 100u / totalPages));
 
     uint8_t data[4];
-    if (!_nfc->mifareultralight_ReadPage(page, data)) break;
+    if (!_pn532Type2ReadPage(_nfc, _wire, page, data)) break;
 
     memcpy(&user[userLen], data, 4);
     userLen += 4;
@@ -2777,7 +3093,7 @@ bool PN532I2cScreen::_writeUltralightNdefRecord(const uint8_t* ndef, size_t ndef
   // Read the NFC Forum Type 2 Capability Container from page 3.
   // CC byte 2 gives the data area size in multiples of 8 bytes.
   uint8_t cc[4] = {};
-  if (!_nfc->mifareultralight_ReadPage(3, cc)) {
+  if (!_pn532Type2ReadPage(_nfc, _wire, 3, cc)) {
     ShowStatusAction::show("Failed to read CC");
     return false;
   }
@@ -2828,7 +3144,7 @@ bool PN532I2cScreen::_writeUltralightNdefRecord(const uint8_t* ndef, size_t ndef
              (unsigned)currentPage, (unsigned)totalPages);
     ProgressView::progress(msg, (int)(offset * 100 / paddedLen));
 
-    if (!_nfc->mifareultralight_WritePage(page, &payload[offset])) {
+    if (!_pn532Type2WritePage(_nfc, _wire, page, &payload[offset])) {
       success = false;
       break;
     }
@@ -3285,7 +3601,7 @@ void PN532I2cScreen::_doEraseNdef() {
 
   // Read NFC Forum Type 2 Capability Container from page 3.
   uint8_t cc[4] = {};
-  if (!_nfc->mifareultralight_ReadPage(3, cc)) {
+  if (!_pn532Type2ReadPage(_nfc, _wire, 3, cc)) {
     ShowStatusAction::show("Failed to read CC");
     _goUltralightNdef();
     return;
@@ -3305,7 +3621,7 @@ void PN532I2cScreen::_doEraseNdef() {
   // The previous bytes after the terminator are no longer part of the active NDEF.
   uint8_t emptyNdef[4] = {0x03, 0x00, 0xFE, 0x00};
 
-  bool success = _nfc->mifareultralight_WritePage(4, emptyNdef);
+  bool success = _pn532Type2WritePage(_nfc, _wire, 4, emptyNdef);
 
   ShowStatusAction::show(success ? "NDEF erased" : "NDEF erase failed");
   _goUltralightNdef();

@@ -1,9 +1,12 @@
 #include "ChameleonMfuToolsScreen.h"
 #include "ChameleonMfuScreen.h"
 #include "ChameleonMfuWriteScreen.h"
+#include "ChameleonMfuPagesScreen.h"
 #include "utils/ble/ChameleonClient.h"
 #include "core/ScreenManager.h"
 #include "ui/actions/InputSelectAction.h"
+#include "ui/actions/InputNumberAction.h"
+#include "ui/actions/InputTextAction.h"
 #include "ui/actions/ShowStatusAction.h"
 #include "ui/components/Header.h"
 #include "ui/views/ProgressView.h"
@@ -25,6 +28,8 @@ void ChameleonMfuToolsScreen::onInit() {
   _items[0] = {"Read Tag"};
   _items[1] = {"Write to Tag"};
   _items[2] = {"Erase Tag"};
+  _items[3] = {"Read Pages"};
+  _items[4] = {"Write Page"};
   setItems(_items);
 }
 
@@ -171,10 +176,83 @@ void ChameleonMfuToolsScreen::_eraseTag() {
   render();
 }
 
+void ChameleonMfuToolsScreen::_writePage() {
+  Header header; header.render("Write Page");
+  auto& c = ChameleonClient::get();
+
+  uint8_t previousMode = 0;
+  const bool restoreMode = c.getMode(&previousMode);
+  c.setMode(1);
+
+  auto& lcd = Uni.Lcd;
+  const int bx = bodyX(), by = bodyY(), bw = bodyW(), bh = bodyH();
+  lcd.fillRect(bx, by, bw, bh, TFT_BLACK);
+  lcd.setTextDatum(MC_DATUM);
+  lcd.setTextColor(TFT_YELLOW, TFT_BLACK);
+  lcd.drawString("Place tag on reader...", bx + bw / 2, by + bh / 2);
+
+  ChameleonClient::MfuTagInfo info = {};
+  if (!c.mfuDetect(&info) || info.pages <= 4) {
+    if (restoreMode) c.setMode(previousMode);
+    render();
+    ShowStatusAction::show("Unsupported / no tag", 1400);
+    render();
+    return;
+  }
+
+  String title = String("Page (4..") + String(info.pages - 1) + ")";
+  const int page = InputNumberAction::popup(title.c_str(), 4, info.pages - 1, 4);
+  if (InputNumberAction::wasCancelled()) {
+    if (restoreMode) c.setMode(previousMode);
+    render();
+    return;
+  }
+
+  String hex = InputTextAction::popup("Page data (8 hex)", "", InputTextAction::INPUT_HEX);
+  if (InputTextAction::wasCancelled()) {
+    if (restoreMode) c.setMode(previousMode);
+    render();
+    return;
+  }
+  hex.replace(" ", "");
+  hex.replace(":", "");
+  if (hex.length() != 8) {
+    if (restoreMode) c.setMode(previousMode);
+    render();
+    ShowStatusAction::show("Need 8 hex chars", 1200);
+    render();
+    return;
+  }
+
+  uint8_t data[4] = {};
+  for (uint8_t i = 0; i < 4; ++i) {
+    char b[3] = {hex[i * 2], hex[i * 2 + 1], 0};
+    char* end = nullptr;
+    unsigned long v = strtoul(b, &end, 16);
+    if (!end || *end) {
+      if (restoreMode) c.setMode(previousMode);
+      render();
+      ShowStatusAction::show("Bad hex", 1200);
+      render();
+      return;
+    }
+    data[i] = (uint8_t)v;
+  }
+
+  render();
+  const bool ok = c.mfuWritePage((uint8_t)page, data);
+  if (restoreMode) c.setMode(previousMode);
+  render();
+  ShowStatusAction::show(ok ? "Page written" : "Write failed", 1400);
+  render();
+}
+
 void ChameleonMfuToolsScreen::onItemSelected(uint8_t index) {
   if (index == 0) Screen.push(new ChameleonMfuScreen());
   else if (index == 1) _writeTag();
   else if (index == 2) _eraseTag();
+  else if (index == 3) Screen.push(new ChameleonMfuPagesScreen());
+  else if (index == 4) _writePage();
 }
 
 void ChameleonMfuToolsScreen::onBack() { Screen.goBack(); }

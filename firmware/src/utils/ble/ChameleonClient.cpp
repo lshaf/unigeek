@@ -1200,6 +1200,17 @@ bool ChameleonClient::mfuReadDump(const MfuTagInfo& info, uint8_t* out,
   return done == total;
 }
 
+bool ChameleonClient::mfuWritePage(uint8_t page, const uint8_t data[4]) {
+  if (!data) return false;
+  uint8_t cmd[6] = {0xA2, page, data[0], data[1], data[2], data[3]};
+  uint8_t rsp[8] = {};
+  uint16_t len = 0;
+  if (!_mfuRaw(*this, cmd, sizeof(cmd), rsp, &len, sizeof(rsp))) return false;
+  // Type-2 WRITE acknowledges with 4-bit ACK 0xA. Some Chameleon firmware
+  // paths return it in a full byte, while others report no data on success.
+  return len == 0 || (len >= 1 && (rsp[0] & 0x0F) == 0x0A);
+}
+
 bool ChameleonClient::mfuWriteNtag215User(const uint8_t* dump, uint16_t dumpLen,
                                            MfuProgressCallback progress,
                                            const MfuTagInfo* expectedTarget) {

@@ -220,6 +220,8 @@ public:
   bool mfuReadDump(const MfuTagInfo& info, uint8_t* out, uint16_t outSize,
                    uint16_t* bytesRead = nullptr,
                    MfuProgressCallback progress = nullptr);
+  // Raw Type-2 WRITE of exactly one 4-byte page.
+  bool mfuWritePage(uint8_t page, const uint8_t data[4]);
   // Write the writable user-memory area of a physical NTAG215 (pages 4..129).
   // Manufacturer/UID, lock and configuration/password pages are deliberately
   // preserved.

@@ -46,6 +46,7 @@ private:
     STATE_MAGIC_MENU,
     STATE_MAGIC_DETECT,
     STATE_RAW_RESULT,
+    STATE_ULTRALIGHT_DUMP,
     STATE_EMULATE,
     STATE_NTAG_MENU,
     STATE_NDEF_WRITE_MENU,
@@ -123,7 +124,10 @@ private:
     {"NDEF Operations"},
   };
 
-  ListItem _ulTagItems[2] = {
+  ListItem _ulTagItems[5] = {
+    {"Read Tag"},
+    {"Write to Tag"},
+    {"Erase Tag"},
     {"Read Pages"},
     {"Write Page"},
   };
@@ -173,6 +177,8 @@ private:
   uint8_t  _writePreviewSourceUid[7] = {};
   uint8_t  _writePreviewSourceUidLen = 0;
   bool     _writePreviewReplaceUid = true;
+  String   _ulTypeName;
+  uint16_t _ulPages = 0;
 
   enum NdefTarget_e {
     NDEF_TARGET_ULTRALIGHT,
@@ -241,8 +247,17 @@ private:
   void _doShowKeys();
   void _doDictionaryPicker();
   void _doDictionaryAttackWithFile(uint8_t fileIndex);
-  void _doUltralightDump();
-  void _doUltralightWrite();
+  void _doUltralightReadTag();
+  void _doUltralightWriteTag();
+  void _doUltralightEraseTag();
+  void _doUltralightReadPages();
+  void _doUltralightWritePage();
+  bool _detectUltralightTag(uint16_t& pages, const char*& typeName);
+  bool _readUltralightDump(uint16_t pages);
+  bool _writeUltralightNtag215Dump(const uint8_t* dump, size_t len);
+  void _showUltralightTagDetails(const char* typeName, uint16_t pages);
+  void _showUltralightDumpActions();
+  void _saveUltralightDump(const char* typeName);
   void _doReadNdef();
   void _doReadClassicNdef();
   void _showNdefResult(const uint8_t* uid, uint8_t uidLen,
