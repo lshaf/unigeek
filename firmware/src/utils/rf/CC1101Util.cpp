@@ -8,6 +8,7 @@
 #include "KeeloqUtil.h"
 #include "SubGhzDecoders.h"
 #include <ELECHOUSE_CC1101_SRC_DRV.h>
+#include "utils/ScratchBuffer.h"
 
 // ── CC1101 antenna-path selection ───────────────────────────────────────────
 // Select the appropriate RF switch path for the requested frequency band.
@@ -252,7 +253,8 @@ bool CC1101Util::pollReceive(Signal& out) {
   const uint16_t n = _rmt.readFrame(_rxFrame, kRxFrameMax);
   if (n >= 8) {
     // The decoders take unsigned durations; build the magnitude view once.
-    static unsigned int mag[kRxFrameMax];
+    static unsigned int* mag = nullptr;
+    if (!scratchAlloc(mag, kRxFrameMax)) return false;
     for (uint16_t i = 0; i < n; i++) {
       const int32_t v = _rxFrame[i];
       mag[i] = (unsigned int)(v < 0 ? -v : v);
@@ -367,7 +369,8 @@ void CC1101Util::pollRawRecord() {
 
   // ── Capturing: drain every completed (per-repeat) frame. ───────────────────
   if (s_rawCount < kRawRecMax) {
-    static int32_t frame[kRxFrameMax];
+    static int32_t* frame = nullptr;
+    if (!scratchAlloc(frame, kRxFrameMax)) return;
     uint16_t n;
     while ((n = _rmt.readFrame(frame, kRxFrameMax)) > 0) {
       // Each frame is one repeat, delimited by the RMT idle gap. Re-insert that
@@ -920,7 +923,8 @@ void CC1101Util::_sendRcSwitch(const Signal& sig) {
 
   // Encode the waveform to durations, then transmit over RMT (hardware-timed).
   // Bound: 10 repeats × (~24 preamble + 2×64 bits + trailer) fits comfortably.
-  static int32_t tx[2048];
+  static int32_t* tx = nullptr;
+  if (!scratchAlloc(tx, 2048)) return;
   const uint16_t k = sw.encodeToDurations(sig.key, (unsigned int)sig.bit, tx, 2048);
   _rmt.beginTx((gpio_num_t)_gdo0Pin);
   _rmt.sendDurations(tx, k);
@@ -945,7 +949,8 @@ bool CC1101Util::beginBruteTx(float freq) {
 
 void CC1101Util::sendBruteCode(int protoNum, uint64_t key, int bits, int te, int repeat) {
   if (!_rmt.active() || bits <= 0) return;
-  static int32_t tx[512];   // 24-bit x several repeats fits comfortably
+  static int32_t* tx = nullptr;   // 24-bit x several repeats fits comfortably
+  if (!scratchAlloc(tx, 512)) return;
   RCSwitchUtil sw;
   sw.setProtocol(protoNum);
   if (te > 0) sw.setPulseLength(te);

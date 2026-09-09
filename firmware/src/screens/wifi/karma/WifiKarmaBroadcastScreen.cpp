@@ -10,6 +10,7 @@
 #include <esp_wifi.h>
 #include <FS.h>
 #include <string.h>
+#include "utils/ScratchBuffer.h"
 
 WifiKarmaBroadcastScreen* WifiKarmaBroadcastScreen::_instance = nullptr;
 
@@ -672,7 +673,8 @@ void WifiKarmaBroadcastScreen::_optEvilAp()
   }
 
   // Snapshot the harvested SSID pool for the picker.
-  static char names[MAX_SSID][33];
+  static char (*names)[33] = nullptr;
+  if (!scratchAlloc(names, MAX_SSID)) return;
   int n = 0;
   portENTER_CRITICAL(&_lock);
   int cnt = _ssidCount;
@@ -779,7 +781,8 @@ void WifiKarmaBroadcastScreen::_saveProbes()
     return;
   }
 
-  static char names[MAX_SSID][33];
+  static char (*names)[33] = nullptr;
+  if (!scratchAlloc(names, MAX_SSID)) return;
   portENTER_CRITICAL(&_lock);
   int cnt = _ssidCount;
   for (int i = 0; i < cnt && i < MAX_SSID; i++) {

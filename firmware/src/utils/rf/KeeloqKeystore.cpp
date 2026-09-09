@@ -2,8 +2,11 @@
 #include "core/Device.h"
 
 KeeloqKeystore& KeeloqKeystore::instance() {
-  static KeeloqKeystore inst;
-  return inst;
+  // Heap-allocated on first use: the keystore is only touched by the
+  // SubGHz/KeeLoq paths, so boards that never open them don't pay for it
+  // in the static DRAM budget.
+  static KeeloqKeystore* inst = new KeeloqKeystore();
+  return *inst;
 }
 
 void KeeloqKeystore::ensureLoaded() {

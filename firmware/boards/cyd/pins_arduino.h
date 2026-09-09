@@ -128,4 +128,9 @@ static const uint8_t SCL = GROVE_SCL;
 
 // ─── Firmware Feature Flags ───────────────────────────────
 #define DEVICE_HAS_TOUCH_NAV
+
+// 4 MB flash: Games and Chameleon Ultra are compiled out (~1.2 MB of .text)
+// so the build fits the 3 MB app0 partition. Sources are also excluded via
+// build_src_filter in this board's config.ini - keep the two in step.
+#define MINI_BUILD
 #define DEVICE_HAS_SCREEN_ORIENT

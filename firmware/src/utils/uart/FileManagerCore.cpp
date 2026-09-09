@@ -1,6 +1,7 @@
 #include "utils/uart/FileManagerCore.h"
 #include "core/Device.h"
 #include "utils/FirmwareInfo.h"
+#include "utils/ScratchBuffer.h"
 
 void FileManagerCore::reset() {
   resetParser();
@@ -13,15 +14,18 @@ void FileManagerCore::reset() {
   _getCtx = 0;
 }
 
+static constexpr uint32_t kGetChunkBuf = 2048;
+
 void FileManagerCore::pump() {
   if (!_getActive || !_getFile) return;
   // Streaming a 300 KB file as a single blocking loop starves the BLE TX
   // queue and trips the task watchdog. Instead, send one chunk per pump()
   // (per main-loop iteration) so other work — including BLE notification
   // draining — gets a chance to run between frames.
-  static uint8_t buf[2048];
+  static uint8_t* buf = nullptr;
+  if (!scratchAlloc(buf, kGetChunkBuf)) return;
   uint32_t want = _getChunkSize;
-  if (want > sizeof(buf)) want = sizeof(buf);
+  if (want > kGetChunkBuf) want = kGetChunkBuf;
   int n = _getFile.read(buf, want);
   if (n <= 0) {
     // Drained — emit the zero-length terminator and close.

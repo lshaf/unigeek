@@ -29,12 +29,26 @@ private:
     DrawIconFunc drawIcon;
   };
 
-#if (defined(DEVICE_HAS_LIGHT_SLEEP) || defined(DEVICE_HAS_DEEP_SLEEP) || defined(DEVICE_HAS_POWER_OFF) || defined(APP_MENU_POWER_OFF)) && defined(DEVICE_HAS_TOUCH_NAV)
-  static const uint8_t ITEM_COUNT = 10;
-#elif defined(DEVICE_HAS_LIGHT_SLEEP) || defined(DEVICE_HAS_DEEP_SLEEP) || defined(DEVICE_HAS_POWER_OFF) || defined(APP_MENU_POWER_OFF) || defined(DEVICE_HAS_TOUCH_NAV)
-  static const uint8_t ITEM_COUNT = 9;
+// MINI_BUILD (4 MB flash boards) compiles the Games menu out entirely, so it
+// no longer occupies a grid slot. Keep this in step with the slot indices in
+// MainMenuScreen.cpp.
+#ifdef MINI_BUILD
+#  define APP_MAIN_MENU_GAMES 0
+#  define APP_MAIN_MENU_LUA   0
 #else
-  static const uint8_t ITEM_COUNT = 8;
+#  define APP_MAIN_MENU_GAMES 1
+#  define APP_MAIN_MENU_LUA   1
+#endif
+
+// Always present: Wifi, Bluetooth, HID, Modules, Utility, Settings (6), plus
+// the optional Lua/Games slots and the trailing Home/Power entries.
+
+#if (defined(DEVICE_HAS_LIGHT_SLEEP) || defined(DEVICE_HAS_DEEP_SLEEP) || defined(DEVICE_HAS_POWER_OFF) || defined(APP_MENU_POWER_OFF)) && defined(DEVICE_HAS_TOUCH_NAV)
+  static const uint8_t ITEM_COUNT = 8 + APP_MAIN_MENU_LUA + APP_MAIN_MENU_GAMES;
+#elif defined(DEVICE_HAS_LIGHT_SLEEP) || defined(DEVICE_HAS_DEEP_SLEEP) || defined(DEVICE_HAS_POWER_OFF) || defined(APP_MENU_POWER_OFF) || defined(DEVICE_HAS_TOUCH_NAV)
+  static const uint8_t ITEM_COUNT = 7 + APP_MAIN_MENU_LUA + APP_MAIN_MENU_GAMES;
+#else
+  static const uint8_t ITEM_COUNT = 6 + APP_MAIN_MENU_LUA + APP_MAIN_MENU_GAMES;
 #endif
 
   GridItem _items[ITEM_COUNT];

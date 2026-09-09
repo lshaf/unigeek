@@ -7,14 +7,31 @@
 #include "screens/wifi/WifiMenuScreen.h"
 #include "screens/ble/BLEMenuScreen.h"
 #include "screens/hid/KeyboardMenuScreen.h"
+#ifndef MINI_BUILD
 #include "screens/game/GameMenuScreen.h"
+#endif
 #include "screens/module/ModuleMenuScreen.h"
 #include "screens/utility/UtilityMenuScreen.h"
+#if APP_MAIN_MENU_LUA
 #include "screens/LuaScreen.h"
+#endif
 #include "screens/setting/SettingScreen.h"
 #include "screens/CharacterScreen.h"
 #include "screens/PowerMenuScreen.h"
 #include "ui/components/Icon.h"
+
+// Grid slot indices. MINI_BUILD compiles Lua and Games out, so every entry
+// after them shifts up; expressing the tail relative to Settings keeps the
+// population block, the switch and ITEM_COUNT from drifting apart.
+#if APP_MAIN_MENU_LUA
+static constexpr uint8_t kIdxLua = 5;
+#endif
+#if APP_MAIN_MENU_GAMES
+static constexpr uint8_t kIdxGames = 5 + APP_MAIN_MENU_LUA;
+#endif
+static constexpr uint8_t kIdxSettings = 5 + APP_MAIN_MENU_LUA + APP_MAIN_MENU_GAMES;
+static constexpr uint8_t kIdxExtra0   = kIdxSettings + 1;
+static constexpr uint8_t kIdxExtra1   = kIdxSettings + 2;
 
 void MainMenuScreen::onInit() {
   _items[0] = {"Wifi", Icons::drawWifi};
@@ -22,25 +39,29 @@ void MainMenuScreen::onInit() {
   _items[2] = {"HID", Icons::drawKeyboard};
   _items[3] = {"Modules", Icons::drawModule};
   _items[4] = {"Utility", Icons::drawUtility};
-  _items[5] = {"LUA", Icons::drawLua};
-  _items[6] = {"Games", Icons::drawGame};
-  _items[7] = {"Settings", Icons::drawSetting};
+#if APP_MAIN_MENU_LUA
+  _items[kIdxLua] = {"LUA", Icons::drawLua};
+#endif
+#if APP_MAIN_MENU_GAMES
+  _items[kIdxGames] = {"Games", Icons::drawGame};
+#endif
+  _items[kIdxSettings] = {"Settings", Icons::drawSetting};
 #if defined(DEVICE_HAS_LIGHT_SLEEP) || defined(DEVICE_HAS_DEEP_SLEEP) || defined(DEVICE_HAS_POWER_OFF)
 # ifdef DEVICE_HAS_TOUCH_NAV
-  _items[8] = {"Home", Icons::drawHome};
-  _items[9] = {"Power", Icons::drawPower};
+  _items[kIdxExtra0] = {"Home", Icons::drawHome};
+  _items[kIdxExtra1] = {"Power", Icons::drawPower};
 # else
-  _items[8] = {"Power", Icons::drawPower};
+  _items[kIdxExtra0] = {"Power", Icons::drawPower};
 # endif
 #elif defined(APP_MENU_POWER_OFF)
 # ifdef DEVICE_HAS_TOUCH_NAV
-  _items[8] = {"Home", Icons::drawHome};
-  _items[9] = {"Power Off", Icons::drawPower};
+  _items[kIdxExtra0] = {"Home", Icons::drawHome};
+  _items[kIdxExtra1] = {"Power Off", Icons::drawPower};
 # else
-  _items[8] = {"Power Off", Icons::drawPower};
+  _items[kIdxExtra0] = {"Power Off", Icons::drawPower};
 # endif
 #elif defined(DEVICE_HAS_TOUCH_NAV)
-  _items[8] = {"Home", Icons::drawHome};
+  _items[kIdxExtra0] = {"Home", Icons::drawHome};
 #endif
 
   _selectedIndex    = 0;
@@ -300,25 +321,29 @@ void MainMenuScreen::onItemSelected(uint8_t index) {
   case 2: Screen.push(new KeyboardMenuScreen()); break;
   case 3: Screen.push(new ModuleMenuScreen());   break;
   case 4: Screen.push(new UtilityMenuScreen());  break;
-  case 5: Screen.push(new LuaScreen());          break;
-  case 6: Screen.push(new GameMenuScreen());     break;
-  case 7: Screen.push(new SettingScreen());      break;
+#if APP_MAIN_MENU_LUA
+  case kIdxLua: Screen.push(new LuaScreen()); break;
+#endif
+#if APP_MAIN_MENU_GAMES
+  case kIdxGames: Screen.push(new GameMenuScreen()); break;
+#endif
+  case kIdxSettings: Screen.push(new SettingScreen()); break;
 #if defined(DEVICE_HAS_LIGHT_SLEEP) || defined(DEVICE_HAS_DEEP_SLEEP) || defined(DEVICE_HAS_POWER_OFF)
 # ifdef DEVICE_HAS_TOUCH_NAV
-  case 8: onBack(); break;
-  case 9: Screen.push(new PowerMenuScreen()); break;
+  case kIdxExtra0: onBack(); break;
+  case kIdxExtra1: Screen.push(new PowerMenuScreen()); break;
 # else
-  case 8: Screen.push(new PowerMenuScreen()); break;
+  case kIdxExtra0: Screen.push(new PowerMenuScreen()); break;
 # endif
 #elif defined(APP_MENU_POWER_OFF)
 # ifdef DEVICE_HAS_TOUCH_NAV
-  case 8: onBack(); break;
-  case 9: Uni.Power.powerOff(); break;
+  case kIdxExtra0: onBack(); break;
+  case kIdxExtra1: Uni.Power.powerOff(); break;
 # else
-  case 8: Uni.Power.powerOff(); break;
+  case kIdxExtra0: Uni.Power.powerOff(); break;
 # endif
 #elif defined(DEVICE_HAS_TOUCH_NAV)
-  case 8: onBack(); break;
+  case kIdxExtra0: onBack(); break;
 #endif
   }
 }

@@ -92,6 +92,11 @@ static const uint8_t SCL = GROVE_SCL;
 
 // ─── Firmware Feature Flags ───────────────────────────────
 #define DEVICE_HAS_SOUND          // buzzer attached — enables audio paths and sound settings
+
+// 4 MB flash: Games and Chameleon Ultra are compiled out (~1.2 MB of .text)
+// so the build fits the 3 MB app0 partition. Sources are also excluded via
+// build_src_filter in this board's config.ini - keep the two in step.
+#define MINI_BUILD
                                   // NOTE: no DEVICE_HAS_VOLUME_CONTROL — piezo buzzer has no real volume control
 #define DEVICE_HAS_NAV_MODE_SWITCH // supports switching between default (buttons) and encoder navigation
 #define DEVICE_HAS_SCREEN_ORIENT    // screen rotation + UP/DOWN swap for left/right hand orientation

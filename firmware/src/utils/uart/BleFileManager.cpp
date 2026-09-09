@@ -2,6 +2,7 @@
 #include <Arduino.h>
 #include <NimBLEDevice.h>
 #include <esp_heap_caps.h>
+#include "utils/ScratchBuffer.h"
 
 BleFileManager BleFM;
 
@@ -14,7 +15,7 @@ static const char* NUS_TX_UUID  = "6e400003-b5a3-f393-e0a9-e50e24dcca9e"; // dev
 // RX ring buffer. Large enough for several MTU-sized inbound packets so the
 // BLE callback never has to drop bytes between FileManagerCore drains.
 static constexpr size_t RX_RING = 4096;
-static uint8_t           _rxBuf[RX_RING];
+static uint8_t*          _rxBuf     = nullptr;
 static volatile uint16_t _rxHead    = 0;
 static volatile uint16_t _rxTail    = 0;
 static NimBLECharacteristic* _txChar = nullptr;
@@ -168,6 +169,8 @@ static void _txTaskFn(void*) {
 
 void BleFileManager::begin(const char* deviceName) {
   if (_inited) return;
+  // Must succeed before the RX callback below is registered.
+  if (!scratchAlloc(_rxBuf, RX_RING)) return;
   NimBLEDevice::init(deviceName);
   // init() is idempotent — if another subsystem already brought NimBLE up
   // with a different name (e.g. Claude Buddy), the deviceName passed above

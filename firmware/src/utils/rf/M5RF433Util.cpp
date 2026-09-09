@@ -4,6 +4,7 @@
 
 #include "M5RF433Util.h"
 #include "KeeloqUtil.h"
+#include "utils/ScratchBuffer.h"
 
 bool M5RF433Util::begin(int8_t txPin, int8_t rxPin) {
   _txPin = txPin;
@@ -36,7 +37,8 @@ bool M5RF433Util::beginReceive() {
 bool M5RF433Util::pollReceive(Signal& out) {
   if (!_initialized) return false;
 
-  static int32_t frame[1024];
+  static int32_t* frame = nullptr;
+  if (!scratchAlloc(frame, 1024)) return false;
   const uint16_t n = _rmt.readFrame(frame, 1024);
   if (n < 8) return false;
 
@@ -138,7 +140,8 @@ void M5RF433Util::_sendRcSwitch(const Signal& sig) {
   if (sig.te > 0) sw.setPulseLength(sig.te);
   sw.setRepeatTransmit(10);
 
-  static int32_t tx[2048];
+  static int32_t* tx = nullptr;
+  if (!scratchAlloc(tx, 2048)) return;
   const uint16_t k = sw.encodeToDurations(sig.key, (unsigned int)sig.bit, tx, 2048);
   _rmt.sendDurations(tx, k);
 }

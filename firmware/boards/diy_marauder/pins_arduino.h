@@ -74,3 +74,8 @@ static const uint8_t SCL = GROVE_SCL;
 // rows, LEFT/RIGHT move between columns). Without this flag, UP maps to LEFT
 // and DOWN maps to RIGHT so 2-button devices can still traverse the grid.
 #define DEVICE_HAS_4WAY_NAV
+
+// 4 MB flash: Games and Chameleon Ultra are compiled out (~1.2 MB of .text)
+// so the build fits the 3 MB app0 partition. Sources are also excluded via
+// build_src_filter in this board's config.ini - keep the two in step.
+#define MINI_BUILD
