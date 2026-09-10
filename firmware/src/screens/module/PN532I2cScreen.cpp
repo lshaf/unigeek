@@ -982,13 +982,21 @@ void PN532I2cScreen::_doReadEmv() {
     showEmvStatus("SAM init failed");
     return;
   }
+  // Give the RF field a brief moment to settle. Some PN532 modules are
+  // unreliable if InListPassiveTarget follows SAMConfig immediately.
+  delay(60);
 
   // Use one InListPassiveTarget activation for the complete EMV exchange.
   // Adafruit-PN532_Bruce readPassiveTargetID() does not update _inListedTag,
   // while inDataExchange() uses _inListedTag as Tg. Calling both methods also
   // tries to activate the same card twice. inListPassiveTarget() both activates
   // the ISO14443-A target and stores its target number for inDataExchange().
-  if (!_nfc->inListPassiveTarget()) {
+  bool targetActive = false;
+  for (uint8_t attempt = 0; attempt < 3 && !targetActive; ++attempt) {
+    targetActive = _nfc->inListPassiveTarget();
+    if (!targetActive) delay(80);
+  }
+  if (!targetActive) {
     showEmvStatus("Target activation failed");
     return;
   }
@@ -1042,6 +1050,55 @@ void PN532I2cScreen::_doReadEmv() {
     return;
   }
 
+  // Select the application with the lowest non-zero EMV priority. If no
+  // priority indicator is present, preserve the PPSE order and select #1.
+  uint8_t selected = 0;
+  uint8_t bestPriority = 0xFF;
+  for (uint8_t i = 0; i < appCount; ++i) {
+    const uint8_t priority = apps[i].priority & 0x0F;
+    if (priority && priority < bestPriority) {
+      selected = i;
+      bestPriority = priority;
+    }
+  }
+
+  uint8_t selectAid[22] = {};
+  const uint8_t selectAidLen = (uint8_t)EmvReader::buildSelectAid(apps[selected], selectAid);
+  if (!selectAidLen) {
+    showEmvStatus("Invalid application AID");
+    return;
+  }
+
+  uint8_t appResponse[220] = {};
+  uint8_t appResponseLen = sizeof(appResponse);
+  if (!_nfc->inDataExchange(selectAid, selectAidLen, appResponse, &appResponseLen)) {
+    if (pn532_packetbuffer[5] == PN532_PN532TOHOST &&
+        pn532_packetbuffer[6] == PN532_RESPONSE_INDATAEXCHANGE) {
+      char msg[24];
+      snprintf(msg, sizeof(msg), "AID PN532 %02X", pn532_packetbuffer[7] & 0x3F);
+      showEmvStatus(msg);
+    } else {
+      showEmvStatus("AID transport timeout");
+    }
+    return;
+  }
+
+  if (appResponseLen < 2) {
+    showEmvStatus("Invalid AID response");
+    return;
+  }
+  const uint8_t aidSw1 = appResponse[appResponseLen - 2];
+  const uint8_t aidSw2 = appResponse[appResponseLen - 1];
+  if (aidSw1 != 0x90 || aidSw2 != 0x00) {
+    char msg[20];
+    snprintf(msg, sizeof(msg), "AID SW %02X%02X", aidSw1, aidSw2);
+    showEmvStatus(msg);
+    return;
+  }
+
+  EmvReader::SelectedApplication selectedApp;
+  EmvReader::parseSelectAid(appResponse, appResponseLen, selectedApp);
+
   _state = STATE_EMV_RESULT;
   _resetRows();
   _pushRow("Applications", String(appCount));
@@ -1051,6 +1108,10 @@ void PN532I2cScreen::_doReadEmv() {
     if (apps[i].label.length()) _pushWrappedRow(String("Label ") + n, apps[i].label);
     if (apps[i].priority) _pushRow(String("Priority ") + n, String(apps[i].priority & 0x0F));
   }
+  _pushRow("Selected", String(selected + 1));
+  if (selectedApp.label.length()) _pushWrappedRow("App Label", selectedApp.label);
+  if (selectedApp.preferredName.length()) _pushWrappedRow("Preferred Name", selectedApp.preferredName);
+  if (selectedApp.pdolLen) _pushWrappedRow("PDOL", EmvReader::hex(selectedApp.pdol, selectedApp.pdolLen));
   _scrollView.setRows(_rows, _rowCount);
   render();
 }

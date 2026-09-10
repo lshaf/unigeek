@@ -13,6 +13,13 @@ struct Application {
   uint8_t priority = 0;
 };
 
+struct SelectedApplication {
+  String label;
+  String preferredName;
+  uint8_t pdol[64] = {};
+  uint8_t pdolLen = 0;
+};
+
 inline bool readLength(const uint8_t* data, size_t len, size_t& pos, size_t& outLen) {
   if (pos >= len) return false;
   uint8_t b = data[pos++];
@@ -98,6 +105,41 @@ inline uint8_t parsePpse(const uint8_t* response, size_t len, Application* apps,
   uint8_t count = 0;
   scanTemplates(response, len - 2, apps, count, maxApps);
   return count;
+}
+
+inline void parseSelectedTemplate(const uint8_t* data, size_t len, SelectedApplication& app) {
+  size_t pos = 0;
+  while (pos < len) {
+    uint32_t tag = 0; size_t l = 0;
+    if (!readTag(data, len, pos, tag) || !readLength(data, len, pos, l)) return;
+    const uint8_t* v = data + pos;
+    if (tag == 0x50 && app.label.length() == 0) {
+      app.label = ascii(v, l);
+    } else if (tag == 0x9F12 && app.preferredName.length() == 0) {
+      app.preferredName = ascii(v, l);
+    } else if (tag == 0x9F38 && l > 0) {
+      const size_t n = l < sizeof(app.pdol) ? l : sizeof(app.pdol);
+      memcpy(app.pdol, v, n);
+      app.pdolLen = (uint8_t)n;
+    } else if ((tag & 0x20) != 0) {
+      parseSelectedTemplate(v, l, app);
+    }
+    pos += l;
+  }
+}
+
+inline bool parseSelectAid(const uint8_t* response, size_t len, SelectedApplication& app) {
+  if (!response || len < 2 || response[len - 2] != 0x90 || response[len - 1] != 0x00) return false;
+  parseSelectedTemplate(response, len - 2, app);
+  return true;
+}
+
+inline size_t buildSelectAid(const Application& app, uint8_t out[22]) {
+  if (!app.aidLen || app.aidLen > sizeof(app.aid)) return 0;
+  out[0] = 0x00; out[1] = 0xA4; out[2] = 0x04; out[3] = 0x00; out[4] = app.aidLen;
+  memcpy(out + 5, app.aid, app.aidLen);
+  out[5 + app.aidLen] = 0x00;
+  return 6 + app.aidLen;
 }
 
 inline size_t buildSelectPpse(uint8_t out[20]) {
