@@ -127,6 +127,35 @@ static bool _pn532Type2WritePage(Adafruit_PN532* nfc, TwoWire* wire,
   return len == 0 || (len >= 1 && (rsp[0] & 0x0F) == 0x0A);
 }
 
+
+static bool _type2DefaultCc(const char* typeName, uint8_t cc[4]) {
+  if (!typeName || !cc) return false;
+  uint8_t size = 0;
+  if (strcmp(typeName, "NTAG210") == 0 ||
+      strcmp(typeName, "Ultralight EV1 11") == 0 ||
+      strcmp(typeName, "Ultralight") == 0) size = 0x06;
+  else if (strcmp(typeName, "NTAG212") == 0 ||
+           strcmp(typeName, "Ultralight EV1 21") == 0) size = 0x10;
+  else if (strcmp(typeName, "NTAG213") == 0 ||
+           strcmp(typeName, "Ultralight C") == 0) size = 0x12;
+  else if (strcmp(typeName, "NTAG215") == 0) size = 0x3F;
+  else if (strcmp(typeName, "NTAG216") == 0) size = 0x6F;
+  else return false;
+  cc[0] = 0xE1; cc[1] = 0x10; cc[2] = size; cc[3] = 0x00;
+  return true;
+}
+
+static bool _type2CcIsValid(const uint8_t cc[4]) {
+  return cc && cc[0] == 0xE1 && (cc[1] & 0xF0) == 0x10 && cc[2] != 0;
+}
+
+static bool _type2CcCanProgramSafely(const uint8_t current[4], const uint8_t desired[4]) {
+  // Conservative rule that is also safe for OTP-style page 3: formatting may
+  // set previously-clear bits, but never requires clearing an already-set bit.
+  for (uint8_t i = 0; i < 4; ++i)
+    if ((current[i] & (uint8_t)~desired[i]) != 0) return false;
+  return true;
+}
 static const char* _ultralightSensitivePageLabel(const char* typeName, uint16_t page) {
   if (!typeName) return nullptr;
 
@@ -674,6 +703,10 @@ void PN532I2cScreen::onItemSelected(uint8_t index) {
         case 2:
           _ndefTarget = NDEF_TARGET_ULTRALIGHT;
           _doEraseNdef();
+          break;
+        case 3:
+          _ndefTarget = NDEF_TARGET_ULTRALIGHT;
+          _doFormatNdef();
           break;
       }
       break;
@@ -4114,6 +4147,49 @@ void PN532I2cScreen::_doEraseNdef() {
   const bool success = _pn532Type2WritePage(_nfc, _wire, 4, emptyNdef);
 
   ShowStatusAction::show(success ? "NDEF erased" : "NDEF erase failed");
+  _goUltralightNdef();
+}
+
+void PN532I2cScreen::_doFormatNdef() {
+  renderOperationTitle("Format NDEF");
+  _ndefTarget = NDEF_TARGET_ULTRALIGHT;
+  renderTagPrompt("Place tag on reader...", bodyX(), bodyY(), bodyW(), bodyH());
+
+  uint16_t pages = 0;
+  const char* typeName = nullptr;
+  if (!_detectUltralightTag(pages, typeName)) {
+    ShowStatusAction::show("No Type 2 tag");
+    _goUltralightNdef();
+    return;
+  }
+  if (!_pn532EnsureUltralightAuth(_nfc, _wire, typeName, pages, false)) {
+    _goUltralightNdef();
+    return;
+  }
+
+  uint8_t cc[4] = {}, desired[4] = {};
+  if (!_pn532Type2ReadPage(_nfc, _wire, 3, cc) || !_type2DefaultCc(typeName, desired)) {
+    ShowStatusAction::show("Format unsupported");
+    _goUltralightNdef();
+    return;
+  }
+
+  if (!_type2CcIsValid(cc)) {
+    if (!_type2CcCanProgramSafely(cc, desired)) {
+      ShowStatusAction::show("CC cannot be safely formatted");
+      _goUltralightNdef();
+      return;
+    }
+    if (!_pn532Type2WritePage(_nfc, _wire, 3, desired)) {
+      ShowStatusAction::show("CC write failed");
+      _goUltralightNdef();
+      return;
+    }
+  }
+
+  const uint8_t emptyNdef[4] = {0x03, 0x00, 0xFE, 0x00};
+  const bool ok = _pn532Type2WritePage(_nfc, _wire, 4, emptyNdef);
+  ShowStatusAction::show(ok ? "NDEF formatted" : "Format failed");
   _goUltralightNdef();
 }
 

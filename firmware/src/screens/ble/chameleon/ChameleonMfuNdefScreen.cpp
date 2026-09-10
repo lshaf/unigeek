@@ -36,6 +36,40 @@ void prog(uint16_t done, uint16_t total) {
 
 constexpr const char* kNdefDir = "/unigeek/nfc/ndefs";
 
+bool type2DefaultCc(uint16_t type, uint8_t cc[4]) {
+  uint8_t size = 0;
+  switch (type) {
+    case ChameleonClient::MFU_NTAG210:
+    case ChameleonClient::MFU_ULTRALIGHT_EV1_11:
+    case ChameleonClient::MFU_ULTRALIGHT:
+      size = 0x06; break;
+    case ChameleonClient::MFU_NTAG212:
+    case ChameleonClient::MFU_ULTRALIGHT_EV1_21:
+      size = 0x10; break;
+    case ChameleonClient::MFU_NTAG213:
+    case ChameleonClient::MFU_ULTRALIGHT_C:
+      size = 0x12; break;
+    case ChameleonClient::MFU_NTAG215:
+      size = 0x3F; break;
+    case ChameleonClient::MFU_NTAG216:
+      size = 0x6F; break;
+    default:
+      return false;
+  }
+  cc[0] = 0xE1; cc[1] = 0x10; cc[2] = size; cc[3] = 0x00;
+  return true;
+}
+
+bool type2CcIsValid(const uint8_t cc[4]) {
+  return cc && cc[0] == 0xE1 && (cc[1] & 0xF0) == 0x10 && cc[2] != 0;
+}
+
+bool type2CcCanProgramSafely(const uint8_t current[4], const uint8_t desired[4]) {
+  for (uint8_t i = 0; i < 4; ++i)
+    if ((current[i] & (uint8_t)~desired[i]) != 0) return false;
+  return true;
+}
+
 }  // namespace
 
 const char* ChameleonMfuNdefScreen::title() {
@@ -289,6 +323,65 @@ void ChameleonMfuNdefScreen::erase() {
   writeRecord(nullptr, 0, "Erase NDEF");
   goMenu();
 }
+
+void ChameleonMfuNdefScreen::format() {
+  operationTitle("Format NDEF");
+  _running = true;
+
+  auto& c = ChameleonClient::get();
+  uint8_t previousMode = 0;
+  const bool restoreMode = c.getMode(&previousMode);
+  c.setMode(1);
+
+  ChameleonClient::MfuTagInfo info = {};
+  renderTagPrompt("Place tag on reader...", bodyX(), bodyY(), bodyW(), bodyH());
+  if (!c.mfuDetect(&info)) {
+    if (restoreMode) c.setMode(previousMode);
+    ShowStatusAction::show("No Type 2 tag");
+    _running = false;
+    goMenu();
+    return;
+  }
+
+  uint8_t pwd[4] = {}; bool usePwd = false;
+  if (!ChameleonMfuAuthUtils::prepare(c, info, false, pwd, usePwd)) {
+    if (restoreMode) c.setMode(previousMode);
+    _running = false;
+    goMenu();
+    return;
+  }
+
+  uint8_t cc[4] = {}, desired[4] = {};
+  const bool ccRead = usePwd ? c.mfuReadPageSession(3, cc) : c.mfuReadPage(3, cc);
+  if (!ccRead || !type2DefaultCc(info.type, desired)) {
+    if (restoreMode) c.setMode(previousMode);
+    ShowStatusAction::show("Format unsupported");
+    _running = false;
+    goMenu();
+    return;
+  }
+
+  bool ok = true;
+  if (!type2CcIsValid(cc)) {
+    if (!type2CcCanProgramSafely(cc, desired)) {
+      if (restoreMode) c.setMode(previousMode);
+      ShowStatusAction::show("CC cannot be safely formatted");
+      _running = false;
+      goMenu();
+      return;
+    }
+    ok = usePwd ? c.mfuWritePageSession(3, desired) : c.mfuWritePage(3, desired);
+  }
+
+  const uint8_t emptyNdef[4] = {0x03, 0x00, 0xFE, 0x00};
+  if (ok) ok = usePwd ? c.mfuWritePageSession(4, emptyNdef)
+                      : c.mfuWritePage(4, emptyNdef);
+
+  if (restoreMode) c.setMode(previousMode);
+  ShowStatusAction::show(ok ? "NDEF formatted" : "Format failed");
+  _running = false;
+  goMenu();
+}
 void ChameleonMfuNdefScreen::writeBuilt(uint8_t kind) {
   const char* prompt = kind == 0 ? "Text"
                      : kind == 1 ? "URL"
@@ -356,6 +449,7 @@ void ChameleonMfuNdefScreen::onItemSelected(uint8_t index) {
       case 0: read();    break;
       case 1: goWrite(); break;
       case 2: erase();   break;
+      case 3: format();  break;
     }
     return;
   }

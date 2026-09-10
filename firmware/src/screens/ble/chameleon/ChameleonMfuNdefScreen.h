@@ -22,10 +22,11 @@ private:
   State _state   = MENU;
   bool  _running = false;
 
-  ListItem _menu[3] = {
+  ListItem _menu[4] = {
     {"Read NDEF"},
     {"Write NDEF"},
     {"Erase NDEF"},
+    {"Format NDEF"},
   };
 
   ListItem _write[6] = {
@@ -52,6 +53,7 @@ private:
   bool writeRecord(const uint8_t* ndef, size_t len, const char* opTitle);
   void read();
   void erase();
+  void format();
   void show(const uint8_t* ndef, size_t len, const uint8_t uid[7]);
   void add(const String& label, const String& value);
   void writeBuilt(uint8_t kind);

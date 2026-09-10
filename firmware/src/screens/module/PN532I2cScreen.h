@@ -141,10 +141,11 @@ private:
     {"Lock Tag"},
   };
 
-  ListItem _ulNdefItems[3] = {
+  ListItem _ulNdefItems[4] = {
     {"Read NDEF"},
     {"Write NDEF"},
     {"Erase NDEF"},
+    {"Format NDEF"},
   };
 
   LogView _magicLog;
@@ -290,6 +291,7 @@ private:
   void _doSaveNdef();
   void _doWriteCurrentNdef();
   void _doEraseNdef();
+  void _doFormatNdef();
   void _doEraseClassicNdef();
   bool _writeNdefRecord(const uint8_t* ndef, size_t ndefLen);
   bool _writeUltralightNdefRecord(const uint8_t* ndef, size_t ndefLen);
