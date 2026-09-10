@@ -12,6 +12,7 @@
 #include "../../utils/nfc/NdefBuilder.h"
 #include "../../utils/nfc/NdefParser.h"
 #include "../../utils/nfc/NfcDumpBuilder.h"
+#include "../../utils/nfc/EmvReader.h"
 
 #include "utils/nfc/MfcKeyStore.h"
 // ── raw I2C helpers for Gen1a / Gen3 ──────────────────────────────────────
@@ -383,6 +384,7 @@ const char* PN532I2cScreen::title() {
     case STATE_INFO:            return "Firmware Info";
     case STATE_SCAN_RESULT:     return "Tag Details";
     case STATE_SCAN_14A:        return "Scan Tag";
+    case STATE_EMV_RESULT:      return "EMV Details";
     case STATE_MIFARE_MENU:     return "MIFARE Classic";
     case STATE_MIFARE_TAG_MENU: return "Tag Operations";
     case STATE_MIFARE_NDEF_MENU:return "NDEF Operations";
@@ -421,6 +423,15 @@ void PN532I2cScreen::onInit() {
 }
 
 void PN532I2cScreen::onUpdate() {
+  if (_state == STATE_EMV_RESULT) {
+    if (Uni.Nav->wasPressed()) {
+      auto dir = Uni.Nav->readDirection();
+      if (dir == INavigation::DIR_BACK) _goMain();
+      else _scrollView.onNav(dir);
+    }
+    return;
+  }
+
   if (_state == STATE_SCAN_14A) {
     if (Uni.Nav->wasPressed()) {
       auto dir = Uni.Nav->readDirection();
@@ -625,10 +636,11 @@ void PN532I2cScreen::onItemSelected(uint8_t index) {
     case STATE_MAIN_MENU:
       switch (index) {
         case 0: _doScan14A();         break;
-        case 1: _goMifare();          break;
-        case 2: _goUltralight();      break;
-        case 3: _goMagic();           break;
-        case 4: _showFirmwareInfo();  break;
+        case 1: _doReadEmv();         break;
+        case 2: _goMifare();          break;
+        case 3: _goUltralight();      break;
+        case 4: _goMagic();           break;
+        case 5: _showFirmwareInfo();  break;
       }
       break;
     case STATE_MIFARE_MENU:
@@ -947,7 +959,57 @@ void PN532I2cScreen::_cleanup() {
 
 void PN532I2cScreen::_goMain() {
   _state = STATE_MAIN_MENU;
-  setItems(_mainItems, 5);
+  setItems(_mainItems, 6);
+  render();
+}
+
+
+void PN532I2cScreen::_doReadEmv() {
+  renderOperationTitle("Read EMV");
+  renderTagPrompt("Place card on reader...", bodyX(), bodyY(), bodyW(), bodyH());
+
+  if (!_scanCardOrShow(5000)) {
+    _goMain();
+    return;
+  }
+
+  // EMV contactless applications use ISO-DEP. The PN532 activates an
+  // ISO14443-4A target during selection; inDataExchange() then carries APDUs.
+  if ((_sak & 0x20) == 0) {
+    ShowStatusAction::show("Tag not supported");
+    _goMain();
+    return;
+  }
+
+  uint8_t apdu[20] = {};
+  const uint8_t apduLen = (uint8_t)EmvReader::buildSelectPpse(apdu);
+  uint8_t response[64] = {};
+  uint8_t responseLen = sizeof(response);
+  if (!_nfc->inDataExchange(apdu, apduLen, response, &responseLen)) {
+    ShowStatusAction::show("EMV read failed");
+    _goMain();
+    return;
+  }
+
+  EmvReader::Application apps[EmvReader::kMaxApps];
+  const uint8_t appCount = EmvReader::parsePpse(response, responseLen, apps, EmvReader::kMaxApps);
+  if (!appCount) {
+    ShowStatusAction::show("EMV not found");
+    _goMain();
+    return;
+  }
+
+  _state = STATE_EMV_RESULT;
+  _resetRows();
+  _pushRow("UID", _hexUid(_uid, _uidLen));
+  _pushRow("Applications", String(appCount));
+  for (uint8_t i = 0; i < appCount; ++i) {
+    const String n = String(i + 1);
+    _pushWrappedRow(String("AID ") + n, EmvReader::hex(apps[i].aid, apps[i].aidLen));
+    if (apps[i].label.length()) _pushWrappedRow(String("Label ") + n, apps[i].label);
+    if (apps[i].priority) _pushRow(String("Priority ") + n, String(apps[i].priority & 0x0F));
+  }
+  _scrollView.setRows(_rows, _rowCount);
   render();
 }
 
