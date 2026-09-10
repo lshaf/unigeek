@@ -687,8 +687,7 @@ void PN532I2cScreen::onItemSelected(uint8_t index) {
       else if (index == 1) _doUltralightWritePage();
       else if (index == 2) _doUltralightSetPassword();
       else if (index == 3) _doUltralightRemovePassword();
-      else if (index == 4) _doUltralightConfigureProtection();
-      else if (index == 5) _doUltralightLockTag();
+      else if (index == 4) _doUltralightLockTag();
       break;
     case STATE_ULTRALIGHT_NDEF_MENU:
       switch (index) {
@@ -2567,12 +2566,12 @@ void PN532I2cScreen::_doUltralightSetPassword() {
   const uint16_t cfg = _ultralightConfig0(typeName);
 
   uint8_t auth0 = 0xFF, access = 0;
-  bool protectionReadable = _pn532ReadUltralightProtection(
+  const bool protectionReadable = _pn532ReadUltralightProtection(
       _nfc, _wire, typeName, pages, auth0, access);
   const bool wasProtected = !protectionReadable || (auth0 != 0xFF && auth0 < pages);
 
-  // If the tag is already protected, authenticate with the current text
-  // password before changing PWD or configuration pages.
+  // Authenticate with the current password before changing an existing
+  // protected configuration.
   if (wasProtected && !_pn532EnsureUltralightAuthForRange(
           _nfc, _wire, typeName, pages, cfg, cfg + 2, false)) {
     _goUltralightAdvanced(); return;
@@ -2583,92 +2582,41 @@ void PN532I2cScreen::_doUltralightSetPassword() {
       !_pn532Type2ReadPageTailSafe(_nfc, _wire, cfg + 1, pages, c1)) {
     ShowStatusAction::show("Read config failed"); _goUltralightAdvanced(); return;
   }
-  if (c1[0] & 0x40) {
-    // CFGLCK does not prevent changing PWD itself, but on an unprotected tag
-    // it would prevent us from enabling the expected write-only protection.
-    if (!wasProtected) {
-      ShowStatusAction::show("Configuration locked"); _goUltralightAdvanced(); return;
-    }
-  }
 
   uint8_t newPwd[4] = {};
   if (!_promptUltralightPassword(newPwd, "New Password")) {
     _goUltralightAdvanced(); return;
   }
-
-  bool ok = _pn532Type2WritePage(_nfc, _wire, (uint8_t)(cfg + 2), newPwd);
-  if (ok && !wasProtected) {
-    // Match the user-facing semantics of NFC Tools: setting a password on an
-    // open tag makes the user area write-protected while reads stay public.
-    c1[0] &= (uint8_t)~0x80u; // PROT=0: write-only protection
-    c0[3] = 4;               // protect user memory from page 4
-    ok = _pn532Type2WritePage(_nfc, _wire, (uint8_t)(cfg + 1), c1);
-    if (ok) ok = _pn532Type2WritePage(_nfc, _wire, (uint8_t)cfg, c0);
-  }
-
-  ShowStatusAction::show(ok ? "Password set" : "Password write failed");
-  _goUltralightAdvanced();
-}
-
-void PN532I2cScreen::_doUltralightConfigureProtection() {
-  renderOperationTitle("Configure Protection");
-  renderTagPrompt("Place tag on reader...", bodyX(), bodyY(), bodyW(), bodyH());
-  uint16_t pages = 0; const char* typeName = nullptr;
-  if (!_detectUltralightTag(pages, typeName) || _ultralightConfig0(typeName) == 0xFFFF) {
-    ShowStatusAction::show("Protection not supported"); _goUltralightAdvanced(); return;
-  }
-  const uint16_t cfg = _ultralightConfig0(typeName);
-  uint8_t auth0Before = 0xFF, accessBefore = 0;
-  const bool protectionReadable = _pn532ReadUltralightProtection(
-      _nfc, _wire, typeName, pages, auth0Before, accessBefore);
-  const bool alreadyProtected = protectionReadable && auth0Before != 0xFF && auth0Before < pages;
-
-  if (alreadyProtected) {
-    if (!_pn532EnsureUltralightAuthForRange(_nfc, _wire, typeName, pages, cfg, cfg + 1, false)) {
-      _goUltralightAdvanced(); return;
-    }
-  } else {
-    // Before enabling protection on an open tag, verify that the user knows
-    // the current text password. Otherwise AUTH0 could be enabled with an
-    // unknown/default PWD and make subsequent writes inaccessible.
-    uint8_t pwd[4] = {};
-    if (!_promptUltralightPassword(pwd, "Password") ||
-        !_pn532UltralightPwdAuth(_nfc, _wire, pwd)) {
-      if (!InputTextAction::wasCancelled()) ShowStatusAction::show("Authentication failed");
-      _goUltralightAdvanced(); return;
-    }
-  }
-  uint8_t c0[4] = {}, c1[4] = {};
-  if (!_pn532Type2ReadPageTailSafe(_nfc, _wire, cfg, pages, c0) ||
-      !_pn532Type2ReadPageTailSafe(_nfc, _wire, cfg + 1, pages, c1)) {
-    ShowStatusAction::show("Read config failed"); _goUltralightAdvanced(); return;
-  }
-  if (c1[0] & 0x40) { ShowStatusAction::show("Configuration locked"); _goUltralightAdvanced(); return; }
-
-  const int first = InputNumberAction::popup(
-      (String("Protect from (4..") + String(pages - 1) + ")").c_str(), 4, pages - 1, 4);
-  if (InputNumberAction::wasCancelled()) { _goUltralightAdvanced(); return; }
   static const InputSelectAction::Option modes[] = {
-    {"Write only", "w"}, {"Read + Write", "rw"},
+    {"Write Only", "w"}, {"Read & Write", "rw"},
   };
   const char* mode = InputSelectAction::popup("Protection", modes, 2, nullptr);
   if (!mode) { _goUltralightAdvanced(); return; }
-  const int lim = InputNumberAction::popup("Auth limit (0..7)", 0, 7, 0);
-  if (InputNumberAction::wasCancelled()) { _goUltralightAdvanced(); return; }
-  if (lim > 0) {
-    static const InputSelectAction::Option warn[] = {{"Use auth limit", "yes"}};
-    if (!InputSelectAction::popup("Warning: may lock access", warn, 1, nullptr)) {
-      _goUltralightAdvanced(); return;
-    }
+  const bool protectRead = strcmp(mode, "rw") == 0;
+
+  // Set Password always protects the whole user memory (page 4 onward),
+  // leaving the user to choose only whether reads are protected as well.
+  // AUTHLIM is reset to unlimited; risky lockout policy is not exposed here.
+  const uint8_t desiredAccess = (uint8_t)((c1[0] & ~0x87u) | (protectRead ? 0x80u : 0u));
+  const bool configLocked = (c1[0] & 0x40u) != 0;
+  if (configLocked &&
+      (c0[3] != 4 || (c1[0] & 0x87u) != (desiredAccess & 0x87u))) {
+    ShowStatusAction::show("Configuration locked"); _goUltralightAdvanced(); return;
   }
-  c1[0] = (uint8_t)((c1[0] & ~0x87u) |
-                    (strcmp(mode, "rw") == 0 ? 0x80u : 0u) | (lim & 0x07));
-  c0[3] = (uint8_t)first;
-  // ACCESS first, AUTH0 last: protection becomes effective only after field
-  // reset/POR on supported NXP tags, and this order avoids changing AUTH0 early.
-  bool ok = _pn532Type2WritePage(_nfc, _wire, (uint8_t)(cfg + 1), c1);
-  if (ok) ok = _pn532Type2WritePage(_nfc, _wire, (uint8_t)cfg, c0);
-  ShowStatusAction::show(ok ? "Protection configured" : "Protection failed");
+
+  bool ok = true;
+  if (!configLocked) {
+    c1[0] = desiredAccess;
+    c0[3] = 4;
+    // ACCESS first; AUTH0 is written only after the new password is stored so
+    // an initially open tag is never protected by an unknown/default PWD.
+    ok = _pn532Type2WritePage(_nfc, _wire, (uint8_t)(cfg + 1), c1);
+  }
+  if (ok) ok = _pn532Type2WritePage(_nfc, _wire, (uint8_t)(cfg + 2), newPwd);
+  if (ok && !configLocked)
+    ok = _pn532Type2WritePage(_nfc, _wire, (uint8_t)cfg, c0);
+
+  ShowStatusAction::show(ok ? "Password set" : "Password setup failed");
   _goUltralightAdvanced();
 }
 

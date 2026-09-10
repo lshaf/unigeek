@@ -8,10 +8,9 @@ public:
   void onItemSelected(uint8_t index) override;
   void onBack() override;
 private:
-  ListItem _items[6];
+  ListItem _items[5];
   void _writePage();
   void _lockTag();
   void _setPassword();
-  void _configureProtection();
   void _removePassword();
 };

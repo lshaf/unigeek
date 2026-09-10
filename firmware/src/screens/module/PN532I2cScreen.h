@@ -132,12 +132,11 @@ private:
     {"Advanced"},
   };
 
-  ListItem _ulAdvancedItems[6] = {
+  ListItem _ulAdvancedItems[5] = {
     {"Read Memory"},
     {"Write Page"},
     {"Set Password"},
     {"Remove Password"},
-    {"Configure Protection"},
     {"Lock Tag"},
   };
 
@@ -265,7 +264,6 @@ private:
   void _doUltralightWritePage();
   void _doUltralightLockTag();
   void _doUltralightSetPassword();
-  void _doUltralightConfigureProtection();
   void _doUltralightRemovePassword();
   bool _detectUltralightTag(uint16_t& pages, const char*& typeName);
   bool _readUltralightDump(uint16_t pages);
