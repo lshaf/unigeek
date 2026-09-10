@@ -132,9 +132,13 @@ private:
     {"Advanced"},
   };
 
-  ListItem _ulAdvancedItems[2] = {
+  ListItem _ulAdvancedItems[6] = {
     {"Read Pages"},
     {"Write Page"},
+    {"Lock Pages"},
+    {"Set Password"},
+    {"Configure Protection"},
+    {"Disable Protection"},
   };
 
   ListItem _ulNdefItems[3] = {
@@ -258,6 +262,10 @@ private:
   void _doUltralightEraseTag();
   void _doUltralightReadPages();
   void _doUltralightWritePage();
+  void _doUltralightLockPages();
+  void _doUltralightSetPassword();
+  void _doUltralightConfigureProtection();
+  void _doUltralightDisableProtection();
   bool _detectUltralightTag(uint16_t& pages, const char*& typeName);
   bool _readUltralightDump(uint16_t pages);
   bool _writeUltralightNtag215Dump(const uint8_t* dump, size_t len);

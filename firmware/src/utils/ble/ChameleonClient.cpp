@@ -1226,6 +1226,15 @@ bool ChameleonClient::mfuReadPage(uint8_t page, uint8_t data[4]) {
   return true;
 }
 
+bool ChameleonClient::mfuReadPageSession(uint8_t page, uint8_t data[4]) {
+  if (!data) return false;
+  const uint8_t cmd[2] = {0x30, page};
+  uint8_t rsp[24] = {}; uint16_t len = 0;
+  if (!_mfuRawSession(*this, cmd, sizeof(cmd), rsp, &len, sizeof(rsp)) || len < 16) return false;
+  memcpy(data, rsp, 4);
+  return true;
+}
+
 bool ChameleonClient::mfuPwdAuth(const uint8_t password[4], uint8_t pack[2]) {
   if (!password) return false;
   const uint8_t cmd[5] = {0x1B, password[0], password[1], password[2], password[3]};
@@ -1243,6 +1252,14 @@ bool ChameleonClient::mfuWritePage(uint8_t page, const uint8_t data[4]) {
   if (!_mfuRaw(*this, cmd, sizeof(cmd), rsp, &len, sizeof(rsp))) return false;
   // Type-2 WRITE acknowledges with 4-bit ACK 0xA. Some Chameleon firmware
   // paths return it in a full byte, while others report no data on success.
+  return len == 0 || (len >= 1 && (rsp[0] & 0x0F) == 0x0A);
+}
+
+bool ChameleonClient::mfuWritePageSession(uint8_t page, const uint8_t data[4]) {
+  if (!data) return false;
+  uint8_t cmd[6] = {0xA2, page, data[0], data[1], data[2], data[3]};
+  uint8_t rsp[8] = {}; uint16_t len = 0;
+  if (!_mfuRawSession(*this, cmd, sizeof(cmd), rsp, &len, sizeof(rsp))) return false;
   return len == 0 || (len >= 1 && (rsp[0] & 0x0F) == 0x0A);
 }
 

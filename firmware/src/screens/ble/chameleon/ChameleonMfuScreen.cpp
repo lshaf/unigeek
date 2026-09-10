@@ -108,6 +108,29 @@ void ChameleonMfuScreen::_buildResult() {
   addRow("Pages", String(_info.pages));
   addRow("Dump", String(_dumpLen) + " bytes");
 
+  // Keep Ultralight/NTAG Tag Details aligned with MIFARE Classic: core tag
+  // identity/dump information first, then family-specific status, then NDEF.
+  const uint16_t cfg = ChameleonMfuAuthUtils::config0(_info.type);
+  if (cfg != 0xFFFF && (size_t)(cfg + 1) * 4u + 3u < _dumpLen) {
+    const uint8_t auth0 = _dump[(size_t)cfg * 4u + 3u];
+    const uint8_t access = _dump[(size_t)(cfg + 1) * 4u];
+    if (auth0 == 0xFF || auth0 >= _info.pages) {
+      addRow("Protection", "None");
+    } else {
+      addRow("Protection", (access & 0x80) ? "Read + Write" : "Write only");
+      addRow("From Page", String(auth0));
+    }
+  }
+
+  bool locked = false;
+  if (_dumpLen >= 12) locked = (_dump[10] != 0 || _dump[11] != 0);
+  const uint16_t dyn = ChameleonMfuAuthUtils::dynamicLockPage(_info.type);
+  if (dyn != 0xFFFF && (size_t)dyn * 4u + 2u < _dumpLen) {
+    locked = locked || _dump[(size_t)dyn * 4u] ||
+             _dump[(size_t)dyn * 4u + 1u] || _dump[(size_t)dyn * 4u + 2u];
+  }
+  addRow("Lock Status", locked ? "Locked pages" : "Unlocked");
+
   const uint8_t* ndef = nullptr;
   size_t ndefLen = 0;
   NdefParser::Result parsed;

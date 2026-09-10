@@ -1,4 +1,5 @@
 #include "ChameleonMfuPagesScreen.h"
+#include "ChameleonMfuAuthUtils.h"
 #include "core/Device.h"
 #include "core/ScreenManager.h"
 #include "ui/actions/ShowStatusAction.h"
@@ -50,9 +51,19 @@ void ChameleonMfuPagesScreen::_read() {
     return;
   }
 
+  uint8_t pwd[4] = {}; bool usePwd = false;
+  if (!ChameleonMfuAuthUtils::ensureForRange(c, _info, 0, _info.pages - 1, true, pwd, usePwd)) {
+    free(_dump); _dump = nullptr;
+    if (restoreMode) c.setMode(previousMode);
+    _busy = false;
+    render();
+    return;
+  }
+
   ProgressView::init();
   uint16_t got = 0;
-  const bool ok = c.mfuReadDump(_info, _dump, (uint16_t)bytes, &got, pageReadProgress);
+  const bool ok = c.mfuReadDump(_info, _dump, (uint16_t)bytes, &got, pageReadProgress,
+                                usePwd ? pwd : nullptr);
   ProgressView::finish();
   if (restoreMode) c.setMode(previousMode);
   _busy = false;

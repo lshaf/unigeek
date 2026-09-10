@@ -223,8 +223,10 @@ public:
                    const uint8_t* password = nullptr);
   // Raw Type-2 WRITE of exactly one 4-byte page.
   bool mfuReadPage(uint8_t page, uint8_t data[4]);
+  bool mfuReadPageSession(uint8_t page, uint8_t data[4]);
   bool mfuPwdAuth(const uint8_t password[4], uint8_t pack[2] = nullptr);
   bool mfuWritePage(uint8_t page, const uint8_t data[4]);
+  bool mfuWritePageSession(uint8_t page, const uint8_t data[4]);
   // Write the writable user-memory area of a physical NTAG215 (pages 4..129).
   // Manufacturer/UID, lock and configuration/password pages are deliberately
   // preserved.
