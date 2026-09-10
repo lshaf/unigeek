@@ -2577,10 +2577,9 @@ void PN532I2cScreen::_doUltralightSetPassword() {
     _goUltralightAdvanced(); return;
   }
 
-  uint8_t c0[4] = {}, c1[4] = {}, pack[4] = {};
+  uint8_t c0[4] = {}, c1[4] = {};
   if (!_pn532Type2ReadPageTailSafe(_nfc, _wire, cfg, pages, c0) ||
-      !_pn532Type2ReadPageTailSafe(_nfc, _wire, cfg + 1, pages, c1) ||
-      !_pn532Type2ReadPageTailSafe(_nfc, _wire, cfg + 3, pages, pack)) {
+      !_pn532Type2ReadPageTailSafe(_nfc, _wire, cfg + 1, pages, c1)) {
     ShowStatusAction::show("Read config failed"); _goUltralightAdvanced(); return;
   }
 
@@ -2614,14 +2613,20 @@ void PN532I2cScreen::_doUltralightSetPassword() {
     ok = _pn532Type2WritePage(_nfc, _wire, (uint8_t)(cfg + 1), c1);
   }
   if (ok) ok = _pn532Type2WritePage(_nfc, _wire, (uint8_t)(cfg + 2), newPwd);
-  if (ok) {
-    pack[0] = 0x00; pack[1] = 0x00;
-    ok = _pn532Type2WritePage(_nfc, _wire, (uint8_t)(cfg + 3), pack);
+
+  // PWD takes effect immediately. Verify the exact bytes we just wrote before
+  // enabling AUTH0 (or relying on the new credential on an already protected
+  // tag). PACK is intentionally left unchanged; it is not part of the
+  // user-facing password and NFC Tools does not require changing it.
+  if (ok && !_pn532UltralightPwdAuth(_nfc, _wire, newPwd)) {
+    ShowStatusAction::show("Password verification failed");
+    _goUltralightAdvanced(); return;
   }
+
   if (ok && !configLocked)
     ok = _pn532Type2WritePage(_nfc, _wire, (uint8_t)cfg, c0);
 
-  ShowStatusAction::show(ok ? "Password set - retap tag" : "Password setup failed");
+  ShowStatusAction::show(ok ? "Password set\nRetap tag to activate" : "Password setup failed");
   _goUltralightAdvanced();
 }
 
