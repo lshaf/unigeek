@@ -1166,14 +1166,23 @@ bool ChameleonClient::mfuDetect(MfuTagInfo* out) {
   }
 
   // Original MIFARE Ultralight (MF0ICU1) has no GET_VERSION and no
-  // Ultralight-C authentication command. Do not depend on an out-of-range
-  // READ (page 0x10) being surfaced as a failure: Chameleon firmware versions
-  // may report the Type-2 NAK differently. Confirm an NXP 7-byte UID and two
-  // valid reads inside the 16-page MF0ICU1 address space instead. READ 0x0F is
-  // valid and rolls over to page 0.
+  // Ultralight-C authentication command. Avoid depending on READ 0x0F
+  // rollover behavior: some CU firmware/reader combinations do not surface
+  // that boundary read consistently even though ordinary UL reads work.
+  //
+  // At this point GET_VERSION and UL-C AUTH have already failed. A readable
+  // page 0 on an NXP 7-byte UID therefore identifies a legacy Type-2
+  // candidate. Preserve older/larger pre-GET_VERSION tags as generic when a
+  // valid Capability Container advertises more than the original UL's
+  // 48-byte data area.
   if (out->uidLen == 7 && out->uid[0] == 0x04) {
     uint8_t tmp[16] = {};
-    if (_mfuRead4(*this, 0, tmp) && _mfuRead4(*this, 15, tmp)) {
+    if (_mfuRead4(*this, 0, tmp)) {
+      uint8_t cc[16] = {};
+      if (_mfuRead4(*this, 3, cc) &&
+          cc[0] == 0xE1 && (cc[1] & 0xF0) == 0x10 && cc[2] > 0x06) {
+        return detectGenericType2();
+      }
       out->type  = MFU_ULTRALIGHT;
       out->pages = 16;
       return true;

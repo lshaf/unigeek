@@ -1222,7 +1222,7 @@ const char* PN532I2cScreen::_inferType(uint8_t sak, uint16_t atqa) const {
   if (sak == 0x18) return "MF Classic 4K";
   if (sak == 0x28) return "MF Plus / SmartMX";
   if (sak == 0x20) return atqaHi == 0x03 ? "MIFARE DESFire" : "ISO14443-4";
-  if (sak == 0x00) return (atqa & 0x00FF) == 0x44 ? "MIFARE UL / NTAG" : "ISO14443A T2";
+  if (sak == 0x00) return (atqa & 0x00FF) == 0x44 ? "Ultralight / NTAG" : "ISO14443A T2";
   return "ISO14443A";
 }
 
@@ -1324,28 +1324,34 @@ const char* PN532I2cScreen::_inferType2Variant() {
   if (isUltralightC) return "Ultralight C";
 
   // Original MIFARE Ultralight (MF0ICU1) has no GET_VERSION and no
-  // Ultralight-C authentication command. Do not identify it by requiring an
-  // out-of-range READ (page 0x10) to fail: reader/firmware wrappers do not
-  // expose Type-2 NAKs consistently. Instead, after the two legacy probes
-  // above failed, confirm the NXP 7-byte UID and two valid reads within the
-  // 16-page MF0ICU1 address space. READ 0x0F is valid and rolls over to page 0.
-  if (_uidLen != 7 || _uid[0] != 0x04) return nullptr;
+  // Ultralight-C authentication command. Some reader stacks are unreliable
+  // when READ starts at page 0x0F and wraps to page 0, so do not make that
+  // rollover a prerequisite for recognizing a genuine legacy Ultralight.
+  //
+  // A readable page 0 plus an NXP 7-byte UID is enough to establish a legacy
+  // Type-2 candidate here, because GET_VERSION and the UL-C AUTH probe have
+  // already failed. If a valid CC advertises more than the original UL's
+  // 48-byte data area, keep the tag generic instead of misclassifying older
+  // NTAG-family parts that also predate GET_VERSION.
+  if (_uidLen != 7 || _uid[0] != 0x04)
+    return hasGenericType2Cc() ? "Ultralight / NTAG" : nullptr;
 
-  const uint8_t read0[2]  = {0x30, 0x00};
-  const uint8_t read15[2] = {0x30, 0x0F};
+  const uint8_t read0[2] = {0x30, 0x00};
   uint8_t data[18] = {};
   uint8_t len = sizeof(data);
   const bool page0Ok =
       type2Exchange(read0, sizeof(read0), data, len) && len >= 16;
+  if (!page0Ok) return hasGenericType2Cc() ? "Ultralight / NTAG" : nullptr;
 
+  const uint8_t readCc[2] = {0x30, 0x03};
   len = sizeof(data);
   memset(data, 0, sizeof(data));
-  const bool page15Ok =
-      type2Exchange(read15, sizeof(read15), data, len) && len >= 16;
+  if (type2Exchange(readCc, sizeof(readCc), data, len) && len >= 16 &&
+      data[0] == 0xE1 && (data[1] & 0xF0) == 0x10 && data[2] > 0x06) {
+    return "Ultralight / NTAG";
+  }
 
-  if (page0Ok && page15Ok) return "Ultralight";
-
-  return hasGenericType2Cc() ? "Ultralight / NTAG" : nullptr;
+  return "Ultralight";
 }
 
 // ── scan helper ────────────────────────────────────────────────────────────

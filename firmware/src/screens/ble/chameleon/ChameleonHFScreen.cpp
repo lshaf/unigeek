@@ -17,7 +17,7 @@ const char* ChameleonHFScreen::_inferType(uint8_t sak, const uint8_t atqa[2]) {
     return "ISO14443-4";
   }
   if (sak == 0x00) {
-    if (atqa[1] == 0x44) return "MIFARE UL / NTAG";
+    if (atqa[1] == 0x44) return "Ultralight / NTAG";
     return "ISO14443A T2";
   }
   return "ISO14443A";
