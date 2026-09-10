@@ -5,6 +5,7 @@
 #include "screens/hid/KeyboardMenuScreen.h"
 #include "screens/hid/PasswordManagerScreen.h"
 #include "ui/actions/ShowStatusAction.h"
+#include "ui/actions/InputTextAction.h"
 #include "ui/components/StatusBar.h"
 #ifdef DEVICE_HAS_USB_HID
 #include "utils/keyboard/USBKeyboardUtil.h"  // must come before BLEKeyboardUtil — TinyUSB hid.h enum must be processed before NimBLE HIDTypes.h macro
@@ -127,11 +128,10 @@ void KeyboardScreen::onItemSelected(uint8_t index)
 
   if (_state == STATE_MENU) {
     // Resolve which item was actually selected
-    // Items are: [Keyboard (HAS_KEYBOARD)?], Ducky Script, Mouse Jiggle, Media / Camera, Password Manager, [Reset Pair (BLE)?]
+    // Items are: [Keyboard (physical or virtual)?], Ducky Script, Mouse Jiggle, Media / Camera, Password Manager, [Reset Pair (BLE)?]
     uint8_t idx = 0;
-#ifdef DEVICE_HAS_KEYBOARD
+#if defined(DEVICE_HAS_KEYBOARD) || defined(DEVICE_HAS_HID_VIRTUAL_KEYBOARD)
     if (index == idx++) {
-      // Keyboard relay
       _keyboard->releaseAll();
       delay(300);
       if (!_keyboard->isConnected() && _mode == MODE_BLE) {
@@ -139,7 +139,22 @@ void KeyboardScreen::onItemSelected(uint8_t index)
         render();
         return;
       }
+
+#ifdef DEVICE_HAS_KEYBOARD
+      // Devices with a physical keyboard keep the existing live relay.
       _goConnected();
+#else
+      // Encoder/touch devices compose locally and expose HID controls on P3.
+      InputTextAction::popup(
+        _mode == MODE_USB ? "USB Keyboard" : "BLE Keyboard",
+        "",
+        InputTextAction::INPUT_TEXT,
+        InputTextAction::PROFILE_HID,
+        _keyboard
+      );
+      _keyboard->releaseAll();
+      render();
+#endif
       return;
     }
 #endif
@@ -215,7 +230,7 @@ void KeyboardScreen::_goMenu()
   StatusBar::bleConnected() = false;
   Uni.Nav->setSuppressKeys(false);
 
-#ifdef DEVICE_HAS_KEYBOARD
+#if defined(DEVICE_HAS_KEYBOARD) || defined(DEVICE_HAS_HID_VIRTUAL_KEYBOARD)
   _menuItems[_menuCount++] = {"Keyboard", nullptr};
 #endif
   _menuItems[_menuCount++] = {"Ducky Script", nullptr};
