@@ -307,7 +307,7 @@ void ChameleonMfuScreen::_save() {
 
 void ChameleonMfuScreen::_resultActions() {
   static const InputSelectAction::Option opts[] = {
-    {"Save Dump to File", "save"},
+    {"Save Dump",         "save"},
     {"Write to Tag",       "write"},
   };
 

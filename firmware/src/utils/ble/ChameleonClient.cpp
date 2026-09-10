@@ -1300,7 +1300,7 @@ bool ChameleonClient::mfuWriteNtag215User(const uint8_t* dump, uint16_t dumpLen,
     if (!(authenticated ? _mfuRawSession(*this, cmd, sizeof(cmd), rsp, &len, sizeof(rsp), 700) : _mfuRaw(*this, cmd, sizeof(cmd), rsp, &len, sizeof(rsp), 700)))
       return false;
     // Type-2 ACK is 0xA (4 bits). HF14A_RAW exposes it in the low nibble.
-    if (len < 1 || (rsp[0] & 0x0F) != 0x0A) return false;
+    if (!(len == 0 || (len >= 1 && (rsp[0] & 0x0F) == 0x0A))) return false;
 
     ++done;
     if (progress) progress(done, kUserPages);

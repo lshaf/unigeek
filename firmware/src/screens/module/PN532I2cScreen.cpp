@@ -656,10 +656,10 @@ void PN532I2cScreen::onItemSelected(uint8_t index) {
     case STATE_ULTRALIGHT_ADVANCED_MENU:
       if (index == 0) _doUltralightReadPages();
       else if (index == 1) _doUltralightWritePage();
-      else if (index == 2) _doUltralightLockTag();
-      else if (index == 3) _doUltralightSetPassword();
-      else if (index == 4) _doUltralightRemovePassword();
-      else if (index == 5) _doUltralightConfigureProtection();
+      else if (index == 2) _doUltralightSetPassword();
+      else if (index == 3) _doUltralightRemovePassword();
+      else if (index == 4) _doUltralightConfigureProtection();
+      else if (index == 5) _doUltralightLockTag();
       break;
     case STATE_ULTRALIGHT_NDEF_MENU:
       switch (index) {
@@ -2690,84 +2690,90 @@ void PN532I2cScreen::_doReadNdef() {
   _ndefCapacity = 0;
   renderTagPrompt("Place tag on reader...", bodyX(), bodyY(), bodyW(), bodyH());
 
-  uint8_t uid[7];
-  uint8_t uidLen = 0;
-  uint32_t start = millis();
-  bool ok = false;
+  uint16_t pages = 0;
+  const char* typeName = nullptr;
+  if (!_detectUltralightTag(pages, typeName)) {
+    ShowStatusAction::show("No Type 2 tag");
+    _goUltralightNdef();
+    return;
+  }
 
-  while (millis() - start < 5000) {
-    Uni.update();
-    if (Uni.Nav->wasPressed() &&
-        Uni.Nav->readDirection() == INavigation::DIR_BACK) {
-      _goUltralight();
-      return;
-    }
+  if (!_pn532EnsureUltralightAuth(_nfc, _wire, typeName, pages, true)) {
+    _goUltralightNdef();
+    return;
+  }
 
-    if (_nfc->readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLen, 200)) {
-      ok = true;
+  // NFC Forum Type 2 Capability Container (page 3). Byte 2 gives the
+  // NDEF data-area capacity in units of 8 bytes, so use the tag's real
+  // capacity rather than a fixed page range.
+  uint8_t cc[4] = {};
+  if (!_pn532Type2ReadPage(_nfc, _wire, 3, cc)) {
+    ShowStatusAction::show("Failed to read CC");
+    _goUltralightNdef();
+    return;
+  }
+  if (cc[0] != 0xE1 || cc[2] == 0) {
+    ShowStatusAction::show("Not NDEF formatted");
+    _goUltralightNdef();
+    return;
+  }
+
+  _ndefCapacity = (size_t)cc[2] * 8u;
+  const size_t maxUserBytes = pages > 4 ? ((size_t)pages - 4u) * 4u : 0u;
+  const size_t userBytes = (_ndefCapacity < maxUserBytes) ? _ndefCapacity : maxUserBytes;
+  if (!userBytes) {
+    ShowStatusAction::show("Invalid NDEF capacity");
+    _goUltralightNdef();
+    return;
+  }
+
+  uint8_t* user = new uint8_t[userBytes];
+  if (!user) {
+    ShowStatusAction::show("Out of memory");
+    _goUltralightNdef();
+    return;
+  }
+  memset(user, 0, userBytes);
+
+  const size_t totalPages = (userBytes + 3u) / 4u;
+  size_t userLen = 0;
+  bool readOk = true;
+  ProgressView::init();
+  for (size_t i = 0; i < totalPages; ++i) {
+    const uint16_t page16 = 4u + (uint16_t)i;
+    if (page16 >= pages || page16 > 0xFFu) break;
+
+    char msg[36];
+    snprintf(msg, sizeof(msg), "Reading pages (%u/%u)...",
+             (unsigned)(i + 1u), (unsigned)totalPages);
+    ProgressView::progress(msg, (int)(i * 100u / totalPages));
+
+    uint8_t data[4] = {};
+    if (!_pn532Type2ReadPageTailSafe(_nfc, _wire, (uint8_t)page16,
+                                     pages, data)) {
+      readOk = false;
       break;
     }
-    delay(50);
-  }
-
-  if (!ok) {
-    ShowStatusAction::show("No tag detected");
-    _goUltralight();
-    return;
-  }
-
-  uint16_t authPages = 0; const char* authType = nullptr;
-  if (_detectUltralightTag(authPages, authType) &&
-      !_pn532EnsureUltralightAuth(_nfc, _wire, authType, authPages, true)) {
-    _goUltralight();
-    return;
-  }
-
-  // NFC Forum Type 2 Capability Container (page 3).
-  // Byte 2 gives the data-area capacity in units of 8 bytes.
-  uint8_t cc[4] = {};
-  if (_pn532Type2ReadPage(_nfc, _wire, 3, cc) && cc[0] == 0xE1) {
-    _ndefCapacity = (size_t)cc[2] * 8;
-  }
-
-  // Type 2 Tag user memory starts at page 4. Read a conservative 60 pages
-  // (240 bytes), enough for common short NDEF records and matching the current
-  // UniGeek Ultralight page range.
-  static constexpr uint8_t FIRST_PAGE = 4;
-  static constexpr uint8_t LAST_PAGE  = 63;
-  static constexpr size_t USER_BYTES  = (LAST_PAGE - FIRST_PAGE + 1) * 4;
-
-  uint8_t user[USER_BYTES] = {};
-  size_t userLen = 0;
-
-  ProgressView::init();
-  const uint8_t totalPages = LAST_PAGE - FIRST_PAGE + 1;
-  for (uint8_t page = FIRST_PAGE; page <= LAST_PAGE; page++) {
-    const uint8_t currentPage = page - FIRST_PAGE + 1;
-    char msg[32];
-    snprintf(msg, sizeof(msg), "Reading pages (%u/%u)...",
-             (unsigned)currentPage, (unsigned)totalPages);
-    ProgressView::progress(msg,
-                           (int)((uint16_t)(currentPage - 1) * 100u / totalPages));
-
-    uint8_t data[4];
-    if (!_pn532Type2ReadPage(_nfc, _wire, page, data)) break;
-
-    memcpy(&user[userLen], data, 4);
-    userLen += 4;
+    const size_t copy = (userBytes - userLen < 4u) ? userBytes - userLen : 4u;
+    memcpy(user + userLen, data, copy);
+    userLen += copy;
   }
   ProgressView::finish();
 
-  // Parse the Type 2 Tag TLV stream and locate the first NDEF Message TLV (0x03).
+  if (!readOk) {
+    delete[] user;
+    ShowStatusAction::show("Read failed");
+    _goUltralightNdef();
+    return;
+  }
+
   const uint8_t* ndef = nullptr;
   size_t ndefLen = 0;
   size_t pos = 0;
-
   while (pos < userLen) {
-    uint8_t tlv = user[pos++];
-
-    if (tlv == 0x00) continue; // NULL TLV
-    if (tlv == 0xFE) break;    // Terminator TLV
+    const uint8_t tlv = user[pos++];
+    if (tlv == 0x00) continue;
+    if (tlv == 0xFE) break;
     if (pos >= userLen) break;
 
     size_t len = user[pos++];
@@ -2776,21 +2782,18 @@ void PN532I2cScreen::_doReadNdef() {
       len = ((size_t)user[pos] << 8) | user[pos + 1];
       pos += 2;
     }
-
     if (pos + len > userLen) break;
-
     if (tlv == 0x03) {
-      ndef = &user[pos];
+      ndef = user + pos;
       ndefLen = len;
       break;
     }
-
     pos += len;
   }
 
-  _showNdefResult(uid, uidLen, ndef, ndefLen);
+  _showNdefResult(_uid, _uidLen, ndef, ndefLen);
+  delete[] user;
 }
-
 
 void PN532I2cScreen::_showNdefResult(const uint8_t* uid, uint8_t uidLen,
                                          const uint8_t* ndef, size_t ndefLen) {
@@ -4080,55 +4083,35 @@ void PN532I2cScreen::_doEraseNdef() {
   _ndefTarget = NDEF_TARGET_ULTRALIGHT;
   renderTagPrompt("Place tag on reader...", bodyX(), bodyY(), bodyW(), bodyH());
 
-  uint8_t uid[7];
-  uint8_t uidLen = 0;
-  uint32_t start = millis();
-  bool ok = false;
-
-  while (millis() - start < 5000) {
-    Uni.update();
-    if (Uni.Nav->wasPressed() &&
-        Uni.Nav->readDirection() == INavigation::DIR_BACK) {
-      _goUltralightNdef();
-      return;
-    }
-
-    if (_nfc->readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLen, 200)) {
-      ok = true;
-      break;
-    }
-    delay(50);
+  uint16_t pages = 0;
+  const char* typeName = nullptr;
+  if (!_detectUltralightTag(pages, typeName)) {
+    ShowStatusAction::show("No Type 2 tag");
+    _goUltralightNdef();
+    return;
   }
-
-  if (!ok) {
-    ShowStatusAction::show("No tag detected");
+  if (!_pn532EnsureUltralightAuth(_nfc, _wire, typeName, pages, false)) {
     _goUltralightNdef();
     return;
   }
 
-  // Read NFC Forum Type 2 Capability Container from page 3.
   uint8_t cc[4] = {};
   if (!_pn532Type2ReadPage(_nfc, _wire, 3, cc)) {
     ShowStatusAction::show("Failed to read CC");
     _goUltralightNdef();
     return;
   }
-
   if (cc[0] != 0xE1) {
     ShowStatusAction::show("Not NDEF formatted");
     _goUltralightNdef();
     return;
   }
 
-
-  // Logical NDEF erase:
-  // 03 = NDEF Message TLV
-  // 00 = zero-length NDEF message
-  // FE = Terminator TLV
-  // The previous bytes after the terminator are no longer part of the active NDEF.
+  // Logical NDEF erase: zero-length NDEF Message TLV followed by Terminator.
+  // Bytes after the terminator remain physically present but are no longer
+  // part of the active NDEF message.
   uint8_t emptyNdef[4] = {0x03, 0x00, 0xFE, 0x00};
-
-  bool success = _pn532Type2WritePage(_nfc, _wire, 4, emptyNdef);
+  const bool success = _pn532Type2WritePage(_nfc, _wire, 4, emptyNdef);
 
   ShowStatusAction::show(success ? "NDEF erased" : "NDEF erase failed");
   _goUltralightNdef();

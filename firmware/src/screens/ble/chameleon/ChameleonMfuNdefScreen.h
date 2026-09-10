@@ -22,11 +22,10 @@ private:
   State _state   = MENU;
   bool  _running = false;
 
-  ListItem _menu[4] = {
+  ListItem _menu[3] = {
     {"Read NDEF"},
     {"Write NDEF"},
     {"Erase NDEF"},
-    {"Format NDEF"},
   };
 
   ListItem _write[6] = {
@@ -51,7 +50,6 @@ private:
   void goWrite();
   bool readImage(uint8_t*& img, size_t& len, uint8_t uid[7]);
   bool writeRecord(const uint8_t* ndef, size_t len, const char* opTitle);
-  bool format(const char* opTitle);
   void read();
   void erase();
   void show(const uint8_t* ndef, size_t len, const uint8_t uid[7]);

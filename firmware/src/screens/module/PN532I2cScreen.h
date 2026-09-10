@@ -135,10 +135,10 @@ private:
   ListItem _ulAdvancedItems[6] = {
     {"Read Memory"},
     {"Write Page"},
-    {"Lock Tag"},
     {"Set Password"},
     {"Remove Password"},
     {"Configure Protection"},
+    {"Lock Tag"},
   };
 
   ListItem _ulNdefItems[3] = {

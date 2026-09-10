@@ -77,13 +77,15 @@ void ChameleonMfuNdefScreen::add(const String& label, const String& value) {
 // `img` and must free() it; every failure path frees it here.
 bool ChameleonMfuNdefScreen::readImage(uint8_t*& img, size_t& len, uint8_t uid[7]) {
   auto& c = ChameleonClient::get();
+  uint8_t previousMode = 0;
+  const bool restoreMode = c.getMode(&previousMode);
   c.setMode(1);
 
   ChameleonClient::MfuTagInfo info = {};
   renderTagPrompt("Place tag on reader...", bodyX(), bodyY(), bodyW(), bodyH());
 
   if (!c.mfuDetect(&info)) {
-    c.setMode(0);
+    if (restoreMode) c.setMode(previousMode);
     ShowStatusAction::show("No Type 2 tag");
     return false;
   }
@@ -91,7 +93,7 @@ bool ChameleonMfuNdefScreen::readImage(uint8_t*& img, size_t& len, uint8_t uid[7
   len = (size_t)info.pages * 4u;
   img = (uint8_t*)malloc(len);
   if (!img) {
-    c.setMode(0);
+    if (restoreMode) c.setMode(previousMode);
     ShowStatusAction::show("Out of memory");
     return false;
   }
@@ -100,7 +102,7 @@ bool ChameleonMfuNdefScreen::readImage(uint8_t*& img, size_t& len, uint8_t uid[7
 
   uint8_t pwd[4] = {}; bool usePwd = false;
   if (!ChameleonMfuAuthUtils::prepare(c, info, true, pwd, usePwd)) {
-    free(img); img = nullptr; c.setMode(0); return false;
+    free(img); img = nullptr; if (restoreMode) c.setMode(previousMode); return false;
   }
 
   uint16_t got = 0;
@@ -117,7 +119,7 @@ bool ChameleonMfuNdefScreen::readImage(uint8_t*& img, size_t& len, uint8_t uid[7
   }, usePwd ? pwd : nullptr);
 
   ProgressView::finish();
-  c.setMode(0);
+  if (restoreMode) c.setMode(previousMode);
 
   if (!ok) {
     free(img);
@@ -147,12 +149,32 @@ void ChameleonMfuNdefScreen::show(const uint8_t* ndef, size_t len, const uint8_t
     add("NDEF", "Not found");
   } else {
     switch (r.kind) {
-      case NdefParser::RECORD_TEXT:  add("NDEF", "Text");  add("Text", r.text);       break;
-      case NdefParser::RECORD_URL:   add("NDEF", "URI");   add("URI", r.uri);         break;
-      case NdefParser::RECORD_PHONE: add("NDEF", "Phone"); add("Phone", r.phone);     break;
-      case NdefParser::RECORD_EMAIL: add("NDEF", "Email"); add("Mail", r.email);      break;
-      case NdefParser::RECORD_VCARD: add("NDEF", "vCard"); add("Contact", r.contact); break;
-      default:                       add("NDEF", "Unsupported");                      break;
+      case NdefParser::RECORD_TEXT:
+        add("Record", "Text");
+        if (r.language.length()) add("Language", r.language);
+        add("Text", r.text);
+        break;
+      case NdefParser::RECORD_URL:
+        add("Record", "URL"); add("URL", r.uri);
+        break;
+      case NdefParser::RECORD_PHONE:
+        add("Record", "Phone"); add("Phone", r.phone);
+        break;
+      case NdefParser::RECORD_EMAIL:
+        add("Record", "Email"); add("Email", r.email);
+        break;
+      case NdefParser::RECORD_VCARD:
+        add("Record", "vCard");
+        if (r.contact.length()) add("Contact", r.contact);
+        if (r.company.length()) add("Company", r.company);
+        if (r.address.length()) add("Address", r.address);
+        if (r.phone.length()) add("Phone", r.phone);
+        if (r.email.length()) add("Email", r.email);
+        if (r.website.length()) add("Website", r.website);
+        break;
+      default:
+        add("Record", "Unsupported");
+        break;
     }
   }
 
@@ -184,51 +206,89 @@ bool ChameleonMfuNdefScreen::writeRecord(const uint8_t* ndef, size_t nl, const c
   operationTitle(opTitle);
 
   auto& c = ChameleonClient::get();
+  uint8_t previousMode = 0;
+  const bool restoreMode = c.getMode(&previousMode);
   c.setMode(1);
 
   ChameleonClient::MfuTagInfo info = {};
   renderTagPrompt("Place tag on reader...", bodyX(), bodyY(), bodyW(), bodyH());
-
-  if (!c.mfuDetect(&info) || info.type != ChameleonClient::MFU_NTAG215) {
-    c.setMode(0);
-    ShowStatusAction::show("Write supports NTAG215");
+  if (!c.mfuDetect(&info)) {
+    if (restoreMode) c.setMode(previousMode);
+    ShowStatusAction::show("No Type 2 tag");
     return false;
   }
 
   uint8_t pwd[4] = {}; bool usePwd = false;
   if (!ChameleonMfuAuthUtils::prepare(c, info, false, pwd, usePwd)) {
-    c.setMode(0);
+    if (restoreMode) c.setMode(previousMode);
     return false;
   }
 
-  uint8_t img[NfcDumpBuilder::NTAG215_SIZE];
-  size_t  len = 0;
-  if (!NfcDumpBuilder::buildNtag215(info.uid, ndef, nl, img, len, sizeof(img))) {
-    c.setMode(0);
+  uint8_t cc[4] = {};
+  const bool ccOk = usePwd ? c.mfuReadPageSession(3, cc) : c.mfuReadPage(3, cc);
+  if (!ccOk || cc[0] != 0xE1 || cc[2] == 0) {
+    if (restoreMode) c.setMode(previousMode);
+    ShowStatusAction::show("Not NDEF formatted");
+    return false;
+  }
+
+  const size_t capacity = (size_t)cc[2] * 8u;
+  const size_t lenBytes = (nl < 0xFFu) ? 1u : 3u;
+  const size_t tlvLen = 1u + lenBytes + nl + 1u; // type + length + NDEF + terminator
+  const size_t paddedLen = (tlvLen + 3u) & ~((size_t)3u);
+  if (paddedLen > capacity) {
+    if (restoreMode) c.setMode(previousMode);
     ShowStatusAction::show("NDEF does not fit");
     return false;
   }
 
-  ProgressView::init();
-  bool ok = c.mfuWriteNtag215User(img, (uint16_t)len, prog, &info,
-                                  usePwd ? pwd : nullptr);
-  ProgressView::finish();
+  uint8_t* payload = (uint8_t*)malloc(paddedLen);
+  if (!payload) {
+    if (restoreMode) c.setMode(previousMode);
+    ShowStatusAction::show("Out of memory");
+    return false;
+  }
+  memset(payload, 0, paddedLen);
+  size_t pos = 0;
+  payload[pos++] = 0x03;
+  if (nl < 0xFFu) {
+    payload[pos++] = (uint8_t)nl;
+  } else {
+    payload[pos++] = 0xFF;
+    payload[pos++] = (uint8_t)((nl >> 8) & 0xFFu);
+    payload[pos++] = (uint8_t)(nl & 0xFFu);
+  }
+  if (nl) { memcpy(payload + pos, ndef, nl); pos += nl; }
+  payload[pos] = 0xFE;
 
-  c.setMode(0);
-  ShowStatusAction::show(ok ? "NDEF written" : "NDEF write failed");
+  const size_t totalPages = paddedLen / 4u;
+  bool ok = true;
+  ProgressView::init();
+  for (size_t i = 0; i < totalPages; ++i) {
+    char msg[36];
+    snprintf(msg, sizeof(msg), "Writing pages (%u/%u)...",
+             (unsigned)(i + 1u), (unsigned)totalPages);
+    ProgressView::progress(msg, (int)(i * 100u / totalPages));
+    const uint8_t page = (uint8_t)(4u + i);
+    ok = usePwd ? c.mfuWritePageSession(page, payload + i * 4u)
+                : c.mfuWritePage(page, payload + i * 4u);
+    if (!ok) break;
+  }
+  ProgressView::finish();
+  free(payload);
+  if (restoreMode) c.setMode(previousMode);
+
+  if (strcmp(opTitle, "Erase NDEF") == 0)
+    ShowStatusAction::show(ok ? "NDEF erased" : "NDEF erase failed");
+  else
+    ShowStatusAction::show(ok ? "NDEF written" : "NDEF write failed");
   return ok;
 }
 
-bool ChameleonMfuNdefScreen::format(const char* opTitle) {
-  return writeRecord(nullptr, 0, opTitle);
-}
-
 void ChameleonMfuNdefScreen::erase() {
-  bool ok = format("Erase NDEF");
-  if (ok) ShowStatusAction::show("NDEF erased");
+  writeRecord(nullptr, 0, "Erase NDEF");
   goMenu();
 }
-
 void ChameleonMfuNdefScreen::writeBuilt(uint8_t kind) {
   const char* prompt = kind == 0 ? "Text"
                      : kind == 1 ? "URL"
@@ -296,7 +356,6 @@ void ChameleonMfuNdefScreen::onItemSelected(uint8_t index) {
       case 0: read();    break;
       case 1: goWrite(); break;
       case 2: erase();   break;
-      case 3: format("Format NDEF"); goMenu(); break;
     }
     return;
   }

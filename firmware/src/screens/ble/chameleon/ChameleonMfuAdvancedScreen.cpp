@@ -103,10 +103,10 @@ bool _buildLockMasks(uint16_t type, uint16_t first, uint16_t last,
 void ChameleonMfuAdvancedScreen::onInit() {
   _items[0] = {"Read Memory"};
   _items[1] = {"Write Page"};
-  _items[2] = {"Lock Tag"};
-  _items[3] = {"Set Password"};
-  _items[4] = {"Remove Password"};
-  _items[5] = {"Configure Protection"};
+  _items[2] = {"Set Password"};
+  _items[3] = {"Remove Password"};
+  _items[4] = {"Configure Protection"};
+  _items[5] = {"Lock Tag"};
   setItems(_items);
 }
 
@@ -262,9 +262,9 @@ void ChameleonMfuAdvancedScreen::_removePassword() {
 void ChameleonMfuAdvancedScreen::onItemSelected(uint8_t index) {
   if(index==0) Screen.push(new ChameleonMfuPagesScreen());
   else if(index==1) _writePage();
-  else if(index==2) _lockTag();
-  else if(index==3) _setPassword();
-  else if(index==4) _removePassword();
-  else if(index==5) _configureProtection();
+  else if(index==2) _setPassword();
+  else if(index==3) _removePassword();
+  else if(index==4) _configureProtection();
+  else if(index==5) _lockTag();
 }
 void ChameleonMfuAdvancedScreen::onBack(){Screen.goBack();}
