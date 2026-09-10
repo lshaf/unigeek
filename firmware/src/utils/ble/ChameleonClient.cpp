@@ -1016,6 +1016,7 @@ namespace {
 // activate_rf_field | wait_response | append_crc | auto_select | keep_rf_field.
 // auto_select performs the ISO14443A selection before each command.
 static constexpr uint8_t kMfuRawOptions = 0xF8;
+static constexpr uint8_t kMfuSessionOptions = 0xE8;
 
 static bool _mfuRaw(ChameleonClient& c, const uint8_t* cmd, uint8_t cmdLen,
                     uint8_t* out, uint16_t* outLen, uint16_t outSize,
@@ -1027,6 +1028,15 @@ static bool _mfuRaw(ChameleonClient& c, const uint8_t* cmd, uint8_t cmdLen,
   }
   // HF commands normally report 0x68 (HF_TAG_OK); some firmware revisions
   // use generic success (0). Keep both, as elsewhere in ChameleonClient.
+  return st == 0 || st == 0x68;
+}
+
+static bool _mfuRawSession(ChameleonClient& c, const uint8_t* cmd, uint8_t cmdLen,
+                           uint8_t* out, uint16_t* outLen, uint16_t outSize,
+                           uint16_t timeoutMs = 500) {
+  uint16_t st = 0;
+  if (!c.hf14ARaw(kMfuSessionOptions, timeoutMs, (uint16_t)cmdLen * 8,
+                  cmd, cmdLen, out, outLen, outSize, &st)) return false;
   return st == 0 || st == 0x68;
 }
 
@@ -1151,10 +1161,13 @@ bool ChameleonClient::mfuDetect(MfuTagInfo* out) {
 
 bool ChameleonClient::mfuReadDump(const MfuTagInfo& info, uint8_t* out,
                                   uint16_t outSize, uint16_t* bytesRead,
-                                  MfuProgressCallback progress) {
+                                  MfuProgressCallback progress,
+                                  const uint8_t* password) {
   if (bytesRead) *bytesRead = 0;
   const uint32_t total = (uint32_t)info.pages * 4u;
   if (!out || outSize < total || info.pages < 4) return false;
+  const bool authenticated = password && mfuPwdAuth(password, nullptr);
+  if (password && !authenticated) return false;
 
   uint16_t page = 0;
   uint16_t done = 0;
@@ -1178,7 +1191,12 @@ bool ChameleonClient::mfuReadDump(const MfuTagInfo& info, uint8_t* out,
     }
 
     uint8_t chunk[16] = {};
-    if (!_mfuRead4(*this, readPage, chunk)) {
+    if (!(authenticated ? ([&]() {
+          const uint8_t cmd[2] = {0x30, readPage};
+          uint8_t rsp[24] = {}; uint16_t rl = 0;
+          if (!_mfuRawSession(*this, cmd, sizeof(cmd), rsp, &rl, sizeof(rsp)) || rl < 16) return false;
+          memcpy(chunk, rsp, 16); return true;
+        })() : _mfuRead4(*this, readPage, chunk))) {
       // Ultralight C pages 44..47 contain the 3DES key and are intentionally
       // not readable. Preserve a complete 48-page image with zeroes there.
       if (info.type == MFU_ULTRALIGHT_C && readPage >= 44) {
@@ -1200,6 +1218,23 @@ bool ChameleonClient::mfuReadDump(const MfuTagInfo& info, uint8_t* out,
   return done == total;
 }
 
+bool ChameleonClient::mfuReadPage(uint8_t page, uint8_t data[4]) {
+  if (!data) return false;
+  uint8_t chunk[16] = {};
+  if (!_mfuRead4(*this, page, chunk)) return false;
+  memcpy(data, chunk, 4);
+  return true;
+}
+
+bool ChameleonClient::mfuPwdAuth(const uint8_t password[4], uint8_t pack[2]) {
+  if (!password) return false;
+  const uint8_t cmd[5] = {0x1B, password[0], password[1], password[2], password[3]};
+  uint8_t rsp[8] = {}; uint16_t len = 0;
+  if (!_mfuRaw(*this, cmd, sizeof(cmd), rsp, &len, sizeof(rsp)) || len < 2) return false;
+  if (pack) { pack[0] = rsp[0]; pack[1] = rsp[1]; }
+  return true;
+}
+
 bool ChameleonClient::mfuWritePage(uint8_t page, const uint8_t data[4]) {
   if (!data) return false;
   uint8_t cmd[6] = {0xA2, page, data[0], data[1], data[2], data[3]};
@@ -1213,7 +1248,8 @@ bool ChameleonClient::mfuWritePage(uint8_t page, const uint8_t data[4]) {
 
 bool ChameleonClient::mfuWriteNtag215User(const uint8_t* dump, uint16_t dumpLen,
                                            MfuProgressCallback progress,
-                                           const MfuTagInfo* expectedTarget) {
+                                           const MfuTagInfo* expectedTarget,
+                                           const uint8_t* password) {
   static constexpr uint16_t kNtag215Bytes = 135u * 4u;
   static constexpr uint8_t kFirstUserPage = 4;
   static constexpr uint8_t kLastUserPage  = 129;
@@ -1230,6 +1266,8 @@ bool ChameleonClient::mfuWriteNtag215User(const uint8_t* dump, uint16_t dumpLen,
         memcmp(target.uid, expectedTarget->uid, target.uidLen) != 0)
       return false;
   }
+  const bool authenticated = password && mfuPwdAuth(password, nullptr);
+  if (password && !authenticated) return false;
 
   // Standard Type-2 WRITE (A2) writes exactly one 4-byte page. Do not touch
   // pages 0..3 (UID/manufacturer + CC), page 130 (dynamic locks), or pages
@@ -1242,7 +1280,7 @@ bool ChameleonClient::mfuWriteNtag215User(const uint8_t* dump, uint16_t dumpLen,
 
     uint8_t rsp[4] = {};
     uint16_t len = 0;
-    if (!_mfuRaw(*this, cmd, sizeof(cmd), rsp, &len, sizeof(rsp), 700))
+    if (!(authenticated ? _mfuRawSession(*this, cmd, sizeof(cmd), rsp, &len, sizeof(rsp), 700) : _mfuRaw(*this, cmd, sizeof(cmd), rsp, &len, sizeof(rsp), 700)))
       return false;
     // Type-2 ACK is 0xA (4 bits). HF14A_RAW exposes it in the low nibble.
     if (len < 1 || (rsp[0] & 0x0F) != 0x0A) return false;

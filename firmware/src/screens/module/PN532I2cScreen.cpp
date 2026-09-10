@@ -170,6 +170,74 @@ static bool _confirmUltralightSensitiveWrite(const char* typeName, uint16_t page
   return choice && strcmp(choice, "write") == 0;
 }
 
+
+static uint16_t _ultralightConfig0(const char* typeName) {
+  if (!typeName) return 0xFFFF;
+  if (strcmp(typeName, "NTAG210") == 0 || strcmp(typeName, "Ultralight EV1 11") == 0) return 16;
+  if (strcmp(typeName, "NTAG212") == 0 || strcmp(typeName, "Ultralight EV1 21") == 0) return 37;
+  if (strcmp(typeName, "NTAG213") == 0) return 41;
+  if (strcmp(typeName, "NTAG215") == 0) return 131;
+  if (strcmp(typeName, "NTAG216") == 0) return 227;
+  return 0xFFFF;
+}
+
+// 0 = no password protection for this operation, 1 = password required,
+// -1 = protection state could not be read (usually because config is protected).
+static int _pn532UltralightNeedsAuth(Adafruit_PN532* nfc, TwoWire* wire,
+                                     const char* typeName, uint16_t pages,
+                                     bool forRead) {
+  const uint16_t cfg = _ultralightConfig0(typeName);
+  if (cfg == 0xFFFF || cfg + 1 >= pages) return 0; // legacy UL / UL-C handled separately
+  uint8_t c0[4] = {}, c1[4] = {};
+  if (!_pn532Type2ReadPageTailSafe(nfc, wire, cfg, pages, c0) ||
+      !_pn532Type2ReadPageTailSafe(nfc, wire, cfg + 1, pages, c1)) return -1;
+  const uint8_t auth0 = c0[3];
+  if (auth0 == 0xFF || auth0 >= pages) return 0;
+  if (!forRead) return 1;
+  return (c1[0] & 0x80) ? 1 : 0; // ACCESS.PROT: 1 = read+write, 0 = write only
+}
+
+static bool _promptUltralightPassword(uint8_t pwd[4]) {
+  String hex = InputTextAction::popup("Password (8 hex)", "", InputTextAction::INPUT_HEX);
+  if (InputTextAction::wasCancelled()) return false;
+  hex.replace(" ", ""); hex.replace(":", "");
+  if (hex.length() != 8) { ShowStatusAction::show("Need 8 hex chars"); return false; }
+  for (uint8_t i = 0; i < 4; ++i) {
+    char b[3] = {hex[i * 2], hex[i * 2 + 1], 0};
+    char* e = nullptr; unsigned long v = strtoul(b, &e, 16);
+    if (!e || *e) { ShowStatusAction::show("Bad password"); return false; }
+    pwd[i] = (uint8_t)v;
+  }
+  return true;
+}
+
+static bool _pn532UltralightPwdAuth(Adafruit_PN532* nfc, TwoWire* wire,
+                                     const uint8_t pwd[4]) {
+  const uint8_t cmd[5] = {0x1B, pwd[0], pwd[1], pwd[2], pwd[3]};
+  uint8_t rsp[8] = {};
+  uint8_t len = sizeof(rsp);
+  if (!_nfcDataExch(nfc, wire, cmd, sizeof(cmd), rsp, len, 500)) {
+    len = sizeof(rsp);
+    if (!_nfcCommThru(nfc, wire, cmd, sizeof(cmd), rsp, len, 500)) return false;
+  }
+  return len >= 2; // successful PWD_AUTH returns the 2-byte PACK (+ optional CRC)
+}
+
+static bool _pn532EnsureUltralightAuth(Adafruit_PN532* nfc, TwoWire* wire,
+                                       const char* typeName, uint16_t pages,
+                                       bool forRead) {
+  const int need = _pn532UltralightNeedsAuth(nfc, wire, typeName, pages, forRead);
+  if (need == 0) return true;
+  if (typeName && strcmp(typeName, "Ultralight C") == 0) return false;
+  uint8_t pwd[4] = {};
+  if (!_promptUltralightPassword(pwd)) return false;
+  if (!_pn532UltralightPwdAuth(nfc, wire, pwd)) {
+    ShowStatusAction::show("Authentication failed");
+    return false;
+  }
+  return true;
+}
+
 // ── title ──────────────────────────────────────────────────────────────────
 
 static void renderTagPrompt(const char* message, int bx, int by, int bw, int bh) {
@@ -207,6 +275,7 @@ const char* PN532I2cScreen::title() {
     case STATE_DICT_SELECT:     return "Dictionary Attack";
     case STATE_ULTRALIGHT_MENU: return "Ultralight / NTAG";
     case STATE_ULTRALIGHT_TAG_MENU:return "Tag Operations";
+    case STATE_ULTRALIGHT_ADVANCED_MENU:return "Advanced";
     case STATE_ULTRALIGHT_NDEF_MENU:return "NDEF Operations";
     case STATE_MAGIC_MENU:      return "Magic Card";
     case STATE_MAGIC_DETECT:    return "Detect Magic";
@@ -496,8 +565,11 @@ void PN532I2cScreen::onItemSelected(uint8_t index) {
       if (index == 0) _doUltralightReadTag();
       else if (index == 1) _doUltralightWriteTag();
       else if (index == 2) _doUltralightEraseTag();
-      else if (index == 3) _doUltralightReadPages();
-      else if (index == 4) _doUltralightWritePage();
+      else if (index == 3) _goUltralightAdvanced();
+      break;
+    case STATE_ULTRALIGHT_ADVANCED_MENU:
+      if (index == 0) _doUltralightReadPages();
+      else if (index == 1) _doUltralightWritePage();
       break;
     case STATE_ULTRALIGHT_NDEF_MENU:
       switch (index) {
@@ -574,6 +646,9 @@ void PN532I2cScreen::onBack() {
     case STATE_ULTRALIGHT_TAG_MENU:
     case STATE_ULTRALIGHT_NDEF_MENU:
       _goUltralight();
+      break;
+    case STATE_ULTRALIGHT_ADVANCED_MENU:
+      _goUltralightTag();
       break;
     case STATE_MIFARE_DUMP_SELECT:
       if (_dumpPickDir == _dumpPath || _dumpPickDir.length() == 0) {
@@ -796,6 +871,12 @@ void PN532I2cScreen::_goUltralight() {
 void PN532I2cScreen::_goUltralightTag() {
   _state = STATE_ULTRALIGHT_TAG_MENU;
   setItems(_ulTagItems);
+  render();
+}
+
+void PN532I2cScreen::_goUltralightAdvanced() {
+  _state = STATE_ULTRALIGHT_ADVANCED_MENU;
+  setItems(_ulAdvancedItems);
   render();
 }
 
@@ -2035,6 +2116,7 @@ bool PN532I2cScreen::_writeUltralightNtag215Dump(const uint8_t* dump, size_t len
     ShowStatusAction::show("Tag must be NTAG215");
     return false;
   }
+  if (!_pn532EnsureUltralightAuth(_nfc, _wire, typeName, pages, false)) return false;
 
   ProgressView::init();
   bool ok = true;
@@ -2091,6 +2173,10 @@ void PN532I2cScreen::_doUltralightReadTag() {
     _goUltralightTag();
     return;
   }
+  if (!_pn532EnsureUltralightAuth(_nfc, _wire, typeName, pages, true)) {
+    _goUltralightTag();
+    return;
+  }
   if (!_readUltralightDump(pages)) {
     ShowStatusAction::show("Read failed");
     _goUltralightTag();
@@ -2131,6 +2217,10 @@ void PN532I2cScreen::_doUltralightEraseTag() {
   if (!_detectUltralightTag(pages, typeName) || pages != 135 ||
       !typeName || strcmp(typeName, "NTAG215") != 0) {
     ShowStatusAction::show("Tag must be NTAG215");
+    _goUltralightTag();
+    return;
+  }
+  if (!_pn532EnsureUltralightAuth(_nfc, _wire, typeName, pages, false)) {
     _goUltralightTag();
     return;
   }
@@ -2268,6 +2358,13 @@ void PN532I2cScreen::_doReadNdef() {
 
   if (!ok) {
     ShowStatusAction::show("No tag detected");
+    _goUltralight();
+    return;
+  }
+
+  uint16_t authPages = 0; const char* authType = nullptr;
+  if (_detectUltralightTag(authPages, authType) &&
+      !_pn532EnsureUltralightAuth(_nfc, _wire, authType, authPages, true)) {
     _goUltralight();
     return;
   }
@@ -3137,6 +3234,12 @@ bool PN532I2cScreen::_writeUltralightNdefRecord(const uint8_t* ndef, size_t ndef
 
   if (!ok) {
     ShowStatusAction::show("No tag detected");
+    return false;
+  }
+
+  uint16_t authPages = 0; const char* authType = nullptr;
+  if (_detectUltralightTag(authPages, authType) &&
+      !_pn532EnsureUltralightAuth(_nfc, _wire, authType, authPages, false)) {
     return false;
   }
 

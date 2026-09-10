@@ -1,4 +1,5 @@
 #include "ChameleonMfuNdefScreen.h"
+#include "ChameleonMfuAuthUtils.h"
 #include "utils/ble/ChameleonClient.h"
 #include "utils/nfc/NdefBuilder.h"
 #include "utils/nfc/NdefParser.h"
@@ -97,6 +98,11 @@ bool ChameleonMfuNdefScreen::readImage(uint8_t*& img, size_t& len, uint8_t uid[7
 
   memcpy(uid, info.uid, 7);
 
+  uint8_t pwd[4] = {}; bool usePwd = false;
+  if (!ChameleonMfuAuthUtils::prepare(c, info, true, pwd, usePwd)) {
+    free(img); img = nullptr; c.setMode(0); return false;
+  }
+
   uint16_t got = 0;
   ProgressView::init();
 
@@ -108,7 +114,7 @@ bool ChameleonMfuNdefScreen::readImage(uint8_t*& img, size_t& len, uint8_t uid[7
     char x[36];
     snprintf(x, sizeof(x), "Reading pages (%u/%u)...", (unsigned)d, (unsigned)t);
     ProgressView::progress(x, t ? (int)((uint32_t)d * 100u / t) : 0);
-  });
+  }, usePwd ? pwd : nullptr);
 
   ProgressView::finish();
   c.setMode(0);
@@ -189,6 +195,12 @@ bool ChameleonMfuNdefScreen::writeRecord(const uint8_t* ndef, size_t nl, const c
     return false;
   }
 
+  uint8_t pwd[4] = {}; bool usePwd = false;
+  if (!ChameleonMfuAuthUtils::prepare(c, info, false, pwd, usePwd)) {
+    c.setMode(0);
+    return false;
+  }
+
   uint8_t img[NfcDumpBuilder::NTAG215_SIZE];
   size_t  len = 0;
   if (!NfcDumpBuilder::buildNtag215(info.uid, ndef, nl, img, len, sizeof(img))) {
@@ -198,7 +210,8 @@ bool ChameleonMfuNdefScreen::writeRecord(const uint8_t* ndef, size_t nl, const c
   }
 
   ProgressView::init();
-  bool ok = c.mfuWriteNtag215User(img, (uint16_t)len, prog, &info);
+  bool ok = c.mfuWriteNtag215User(img, (uint16_t)len, prog, &info,
+                                  usePwd ? pwd : nullptr);
   ProgressView::finish();
 
   c.setMode(0);

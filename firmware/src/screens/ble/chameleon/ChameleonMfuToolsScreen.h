@@ -10,11 +10,10 @@ public:
   void onBack() override;
 
 private:
-  ListItem _items[5];
+  ListItem _items[4];
   BrowseFileView _browser;
   void _writeTag();
   void _eraseTag();
   void _writeFromFile();
   void _writeFromSlot();
-  void _writePage();
 };

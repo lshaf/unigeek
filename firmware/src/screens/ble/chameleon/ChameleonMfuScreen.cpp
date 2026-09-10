@@ -1,4 +1,5 @@
 #include "ChameleonMfuScreen.h"
+#include "ChameleonMfuAuthUtils.h"
 #include "ChameleonMfuWriteScreen.h"
 #include "core/Device.h"
 #include "core/ScreenManager.h"
@@ -196,6 +197,15 @@ void ChameleonMfuScreen::_read() {
     return;
   }
 
+  uint8_t pwd[4] = {}; bool usePwd = false;
+  if (!ChameleonMfuAuthUtils::prepare(c, _info, true, pwd, usePwd)) {
+    free(_dump); _dump = nullptr; _dumpLen = 0;
+    c.setMode(0);
+    _busy = false; _state = STATE_IDLE; _needsDraw = true;
+    render();
+    return;
+  }
+
   ProgressView::init();
   char progressMsg[32];
   snprintf(progressMsg, sizeof(progressMsg), "Reading pages (0/%u)...",
@@ -203,7 +213,8 @@ void ChameleonMfuScreen::_read() {
   ProgressView::progress(progressMsg, 0);
 
   uint16_t got = 0;
-  bool ok = c.mfuReadDump(_info, _dump, (uint16_t)total, &got, _mfuProgress);
+  bool ok = c.mfuReadDump(_info, _dump, (uint16_t)total, &got, _mfuProgress,
+                          usePwd ? pwd : nullptr);
   ProgressView::finish();
   c.setMode(0);
 

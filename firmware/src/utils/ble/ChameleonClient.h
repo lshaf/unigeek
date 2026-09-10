@@ -219,15 +219,19 @@ public:
   using MfuProgressCallback = void (*)(uint16_t pagesDone, uint16_t totalPages);
   bool mfuReadDump(const MfuTagInfo& info, uint8_t* out, uint16_t outSize,
                    uint16_t* bytesRead = nullptr,
-                   MfuProgressCallback progress = nullptr);
+                   MfuProgressCallback progress = nullptr,
+                   const uint8_t* password = nullptr);
   // Raw Type-2 WRITE of exactly one 4-byte page.
+  bool mfuReadPage(uint8_t page, uint8_t data[4]);
+  bool mfuPwdAuth(const uint8_t password[4], uint8_t pack[2] = nullptr);
   bool mfuWritePage(uint8_t page, const uint8_t data[4]);
   // Write the writable user-memory area of a physical NTAG215 (pages 4..129).
   // Manufacturer/UID, lock and configuration/password pages are deliberately
   // preserved.
   bool mfuWriteNtag215User(const uint8_t* dump, uint16_t dumpLen,
                            MfuProgressCallback progress = nullptr,
-                           const MfuTagInfo* expectedTarget = nullptr);
+                           const MfuTagInfo* expectedTarget = nullptr,
+                           const uint8_t* password = nullptr);
   static const char* mfuTagTypeName(uint16_t type);
 
   // Firmware-side nested-attack helpers (cmds 2003/2005/2006).

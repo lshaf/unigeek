@@ -42,6 +42,7 @@ private:
     STATE_DICT_SELECT,
     STATE_ULTRALIGHT_MENU,
     STATE_ULTRALIGHT_TAG_MENU,
+    STATE_ULTRALIGHT_ADVANCED_MENU,
     STATE_ULTRALIGHT_NDEF_MENU,
     STATE_MAGIC_MENU,
     STATE_MAGIC_DETECT,
@@ -124,10 +125,14 @@ private:
     {"NDEF Operations"},
   };
 
-  ListItem _ulTagItems[5] = {
+  ListItem _ulTagItems[4] = {
     {"Read Tag"},
     {"Write to Tag"},
     {"Erase Tag"},
+    {"Advanced"},
+  };
+
+  ListItem _ulAdvancedItems[2] = {
     {"Read Pages"},
     {"Write Page"},
   };
@@ -215,6 +220,7 @@ private:
   void _openKeyDatabase(uint8_t index);
   void _goUltralight();
   void _goUltralightTag();
+  void _goUltralightAdvanced();
   void _goUltralightNdef();
   void _goMagic();
   void _goDetectMagic();
