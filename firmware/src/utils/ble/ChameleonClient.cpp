@@ -1058,6 +1058,11 @@ static bool _mfuGetVersion(ChameleonClient& c, uint8_t out8[8]) {
   uint16_t len = 0;
   if (!_mfuRaw(c, &cmd, 1, rsp, &len, sizeof(rsp))) return false;
   if (len < 8) return false;
+  // A Type-2 NAK or firmware-wrapped failure can still arrive in a buffer
+  // large enough to look like GET_VERSION. Accept only the NXP version prefix
+  // used by the NTAG21x / Ultralight EV1 families; otherwise let the caller
+  // continue with the legacy Ultralight-C / original-Ultralight probes.
+  if (rsp[0] != 0x00 || rsp[1] != 0x04) return false;
   memcpy(out8, rsp, 8);
   return true;
 }
@@ -1139,16 +1144,11 @@ bool ChameleonClient::mfuDetect(MfuTagInfo* out) {
     const uint16_t advertisedPages = (uint16_t)(4u + (uint16_t)data[2] * 2u);
     if (advertisedPages <= 4 || advertisedPages > 256) return false;
 
-    // GET_VERSION is the primary discriminator. If it is unavailable, the
-    // NFC Forum data-area size still uniquely fingerprints the common larger
-    // NTAG21x parts. Do not guess for capacities shared with Ultralight.
+    // Capability Container describes usable NFC Forum memory, not a unique
+    // silicon model. Keep the concrete type unknown unless a model-specific
+    // command identifies it.
     out->type = MFU_UNKNOWN;
     out->pages = advertisedPages;
-    if (out->uidLen == 7 && out->uid[0] == 0x04) {
-      if (data[2] == 0x12) { out->type = MFU_NTAG213; out->pages = 45; }
-      else if (data[2] == 0x3F) { out->type = MFU_NTAG215; out->pages = 135; }
-      else if (data[2] == 0x6F) { out->type = MFU_NTAG216; out->pages = 231; }
-    }
     return true;
   };
 
@@ -1174,24 +1174,13 @@ bool ChameleonClient::mfuDetect(MfuTagInfo* out) {
     return true;
   }
 
-  // Original MIFARE Ultralight (MF0ICU1) has no GET_VERSION and no
-  // Ultralight-C authentication command. Avoid depending on READ 0x0F
-  // rollover behavior: some CU firmware/reader combinations do not surface
-  // that boundary read consistently even though ordinary UL reads work.
-  //
-  // At this point GET_VERSION and UL-C AUTH have already failed. A readable
-  // page 0 on an NXP 7-byte UID therefore identifies a legacy Type-2
-  // candidate. Preserve older/larger pre-GET_VERSION tags as generic when a
-  // valid Capability Container advertises more than the original UL's
-  // 48-byte data area.
-  if (out->uidLen == 7 && out->uid[0] == 0x04) {
-    uint8_t tmp[16] = {};
-    if (_mfuRead4(*this, 0, tmp)) {
-      uint8_t cc[16] = {};
-      if (_mfuRead4(*this, 3, cc) &&
-          cc[0] == 0xE1 && (cc[1] & 0xF0) == 0x10 && cc[2] > 0x06) {
-        return detectGenericType2();
-      }
+  // After excluding Ultralight C, recognize the original 16-page Ultralight
+  // only when a normal READ works and the documented out-of-range READ 0x29
+  // NAKs. A successful high-page read remains ambiguous; do not guess NTAG203.
+  uint8_t tmp[16] = {};
+  if (_mfuRead4(*this, 0, tmp)) {
+    memset(tmp, 0, sizeof(tmp));
+    if (!_mfuRead4(*this, 0x29, tmp)) {
       out->type  = MFU_ULTRALIGHT;
       out->pages = 16;
       return true;

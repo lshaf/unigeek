@@ -620,6 +620,7 @@ void PN532I2cScreen::onRender() {
     return;
   }
   if (_state == STATE_INFO || _state == STATE_SCAN_RESULT ||
+      _state == STATE_EMV_RESULT ||
       _state == STATE_MIFARE_DUMP || _state == STATE_MIFARE_DUMP_HEX ||
       _state == STATE_MIFARE_WRITE_PREVIEW ||
       _state == STATE_MIFARE_KEYS || _state == STATE_MIFARE_KEY_DB_VIEW ||
@@ -968,40 +969,81 @@ void PN532I2cScreen::_doReadEmv() {
   renderOperationTitle("Read EMV");
   renderTagPrompt("Place card on reader...", bodyX(), bodyY(), bodyW(), bodyH());
 
-  if (!_scanCardOrShow(5000)) {
-    _goMain();
+  auto showEmvStatus = [this](const String& status) {
+    _state = STATE_EMV_RESULT;
+    _resetRows();
+    _pushWrappedRow("Status", status);
+    _scrollView.setRows(_rows, _rowCount);
+    render();
+  };
+
+  // Put the PN532 SAM in normal mode before passive-target activation.
+  if (!_nfc->SAMConfig()) {
+    showEmvStatus("SAM init failed");
     return;
   }
 
-  // EMV contactless applications use ISO-DEP. The PN532 activates an
-  // ISO14443-4A target during selection; inDataExchange() then carries APDUs.
-  if ((_sak & 0x20) == 0) {
-    ShowStatusAction::show("Tag not supported");
-    _goMain();
+  // Use one InListPassiveTarget activation for the complete EMV exchange.
+  // Adafruit-PN532_Bruce readPassiveTargetID() does not update _inListedTag,
+  // while inDataExchange() uses _inListedTag as Tg. Calling both methods also
+  // tries to activate the same card twice. inListPassiveTarget() both activates
+  // the ISO14443-A target and stores its target number for inDataExchange().
+  if (!_nfc->inListPassiveTarget()) {
+    showEmvStatus("Target activation failed");
     return;
   }
 
   uint8_t apdu[20] = {};
   const uint8_t apduLen = (uint8_t)EmvReader::buildSelectPpse(apdu);
-  uint8_t response[64] = {};
+  // EMV SELECT-by-name uses Le=00.
+  apdu[19] = 0x00;
+
+  uint8_t response[220] = {};
   uint8_t responseLen = sizeof(response);
   if (!_nfc->inDataExchange(apdu, apduLen, response, &responseLen)) {
-    ShowStatusAction::show("EMV read failed");
-    _goMain();
+    // Adafruit_PN532 leaves the last response frame in pn532_packetbuffer.
+    // If InDataExchange reached a PN532 response, expose its 6-bit status;
+    // otherwise report the transport/ACK/ready failure separately.
+    if (pn532_packetbuffer[5] == PN532_PN532TOHOST &&
+        pn532_packetbuffer[6] == PN532_RESPONSE_INDATAEXCHANGE) {
+      char msg[24];
+      snprintf(msg, sizeof(msg), "PN532 status %02X",
+               pn532_packetbuffer[7] & 0x3F);
+      showEmvStatus(msg);
+    } else {
+      showEmvStatus("Transport timeout");
+    }
     return;
+  }
+
+  // Surface ISO 7816 status words separately from transport failures. This
+  // makes physical testing useful even when the card does not expose PPSE.
+  if (responseLen >= 2) {
+    const uint8_t sw1 = response[responseLen - 2];
+    const uint8_t sw2 = response[responseLen - 1];
+    if (sw1 != 0x90 || sw2 != 0x00) {
+      // A completely full destination buffer may be a truncated long FCI, in
+      // which case its last two bytes are not necessarily SW1/SW2.
+      if (responseLen == sizeof(response)) {
+        showEmvStatus("Response too long");
+      } else {
+        char msg[20];
+        snprintf(msg, sizeof(msg), "APDU SW %02X%02X", sw1, sw2);
+        showEmvStatus(msg);
+      }
+      return;
+    }
   }
 
   EmvReader::Application apps[EmvReader::kMaxApps];
   const uint8_t appCount = EmvReader::parsePpse(response, responseLen, apps, EmvReader::kMaxApps);
   if (!appCount) {
-    ShowStatusAction::show("EMV not found");
-    _goMain();
+    showEmvStatus("No EMV application found");
     return;
   }
 
   _state = STATE_EMV_RESULT;
   _resetRows();
-  _pushRow("UID", _hexUid(_uid, _uidLen));
   _pushRow("Applications", String(appCount));
   for (uint8_t i = 0; i < appCount; ++i) {
     const String n = String(i + 1);
@@ -1267,15 +1309,8 @@ const char* PN532I2cScreen::_inferType2Variant() {
     const uint8_t ccSize = readType2CcSize();
     if (!ccSize) return nullptr;
 
-    // When GET_VERSION is unavailable, the NFC Forum data-area size still
-    // uniquely fingerprints the common larger NTAG21x parts. Keep ambiguous
-    // capacities (e.g. 48/128 bytes, shared with Ultralight variants) generic
-    // rather than guessing a concrete model.
-    if (_uidLen == 7 && _uid[0] == 0x04) {
-      if (ccSize == 0x12) return "NTAG213";
-      if (ccSize == 0x3F) return "NTAG215";
-      if (ccSize == 0x6F) return "NTAG216";
-    }
+    // Capability Container describes usable NFC Forum memory, not a unique
+    // silicon model. Do not infer NTAG213/215/216 from CC size alone.
     return "Ultralight / NTAG";
   };
 
@@ -1287,17 +1322,15 @@ const char* PN532I2cScreen::_inferType2Variant() {
   for (uint8_t attempt = 0; attempt < 3 && !gotVersion; ++attempt) {
     uint8_t len = sizeof(version);
     memset(version, 0, sizeof(version));
-    if (type2Exchange(&getVersion, 1, version, len) && len >= 8)
+    if (type2Exchange(&getVersion, 1, version, len) && len >= 8 &&
+        version[0] == 0x00 && version[1] == 0x04)
       gotVersion = true;
     else
       delay(20);
   }
 
   if (gotVersion) {
-    // NXP GET_VERSION starts with fixed byte 0x00 and vendor ID 0x04.
-    if (version[0] != 0x00 || version[1] != 0x04)
-      return genericType2Name();
-
+    // GET_VERSION was structurally validated above.
     if (version[2] == 0x04) { // NTAG21x
       switch (version[6]) {
         case 0x0B: return "NTAG210";
@@ -1340,35 +1373,24 @@ const char* PN532I2cScreen::_inferType2Variant() {
 
   if (isUltralightC) return "Ultralight C";
 
-  // Original MIFARE Ultralight (MF0ICU1) has no GET_VERSION and no
-  // Ultralight-C authentication command. Some reader stacks are unreliable
-  // when READ starts at page 0x0F and wraps to page 0, so do not make that
-  // rollover a prerequisite for recognizing a genuine legacy Ultralight.
-  //
-  // A readable page 0 plus an NXP 7-byte UID is enough to establish a legacy
-  // Type-2 candidate here, because GET_VERSION and the UL-C AUTH probe have
-  // already failed. If a valid CC advertises more than the original UL's
-  // 48-byte data area, keep the tag generic instead of misclassifying older
-  // NTAG-family parts that also predate GET_VERSION.
-  if (_uidLen != 7 || _uid[0] != 0x04)
-    return genericType2Name();
-
+  // Legacy Type-2 parts do not all implement GET_VERSION. After excluding
+  // Ultralight C, use the documented MF0ICU1 address limit only to recognize
+  // the original 16-page Ultralight: READ 0x29 must NAK on a genuine MF0ICU1.
+  // A successful high-page read is *not* enough to call the tag NTAG203; keep
+  // that case generic because clones/readers can make this probe ambiguous.
   const uint8_t read0[2] = {0x30, 0x00};
   uint8_t data[18] = {};
   uint8_t len = sizeof(data);
-  const bool page0Ok =
-      type2Exchange(read0, sizeof(read0), data, len) && len >= 16;
-  if (!page0Ok) return genericType2Name();
+  if (!type2Exchange(read0, sizeof(read0), data, len) || len < 16)
+    return genericType2Name();
 
-  const uint8_t readCc[2] = {0x30, 0x03};
+  const uint8_t read41[2] = {0x30, 0x29};
   len = sizeof(data);
   memset(data, 0, sizeof(data));
-  if (type2Exchange(readCc, sizeof(readCc), data, len) && len >= 16 &&
-      data[0] == 0xE1 && (data[1] & 0xF0) == 0x10 && data[2] > 0x06) {
-    return "Ultralight / NTAG";
-  }
+  if (!type2Exchange(read41, sizeof(read41), data, len) || len < 16)
+    return "Ultralight";
 
-  return "Ultralight";
+  return genericType2Name();
 }
 
 // ── scan helper ────────────────────────────────────────────────────────────
