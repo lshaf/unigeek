@@ -260,6 +260,14 @@ static uint16_t _ultralightDynamicLockPage(const char* typeName) {
 
 static bool _pn532UltralightPwdAuth(Adafruit_PN532* nfc, TwoWire* wire,
                                      const uint8_t pwd[4]) {
+  // If a PROT=1 tag rejected the preceding config READ, establish a fresh
+  // Type-2 target before PWD_AUTH. Keep this target selected for all protected
+  // I/O that follows.
+  uint8_t uid[7] = {};
+  uint8_t uidLen = 0;
+  if (!nfc->readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLen, 500))
+    return false;
+
   const uint8_t cmd[5] = {0x1B, pwd[0], pwd[1], pwd[2], pwd[3]};
   uint8_t rsp[8] = {};
   uint8_t len = sizeof(rsp);
