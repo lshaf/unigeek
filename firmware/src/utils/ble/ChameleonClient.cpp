@@ -1115,6 +1115,7 @@ const char* ChameleonClient::mfuTagTypeName(uint16_t type) {
     case MFU_ULTRALIGHT_C:     return "Ultralight C";
     case MFU_ULTRALIGHT_EV1_11:return "Ultralight EV1 11";
     case MFU_ULTRALIGHT_EV1_21:return "Ultralight EV1 21";
+    case MFU_UNKNOWN:          return "Ultralight / NTAG";
     default:                   return "Unknown";
   }
 }
@@ -1128,13 +1129,28 @@ bool ChameleonClient::mfuDetect(MfuTagInfo* out) {
   if (!scan14A(out->uid, &out->uidLen, out->atqa, &out->sak)) return false;
   if (out->sak != 0x00) return false;
 
+  // Conservative generic fallback: a valid NFC Forum Type-2 Capability
+  // Container gives the usable data-area size without assuming any concrete
+  // NTAG/Ultralight security or lock layout.
+  auto detectGenericType2 = [&]() -> bool {
+    uint8_t data[16] = {};
+    if (!_mfuRead4(*this, 3, data)) return false;
+    if (data[0] != 0xE1 || (data[1] & 0xF0) != 0x10 || data[2] == 0) return false;
+    const uint16_t advertisedPages = (uint16_t)(4u + (uint16_t)data[2] * 2u);
+    if (advertisedPages <= 4 || advertisedPages > 256) return false;
+    out->type = MFU_UNKNOWN;
+    out->pages = advertisedPages;
+    return true;
+  };
+
   uint8_t version[8] = {};
   for (uint8_t attempt = 0; attempt < 3; ++attempt) {
     if (_mfuGetVersion(*this, version)) {
       if (_mfuVersionToInfo(version, &out->type, &out->pages)) return true;
-      // We received a real GET_VERSION response, but not one we know.
-      // Do not misclassify it with legacy memory-size probes.
-      return false;
+      // We received a real GET_VERSION response, but not one we know. Keep
+      // the concrete type unknown while still allowing safe Type-2 operations
+      // when the tag exposes a valid Capability Container.
+      return detectGenericType2();
     }
     delay(30);
   }
@@ -1149,14 +1165,22 @@ bool ChameleonClient::mfuDetect(MfuTagInfo* out) {
     return true;
   }
 
-  uint8_t tmp[16] = {};
-  if (_mfuRead4(*this, 0, tmp) && !_mfuRead4(*this, 16, tmp)) {
-    out->type  = MFU_ULTRALIGHT;
-    out->pages = 16;
-    return true;
+  // Original MIFARE Ultralight (MF0ICU1) has no GET_VERSION and no
+  // Ultralight-C authentication command. Do not depend on an out-of-range
+  // READ (page 0x10) being surfaced as a failure: Chameleon firmware versions
+  // may report the Type-2 NAK differently. Confirm an NXP 7-byte UID and two
+  // valid reads inside the 16-page MF0ICU1 address space instead. READ 0x0F is
+  // valid and rolls over to page 0.
+  if (out->uidLen == 7 && out->uid[0] == 0x04) {
+    uint8_t tmp[16] = {};
+    if (_mfuRead4(*this, 0, tmp) && _mfuRead4(*this, 15, tmp)) {
+      out->type  = MFU_ULTRALIGHT;
+      out->pages = 16;
+      return true;
+    }
   }
 
-  return false;
+  return detectGenericType2();
 }
 
 bool ChameleonClient::mfuReadDump(const MfuTagInfo& info, uint8_t* out,

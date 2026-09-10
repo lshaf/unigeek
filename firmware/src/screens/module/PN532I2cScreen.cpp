@@ -1189,6 +1189,17 @@ const char* PN532I2cScreen::_inferType2Variant() {
     return _nfcCommThru(_nfc, _wire, tx, txLen, rx, rxLen, timeoutMs);
   };
 
+  // Conservative fallback for Type-2-compatible tags whose concrete variant
+  // is unknown. A valid NFC Forum Capability Container lets us expose only
+  // the advertised data area without guessing security/configuration pages.
+  auto hasGenericType2Cc = [&]() -> bool {
+    const uint8_t readCc[2] = {0x30, 0x03};
+    uint8_t data[18] = {};
+    uint8_t len = sizeof(data);
+    if (!type2Exchange(readCc, sizeof(readCc), data, len) || len < 4) return false;
+    return data[0] == 0xE1 && (data[1] & 0xF0) == 0x10 && data[2] != 0;
+  };
+
   // NTAG21x / Ultralight EV1 GET_VERSION.
   const uint8_t getVersion = 0x60;
   uint8_t version[8] = {};
@@ -1205,7 +1216,8 @@ const char* PN532I2cScreen::_inferType2Variant() {
 
   if (gotVersion) {
     // NXP GET_VERSION starts with fixed byte 0x00 and vendor ID 0x04.
-    if (version[0] != 0x00 || version[1] != 0x04) return nullptr;
+    if (version[0] != 0x00 || version[1] != 0x04)
+      return hasGenericType2Cc() ? "Ultralight / NTAG" : nullptr;
 
     if (version[2] == 0x04) { // NTAG21x
       switch (version[6]) {
@@ -1214,7 +1226,7 @@ const char* PN532I2cScreen::_inferType2Variant() {
         case 0x0F: return "NTAG213";
         case 0x11: return "NTAG215";
         case 0x13: return "NTAG216";
-        default:   return nullptr;
+        default:   return hasGenericType2Cc() ? "Ultralight / NTAG" : nullptr;
       }
     }
 
@@ -1228,7 +1240,7 @@ const char* PN532I2cScreen::_inferType2Variant() {
 
     // A real but unknown GET_VERSION response must not be forced into one of
     // the legacy Ultralight variants.
-    return nullptr;
+    return hasGenericType2Cc() ? "Ultralight / NTAG" : nullptr;
   }
 
   // Legacy Ultralight C has no GET_VERSION. AUTHENTICATE part 1 returns
@@ -1249,21 +1261,29 @@ const char* PN532I2cScreen::_inferType2Variant() {
 
   if (isUltralightC) return "Ultralight C";
 
-  // Original MIFARE Ultralight: page 0 is readable, while page 16 is beyond
-  // the 16-page memory. READ returns four pages (16 bytes).
+  // Original MIFARE Ultralight (MF0ICU1) has no GET_VERSION and no
+  // Ultralight-C authentication command. Do not identify it by requiring an
+  // out-of-range READ (page 0x10) to fail: reader/firmware wrappers do not
+  // expose Type-2 NAKs consistently. Instead, after the two legacy probes
+  // above failed, confirm the NXP 7-byte UID and two valid reads within the
+  // 16-page MF0ICU1 address space. READ 0x0F is valid and rolls over to page 0.
+  if (_uidLen != 7 || _uid[0] != 0x04) return nullptr;
+
   const uint8_t read0[2]  = {0x30, 0x00};
-  const uint8_t read16[2] = {0x30, 0x10};
+  const uint8_t read15[2] = {0x30, 0x0F};
   uint8_t data[18] = {};
   uint8_t len = sizeof(data);
-  bool page0Ok = type2Exchange(read0, sizeof(read0), data, len) && len >= 16;
+  const bool page0Ok =
+      type2Exchange(read0, sizeof(read0), data, len) && len >= 16;
 
   len = sizeof(data);
   memset(data, 0, sizeof(data));
-  bool page16Ok = type2Exchange(read16, sizeof(read16), data, len) && len >= 16;
+  const bool page15Ok =
+      type2Exchange(read15, sizeof(read15), data, len) && len >= 16;
 
-  if (page0Ok && !page16Ok) return "Ultralight";
+  if (page0Ok && page15Ok) return "Ultralight";
 
-  return nullptr;
+  return hasGenericType2Cc() ? "Ultralight / NTAG" : nullptr;
 }
 
 // ── scan helper ────────────────────────────────────────────────────────────
@@ -2146,6 +2166,14 @@ bool PN532I2cScreen::_detectUltralightTag(uint16_t& pages, const char*& typeName
   else if (strcmp(typeName, "Ultralight EV1 21") == 0) pages = 41;
   else if (strcmp(typeName, "Ultralight C") == 0) pages = 48;
   else if (strcmp(typeName, "Ultralight") == 0) pages = 16;
+  else if (strcmp(typeName, "Ultralight / NTAG") == 0) {
+    uint8_t cc[4] = {};
+    if (!_pn532Type2ReadPage(_nfc, _wire, 3, cc) ||
+        cc[0] != 0xE1 || (cc[1] & 0xF0) != 0x10 || cc[2] == 0) return false;
+    const uint16_t advertisedPages = (uint16_t)(4u + (uint16_t)cc[2] * 2u);
+    if (advertisedPages <= 4 || advertisedPages > 256) return false;
+    pages = advertisedPages;
+  }
   return pages != 0;
 }
 
@@ -2522,8 +2550,9 @@ void PN532I2cScreen::_doUltralightLockTag() {
   renderTagPrompt("Place tag on reader...", bodyX(), bodyY(), bodyW(), bodyH());
   uint16_t pages = 0; const char* typeName = nullptr;
   if (!_detectUltralightTag(pages, typeName) || !typeName ||
-      strcmp(typeName, "Ultralight C") == 0) {
-    ShowStatusAction::show("Unsupported tag type"); _goUltralightAdvanced(); return;
+      strcmp(typeName, "Ultralight C") == 0 ||
+      strcmp(typeName, "Ultralight / NTAG") == 0) {
+    ShowStatusAction::show("Lock not supported"); _goUltralightAdvanced(); return;
   }
 
   uint16_t lastUser = _ultralightDynamicLockPage(typeName);
@@ -3616,12 +3645,12 @@ bool PN532I2cScreen::_writeUltralightNdefRecord(const uint8_t* ndef, size_t ndef
   }
 
   size_t capacity = (size_t)cc[2] * 8u;
+  size_t physicalCapacity = authPages > 4 ? ((size_t)authPages - 4u) * 4u : 0u;
   uint8_t maxCc[4] = {};
-  if (!_type2DefaultCc(authType, maxCc)) {
-    ShowStatusAction::show("Unsupported Type 2 tag");
-    return false;
+  if (_type2DefaultCc(authType, maxCc)) {
+    const size_t knownCapacity = (size_t)maxCc[2] * 8u;
+    if (knownCapacity < physicalCapacity) physicalCapacity = knownCapacity;
   }
-  const size_t physicalCapacity = (size_t)maxCc[2] * 8u;
   if (capacity == 0 || physicalCapacity == 0) {
     ShowStatusAction::show("Invalid NDEF capacity");
     return false;

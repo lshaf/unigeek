@@ -267,13 +267,17 @@ bool ChameleonMfuNdefScreen::writeRecord(const uint8_t* ndef, size_t nl, const c
   }
 
   size_t capacity = (size_t)cc[2] * 8u;
+  size_t physicalCapacity = info.pages > 4 ? ((size_t)info.pages - 4u) * 4u : 0u;
   uint8_t maxCc[4] = {};
-  if (!type2DefaultCc(info.type, maxCc)) {
+  if (type2DefaultCc(info.type, maxCc)) {
+    const size_t knownCapacity = (size_t)maxCc[2] * 8u;
+    if (knownCapacity < physicalCapacity) physicalCapacity = knownCapacity;
+  }
+  if (!physicalCapacity) {
     if (restoreMode) c.setMode(previousMode);
-    ShowStatusAction::show("Unsupported Type 2 tag");
+    ShowStatusAction::show("Invalid NDEF capacity");
     return false;
   }
-  const size_t physicalCapacity = (size_t)maxCc[2] * 8u;
   if (capacity > physicalCapacity) capacity = physicalCapacity;
   const size_t lenBytes = (nl < 0xFFu) ? 1u : 3u;
   const size_t tlvLen = 1u + lenBytes + nl + 1u; // type + length + NDEF + terminator

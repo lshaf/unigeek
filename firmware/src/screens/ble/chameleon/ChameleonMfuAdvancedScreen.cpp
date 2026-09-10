@@ -130,8 +130,10 @@ void ChameleonMfuAdvancedScreen::_lockTag() {
   auto& c = ChameleonClient::get(); uint8_t previousMode = 0;
   const bool restoreMode = c.getMode(&previousMode); c.setMode(1);
   ChameleonClient::MfuTagInfo info = {};
-  if (!_detect(c, info) || info.pages <= 4 || info.type == ChameleonClient::MFU_ULTRALIGHT_C) {
-    if (restoreMode) c.setMode(previousMode); render(); ShowStatusAction::show("Unsupported tag type"); render(); return;
+  if (!_detect(c, info) || info.pages <= 4 ||
+      info.type == ChameleonClient::MFU_ULTRALIGHT_C ||
+      info.type == ChameleonClient::MFU_UNKNOWN) {
+    if (restoreMode) c.setMode(previousMode); render(); ShowStatusAction::show("Lock not supported"); render(); return;
   }
   uint16_t lastUser = ChameleonMfuAuthUtils::dynamicLockPage(info.type);
   if (lastUser != 0xFFFF) --lastUser; else lastUser = 15;
