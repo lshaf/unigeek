@@ -117,7 +117,7 @@ void ChameleonMfuScreen::_buildResult() {
     if (auth0 == 0xFF || auth0 >= _info.pages) {
       addRow("Protection", "None");
     } else {
-      addRow("Protection", (access & 0x80) ? "Read + Write" : "Write only");
+      addRow("Protection", (access & 0x80) ? "Read & Write" : "Write Only");
       addRow("From Page", String(auth0));
     }
   }

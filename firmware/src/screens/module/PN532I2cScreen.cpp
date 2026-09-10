@@ -2190,7 +2190,7 @@ void PN532I2cScreen::_showUltralightTagDetails(const char* typeName, uint16_t pa
     if (auth0 == 0xFF || auth0 >= pages) {
       _pushRow("Protection", "None");
     } else {
-      _pushRow("Protection", (access & 0x80) ? "Read + Write" : "Write only");
+      _pushRow("Protection", (access & 0x80) ? "Read & Write" : "Write Only");
       _pushRow("From Page", String(auth0));
     }
   }
@@ -2467,7 +2467,7 @@ void PN532I2cScreen::_doUltralightReadPages() {
 }
 
 void PN532I2cScreen::_doUltralightWritePage() {
-  renderOperationTitle("Write Page");
+  renderOperationTitle("Edit Memory");
   renderTagPrompt("Place tag on reader...", bodyX(), bodyY(), bodyW(), bodyH());
   uint16_t pages = 0; const char* typeName = nullptr;
   if (!_detectUltralightTag(pages, typeName)) {
@@ -2573,13 +2573,14 @@ void PN532I2cScreen::_doUltralightSetPassword() {
   // Authenticate with the current password before changing an existing
   // protected configuration.
   if (wasProtected && !_pn532EnsureUltralightAuthForRange(
-          _nfc, _wire, typeName, pages, cfg, cfg + 2, false)) {
+          _nfc, _wire, typeName, pages, cfg, cfg + 3, false)) {
     _goUltralightAdvanced(); return;
   }
 
-  uint8_t c0[4] = {}, c1[4] = {};
+  uint8_t c0[4] = {}, c1[4] = {}, pack[4] = {};
   if (!_pn532Type2ReadPageTailSafe(_nfc, _wire, cfg, pages, c0) ||
-      !_pn532Type2ReadPageTailSafe(_nfc, _wire, cfg + 1, pages, c1)) {
+      !_pn532Type2ReadPageTailSafe(_nfc, _wire, cfg + 1, pages, c1) ||
+      !_pn532Type2ReadPageTailSafe(_nfc, _wire, cfg + 3, pages, pack)) {
     ShowStatusAction::show("Read config failed"); _goUltralightAdvanced(); return;
   }
 
@@ -2613,10 +2614,14 @@ void PN532I2cScreen::_doUltralightSetPassword() {
     ok = _pn532Type2WritePage(_nfc, _wire, (uint8_t)(cfg + 1), c1);
   }
   if (ok) ok = _pn532Type2WritePage(_nfc, _wire, (uint8_t)(cfg + 2), newPwd);
+  if (ok) {
+    pack[0] = 0x00; pack[1] = 0x00;
+    ok = _pn532Type2WritePage(_nfc, _wire, (uint8_t)(cfg + 3), pack);
+  }
   if (ok && !configLocked)
     ok = _pn532Type2WritePage(_nfc, _wire, (uint8_t)cfg, c0);
 
-  ShowStatusAction::show(ok ? "Password set" : "Password setup failed");
+  ShowStatusAction::show(ok ? "Password set - retap tag" : "Password setup failed");
   _goUltralightAdvanced();
 }
 
@@ -3544,7 +3549,7 @@ bool PN532I2cScreen::_writeNdefRecord(const uint8_t* ndef, size_t ndefLen) {
 
 bool PN532I2cScreen::_writeUltralightNdefRecord(const uint8_t* ndef, size_t ndefLen) {
   renderOperationTitle("Write NDEF");
-  if (!ndef || ndefLen == 0 || ndefLen > 254) {
+  if (!ndef || ndefLen == 0 || ndefLen > MAX_NDEF_BYTES) {
     ShowStatusAction::show("NDEF too large");
     return false;
   }
@@ -3576,8 +3581,11 @@ bool PN532I2cScreen::_writeUltralightNdefRecord(const uint8_t* ndef, size_t ndef
   }
 
   uint16_t authPages = 0; const char* authType = nullptr;
-  if (_detectUltralightTag(authPages, authType) &&
-      !_pn532EnsureUltralightAuth(_nfc, _wire, authType, authPages, false)) {
+  if (!_detectUltralightTag(authPages, authType)) {
+    ShowStatusAction::show("Unsupported Type 2 tag");
+    return false;
+  }
+  if (!_pn532EnsureUltralightAuth(_nfc, _wire, authType, authPages, false)) {
     return false;
   }
 
@@ -3594,15 +3602,23 @@ bool PN532I2cScreen::_writeUltralightNdefRecord(const uint8_t* ndef, size_t ndef
     return false;
   }
 
-  size_t capacity = (size_t)cc[2] * 8;
-  if (capacity == 0) {
+  size_t capacity = (size_t)cc[2] * 8u;
+  uint8_t maxCc[4] = {};
+  if (!_type2DefaultCc(authType, maxCc)) {
+    ShowStatusAction::show("Unsupported Type 2 tag");
+    return false;
+  }
+  const size_t physicalCapacity = (size_t)maxCc[2] * 8u;
+  if (capacity == 0 || physicalCapacity == 0) {
     ShowStatusAction::show("Invalid NDEF capacity");
     return false;
   }
+  if (capacity > physicalCapacity) capacity = physicalCapacity;
 
   // Type 2 Tag memory layout:
-  // 03 <LEN> <NDEF message> FE
-  size_t tlvLen = ndefLen + 3;
+  // 03 <LEN> <NDEF message> FE; lengths >= 255 use the extended TLV form.
+  const size_t lenBytes = (ndefLen < 0xFFu) ? 1u : 3u;
+  size_t tlvLen = 1u + lenBytes + ndefLen + 1u;
   size_t paddedLen = (tlvLen + 3) & ~((size_t)3);
 
   if (paddedLen > capacity) {
@@ -3617,10 +3633,18 @@ bool PN532I2cScreen::_writeUltralightNdefRecord(const uint8_t* ndef, size_t ndef
   }
 
   memset(payload, 0x00, paddedLen);
-  payload[0] = 0x03;
-  payload[1] = (uint8_t)ndefLen;
-  memcpy(&payload[2], ndef, ndefLen);
-  payload[2 + ndefLen] = 0xFE;
+  size_t pos = 0;
+  payload[pos++] = 0x03;
+  if (ndefLen < 0xFFu) {
+    payload[pos++] = (uint8_t)ndefLen;
+  } else {
+    payload[pos++] = 0xFF;
+    payload[pos++] = (uint8_t)((ndefLen >> 8) & 0xFFu);
+    payload[pos++] = (uint8_t)(ndefLen & 0xFFu);
+  }
+  memcpy(payload + pos, ndef, ndefLen);
+  pos += ndefLen;
+  payload[pos] = 0xFE;
 
   ProgressView::init();
   bool success = true;

@@ -134,7 +134,7 @@ private:
 
   ListItem _ulAdvancedItems[5] = {
     {"Read Memory"},
-    {"Write Page"},
+    {"Edit Memory"},
     {"Set Password"},
     {"Remove Password"},
     {"Lock Tag"},
@@ -196,7 +196,7 @@ private:
   NdefTarget_e _ndefTarget = NDEF_TARGET_ULTRALIGHT;
 
   // Raw NDEF message retained after Read NDEF (without the tag-specific TLV wrapper).
-  static constexpr size_t MAX_NDEF_BYTES = 254;
+  static constexpr size_t MAX_NDEF_BYTES = 880;
   uint8_t  _ndefBuf[MAX_NDEF_BYTES] = {};
   size_t   _ndefLen = 0;
   size_t   _ndefCapacity = 0;
