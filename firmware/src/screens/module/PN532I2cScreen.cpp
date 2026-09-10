@@ -125,6 +125,51 @@ static bool _pn532Type2WritePage(Adafruit_PN532* nfc, TwoWire* wire,
   return len == 0 || (len >= 1 && (rsp[0] & 0x0F) == 0x0A);
 }
 
+static const char* _ultralightSensitivePageLabel(const char* typeName, uint16_t page) {
+  if (!typeName) return nullptr;
+
+  uint16_t dynamicLock = 0xFFFF;
+  uint16_t config0 = 0xFFFF;
+
+  if (strcmp(typeName, "NTAG210") == 0 ||
+      strcmp(typeName, "Ultralight EV1 11") == 0) {
+    config0 = 16;
+  } else if (strcmp(typeName, "NTAG212") == 0 ||
+             strcmp(typeName, "Ultralight EV1 21") == 0) {
+    dynamicLock = 36; config0 = 37;
+  } else if (strcmp(typeName, "NTAG213") == 0) {
+    dynamicLock = 40; config0 = 41;
+  } else if (strcmp(typeName, "NTAG215") == 0) {
+    dynamicLock = 130; config0 = 131;
+  } else if (strcmp(typeName, "NTAG216") == 0) {
+    dynamicLock = 226; config0 = 227;
+  } else if (strcmp(typeName, "Ultralight C") == 0) {
+    if (page >= 40 && page <= 43) return "Security/config page";
+    if (page >= 44 && page <= 47) return "3DES key page";
+    return nullptr;
+  } else {
+    return nullptr;
+  }
+
+  if (page == dynamicLock) return "Dynamic lock page";
+  if (page == config0 || page == config0 + 1) return "Configuration page";
+  if (page == config0 + 2) return "Password page";
+  if (page == config0 + 3) return "PACK page";
+  return nullptr;
+}
+
+static bool _confirmUltralightSensitiveWrite(const char* typeName, uint16_t page) {
+  const char* label = _ultralightSensitivePageLabel(typeName, page);
+  if (!label) return true;
+
+  static const InputSelectAction::Option opts[] = {
+    {"Write anyway", "write"},
+  };
+  String title = String("Warning: ") + label;
+  const char* choice = InputSelectAction::popup(title.c_str(), opts, 1, nullptr);
+  return choice && strcmp(choice, "write") == 0;
+}
+
 // ── title ──────────────────────────────────────────────────────────────────
 
 static void renderTagPrompt(const char* message, int bx, int by, int bw, int bh) {
@@ -2169,6 +2214,11 @@ void PN532I2cScreen::_doUltralightWritePage() {
   const int page = InputNumberAction::popup(
       (String("Page (4..") + String(pages - 1) + ")").c_str(), 4, pages - 1, 4);
   if (InputNumberAction::wasCancelled()) { _goUltralightTag(); return; }
+
+  if (!_confirmUltralightSensitiveWrite(typeName, (uint16_t)page)) {
+    _goUltralightTag();
+    return;
+  }
 
   String hex = InputTextAction::popup("Page data (8 hex)", "", InputTextAction::INPUT_HEX);
   if (InputTextAction::wasCancelled()) { _goUltralightTag(); return; }

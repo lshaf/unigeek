@@ -22,6 +22,50 @@ void _mfuEraseProgress(uint16_t done, uint16_t total) {
   const int pct = total ? (int)((uint32_t)done * 100u / total) : 0;
   ProgressView::progress(msg, pct);
 }
+
+const char* _mfuSensitivePageLabel(uint16_t type, uint16_t page) {
+  uint16_t dynamicLock = 0xFFFF;
+  uint16_t config0 = 0xFFFF;
+
+  switch (type) {
+    case ChameleonClient::MFU_NTAG210:
+    case ChameleonClient::MFU_ULTRALIGHT_EV1_11:
+      config0 = 16; break;
+    case ChameleonClient::MFU_NTAG212:
+    case ChameleonClient::MFU_ULTRALIGHT_EV1_21:
+      dynamicLock = 36; config0 = 37; break;
+    case ChameleonClient::MFU_NTAG213:
+      dynamicLock = 40; config0 = 41; break;
+    case ChameleonClient::MFU_NTAG215:
+      dynamicLock = 130; config0 = 131; break;
+    case ChameleonClient::MFU_NTAG216:
+      dynamicLock = 226; config0 = 227; break;
+    case ChameleonClient::MFU_ULTRALIGHT_C:
+      if (page >= 40 && page <= 43) return "Security/config page";
+      if (page >= 44 && page <= 47) return "3DES key page";
+      return nullptr;
+    default:
+      return nullptr;
+  }
+
+  if (page == dynamicLock) return "Dynamic lock page";
+  if (page == config0 || page == config0 + 1) return "Configuration page";
+  if (page == config0 + 2) return "Password page";
+  if (page == config0 + 3) return "PACK page";
+  return nullptr;
+}
+
+bool _confirmMfuSensitiveWrite(uint16_t type, uint16_t page) {
+  const char* label = _mfuSensitivePageLabel(type, page);
+  if (!label) return true;
+
+  static const InputSelectAction::Option opts[] = {
+    {"Write anyway", "write"},
+  };
+  String title = String("Warning: ") + label;
+  const char* choice = InputSelectAction::popup(title.c_str(), opts, 1, nullptr);
+  return choice && strcmp(choice, "write") == 0;
+}
 }
 
 void ChameleonMfuToolsScreen::onInit() {
@@ -203,6 +247,12 @@ void ChameleonMfuToolsScreen::_writePage() {
   String title = String("Page (4..") + String(info.pages - 1) + ")";
   const int page = InputNumberAction::popup(title.c_str(), 4, info.pages - 1, 4);
   if (InputNumberAction::wasCancelled()) {
+    if (restoreMode) c.setMode(previousMode);
+    render();
+    return;
+  }
+
+  if (!_confirmMfuSensitiveWrite(info.type, (uint16_t)page)) {
     if (restoreMode) c.setMode(previousMode);
     render();
     return;
