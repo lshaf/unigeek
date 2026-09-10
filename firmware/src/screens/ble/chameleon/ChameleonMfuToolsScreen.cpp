@@ -94,7 +94,7 @@ void ChameleonMfuToolsScreen::_writeFromSlot() {
   }
   if (!(hfType == ChameleonClient::MFU_NTAG215)) {
     render();
-    ShowStatusAction::show("Unsupported tag type", 1500);
+    ShowStatusAction::show("Tag not supported", 1500);
     render();
     return;
   }

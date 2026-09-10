@@ -16,7 +16,7 @@
 void ChameleonMagicScreen::onInit() {
   _done = false;
   _log.clear();
-  _log.addLine("Magic Card Detect", TFT_CYAN);
+  _log.addLine("Detect Magic", TFT_CYAN);
   _log.addLine("[Press] Start", TFT_DARKGREY);
   _needsDraw = true;
 }
