@@ -10,8 +10,8 @@ public:
 private:
   ListItem _items[6];
   void _writePage();
-  void _lockPages();
+  void _lockTag();
   void _setPassword();
   void _configureProtection();
-  void _disableProtection();
+  void _removePassword();
 };

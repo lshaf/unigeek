@@ -4,7 +4,7 @@
 
 class ChameleonMfuPagesScreen : public BaseScreen {
 public:
-  const char* title() override { return "Read Pages"; }
+  const char* title() override { return "Read Memory"; }
   bool inhibitPowerOff() override { return _busy; }
   void onInit() override;
   void onUpdate() override;

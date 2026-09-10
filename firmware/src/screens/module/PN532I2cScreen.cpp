@@ -220,6 +220,15 @@ static bool _promptUltralightPassword(uint8_t pwd[4], const char* title = "Passw
   return true;
 }
 
+static uint16_t _ultralightDynamicLockPage(const char* typeName) {
+  if (!typeName) return 0xFFFF;
+  if (strcmp(typeName, "NTAG212") == 0 || strcmp(typeName, "Ultralight EV1 21") == 0) return 36;
+  if (strcmp(typeName, "NTAG213") == 0) return 40;
+  if (strcmp(typeName, "NTAG215") == 0) return 130;
+  if (strcmp(typeName, "NTAG216") == 0) return 226;
+  return 0xFFFF;
+}
+
 static bool _pn532UltralightPwdAuth(Adafruit_PN532* nfc, TwoWire* wire,
                                      const uint8_t pwd[4]) {
   const uint8_t cmd[5] = {0x1B, pwd[0], pwd[1], pwd[2], pwd[3]};
@@ -356,7 +365,7 @@ const char* PN532I2cScreen::title() {
     case STATE_ULTRALIGHT_NDEF_MENU:return "NDEF Operations";
     case STATE_MAGIC_MENU:      return "Magic Card";
     case STATE_MAGIC_DETECT:    return "Detect Magic";
-    case STATE_RAW_RESULT:      return "Read Pages";
+    case STATE_RAW_RESULT:      return "Read Memory";
     case STATE_ULTRALIGHT_DUMP: return "Tag Details";
     case STATE_EMULATE:         return "Emulate Card";
     case STATE_NTAG_MENU:       return "Emulate NDEF";
@@ -647,10 +656,10 @@ void PN532I2cScreen::onItemSelected(uint8_t index) {
     case STATE_ULTRALIGHT_ADVANCED_MENU:
       if (index == 0) _doUltralightReadPages();
       else if (index == 1) _doUltralightWritePage();
-      else if (index == 2) _doUltralightLockPages();
+      else if (index == 2) _doUltralightLockTag();
       else if (index == 3) _doUltralightSetPassword();
-      else if (index == 4) _doUltralightConfigureProtection();
-      else if (index == 5) _doUltralightDisableProtection();
+      else if (index == 4) _doUltralightRemovePassword();
+      else if (index == 5) _doUltralightConfigureProtection();
       break;
     case STATE_ULTRALIGHT_NDEF_MENU:
       switch (index) {
@@ -2383,7 +2392,7 @@ void PN532I2cScreen::_doUltralightEraseTag() {
 }
 
 void PN532I2cScreen::_doUltralightReadPages() {
-  renderOperationTitle("Read Pages");
+  renderOperationTitle("Read Memory");
   renderTagPrompt("Place tag on reader...", bodyX(), bodyY(), bodyW(), bodyH());
   uint16_t pages = 0; const char* typeName = nullptr;
   if (!_detectUltralightTag(pages, typeName)) {
@@ -2468,32 +2477,27 @@ void PN532I2cScreen::_doUltralightWritePage() {
 }
 
 
-void PN532I2cScreen::_doUltralightLockPages() {
-  renderOperationTitle("Lock Pages");
+void PN532I2cScreen::_doUltralightLockTag() {
+  renderOperationTitle("Lock Tag");
   renderTagPrompt("Place tag on reader...", bodyX(), bodyY(), bodyW(), bodyH());
   uint16_t pages = 0; const char* typeName = nullptr;
   if (!_detectUltralightTag(pages, typeName) || !typeName ||
       strcmp(typeName, "Ultralight C") == 0) {
     ShowStatusAction::show("Unsupported tag type"); _goUltralightAdvanced(); return;
   }
+
   uint16_t lastUser = _ultralightDynamicLockPage(typeName);
   if (lastUser != 0xFFFF) --lastUser; else lastUser = 15;
-  if (lastUser < 4) { ShowStatusAction::show("No lockable pages"); _goUltralightAdvanced(); return; }
-  const int first = InputNumberAction::popup(
-      (String("First page (4..") + String(lastUser) + ")").c_str(), 4, lastUser, 4);
-  if (InputNumberAction::wasCancelled()) { _goUltralightAdvanced(); return; }
-  const int last = InputNumberAction::popup(
-      (String("Last page (") + String(first) + ".." + String(lastUser) + ")").c_str(),
-      first, lastUser, first);
-  if (InputNumberAction::wasCancelled()) { _goUltralightAdvanced(); return; }
+  if (lastUser < 4) { ShowStatusAction::show("No lockable memory"); _goUltralightAdvanced(); return; }
+
   static const InputSelectAction::Option warn[] = {{"Lock permanently", "lock"}};
-  if (!InputSelectAction::popup("Permanent page-group lock", warn, 1, nullptr)) {
+  if (!InputSelectAction::popup("Make tag read-only?", warn, 1, nullptr)) {
     _goUltralightAdvanced(); return;
   }
 
   uint8_t sm[2] = {}, dm[3] = {};
-  if (!_pn532BuildUltralightLockMasks(typeName, first, last, sm, dm)) {
-    ShowStatusAction::show("Unsupported lock range"); _goUltralightAdvanced(); return;
+  if (!_pn532BuildUltralightLockMasks(typeName, 4, lastUser, sm, dm)) {
+    ShowStatusAction::show("Unsupported lock layout"); _goUltralightAdvanced(); return;
   }
   const uint16_t dyn = _ultralightDynamicLockPage(typeName);
   const bool needsDyn = dyn != 0xFFFF && (dm[0] || dm[1] || dm[2]);
@@ -2505,8 +2509,6 @@ void PN532I2cScreen::_doUltralightLockPages() {
 
   bool ok = true;
   if (sm[0] || sm[1]) {
-    // Type 2 static lock bytes are bytes 2/3 of page 2. Bytes 0/1 are not
-    // modified by the lock-byte WRITE semantics.
     uint8_t p2[4] = {0, 0, sm[0], sm[1]};
     ok = _pn532Type2WritePage(_nfc, _wire, 2, p2);
   }
@@ -2518,7 +2520,7 @@ void PN532I2cScreen::_doUltralightLockPages() {
       ok = _pn532Type2WritePage(_nfc, _wire, (uint8_t)dyn, cur);
     }
   }
-  ShowStatusAction::show(ok ? "Pages locked" : "Lock failed");
+  ShowStatusAction::show(ok ? "Tag locked" : "Lock failed");
   _goUltralightAdvanced();
 }
 
@@ -2530,21 +2532,48 @@ void PN532I2cScreen::_doUltralightSetPassword() {
     ShowStatusAction::show("Password not supported"); _goUltralightAdvanced(); return;
   }
   const uint16_t cfg = _ultralightConfig0(typeName);
-  if (!_pn532EnsureUltralightAuthForRange(_nfc, _wire, typeName, pages, cfg + 2, cfg + 2, false)) {
+
+  uint8_t auth0 = 0xFF, access = 0;
+  bool protectionReadable = _pn532ReadUltralightProtection(
+      _nfc, _wire, typeName, pages, auth0, access);
+  const bool wasProtected = !protectionReadable || (auth0 != 0xFF && auth0 < pages);
+
+  // If the tag is already protected, authenticate with the current text
+  // password before changing PWD or configuration pages.
+  if (wasProtected && !_pn532EnsureUltralightAuthForRange(
+          _nfc, _wire, typeName, pages, cfg, cfg + 2, false)) {
     _goUltralightAdvanced(); return;
+  }
+
+  uint8_t c0[4] = {}, c1[4] = {};
+  if (!_pn532Type2ReadPageTailSafe(_nfc, _wire, cfg, pages, c0) ||
+      !_pn532Type2ReadPageTailSafe(_nfc, _wire, cfg + 1, pages, c1)) {
+    ShowStatusAction::show("Read config failed"); _goUltralightAdvanced(); return;
+  }
+  if (c1[0] & 0x40) {
+    // CFGLCK does not prevent changing PWD itself, but on an unprotected tag
+    // it would prevent us from enabling the expected write-only protection.
+    if (!wasProtected) {
+      ShowStatusAction::show("Configuration locked"); _goUltralightAdvanced(); return;
+    }
   }
 
   uint8_t newPwd[4] = {};
   if (!_promptUltralightPassword(newPwd, "New Password")) {
-    _goUltralightAdvanced();
-    return;
+    _goUltralightAdvanced(); return;
   }
 
-  // NFC Tools-style text passwords are MD5-derived to the 4-byte PWD.
-  // PACK is deliberately left unchanged: it is an authentication response,
-  // not part of the user-facing password.
   bool ok = _pn532Type2WritePage(_nfc, _wire, (uint8_t)(cfg + 2), newPwd);
-  ShowStatusAction::show(ok ? "Password updated" : "Password write failed");
+  if (ok && !wasProtected) {
+    // Match the user-facing semantics of NFC Tools: setting a password on an
+    // open tag makes the user area write-protected while reads stay public.
+    c1[0] &= (uint8_t)~0x80u; // PROT=0: write-only protection
+    c0[3] = 4;               // protect user memory from page 4
+    ok = _pn532Type2WritePage(_nfc, _wire, (uint8_t)(cfg + 1), c1);
+    if (ok) ok = _pn532Type2WritePage(_nfc, _wire, (uint8_t)cfg, c0);
+  }
+
+  ShowStatusAction::show(ok ? "Password set" : "Password write failed");
   _goUltralightAdvanced();
 }
 
@@ -2556,8 +2585,25 @@ void PN532I2cScreen::_doUltralightConfigureProtection() {
     ShowStatusAction::show("Protection not supported"); _goUltralightAdvanced(); return;
   }
   const uint16_t cfg = _ultralightConfig0(typeName);
-  if (!_pn532EnsureUltralightAuthForRange(_nfc, _wire, typeName, pages, cfg, cfg + 1, false)) {
-    _goUltralightAdvanced(); return;
+  uint8_t auth0Before = 0xFF, accessBefore = 0;
+  const bool protectionReadable = _pn532ReadUltralightProtection(
+      _nfc, _wire, typeName, pages, auth0Before, accessBefore);
+  const bool alreadyProtected = protectionReadable && auth0Before != 0xFF && auth0Before < pages;
+
+  if (alreadyProtected) {
+    if (!_pn532EnsureUltralightAuthForRange(_nfc, _wire, typeName, pages, cfg, cfg + 1, false)) {
+      _goUltralightAdvanced(); return;
+    }
+  } else {
+    // Before enabling protection on an open tag, verify that the user knows
+    // the current text password. Otherwise AUTH0 could be enabled with an
+    // unknown/default PWD and make subsequent writes inaccessible.
+    uint8_t pwd[4] = {};
+    if (!_promptUltralightPassword(pwd, "Password") ||
+        !_pn532UltralightPwdAuth(_nfc, _wire, pwd)) {
+      if (!InputTextAction::wasCancelled()) ShowStatusAction::show("Authentication failed");
+      _goUltralightAdvanced(); return;
+    }
   }
   uint8_t c0[4] = {}, c1[4] = {};
   if (!_pn532Type2ReadPageTailSafe(_nfc, _wire, cfg, pages, c0) ||
@@ -2593,26 +2639,46 @@ void PN532I2cScreen::_doUltralightConfigureProtection() {
   _goUltralightAdvanced();
 }
 
-void PN532I2cScreen::_doUltralightDisableProtection() {
-  renderOperationTitle("Disable Protection");
+void PN532I2cScreen::_doUltralightRemovePassword() {
+  renderOperationTitle("Remove Password");
   renderTagPrompt("Place tag on reader...", bodyX(), bodyY(), bodyW(), bodyH());
   uint16_t pages = 0; const char* typeName = nullptr;
   if (!_detectUltralightTag(pages, typeName) || _ultralightConfig0(typeName) == 0xFFFF) {
-    ShowStatusAction::show("Protection not supported"); _goUltralightAdvanced(); return;
+    ShowStatusAction::show("Password not supported"); _goUltralightAdvanced(); return;
   }
   const uint16_t cfg = _ultralightConfig0(typeName);
-  if (!_pn532EnsureUltralightAuthForRange(_nfc, _wire, typeName, pages, cfg, cfg, false)) {
+
+  uint8_t auth0 = 0xFF, access = 0;
+  const bool readable = _pn532ReadUltralightProtection(
+      _nfc, _wire, typeName, pages, auth0, access);
+  const bool protectedNow = !readable || (auth0 != 0xFF && auth0 < pages);
+  if (protectedNow && !_pn532EnsureUltralightAuthForRange(
+          _nfc, _wire, typeName, pages, cfg, cfg + 3, false)) {
     _goUltralightAdvanced(); return;
   }
+
   uint8_t c0[4] = {}, c1[4] = {};
   if (!_pn532Type2ReadPageTailSafe(_nfc, _wire, cfg, pages, c0) ||
       !_pn532Type2ReadPageTailSafe(_nfc, _wire, cfg + 1, pages, c1)) {
     ShowStatusAction::show("Read config failed"); _goUltralightAdvanced(); return;
   }
-  if (c1[0] & 0x40) { ShowStatusAction::show("Configuration locked"); _goUltralightAdvanced(); return; }
-  c0[3] = 0xFF;
-  const bool ok = _pn532Type2WritePage(_nfc, _wire, (uint8_t)cfg, c0);
-  ShowStatusAction::show(ok ? "Protection disabled" : "Disable failed");
+  if (c1[0] & 0x40) {
+    ShowStatusAction::show("Configuration locked"); _goUltralightAdvanced(); return;
+  }
+
+  // Restore the password-protection fields to their NXP delivery state.
+  // No PACK is exposed in the UI; it is reset internally together with PWD.
+  c1[0] &= (uint8_t)~0x87u; // PROT=0, AUTHLIM=0; preserve unrelated bits
+  c0[3] = 0xFF;             // AUTH0=FF: password protection disabled
+  const uint8_t defaultPwd[4] = {0xFF, 0xFF, 0xFF, 0xFF};
+  const uint8_t defaultPack[4] = {0x00, 0x00, 0x00, 0x00};
+
+  bool ok = _pn532Type2WritePage(_nfc, _wire, (uint8_t)(cfg + 1), c1);
+  if (ok) ok = _pn532Type2WritePage(_nfc, _wire, (uint8_t)cfg, c0);
+  if (ok) ok = _pn532Type2WritePage(_nfc, _wire, (uint8_t)(cfg + 2), defaultPwd);
+  if (ok) ok = _pn532Type2WritePage(_nfc, _wire, (uint8_t)(cfg + 3), defaultPack);
+
+  ShowStatusAction::show(ok ? "Password removed" : "Remove failed");
   _goUltralightAdvanced();
 }
 
