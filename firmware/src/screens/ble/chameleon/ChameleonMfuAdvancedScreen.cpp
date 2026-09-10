@@ -114,7 +114,7 @@ void ChameleonMfuAdvancedScreen::_writePage() {
   auto& c = ChameleonClient::get(); uint8_t previousMode = 0;
   const bool restoreMode = c.getMode(&previousMode); c.setMode(1);
   ChameleonClient::MfuTagInfo info = {};
-  if (!_detect(c, info) || info.pages <= 4) { if (restoreMode) c.setMode(previousMode); render(); ShowStatusAction::show("Unsupported / no tag"); render(); return; }
+  if (!_detect(c, info) || info.pages <= 4) { if (restoreMode) c.setMode(previousMode); render(); ShowStatusAction::show("Tag not supported"); render(); return; }
   const int page = InputNumberAction::popup((String("Page (4..") + String(info.pages - 1) + ")").c_str(), 4, info.pages - 1, 4);
   if (InputNumberAction::wasCancelled() || !_confirmSensitiveWrite(info.type, (uint16_t)page)) { if (restoreMode) c.setMode(previousMode); render(); return; }
   uint8_t data[4] = {}; if (!_readHex4("Page data (8 hex)", data)) { if (restoreMode) c.setMode(previousMode); render(); return; }

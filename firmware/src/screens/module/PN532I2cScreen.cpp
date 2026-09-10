@@ -2348,7 +2348,7 @@ void PN532I2cScreen::_doUltralightReadTag() {
   renderTagPrompt("Place tag on reader...", bodyX(), bodyY(), bodyW(), bodyH());
   uint16_t pages = 0; const char* typeName = nullptr;
   if (!_detectUltralightTag(pages, typeName)) {
-    ShowStatusAction::show("Unsupported / no tag");
+    ShowStatusAction::show("Tag not supported");
     _goUltralightTag();
     return;
   }
@@ -2436,7 +2436,7 @@ void PN532I2cScreen::_doUltralightReadPages() {
   renderTagPrompt("Place tag on reader...", bodyX(), bodyY(), bodyW(), bodyH());
   uint16_t pages = 0; const char* typeName = nullptr;
   if (!_detectUltralightTag(pages, typeName)) {
-    ShowStatusAction::show("Unsupported / no tag");
+    ShowStatusAction::show("Tag not supported");
     _goUltralightAdvanced();
     return;
   }
@@ -2479,7 +2479,7 @@ void PN532I2cScreen::_doUltralightWritePage() {
   renderTagPrompt("Place tag on reader...", bodyX(), bodyY(), bodyW(), bodyH());
   uint16_t pages = 0; const char* typeName = nullptr;
   if (!_detectUltralightTag(pages, typeName)) {
-    ShowStatusAction::show("Unsupported / no tag");
+    ShowStatusAction::show("Tag not supported");
     _goUltralightAdvanced();
     return;
   }
