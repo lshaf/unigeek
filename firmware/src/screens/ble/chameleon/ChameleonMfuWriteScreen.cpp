@@ -277,6 +277,11 @@ void ChameleonMfuWriteScreen::_write() {
   _busy = false;
   _restoreContext();
 
+  // ProgressView leaves its last frame in the body area. Clear it before the
+  // modal status is shown; otherwise dismissing the status reveals remnants
+  // of the progress UI behind the Write to Tag screen.
+  Uni.Lcd.fillRect(bodyX(), bodyY(), bodyW(), bodyH(), TFT_BLACK);
+
   if (ok) {
     ShowStatusAction::show("Tag written", 1600);
     _freeDump();

@@ -409,6 +409,10 @@ void ChameleonMfcWriteScreen::_write() {
   }
   _busy = false; _restoreContext();
 
+  // Do not leave the completed progress view behind the modal status box.
+  // ShowStatusAction clears only its own rectangle when dismissed.
+  Uni.Lcd.fillRect(bodyX(), bodyY(), bodyW(), bodyH(), TFT_BLACK);
+
   if (ok && !uidWriteFailed) {
     const char* status = restoreUid ? "Tag + UID written" :
                          (replaceUidRequested && uidDiffers ? "Tag written; UID preserved" : "Tag written");
