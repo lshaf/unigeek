@@ -27,7 +27,6 @@ private:
     STATE_INFO,
     STATE_SCAN_RESULT,
     STATE_SCAN_14A,
-    STATE_EMV_RESULT,
     STATE_MIFARE_MENU,
     STATE_MIFARE_TAG_MENU,
     STATE_MIFARE_NDEF_MENU,
@@ -84,9 +83,8 @@ private:
   String _rowValues[MAX_ROWS];
   uint16_t _rowCount = 0;
 
-  ListItem _mainItems[6] = {
+  ListItem _mainItems[5] = {
     {"Scan Tag"},
-    {"Read EMV"},
     {"MIFARE Classic"},
     {"Ultralight / NTAG"},
     {"Magic Card"},
@@ -234,7 +232,6 @@ private:
 
   void _showFirmwareInfo();
   void _doScan14A();
-  void _doReadEmv();
   void _doAuthenticate();
   bool _discoverDefaultKeys(bool checkingProgress = false);
   void _loadSavedKeys();

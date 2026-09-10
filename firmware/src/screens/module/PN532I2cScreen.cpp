@@ -12,7 +12,6 @@
 #include "../../utils/nfc/NdefBuilder.h"
 #include "../../utils/nfc/NdefParser.h"
 #include "../../utils/nfc/NfcDumpBuilder.h"
-#include "../../utils/nfc/EmvReader.h"
 
 #include "utils/nfc/MfcKeyStore.h"
 // ── raw I2C helpers for Gen1a / Gen3 ──────────────────────────────────────
@@ -384,7 +383,6 @@ const char* PN532I2cScreen::title() {
     case STATE_INFO:            return "Firmware Info";
     case STATE_SCAN_RESULT:     return "Tag Details";
     case STATE_SCAN_14A:        return "Scan Tag";
-    case STATE_EMV_RESULT:      return "EMV Details";
     case STATE_MIFARE_MENU:     return "MIFARE Classic";
     case STATE_MIFARE_TAG_MENU: return "Tag Operations";
     case STATE_MIFARE_NDEF_MENU:return "NDEF Operations";
@@ -423,15 +421,6 @@ void PN532I2cScreen::onInit() {
 }
 
 void PN532I2cScreen::onUpdate() {
-  if (_state == STATE_EMV_RESULT) {
-    if (Uni.Nav->wasPressed()) {
-      auto dir = Uni.Nav->readDirection();
-      if (dir == INavigation::DIR_BACK) _goMain();
-      else _scrollView.onNav(dir);
-    }
-    return;
-  }
-
   if (_state == STATE_SCAN_14A) {
     if (Uni.Nav->wasPressed()) {
       auto dir = Uni.Nav->readDirection();
@@ -620,7 +609,6 @@ void PN532I2cScreen::onRender() {
     return;
   }
   if (_state == STATE_INFO || _state == STATE_SCAN_RESULT ||
-      _state == STATE_EMV_RESULT ||
       _state == STATE_MIFARE_DUMP || _state == STATE_MIFARE_DUMP_HEX ||
       _state == STATE_MIFARE_WRITE_PREVIEW ||
       _state == STATE_MIFARE_KEYS || _state == STATE_MIFARE_KEY_DB_VIEW ||
@@ -637,11 +625,10 @@ void PN532I2cScreen::onItemSelected(uint8_t index) {
     case STATE_MAIN_MENU:
       switch (index) {
         case 0: _doScan14A();         break;
-        case 1: _doReadEmv();         break;
-        case 2: _goMifare();          break;
-        case 3: _goUltralight();      break;
-        case 4: _goMagic();           break;
-        case 5: _showFirmwareInfo();  break;
+        case 1: _goMifare();          break;
+        case 2: _goUltralight();      break;
+        case 3: _goMagic();           break;
+        case 4: _showFirmwareInfo();  break;
       }
       break;
     case STATE_MIFARE_MENU:
@@ -960,161 +947,10 @@ void PN532I2cScreen::_cleanup() {
 
 void PN532I2cScreen::_goMain() {
   _state = STATE_MAIN_MENU;
-  setItems(_mainItems, 6);
+  setItems(_mainItems, 5);
   render();
 }
 
-
-void PN532I2cScreen::_doReadEmv() {
-  renderOperationTitle("Read EMV");
-  renderTagPrompt("Place card on reader...", bodyX(), bodyY(), bodyW(), bodyH());
-
-  auto showEmvStatus = [this](const String& status) {
-    _state = STATE_EMV_RESULT;
-    _resetRows();
-    _pushWrappedRow("Status", status);
-    _scrollView.setRows(_rows, _rowCount);
-    render();
-  };
-
-  // Put the PN532 SAM in normal mode before passive-target activation.
-  if (!_nfc->SAMConfig()) {
-    showEmvStatus("SAM init failed");
-    return;
-  }
-  // Give the RF field a brief moment to settle. Some PN532 modules are
-  // unreliable if InListPassiveTarget follows SAMConfig immediately.
-  delay(60);
-
-  // Use one InListPassiveTarget activation for the complete EMV exchange.
-  // Adafruit-PN532_Bruce readPassiveTargetID() does not update _inListedTag,
-  // while inDataExchange() uses _inListedTag as Tg. Calling both methods also
-  // tries to activate the same card twice. inListPassiveTarget() both activates
-  // the ISO14443-A target and stores its target number for inDataExchange().
-  bool targetActive = false;
-  for (uint8_t attempt = 0; attempt < 3 && !targetActive; ++attempt) {
-    targetActive = _nfc->inListPassiveTarget();
-    if (!targetActive) delay(80);
-  }
-  if (!targetActive) {
-    showEmvStatus("Target activation failed");
-    return;
-  }
-
-  uint8_t apdu[20] = {};
-  const uint8_t apduLen = (uint8_t)EmvReader::buildSelectPpse(apdu);
-  // EMV SELECT-by-name uses Le=00.
-  apdu[19] = 0x00;
-
-  uint8_t response[220] = {};
-  uint8_t responseLen = sizeof(response);
-  if (!_nfc->inDataExchange(apdu, apduLen, response, &responseLen)) {
-    // Adafruit_PN532 leaves the last response frame in pn532_packetbuffer.
-    // If InDataExchange reached a PN532 response, expose its 6-bit status;
-    // otherwise report the transport/ACK/ready failure separately.
-    if (pn532_packetbuffer[5] == PN532_PN532TOHOST &&
-        pn532_packetbuffer[6] == PN532_RESPONSE_INDATAEXCHANGE) {
-      char msg[24];
-      snprintf(msg, sizeof(msg), "PN532 status %02X",
-               pn532_packetbuffer[7] & 0x3F);
-      showEmvStatus(msg);
-    } else {
-      showEmvStatus("Transport timeout");
-    }
-    return;
-  }
-
-  // Surface ISO 7816 status words separately from transport failures. This
-  // makes physical testing useful even when the card does not expose PPSE.
-  if (responseLen >= 2) {
-    const uint8_t sw1 = response[responseLen - 2];
-    const uint8_t sw2 = response[responseLen - 1];
-    if (sw1 != 0x90 || sw2 != 0x00) {
-      // A completely full destination buffer may be a truncated long FCI, in
-      // which case its last two bytes are not necessarily SW1/SW2.
-      if (responseLen == sizeof(response)) {
-        showEmvStatus("Response too long");
-      } else {
-        char msg[20];
-        snprintf(msg, sizeof(msg), "APDU SW %02X%02X", sw1, sw2);
-        showEmvStatus(msg);
-      }
-      return;
-    }
-  }
-
-  EmvReader::Application apps[EmvReader::kMaxApps];
-  const uint8_t appCount = EmvReader::parsePpse(response, responseLen, apps, EmvReader::kMaxApps);
-  if (!appCount) {
-    showEmvStatus("No EMV application found");
-    return;
-  }
-
-  // Select the application with the lowest non-zero EMV priority. If no
-  // priority indicator is present, preserve the PPSE order and select #1.
-  uint8_t selected = 0;
-  uint8_t bestPriority = 0xFF;
-  for (uint8_t i = 0; i < appCount; ++i) {
-    const uint8_t priority = apps[i].priority & 0x0F;
-    if (priority && priority < bestPriority) {
-      selected = i;
-      bestPriority = priority;
-    }
-  }
-
-  uint8_t selectAid[22] = {};
-  const uint8_t selectAidLen = (uint8_t)EmvReader::buildSelectAid(apps[selected], selectAid);
-  if (!selectAidLen) {
-    showEmvStatus("Invalid application AID");
-    return;
-  }
-
-  uint8_t appResponse[220] = {};
-  uint8_t appResponseLen = sizeof(appResponse);
-  if (!_nfc->inDataExchange(selectAid, selectAidLen, appResponse, &appResponseLen)) {
-    if (pn532_packetbuffer[5] == PN532_PN532TOHOST &&
-        pn532_packetbuffer[6] == PN532_RESPONSE_INDATAEXCHANGE) {
-      char msg[24];
-      snprintf(msg, sizeof(msg), "AID PN532 %02X", pn532_packetbuffer[7] & 0x3F);
-      showEmvStatus(msg);
-    } else {
-      showEmvStatus("AID transport timeout");
-    }
-    return;
-  }
-
-  if (appResponseLen < 2) {
-    showEmvStatus("Invalid AID response");
-    return;
-  }
-  const uint8_t aidSw1 = appResponse[appResponseLen - 2];
-  const uint8_t aidSw2 = appResponse[appResponseLen - 1];
-  if (aidSw1 != 0x90 || aidSw2 != 0x00) {
-    char msg[20];
-    snprintf(msg, sizeof(msg), "AID SW %02X%02X", aidSw1, aidSw2);
-    showEmvStatus(msg);
-    return;
-  }
-
-  EmvReader::SelectedApplication selectedApp;
-  EmvReader::parseSelectAid(appResponse, appResponseLen, selectedApp);
-
-  _state = STATE_EMV_RESULT;
-  _resetRows();
-  _pushRow("Applications", String(appCount));
-  for (uint8_t i = 0; i < appCount; ++i) {
-    const String n = String(i + 1);
-    _pushWrappedRow(String("AID ") + n, EmvReader::hex(apps[i].aid, apps[i].aidLen));
-    if (apps[i].label.length()) _pushWrappedRow(String("Label ") + n, apps[i].label);
-    if (apps[i].priority) _pushRow(String("Priority ") + n, String(apps[i].priority & 0x0F));
-  }
-  _pushRow("Selected", String(selected + 1));
-  if (selectedApp.label.length()) _pushWrappedRow("App Label", selectedApp.label);
-  if (selectedApp.preferredName.length()) _pushWrappedRow("Preferred Name", selectedApp.preferredName);
-  if (selectedApp.pdolLen) _pushWrappedRow("PDOL", EmvReader::hex(selectedApp.pdol, selectedApp.pdolLen));
-  _scrollView.setRows(_rows, _rowCount);
-  render();
-}
 
 void PN532I2cScreen::_goMifare() {
   _state = STATE_MIFARE_MENU;
