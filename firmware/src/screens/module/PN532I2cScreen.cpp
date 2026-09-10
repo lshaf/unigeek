@@ -1453,7 +1453,8 @@ void PN532I2cScreen::_doScan14A() {
     const MagicCardType magic = _detectMagicType();
     _pushRow("Magic", magicCardTypeName(magic));
   }
-  const bool supported = (_sak == 0x09 || _sak == 0x08 || _sak == 0x18 || _sak == 0x00);
+  const bool supported = (_sak == 0x09 || _sak == 0x08 || _sak == 0x18 ||
+                          _sak == 0x00 || (_sak & 0x20) != 0);
   if (!supported) _pushRow("Status", "Tag not supported");
   snprintf(buf, sizeof(buf), "%02X:%02X", (_atqa >> 8) & 0xFF, _atqa & 0xFF);
   _pushRow("ATQA", buf);
@@ -2628,7 +2629,7 @@ void PN532I2cScreen::_doUltralightLockTag() {
 
   uint8_t sm[2] = {}, dm[3] = {};
   if (!_pn532BuildUltralightLockMasks(typeName, 4, lastUser, sm, dm)) {
-    ShowStatusAction::show("Unsupported lock layout"); _goUltralightAdvanced(); return;
+    ShowStatusAction::show("Lock not supported"); _goUltralightAdvanced(); return;
   }
   const uint16_t dyn = _ultralightDynamicLockPage(typeName);
   const bool needsDyn = dyn != 0xFFFF && (dm[0] || dm[1] || dm[2]);
@@ -3686,7 +3687,7 @@ bool PN532I2cScreen::_writeUltralightNdefRecord(const uint8_t* ndef, size_t ndef
 
   uint16_t authPages = 0; const char* authType = nullptr;
   if (!_detectUltralightTag(authPages, authType)) {
-    ShowStatusAction::show("Unsupported Type 2 tag");
+    ShowStatusAction::show("Tag not supported");
     return false;
   }
   if (!_pn532EnsureUltralightAuth(_nfc, _wire, authType, authPages, false)) {

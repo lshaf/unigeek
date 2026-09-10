@@ -146,7 +146,7 @@ void ChameleonMfuAdvancedScreen::_lockTag() {
 
   uint8_t sm[2], dm[3];
   if (!_buildLockMasks(info.type, 4, lastUser, sm, dm)) {
-    if (restoreMode) c.setMode(previousMode); render(); ShowStatusAction::show("Unsupported lock layout"); render(); return;
+    if (restoreMode) c.setMode(previousMode); render(); ShowStatusAction::show("Lock not supported"); render(); return;
   }
   uint8_t pwd[4] = {}; bool usePwd = false;
   const uint16_t dyn = ChameleonMfuAuthUtils::dynamicLockPage(info.type);

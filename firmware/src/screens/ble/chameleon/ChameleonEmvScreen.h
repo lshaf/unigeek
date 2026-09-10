@@ -20,4 +20,5 @@ private:
   uint8_t _rowCount = 0;
   void _read();
   void _push(const String& label, const String& value);
+  void _pushWrapped(const String& label, const String& value);
 };

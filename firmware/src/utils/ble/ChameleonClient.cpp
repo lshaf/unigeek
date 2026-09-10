@@ -627,7 +627,7 @@ const char* ChameleonClient::tagTypeName(uint16_t type) {
 }
 
 uint16_t ChameleonClient::inferHFTagType(uint8_t sak, const uint8_t atqa[2]) {
-  if (sak == 0x01) return 1000; // MF Classic Mini
+  if (sak == 0x09) return 1000; // MF Classic Mini
   if (sak == 0x08) return 1001; // MF Classic 1K
   if (sak == 0x18) return 1003; // MF Classic 4K
   if (sak == 0x00) return 1100; // default NTAG/UltraLight → ntag213

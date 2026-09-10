@@ -183,7 +183,7 @@ bool ChameleonMfcNdefScreen::_scanClassic() {
   _sak = sak;
   memcpy(_atqa, atqa, 2);
   if (sak == 0x18) _sectors = 40;
-  else if (sak == 0x01) _sectors = 5;
+  else if (sak == 0x09) _sectors = 5;
   else _sectors = 16;
   return true;
 }

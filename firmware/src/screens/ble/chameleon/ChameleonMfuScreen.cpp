@@ -266,7 +266,7 @@ void ChameleonMfuScreen::_save() {
   // workflows: suggest the UID as the editable basename. The .bin extension
   // is deliberately not shown in the editor; it is appended only on save.
   char suggested[32] = {};
-  const char* typeName = ChameleonClient::tagTypeName((uint16_t)_info.type);
+  const char* typeName = ChameleonClient::mfuTagTypeName(_info.type);
   size_t pos = snprintf(suggested, sizeof(suggested), "%s_", typeName);
   for (uint8_t i = 0; i < _info.uidLen && pos + 2 < sizeof(suggested); ++i) {
     pos += snprintf(suggested + pos, sizeof(suggested) - pos,

@@ -249,7 +249,7 @@ void ChameleonMfcDictScreen::_runAttack(const char* sourceLabel) {
 
   uint8_t atqa[2] = {}, sak = 0;
   if (!c.scan14A(_uid, &_uidLen, atqa, &sak)) {
-    _runLog.addLine("No tag detected detected", TFT_RED);
+    _runLog.addLine("No tag detected", TFT_RED);
     _runLog.draw(Uni.Lcd, bodyX(), bodyY(), bodyW(), bodyH(), _runStatusBarCb, this);
     _state   = STATE_SELECT;
     _running = false;
@@ -259,7 +259,7 @@ void ChameleonMfcDictScreen::_runAttack(const char* sourceLabel) {
   }
 
   if (sak == 0x18)      _sectors = 40;
-  else if (sak == 0x01) _sectors = 5;
+  else if (sak == 0x09) _sectors = 5;
   else                  _sectors = 16;
 
   char msg[64];

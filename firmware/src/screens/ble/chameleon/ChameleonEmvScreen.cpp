@@ -70,6 +70,50 @@ void ChameleonEmvScreen::_push(const String& label, const String& value) {
   ++_rowCount;
 }
 
+void ChameleonEmvScreen::_pushWrapped(const String& label, const String& value) {
+  if (value.length() == 0) {
+    _push(label, "");
+    return;
+  }
+
+  // Match the PN532 EMV details layout: preserve room for the label on the
+  // first row and use continuation rows for long AIDs/application labels.
+  int totalChars = (bodyW() - 10) / 6;
+  if (totalChars < 12) totalChars = 12;
+  int firstChars = totalChars - (int)label.length() - 2;
+  if (firstChars < 8) firstChars = 8;
+
+  int pos = 0;
+  bool first = true;
+  while (pos < (int)value.length() && _rowCount < kMaxRows) {
+    while (pos < (int)value.length() &&
+           (value[pos] == ' ' || value[pos] == '\n' || value[pos] == '\r' || value[pos] == '\t')) ++pos;
+    if (pos >= (int)value.length()) break;
+
+    const int maxChars = first ? firstChars : totalChars;
+    int end = pos + maxChars;
+    if (end > (int)value.length()) end = value.length();
+
+    const int newline = value.indexOf('\n', pos);
+    if (newline >= pos && newline < end) {
+      end = newline;
+    } else if (end < (int)value.length()) {
+      int split = -1;
+      for (int i = end; i > pos; --i) {
+        if (value[i - 1] == ' ' || value[i - 1] == '\t') { split = i - 1; break; }
+      }
+      if (split > pos) end = split;
+    }
+    if (end <= pos) end = min(pos + maxChars, (int)value.length());
+
+    String part = value.substring(pos, end);
+    part.trim();
+    _push(first ? label : "", part);
+    pos = end;
+    first = false;
+  }
+}
+
 void ChameleonEmvScreen::_read() {
   _reading = true; _hasResult = false; _rowCount = 0;
   auto& lcd = Uni.Lcd;
@@ -110,8 +154,8 @@ void ChameleonEmvScreen::_read() {
   _push("Applications", String(count));
   for (uint8_t i = 0; i < count; ++i) {
     String n = String(i + 1);
-    _push(String("AID ") + n, EmvReader::hex(apps[i].aid, apps[i].aidLen));
-    if (apps[i].label.length()) _push(String("Label ") + n, apps[i].label);
+    _pushWrapped(String("AID ") + n, EmvReader::hex(apps[i].aid, apps[i].aidLen));
+    if (apps[i].label.length()) _pushWrapped(String("Label ") + n, apps[i].label);
     if (apps[i].priority) _push(String("Priority ") + n, String(apps[i].priority & 0x0F));
   }
   _scrollView.setRows(_rows, _rowCount);

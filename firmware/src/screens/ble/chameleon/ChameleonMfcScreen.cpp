@@ -151,7 +151,7 @@ void ChameleonMfcScreen::_callAuth() {
     c.setMode(0);
     _running = false;
     render();
-    ShowStatusAction::show("No tag detected detected", 1200);
+    ShowStatusAction::show("No tag detected", 1200);
     Screen.goBack();
     return;
   }
@@ -159,7 +159,7 @@ void ChameleonMfcScreen::_callAuth() {
   _sak = sak;
   memcpy(_atqa, atqa, sizeof(_atqa));
   if (sak == 0x18)      _sectors = 40;
-  else if (sak == 0x01) _sectors = 5;
+  else if (sak == 0x09) _sectors = 5;
   else                  _sectors = 16;
 
   if (!c.mf1Support()) {
