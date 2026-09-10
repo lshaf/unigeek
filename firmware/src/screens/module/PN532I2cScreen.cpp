@@ -1254,12 +1254,29 @@ const char* PN532I2cScreen::_inferType2Variant() {
   // Conservative fallback for Type-2-compatible tags whose concrete variant
   // is unknown. A valid NFC Forum Capability Container lets us expose only
   // the advertised data area without guessing security/configuration pages.
-  auto hasGenericType2Cc = [&]() -> bool {
+  auto readType2CcSize = [&]() -> uint8_t {
     const uint8_t readCc[2] = {0x30, 0x03};
     uint8_t data[18] = {};
     uint8_t len = sizeof(data);
-    if (!type2Exchange(readCc, sizeof(readCc), data, len) || len < 4) return false;
-    return data[0] == 0xE1 && (data[1] & 0xF0) == 0x10 && data[2] != 0;
+    if (!type2Exchange(readCc, sizeof(readCc), data, len) || len < 4) return 0;
+    if (data[0] != 0xE1 || (data[1] & 0xF0) != 0x10 || data[2] == 0) return 0;
+    return data[2];
+  };
+
+  auto genericType2Name = [&]() -> const char* {
+    const uint8_t ccSize = readType2CcSize();
+    if (!ccSize) return nullptr;
+
+    // When GET_VERSION is unavailable, the NFC Forum data-area size still
+    // uniquely fingerprints the common larger NTAG21x parts. Keep ambiguous
+    // capacities (e.g. 48/128 bytes, shared with Ultralight variants) generic
+    // rather than guessing a concrete model.
+    if (_uidLen == 7 && _uid[0] == 0x04) {
+      if (ccSize == 0x12) return "NTAG213";
+      if (ccSize == 0x3F) return "NTAG215";
+      if (ccSize == 0x6F) return "NTAG216";
+    }
+    return "Ultralight / NTAG";
   };
 
   // NTAG21x / Ultralight EV1 GET_VERSION.
@@ -1279,7 +1296,7 @@ const char* PN532I2cScreen::_inferType2Variant() {
   if (gotVersion) {
     // NXP GET_VERSION starts with fixed byte 0x00 and vendor ID 0x04.
     if (version[0] != 0x00 || version[1] != 0x04)
-      return hasGenericType2Cc() ? "Ultralight / NTAG" : nullptr;
+      return genericType2Name();
 
     if (version[2] == 0x04) { // NTAG21x
       switch (version[6]) {
@@ -1288,7 +1305,7 @@ const char* PN532I2cScreen::_inferType2Variant() {
         case 0x0F: return "NTAG213";
         case 0x11: return "NTAG215";
         case 0x13: return "NTAG216";
-        default:   return hasGenericType2Cc() ? "Ultralight / NTAG" : nullptr;
+        default:   return genericType2Name();
       }
     }
 
@@ -1302,7 +1319,7 @@ const char* PN532I2cScreen::_inferType2Variant() {
 
     // A real but unknown GET_VERSION response must not be forced into one of
     // the legacy Ultralight variants.
-    return hasGenericType2Cc() ? "Ultralight / NTAG" : nullptr;
+    return genericType2Name();
   }
 
   // Legacy Ultralight C has no GET_VERSION. AUTHENTICATE part 1 returns
@@ -1334,14 +1351,14 @@ const char* PN532I2cScreen::_inferType2Variant() {
   // 48-byte data area, keep the tag generic instead of misclassifying older
   // NTAG-family parts that also predate GET_VERSION.
   if (_uidLen != 7 || _uid[0] != 0x04)
-    return hasGenericType2Cc() ? "Ultralight / NTAG" : nullptr;
+    return genericType2Name();
 
   const uint8_t read0[2] = {0x30, 0x00};
   uint8_t data[18] = {};
   uint8_t len = sizeof(data);
   const bool page0Ok =
       type2Exchange(read0, sizeof(read0), data, len) && len >= 16;
-  if (!page0Ok) return hasGenericType2Cc() ? "Ultralight / NTAG" : nullptr;
+  if (!page0Ok) return genericType2Name();
 
   const uint8_t readCc[2] = {0x30, 0x03};
   len = sizeof(data);

@@ -1138,8 +1138,17 @@ bool ChameleonClient::mfuDetect(MfuTagInfo* out) {
     if (data[0] != 0xE1 || (data[1] & 0xF0) != 0x10 || data[2] == 0) return false;
     const uint16_t advertisedPages = (uint16_t)(4u + (uint16_t)data[2] * 2u);
     if (advertisedPages <= 4 || advertisedPages > 256) return false;
+
+    // GET_VERSION is the primary discriminator. If it is unavailable, the
+    // NFC Forum data-area size still uniquely fingerprints the common larger
+    // NTAG21x parts. Do not guess for capacities shared with Ultralight.
     out->type = MFU_UNKNOWN;
     out->pages = advertisedPages;
+    if (out->uidLen == 7 && out->uid[0] == 0x04) {
+      if (data[2] == 0x12) { out->type = MFU_NTAG213; out->pages = 45; }
+      else if (data[2] == 0x3F) { out->type = MFU_NTAG215; out->pages = 135; }
+      else if (data[2] == 0x6F) { out->type = MFU_NTAG216; out->pages = 231; }
+    }
     return true;
   };
 
