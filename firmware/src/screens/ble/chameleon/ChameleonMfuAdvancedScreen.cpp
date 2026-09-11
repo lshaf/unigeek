@@ -122,7 +122,7 @@ void ChameleonMfuAdvancedScreen::_writePage() {
   if (!ChameleonMfuAuthUtils::ensureForRange(c, info, page, page, false, pwd, usePwd)) { if (restoreMode) c.setMode(previousMode); render(); return; }
   const bool ok = usePwd ? c.mfuWritePageSession((uint8_t)page, data)
                          : c.mfuWritePage((uint8_t)page, data);
-  if (restoreMode) c.setMode(previousMode); render(); ShowStatusAction::show(ok ? "Page written" : "Write failed"); render();
+  if (restoreMode) c.setMode(previousMode); render(); ShowStatusAction::show(ok ? "Page written" : "Write failed", 1600); render();
 }
 
 void ChameleonMfuAdvancedScreen::_lockTag() {
@@ -170,7 +170,7 @@ void ChameleonMfuAdvancedScreen::_lockTag() {
                   : c.mfuWritePage((uint8_t)dyn, cur);
     }
   }
-  if (restoreMode) c.setMode(previousMode); render(); ShowStatusAction::show(ok ? "Tag locked" : "Lock failed"); render();
+  if (restoreMode) c.setMode(previousMode); render(); ShowStatusAction::show(ok ? "Tag locked" : "Lock failed", 1600); render();
 }
 
 void ChameleonMfuAdvancedScreen::_setPassword() {
@@ -222,7 +222,7 @@ void ChameleonMfuAdvancedScreen::_setPassword() {
   // mfuPwdAuth() leaves the RF field/session active. If configuration pages
   // were already protected, continue in that authenticated session.
   if(ok && !configLocked) ok=c.mfuWritePageSession((uint8_t)cfg,c0);
-  if(restoreMode)c.setMode(previousMode); render(); ShowStatusAction::show(ok?"Password set\nRetap tag to activate":"Password setup failed"); render();
+  if(restoreMode)c.setMode(previousMode); render(); ShowStatusAction::show(ok?"Password set\nRetap tag to activate":"Password setup failed", 1800); render();
 }
 
 void ChameleonMfuAdvancedScreen::_removePassword() {
@@ -247,7 +247,7 @@ void ChameleonMfuAdvancedScreen::_removePassword() {
   if(ok) ok=usePwd?c.mfuWritePageSession((uint8_t)cfg,c0):c.mfuWritePage((uint8_t)cfg,c0);
   if(ok) ok=usePwd?c.mfuWritePageSession((uint8_t)(cfg+2),defaultPwd):c.mfuWritePage((uint8_t)(cfg+2),defaultPwd);
   if(ok) ok=usePwd?c.mfuWritePageSession((uint8_t)(cfg+3),defaultPack):c.mfuWritePage((uint8_t)(cfg+3),defaultPack);
-  if(restoreMode)c.setMode(previousMode); render(); ShowStatusAction::show(ok?"Password removed":"Remove failed"); render();
+  if(restoreMode)c.setMode(previousMode); render(); ShowStatusAction::show(ok?"Password removed":"Remove failed", 1600); render();
 }
 
 void ChameleonMfuAdvancedScreen::onItemSelected(uint8_t index) {

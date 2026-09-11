@@ -325,9 +325,9 @@ bool ChameleonMfuNdefScreen::writeRecord(const uint8_t* ndef, size_t nl, const c
   if (restoreMode) c.setMode(previousMode);
 
   if (strcmp(opTitle, "Erase NDEF") == 0)
-    ShowStatusAction::show(ok ? "NDEF erased" : "NDEF erase failed");
+    ShowStatusAction::show(ok ? "NDEF erased" : "NDEF erase failed", 1600);
   else
-    ShowStatusAction::show(ok ? "NDEF written" : "NDEF write failed");
+    ShowStatusAction::show(ok ? "NDEF written" : "NDEF write failed", 1600);
   return ok;
 }
 
@@ -390,7 +390,7 @@ void ChameleonMfuNdefScreen::format() {
                       : c.mfuWritePage(4, emptyNdef);
 
   if (restoreMode) c.setMode(previousMode);
-  ShowStatusAction::show(ok ? "NDEF formatted" : "Format failed");
+  ShowStatusAction::show(ok ? "NDEF formatted" : "Format failed", 1600);
   _running = false;
   goMenu();
 }

@@ -512,7 +512,7 @@ bool ChameleonMfcNdefScreen::_formatClassic1kNdef() {
 
   if (ok) ProgressView::progress("Format complete", 100);
   ProgressView::finish();
-  ShowStatusAction::show(ok ? "NDEF formatted" : "NDEF format failed");
+  ShowStatusAction::show(ok ? "NDEF formatted" : "NDEF format failed", 1600);
   return ok;
 }
 
@@ -593,7 +593,7 @@ bool ChameleonMfcNdefScreen::_writeNdefRecord(const uint8_t* ndef, size_t ndefLe
   ProgressView::finish();
   free(payload);
   c.setMode(0); _running = false;
-  ShowStatusAction::show(ok ? "NDEF written" : "NDEF write failed");
+  ShowStatusAction::show(ok ? "NDEF written" : "NDEF write failed", 1600);
   return ok;
 }
 
@@ -616,7 +616,7 @@ void ChameleonMfcNdefScreen::_doErase() {
   }
   c.setMode(0); _running = false;
   _hasNdef = false; _ndefLen = 0;
-  ShowStatusAction::show(ok ? "NDEF erased" : "NDEF erase failed");
+  ShowStatusAction::show(ok ? "NDEF erased" : "NDEF erase failed", 1600);
   _goMenu();
 }
 
@@ -735,7 +735,7 @@ void ChameleonMfcNdefScreen::_saveCurrent() {
   fs::File f = Uni.Storage->open(path.c_str(), "w"); bool ok = false;
   if (f) { ok = f.write(_ndef, _ndefLen) == _ndefLen; f.close(); }
   render();
-  ShowStatusAction::show(ok ? "NDEF saved" : "Save failed");
+  ShowStatusAction::show(ok ? "NDEF saved" : "Save failed", 1500);
   if (ok) { _goMenu(); return; }
   render();
 }

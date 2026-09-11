@@ -2125,7 +2125,7 @@ void PN532I2cScreen::_doDictionaryAttackWithFile(uint8_t fileIndex) {
   char msg[48];
   if (recovered > 0) snprintf(msg, sizeof(msg), "%d new key%s saved to Known Keys", recovered, recovered == 1 ? "" : "s");
   else snprintf(msg, sizeof(msg), "No new keys found");
-  ShowStatusAction::show(msg);
+  ShowStatusAction::show(msg, 1600);
   if (_resumeReadAfterDict) {
     _resumeReadAfterDict = false;
     _doDumpMemory();
@@ -2310,7 +2310,7 @@ void PN532I2cScreen::_saveUltralightDump(const char* typeName) {
   fs::File f = Uni.Storage->open((String(_dumpPath) + "/" + filename).c_str(), "w");
   const bool ok = f && f.write(_dumpImg, _dumpLen) == _dumpLen;
   if (f) f.close();
-  ShowStatusAction::show(ok ? (String("Saved: ") + filename).c_str() : "Save failed");
+  ShowStatusAction::show(ok ? (String("Saved: ") + filename).c_str() : "Save failed", 1500);
   render();
 }
 
@@ -2343,7 +2343,7 @@ bool PN532I2cScreen::_writeUltralightNtag215Dump(const uint8_t* dump, size_t len
     }
   }
   ProgressView::finish();
-  ShowStatusAction::show(ok ? "Tag written" : "Tag write failed");
+  ShowStatusAction::show(ok ? "Tag written" : "Tag write failed", 1600);
   return ok;
 }
 
@@ -2460,7 +2460,7 @@ void PN532I2cScreen::_doUltralightEraseTag() {
   }
   ProgressView::finish();
   _hasDump = false; _dumpLen = 0;
-  ShowStatusAction::show(ok ? "Tag erased" : "Erase failed");
+  ShowStatusAction::show(ok ? "Tag erased" : "Erase failed", 1600);
   _goUltralightTag();
 }
 
@@ -2545,7 +2545,7 @@ void PN532I2cScreen::_doUltralightWritePage() {
   }
   render();
   const bool ok = _pn532Type2WritePage(_nfc, _wire, (uint8_t)page, data);
-  ShowStatusAction::show(ok ? "Page written" : "Write failed");
+  ShowStatusAction::show(ok ? "Page written" : "Write failed", 1600);
   _goUltralightAdvanced();
 }
 
@@ -2594,7 +2594,7 @@ void PN532I2cScreen::_doUltralightLockTag() {
       ok = _pn532Type2WritePage(_nfc, _wire, (uint8_t)dyn, cur);
     }
   }
-  ShowStatusAction::show(ok ? "Tag locked" : "Lock failed");
+  ShowStatusAction::show(ok ? "Tag locked" : "Lock failed", 1600);
   _goUltralightAdvanced();
 }
 
@@ -2668,7 +2668,7 @@ void PN532I2cScreen::_doUltralightSetPassword() {
   if (ok && !configLocked)
     ok = _pn532Type2WritePage(_nfc, _wire, (uint8_t)cfg, c0);
 
-  ShowStatusAction::show(ok ? "Password set\nRetap tag to activate" : "Password setup failed");
+  ShowStatusAction::show(ok ? "Password set\nRetap tag to activate" : "Password setup failed", 1800);
   _goUltralightAdvanced();
 }
 
@@ -2711,7 +2711,7 @@ void PN532I2cScreen::_doUltralightRemovePassword() {
   if (ok) ok = _pn532Type2WritePage(_nfc, _wire, (uint8_t)(cfg + 2), defaultPwd);
   if (ok) ok = _pn532Type2WritePage(_nfc, _wire, (uint8_t)(cfg + 3), defaultPack);
 
-  ShowStatusAction::show(ok ? "Password removed" : "Remove failed");
+  ShowStatusAction::show(ok ? "Password removed" : "Remove failed", 1600);
   _goUltralightAdvanced();
 }
 
@@ -3376,7 +3376,7 @@ bool PN532I2cScreen::_formatClassic1kNdef() {
 
   if (ok) ProgressView::progress("Format complete", 100);
   ProgressView::finish();
-  ShowStatusAction::show(ok ? "NDEF formatted" : "NDEF format failed");
+  ShowStatusAction::show(ok ? "NDEF formatted" : "NDEF format failed", 1600);
 
   if (ok) {
     // Trailer writes change authentication state. Force a fresh select before
@@ -3526,7 +3526,7 @@ bool PN532I2cScreen::_writeClassicNdefRecord(const uint8_t* ndef, size_t ndefLen
   ProgressView::finish();
   delete[] payload;
 
-  ShowStatusAction::show(success ? "NDEF written" : "NDEF write failed");
+  ShowStatusAction::show(success ? "NDEF written" : "NDEF write failed", 1600);
   return success;
 }
 
@@ -3581,7 +3581,7 @@ void PN532I2cScreen::_doEraseClassicNdef() {
   bool success = _nfc->mifareclassic_WriteDataBlock(blockNo, block);
   _hasNdef = false;
   _ndefLen = 0;
-  ShowStatusAction::show(success ? "NDEF erased" : "NDEF erase failed");
+  ShowStatusAction::show(success ? "NDEF erased" : "NDEF erase failed", 1600);
   _goMifareNdef();
 }
 
@@ -3715,7 +3715,7 @@ bool PN532I2cScreen::_writeUltralightNdefRecord(const uint8_t* ndef, size_t ndef
   ProgressView::finish();
   delete[] payload;
 
-  ShowStatusAction::show(success ? "NDEF written" : "NDEF write failed");
+  ShowStatusAction::show(success ? "NDEF written" : "NDEF write failed", 1600);
   return success;
 }
 
@@ -4165,7 +4165,7 @@ void PN532I2cScreen::_doEraseNdef() {
   uint8_t emptyNdef[4] = {0x03, 0x00, 0xFE, 0x00};
   const bool success = _pn532Type2WritePage(_nfc, _wire, 4, emptyNdef);
 
-  ShowStatusAction::show(success ? "NDEF erased" : "NDEF erase failed");
+  ShowStatusAction::show(success ? "NDEF erased" : "NDEF erase failed", 1600);
   _goUltralightNdef();
 }
 
@@ -4208,7 +4208,7 @@ void PN532I2cScreen::_doFormatNdef() {
 
   const uint8_t emptyNdef[4] = {0x03, 0x00, 0xFE, 0x00};
   const bool ok = _pn532Type2WritePage(_nfc, _wire, 4, emptyNdef);
-  ShowStatusAction::show(ok ? "NDEF formatted" : "Format failed");
+  ShowStatusAction::show(ok ? "NDEF formatted" : "Format failed", 1600);
   _goUltralightNdef();
 }
 
@@ -4500,7 +4500,7 @@ void PN532I2cScreen::_doGen3SetUid() {
   // fresh activation before the command and verifies the new UID afterwards.
   render();
   const bool ok2 = _writeMagicUid(MagicCardType::GEN3, newUid, newUidLen, nullptr);
-  ShowStatusAction::show(ok2 ? "Gen3 UID set" : "Set UID failed");
+  ShowStatusAction::show(ok2 ? "Gen3 UID set" : "Set UID failed", 1600);
   _goMagic();
 }
 
@@ -4542,7 +4542,7 @@ void PN532I2cScreen::_doGen3LockUid() {
   static const uint8_t cmd[] = {0x90, 0xFD, 0x11, 0x11, 0x00};
   uint8_t resp[8]; uint8_t rlen = sizeof(resp);
   bool locked = _nfcDataExch(_nfc, _wire, cmd, sizeof(cmd), resp, rlen);
-  ShowStatusAction::show(locked ? "Gen3 UID locked" : "Lock failed");
+  ShowStatusAction::show(locked ? "Gen3 UID locked" : "Lock failed", 1600);
   _goMagic();
 }
 
@@ -4795,7 +4795,7 @@ bool PN532I2cScreen::_doWriteDumpToTag(const uint8_t* dump, size_t len,
   Uni.Lcd.fillRect(bodyX(), bodyY(), bodyW(), bodyH(), TFT_BLACK);
   const char* status = restoreUid ? "Tag + UID written" :
                        (replaceUidRequested && uidDiffers ? "Tag written; UID preserved" : "Tag written");
-  ShowStatusAction::show(status);
+  ShowStatusAction::show(status, 1600);
   render();
   return true;
 }
@@ -4905,7 +4905,7 @@ void PN532I2cScreen::_doEraseTag() {
   Uni.Lcd.fillRect(bodyX(), bodyY(), bodyW(), bodyH(), TFT_BLACK);
   _hasCard = false;
   _mfKeys.fill({});
-  ShowStatusAction::show("Tag erased");
+  ShowStatusAction::show("Tag erased", 1600);
   _goMifareTag();
 }
 
@@ -4953,9 +4953,9 @@ void PN532I2cScreen::_doSaveDump() {
 
   if (ok) {
     String msg = String("Saved: ") + filename;
-    ShowStatusAction::show(msg.c_str());
+    ShowStatusAction::show(msg.c_str(), 1500);
   } else {
-    ShowStatusAction::show("Save failed");
+    ShowStatusAction::show("Save failed", 1500);
   }
   render();
 }
@@ -5271,7 +5271,7 @@ void PN532I2cScreen::_doNtagText() {
   _emulateLoop(nfcid1, ndef, ndefLen);
   int n = Achievement.inc("pn532_emulate");
   if (n == 1) Achievement.unlock("pn532_emulate");
-  ShowStatusAction::show("Emulation ended");
+  ShowStatusAction::show("Emulation ended", 1500);
   _doNtagMenu();
 }
 
@@ -5308,6 +5308,6 @@ void PN532I2cScreen::_doNtagUrl() {
   _emulateLoop(nfcid1, ndef, ndefLen);
   int n = Achievement.inc("pn532_emulate");
   if (n == 1) Achievement.unlock("pn532_emulate");
-  ShowStatusAction::show("Emulation ended");
+  ShowStatusAction::show("Emulation ended", 1500);
   _doNtagMenu();
 }
