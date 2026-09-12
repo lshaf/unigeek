@@ -15,7 +15,7 @@ public:
     String      value;
   };
 
-  void setRows(Row* rows, uint8_t count) {
+  void setRows(Row* rows, uint16_t count) {
     _rows  = rows;
     _count = count;
     // clamp offset so the list stays scrolled as far as possible
@@ -69,7 +69,7 @@ private:
   static constexpr int SCROLL_W = 3;
 
   Row*    _rows   = nullptr;
-  uint8_t _count  = 0;
+  uint16_t _count = 0;
   int     _offset = 0;
   int     _x = 0, _y = 0, _w = 0, _h = 0;
 

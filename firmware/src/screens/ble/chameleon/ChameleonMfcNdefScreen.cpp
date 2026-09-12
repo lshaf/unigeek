@@ -105,8 +105,7 @@ void ChameleonMfcNdefScreen::onItemSelected(uint8_t index) {
   if (_state == STATE_MENU) {
     if (index == 0) _doRead();
     else if (index == 1) _goWriteMenu();
-    else if (index == 2) _doErase();
-    else if (index == 3) {
+    else if (index == 2) {
       _running = true;
       renderOperationTitle("Format NDEF");
       if (_scanClassic()) _formatClassic1kNdef();
@@ -114,6 +113,7 @@ void ChameleonMfcNdefScreen::onItemSelected(uint8_t index) {
       ChameleonClient::get().setMode(0);
       _goMenu();
     }
+    else if (index == 3) _doErase();
     return;
   }
   if (_state == STATE_WRITE_MENU) {
@@ -183,7 +183,7 @@ bool ChameleonMfcNdefScreen::_scanClassic() {
   _sak = sak;
   memcpy(_atqa, atqa, 2);
   if (sak == 0x18) _sectors = 40;
-  else if (sak == 0x01) _sectors = 5;
+  else if (sak == 0x09) _sectors = 5;
   else _sectors = 16;
   return true;
 }
@@ -512,7 +512,7 @@ bool ChameleonMfcNdefScreen::_formatClassic1kNdef() {
 
   if (ok) ProgressView::progress("Format complete", 100);
   ProgressView::finish();
-  ShowStatusAction::show(ok ? "NDEF formatted" : "NDEF format failed");
+  ShowStatusAction::show(ok ? "NDEF formatted" : "NDEF format failed", 1600);
   return ok;
 }
 
@@ -593,7 +593,7 @@ bool ChameleonMfcNdefScreen::_writeNdefRecord(const uint8_t* ndef, size_t ndefLe
   ProgressView::finish();
   free(payload);
   c.setMode(0); _running = false;
-  ShowStatusAction::show(ok ? "NDEF written" : "NDEF write failed");
+  ShowStatusAction::show(ok ? "NDEF written" : "NDEF write failed", 1600);
   return ok;
 }
 
@@ -616,7 +616,7 @@ void ChameleonMfcNdefScreen::_doErase() {
   }
   c.setMode(0); _running = false;
   _hasNdef = false; _ndefLen = 0;
-  ShowStatusAction::show(ok ? "NDEF erased" : "NDEF erase failed");
+  ShowStatusAction::show(ok ? "NDEF erased" : "NDEF erase failed", 1600);
   _goMenu();
 }
 
@@ -684,18 +684,18 @@ void ChameleonMfcNdefScreen::_showResult(const uint8_t* ndef, size_t ndefLen) {
     case NdefParser::RECORD_TEXT:
       _addRow("Record", "Text"); if (parsed.language.length()) _addRow("Language", parsed.language); _addWrapped("Text", parsed.text); break;
     case NdefParser::RECORD_URL:
-      _addRow("Record", "URI"); _addWrapped("URI", parsed.uri); break;
+      _addRow("Record", "URL"); _addWrapped("URL", parsed.uri); break;
     case NdefParser::RECORD_PHONE:
       _addRow("Record", "Phone"); _addWrapped("Phone", parsed.phone); break;
     case NdefParser::RECORD_EMAIL:
-      _addRow("Record", "Email"); _addWrapped("Mail", parsed.email); break;
+      _addRow("Record", "Email"); _addWrapped("Email", parsed.email); break;
     case NdefParser::RECORD_VCARD:
       _addRow("Record", "vCard");
       if (parsed.contact.length()) _addWrapped("Contact", parsed.contact);
       if (parsed.company.length()) _addWrapped("Company", parsed.company);
       if (parsed.address.length()) _addWrapped("Address", parsed.address);
       if (parsed.phone.length()) _addWrapped("Phone", parsed.phone);
-      if (parsed.email.length()) _addWrapped("Mail", parsed.email);
+      if (parsed.email.length()) _addWrapped("Email", parsed.email);
       if (parsed.website.length()) _addWrapped("Website", parsed.website);
       break;
     default: _addRow("Record", "Unsupported"); break;
@@ -735,7 +735,7 @@ void ChameleonMfcNdefScreen::_saveCurrent() {
   fs::File f = Uni.Storage->open(path.c_str(), "w"); bool ok = false;
   if (f) { ok = f.write(_ndef, _ndefLen) == _ndefLen; f.close(); }
   render();
-  ShowStatusAction::show(ok ? "NDEF saved" : "Save failed");
+  ShowStatusAction::show(ok ? "NDEF saved" : "Save failed", 1500);
   if (ok) { _goMenu(); return; }
   render();
 }

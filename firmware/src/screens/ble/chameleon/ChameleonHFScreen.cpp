@@ -8,7 +8,7 @@
 #include "ui/actions/ShowStatusAction.h"
 
 const char* ChameleonHFScreen::_inferType(uint8_t sak, const uint8_t atqa[2]) {
-  if (sak == 0x01) return "MF Classic Mini";
+  if (sak == 0x09) return "MF Classic Mini";
   if (sak == 0x08) return "MF Classic 1K";
   if (sak == 0x18) return "MF Classic 4K";
   if (sak == 0x28) return "MF Plus / SmartMX";
@@ -17,7 +17,7 @@ const char* ChameleonHFScreen::_inferType(uint8_t sak, const uint8_t atqa[2]) {
     return "ISO14443-4";
   }
   if (sak == 0x00) {
-    if (atqa[1] == 0x44) return "MIFARE UL / NTAG";
+    if (atqa[1] == 0x44) return "Ultralight / NTAG";
     return "ISO14443A T2";
   }
   return "ISO14443A";
@@ -107,7 +107,7 @@ void ChameleonHFScreen::_doScan() {
     _rows[_rowCount] = {_rowLabels[_rowCount].c_str(), _rowValues[_rowCount]};
     _rowCount++;
 
-    if (_sak == 0x01 || _sak == 0x08 || _sak == 0x18) {
+    if (_sak == 0x09 || _sak == 0x08 || _sak == 0x18) {
       const MagicCardType magic = c.detectMagicType();
       _rowLabels[_rowCount] = "Magic";
       _rowValues[_rowCount] = magicCardTypeName(magic);

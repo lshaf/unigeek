@@ -24,11 +24,12 @@ public:
 private:
   enum State_e {
     STATE_MAIN_MENU,
-    STATE_INFO,
+    STATE_DEVICE_INFO,
     STATE_SCAN_RESULT,
     STATE_SCAN_14A,
     STATE_MIFARE_MENU,
     STATE_MIFARE_TAG_MENU,
+    STATE_MIFARE_ADVANCED_MENU,
     STATE_MIFARE_NDEF_MENU,
     STATE_MIFARE_ATTACKS_MENU,
     STATE_MIFARE_KEYS_MENU,
@@ -42,12 +43,11 @@ private:
     STATE_DICT_SELECT,
     STATE_ULTRALIGHT_MENU,
     STATE_ULTRALIGHT_TAG_MENU,
+    STATE_ULTRALIGHT_ADVANCED_MENU,
     STATE_ULTRALIGHT_NDEF_MENU,
-    STATE_MAGIC_MENU,
     STATE_MAGIC_DETECT,
     STATE_RAW_RESULT,
-    STATE_EMULATE,
-    STATE_NTAG_MENU,
+    STATE_ULTRALIGHT_DUMP,
     STATE_NDEF_WRITE_MENU,
     STATE_NDEF_RESULT,
     STATE_NDEF_FILE_SELECT,
@@ -65,9 +65,10 @@ private:
   uint16_t _atqa   = 0;
   uint8_t  _sak    = 0;
   bool     _hasCard = false;
+  bool     _rawResultMifare = false;
   std::array<std::pair<NFCUtility::MIFARE_Key, NFCUtility::MIFARE_Key>, 40> _mfKeys;
 
-  // Firmware info
+  // Device information reported by GetFirmwareVersion
   uint8_t _fwIc = 0, _fwVer = 0, _fwRev = 0, _fwSup = 0;
 
   // Card type helpers
@@ -81,12 +82,11 @@ private:
   String _rowValues[MAX_ROWS];
   uint16_t _rowCount = 0;
 
-  ListItem _mainItems[5] = {
+  ListItem _mainItems[4] = {
     {"Scan Tag"},
     {"MIFARE Classic"},
     {"Ultralight / NTAG"},
-    {"Magic Card"},
-    {"Firmware Info"},
+    {"Device Info"},
   };
 
   ListItem _mfItems[4] = {
@@ -101,21 +101,30 @@ private:
   };
 
   ListItem _mfKeysItems[2] = {
-    {"Discovered Keys"},
-    {"Key Databases"},
+    {"Check Known Keys"},
+    {"Dictionaries"},
   };
 
-  ListItem _mfTagItems[3] = {
+  ListItem _mfTagItems[5] = {
+    {"Detect Magic"},
     {"Read Tag"},
     {"Write to Tag"},
     {"Erase Tag"},
+    {"Advanced"},
+  };
+
+  ListItem _mfAdvancedItems[4] = {
+    {"Read Memory"},
+    {"Edit Memory"},
+    {"Edit UID (Gen3)"},
+    {"Lock UID (Gen3)"},
   };
 
   ListItem _mfNdefItems[4] = {
     {"Read NDEF"},
     {"Write NDEF"},
-    {"Erase NDEF"},
     {"Format NDEF"},
+    {"Erase NDEF"},
   };
 
   ListItem _ulItems[2] = {
@@ -123,30 +132,30 @@ private:
     {"NDEF Operations"},
   };
 
-  ListItem _ulTagItems[2] = {
-    {"Read Pages"},
-    {"Write Page"},
+  ListItem _ulTagItems[4] = {
+    {"Read Tag"},
+    {"Write to Tag"},
+    {"Erase Tag"},
+    {"Advanced"},
   };
 
-  ListItem _ulNdefItems[3] = {
+  ListItem _ulAdvancedItems[5] = {
+    {"Read Memory"},
+    {"Edit Memory"},
+    {"Set Password"},
+    {"Remove Password"},
+    {"Lock Tag"},
+  };
+
+  ListItem _ulNdefItems[4] = {
     {"Read NDEF"},
     {"Write NDEF"},
+    {"Format NDEF"},
     {"Erase NDEF"},
   };
 
   LogView _magicLog;
   bool _magicDetectDone = false;
-
-  ListItem _magicItems[3] = {
-    {"Detect Magic"},
-    {"Set UID (Gen3)"},
-    {"Lock UID (Gen3)"},
-  };
-
-  ListItem _ntagItems[2] = {
-    {"Text Record"},
-    {"URL Record"},
-  };
 
   ListItem _ndefWriteItems[6] = {
     {"Text"},
@@ -172,6 +181,9 @@ private:
   bool     _writePreviewSourceUidKnown = false;
   uint8_t  _writePreviewSourceUid[7] = {};
   uint8_t  _writePreviewSourceUidLen = 0;
+  bool     _writePreviewReplaceUid = true;
+  String   _ulTypeName;
+  uint16_t _ulPages = 0;
 
   enum NdefTarget_e {
     NDEF_TARGET_ULTRALIGHT,
@@ -180,7 +192,7 @@ private:
   NdefTarget_e _ndefTarget = NDEF_TARGET_ULTRALIGHT;
 
   // Raw NDEF message retained after Read NDEF (without the tag-specific TLV wrapper).
-  static constexpr size_t MAX_NDEF_BYTES = 254;
+  static constexpr size_t MAX_NDEF_BYTES = 880;
   uint8_t  _ndefBuf[MAX_NDEF_BYTES] = {};
   size_t   _ndefLen = 0;
   size_t   _ndefCapacity = 0;
@@ -200,22 +212,20 @@ private:
   void _goMain();
   void _goMifare();
   void _goMifareTag();
+  void _goMifareAdvanced();
   void _goMifareNdef();
   void _goMifareAttacks();
   void _goMifareKeys();
-  void _goScan14A();
   void _openKeyDatabases();
   void _openKeyDatabase(uint8_t index);
   void _goUltralight();
   void _goUltralightTag();
+  void _goUltralightAdvanced();
   void _goUltralightNdef();
-  void _goMagic();
   void _goDetectMagic();
-  void _doNtagMenu();
 
-  void _showFirmwareInfo();
+  void _showDeviceInfo();
   void _doScan14A();
-  void _doAuthenticate();
   bool _discoverDefaultKeys(bool checkingProgress = false);
   void _loadSavedKeys();
   void _saveKeys();
@@ -224,9 +234,10 @@ private:
   void _doDumpMemory();
   void _showTagDetails();
   void _appendDumpNdefDetails();
+  void _appendDumpNdefDetails(const uint8_t* dump, size_t dumpLen, size_t totalSectors);
   void _showDumpHex();
   void _showDumpActions();
-  void _doWriteDumpToTag(const uint8_t* dump, size_t len,
+  bool _doWriteDumpToTag(const uint8_t* dump, size_t len,
                          const uint8_t* sourceUid = nullptr, uint8_t sourceUidLen = 0);
   bool _tryWriteMifareBlock(uint16_t block, const uint8_t data[16],
                             const uint8_t key[6], bool useKeyB);
@@ -239,8 +250,22 @@ private:
   void _doShowKeys();
   void _doDictionaryPicker();
   void _doDictionaryAttackWithFile(uint8_t fileIndex);
-  void _doUltralightDump();
-  void _doUltralightWrite();
+  void _doUltralightReadTag();
+  void _doUltralightWriteTag();
+  void _doUltralightEraseTag();
+  void _doMifareReadMemory();
+  void _doMifareEditMemory();
+  void _doUltralightReadPages();
+  void _doUltralightWritePage();
+  void _doUltralightLockTag();
+  void _doUltralightSetPassword();
+  void _doUltralightRemovePassword();
+  bool _detectUltralightTag(uint16_t& pages, const char*& typeName);
+  bool _readUltralightDump(uint16_t pages);
+  bool _writeUltralightNtag215Dump(const uint8_t* dump, size_t len);
+  void _showUltralightTagDetails(const char* typeName, uint16_t pages);
+  void _showUltralightDumpActions();
+  void _saveUltralightDump(const char* typeName);
   void _doReadNdef();
   void _doReadClassicNdef();
   void _showNdefResult(const uint8_t* uid, uint8_t uidLen,
@@ -259,6 +284,7 @@ private:
   void _doSaveNdef();
   void _doWriteCurrentNdef();
   void _doEraseNdef();
+  void _doFormatNdef();
   void _doEraseClassicNdef();
   bool _writeNdefRecord(const uint8_t* ndef, size_t ndefLen);
   bool _writeUltralightNdefRecord(const uint8_t* ndef, size_t ndefLen);
@@ -276,9 +302,6 @@ private:
   void _doGen3SetUid();
   void _doGen3LockUid();
   void _doSaveDump();
-  void _doNtagText();
-  void _doNtagUrl();
-  void _emulateLoop(const uint8_t* nfcid1, const uint8_t* ndef, uint16_t ndefLen);
 
   String _hexUid(const uint8_t* uid, uint8_t len) const;
   String _hexBlock(const uint8_t* data, uint8_t len) const;

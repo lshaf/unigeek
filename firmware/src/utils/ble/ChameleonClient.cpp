@@ -444,14 +444,21 @@ MagicCardType ChameleonClient::detectMagicType() {
     }
   }
 
-  // Start the Gen1A backdoor with 0x40 sent as 7 bits, then require the
-  // second 0x43 ACK as well. This changes only transient RF/card state; no
-  // memory is written. Always reselect afterwards to leave the card normal.
+  // Gen1A 0x40/0x43 must be entered from HALT. Mirror the sequence used by
+  // writeMagicUid() and by the PN532 backend; probing from the ACTIVE state
+  // can make a genuine Magic Gen1A tag look like a normal card.
   if (!reselect()) return finish(MagicCardType::NONE);
   bool gen1a = false;
   {
     uint8_t resp[16] = {};
     uint16_t respLen = 0;
+
+    uint8_t halt[2] = {0x50, 0x00};
+    uint16_t haltLen = 0;
+    uint16_t haltSt = 0;
+    (void)hf14ARaw(64 | 32 | 8, 200, 16, halt, sizeof(halt),
+                   resp, &haltLen, sizeof(resp), &haltSt);
+
     uint8_t wake = 0x40;
     const bool ack1 = hf14ARaw(128 | 64 | 8, 200, 7, &wake, 1,
                                resp, &respLen, sizeof(resp)) &&
@@ -620,7 +627,7 @@ const char* ChameleonClient::tagTypeName(uint16_t type) {
 }
 
 uint16_t ChameleonClient::inferHFTagType(uint8_t sak, const uint8_t atqa[2]) {
-  if (sak == 0x01) return 1000; // MF Classic Mini
+  if (sak == 0x09) return 1000; // MF Classic Mini
   if (sak == 0x08) return 1001; // MF Classic 1K
   if (sak == 0x18) return 1003; // MF Classic 4K
   if (sak == 0x00) return 1100; // default NTAG/UltraLight → ntag213
@@ -1009,6 +1016,7 @@ namespace {
 // activate_rf_field | wait_response | append_crc | auto_select | keep_rf_field.
 // auto_select performs the ISO14443A selection before each command.
 static constexpr uint8_t kMfuRawOptions = 0xF8;
+static constexpr uint8_t kMfuSessionOptions = 0xE8;
 
 static bool _mfuRaw(ChameleonClient& c, const uint8_t* cmd, uint8_t cmdLen,
                     uint8_t* out, uint16_t* outLen, uint16_t outSize,
@@ -1020,6 +1028,15 @@ static bool _mfuRaw(ChameleonClient& c, const uint8_t* cmd, uint8_t cmdLen,
   }
   // HF commands normally report 0x68 (HF_TAG_OK); some firmware revisions
   // use generic success (0). Keep both, as elsewhere in ChameleonClient.
+  return st == 0 || st == 0x68;
+}
+
+static bool _mfuRawSession(ChameleonClient& c, const uint8_t* cmd, uint8_t cmdLen,
+                           uint8_t* out, uint16_t* outLen, uint16_t outSize,
+                           uint16_t timeoutMs = 500) {
+  uint16_t st = 0;
+  if (!c.hf14ARaw(kMfuSessionOptions, timeoutMs, (uint16_t)cmdLen * 8,
+                  cmd, cmdLen, out, outLen, outSize, &st)) return false;
   return st == 0 || st == 0x68;
 }
 
@@ -1041,6 +1058,11 @@ static bool _mfuGetVersion(ChameleonClient& c, uint8_t out8[8]) {
   uint16_t len = 0;
   if (!_mfuRaw(c, &cmd, 1, rsp, &len, sizeof(rsp))) return false;
   if (len < 8) return false;
+  // A Type-2 NAK or firmware-wrapped failure can still arrive in a buffer
+  // large enough to look like GET_VERSION. Accept only the NXP version prefix
+  // used by the NTAG21x / Ultralight EV1 families; otherwise let the caller
+  // continue with the legacy Ultralight-C / original-Ultralight probes.
+  if (rsp[0] != 0x00 || rsp[1] != 0x04) return false;
   memcpy(out8, rsp, 8);
   return true;
 }
@@ -1098,6 +1120,7 @@ const char* ChameleonClient::mfuTagTypeName(uint16_t type) {
     case MFU_ULTRALIGHT_C:     return "Ultralight C";
     case MFU_ULTRALIGHT_EV1_11:return "Ultralight EV1 11";
     case MFU_ULTRALIGHT_EV1_21:return "Ultralight EV1 21";
+    case MFU_UNKNOWN:          return "Ultralight / NTAG";
     default:                   return "Unknown";
   }
 }
@@ -1111,13 +1134,32 @@ bool ChameleonClient::mfuDetect(MfuTagInfo* out) {
   if (!scan14A(out->uid, &out->uidLen, out->atqa, &out->sak)) return false;
   if (out->sak != 0x00) return false;
 
+  // Conservative generic fallback: a valid NFC Forum Type-2 Capability
+  // Container gives the usable data-area size without assuming any concrete
+  // NTAG/Ultralight security or lock layout.
+  auto detectGenericType2 = [&]() -> bool {
+    uint8_t data[16] = {};
+    if (!_mfuRead4(*this, 3, data)) return false;
+    if (data[0] != 0xE1 || (data[1] & 0xF0) != 0x10 || data[2] == 0) return false;
+    const uint16_t advertisedPages = (uint16_t)(4u + (uint16_t)data[2] * 2u);
+    if (advertisedPages <= 4 || advertisedPages > 256) return false;
+
+    // Capability Container describes usable NFC Forum memory, not a unique
+    // silicon model. Keep the concrete type unknown unless a model-specific
+    // command identifies it.
+    out->type = MFU_UNKNOWN;
+    out->pages = advertisedPages;
+    return true;
+  };
+
   uint8_t version[8] = {};
   for (uint8_t attempt = 0; attempt < 3; ++attempt) {
     if (_mfuGetVersion(*this, version)) {
       if (_mfuVersionToInfo(version, &out->type, &out->pages)) return true;
-      // We received a real GET_VERSION response, but not one we know.
-      // Do not misclassify it with legacy memory-size probes.
-      return false;
+      // We received a real GET_VERSION response, but not one we know. Keep
+      // the concrete type unknown while still allowing safe Type-2 operations
+      // when the tag exposes a valid Capability Container.
+      return detectGenericType2();
     }
     delay(30);
   }
@@ -1132,22 +1174,31 @@ bool ChameleonClient::mfuDetect(MfuTagInfo* out) {
     return true;
   }
 
+  // After excluding Ultralight C, recognize the original 16-page Ultralight
+  // only when a normal READ works and the documented out-of-range READ 0x29
+  // NAKs. A successful high-page read remains ambiguous; do not guess NTAG203.
   uint8_t tmp[16] = {};
-  if (_mfuRead4(*this, 0, tmp) && !_mfuRead4(*this, 16, tmp)) {
-    out->type  = MFU_ULTRALIGHT;
-    out->pages = 16;
-    return true;
+  if (_mfuRead4(*this, 0, tmp)) {
+    memset(tmp, 0, sizeof(tmp));
+    if (!_mfuRead4(*this, 0x29, tmp)) {
+      out->type  = MFU_ULTRALIGHT;
+      out->pages = 16;
+      return true;
+    }
   }
 
-  return false;
+  return detectGenericType2();
 }
 
 bool ChameleonClient::mfuReadDump(const MfuTagInfo& info, uint8_t* out,
                                   uint16_t outSize, uint16_t* bytesRead,
-                                  MfuProgressCallback progress) {
+                                  MfuProgressCallback progress,
+                                  const uint8_t* password) {
   if (bytesRead) *bytesRead = 0;
   const uint32_t total = (uint32_t)info.pages * 4u;
   if (!out || outSize < total || info.pages < 4) return false;
+  const bool authenticated = password && mfuPwdAuth(password, nullptr);
+  if (password && !authenticated) return false;
 
   uint16_t page = 0;
   uint16_t done = 0;
@@ -1171,7 +1222,12 @@ bool ChameleonClient::mfuReadDump(const MfuTagInfo& info, uint8_t* out,
     }
 
     uint8_t chunk[16] = {};
-    if (!_mfuRead4(*this, readPage, chunk)) {
+    if (!(authenticated ? ([&]() {
+          const uint8_t cmd[2] = {0x30, readPage};
+          uint8_t rsp[24] = {}; uint16_t rl = 0;
+          if (!_mfuRawSession(*this, cmd, sizeof(cmd), rsp, &rl, sizeof(rsp)) || rl < 16) return false;
+          memcpy(chunk, rsp, 16); return true;
+        })() : _mfuRead4(*this, readPage, chunk))) {
       // Ultralight C pages 44..47 contain the 3DES key and are intentionally
       // not readable. Preserve a complete 48-page image with zeroes there.
       if (info.type == MFU_ULTRALIGHT_C && readPage >= 44) {
@@ -1193,9 +1249,55 @@ bool ChameleonClient::mfuReadDump(const MfuTagInfo& info, uint8_t* out,
   return done == total;
 }
 
+bool ChameleonClient::mfuReadPage(uint8_t page, uint8_t data[4]) {
+  if (!data) return false;
+  uint8_t chunk[16] = {};
+  if (!_mfuRead4(*this, page, chunk)) return false;
+  memcpy(data, chunk, 4);
+  return true;
+}
+
+bool ChameleonClient::mfuReadPageSession(uint8_t page, uint8_t data[4]) {
+  if (!data) return false;
+  const uint8_t cmd[2] = {0x30, page};
+  uint8_t rsp[24] = {}; uint16_t len = 0;
+  if (!_mfuRawSession(*this, cmd, sizeof(cmd), rsp, &len, sizeof(rsp)) || len < 16) return false;
+  memcpy(data, rsp, 4);
+  return true;
+}
+
+bool ChameleonClient::mfuPwdAuth(const uint8_t password[4], uint8_t pack[2]) {
+  if (!password) return false;
+  const uint8_t cmd[5] = {0x1B, password[0], password[1], password[2], password[3]};
+  uint8_t rsp[8] = {}; uint16_t len = 0;
+  if (!_mfuRaw(*this, cmd, sizeof(cmd), rsp, &len, sizeof(rsp)) || len < 2) return false;
+  if (pack) { pack[0] = rsp[0]; pack[1] = rsp[1]; }
+  return true;
+}
+
+bool ChameleonClient::mfuWritePage(uint8_t page, const uint8_t data[4]) {
+  if (!data) return false;
+  uint8_t cmd[6] = {0xA2, page, data[0], data[1], data[2], data[3]};
+  uint8_t rsp[8] = {};
+  uint16_t len = 0;
+  if (!_mfuRaw(*this, cmd, sizeof(cmd), rsp, &len, sizeof(rsp))) return false;
+  // Type-2 WRITE acknowledges with 4-bit ACK 0xA. Some Chameleon firmware
+  // paths return it in a full byte, while others report no data on success.
+  return len == 0 || (len >= 1 && (rsp[0] & 0x0F) == 0x0A);
+}
+
+bool ChameleonClient::mfuWritePageSession(uint8_t page, const uint8_t data[4]) {
+  if (!data) return false;
+  uint8_t cmd[6] = {0xA2, page, data[0], data[1], data[2], data[3]};
+  uint8_t rsp[8] = {}; uint16_t len = 0;
+  if (!_mfuRawSession(*this, cmd, sizeof(cmd), rsp, &len, sizeof(rsp))) return false;
+  return len == 0 || (len >= 1 && (rsp[0] & 0x0F) == 0x0A);
+}
+
 bool ChameleonClient::mfuWriteNtag215User(const uint8_t* dump, uint16_t dumpLen,
                                            MfuProgressCallback progress,
-                                           const MfuTagInfo* expectedTarget) {
+                                           const MfuTagInfo* expectedTarget,
+                                           const uint8_t* password) {
   static constexpr uint16_t kNtag215Bytes = 135u * 4u;
   static constexpr uint8_t kFirstUserPage = 4;
   static constexpr uint8_t kLastUserPage  = 129;
@@ -1212,6 +1314,8 @@ bool ChameleonClient::mfuWriteNtag215User(const uint8_t* dump, uint16_t dumpLen,
         memcmp(target.uid, expectedTarget->uid, target.uidLen) != 0)
       return false;
   }
+  const bool authenticated = password && mfuPwdAuth(password, nullptr);
+  if (password && !authenticated) return false;
 
   // Standard Type-2 WRITE (A2) writes exactly one 4-byte page. Do not touch
   // pages 0..3 (UID/manufacturer + CC), page 130 (dynamic locks), or pages
@@ -1224,10 +1328,10 @@ bool ChameleonClient::mfuWriteNtag215User(const uint8_t* dump, uint16_t dumpLen,
 
     uint8_t rsp[4] = {};
     uint16_t len = 0;
-    if (!_mfuRaw(*this, cmd, sizeof(cmd), rsp, &len, sizeof(rsp), 700))
+    if (!(authenticated ? _mfuRawSession(*this, cmd, sizeof(cmd), rsp, &len, sizeof(rsp), 700) : _mfuRaw(*this, cmd, sizeof(cmd), rsp, &len, sizeof(rsp), 700)))
       return false;
     // Type-2 ACK is 0xA (4 bits). HF14A_RAW exposes it in the low nibble.
-    if (len < 1 || (rsp[0] & 0x0F) != 0x0A) return false;
+    if (!(len == 0 || (len >= 1 && (rsp[0] & 0x0F) == 0x0A))) return false;
 
     ++done;
     if (progress) progress(done, kUserPages);

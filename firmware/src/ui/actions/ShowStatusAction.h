@@ -54,24 +54,31 @@ private:
     String msg       = _message;
 
     for (int i = 0; i <= (int)msg.length() && lineCount < MAX_LINES; i++) {
-      if (i < (int)msg.length() && msg[i] != ' ') {
+      const bool atEnd = i == (int)msg.length();
+      const bool newline = !atEnd && msg[i] == '\n';
+
+      if (!atEnd && msg[i] != ' ' && !newline) {
         word += msg[i];
         continue;
       }
-      if (word.length() == 0) continue;
 
-      String candidate = lines[lineCount].length() > 0
-                         ? lines[lineCount] + " " + word
-                         : word;
+      if (word.length() > 0) {
+        String candidate = lines[lineCount].length() > 0
+                           ? lines[lineCount] + " " + word
+                           : word;
 
-      if (lcd.textWidth(candidate.c_str()) <= maxContentW) {
-        lines[lineCount] = candidate;
-      } else {
-        if (lines[lineCount].length() > 0 && lineCount < MAX_LINES - 1)
-          lineCount++;
-        lines[lineCount] = word;
+        if (lcd.textWidth(candidate.c_str()) <= maxContentW) {
+          lines[lineCount] = candidate;
+        } else {
+          if (lines[lineCount].length() > 0 && lineCount < MAX_LINES - 1)
+            lineCount++;
+          lines[lineCount] = word;
+        }
+        word = "";
       }
-      word = "";
+
+      if (newline && lineCount < MAX_LINES - 1)
+        lineCount++;
     }
     lineCount++;  // index → count
 

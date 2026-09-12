@@ -45,8 +45,8 @@ private:
   ListItem _menuItems[4] = {
     {"Read NDEF"},
     {"Write NDEF"},
-    {"Erase NDEF"},
     {"Format NDEF"},
+    {"Erase NDEF"},
   };
   ListItem _writeItems[6] = {
     {"Text"}, {"URL"}, {"Phone"}, {"Email"}, {"vCard"}, {"Load from File"},

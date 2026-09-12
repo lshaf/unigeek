@@ -10,5 +10,5 @@ public:
   void onBack()                      override;
 
 private:
-  ListItem _items[5];
+  ListItem _items[4];
 };

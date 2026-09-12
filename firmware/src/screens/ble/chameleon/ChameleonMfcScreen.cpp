@@ -11,6 +11,7 @@
 #include "ChameleonMfcWriteScreen.h"
 #include "utils/nfc/NdefParser.h"
 
+#include "utils/nfc/MfcKeyStore.h"
 extern "C" {
 #include "utils/crypto/crapto1.h"
 }
@@ -67,9 +68,10 @@ const char* ChameleonMfcScreen::title() {
   switch (_state) {
     case STATE_AUTH:               return "Read Tag";
     case STATE_MF_MENU:            return "MIFARE Classic";
-    case STATE_SHOW_KEYS:          return "Discovered Keys";
+    case STATE_SHOW_KEYS:          return "Check Known Keys";
     case STATE_DUMP:               return "Read Tag";
     case STATE_DUMP_RESULT:        return "Tag Details";
+    case STATE_DUMP_HEX:           return "Memory Dump";
     case STATE_DICT_SEL:
     case STATE_DICT_RUN:
     case STATE_DICT_LOG:           return "Dictionary Attack";
@@ -83,13 +85,6 @@ const char* ChameleonMfcScreen::title() {
 
 void ChameleonMfcScreen::onInit() {
   _callAuth();
-}
-
-void ChameleonMfcScreen::_goMfMenu() {
-  _freeDump();
-  _state = STATE_MF_MENU;
-  setItems(_mfItems, 5);
-  render();
 }
 
 // ── Status bar callbacks ──
@@ -149,7 +144,7 @@ void ChameleonMfcScreen::_callAuth() {
     c.setMode(0);
     _running = false;
     render();
-    ShowStatusAction::show("No tag detected detected", 1200);
+    ShowStatusAction::show("No tag detected", 1200);
     Screen.goBack();
     return;
   }
@@ -157,7 +152,7 @@ void ChameleonMfcScreen::_callAuth() {
   _sak = sak;
   memcpy(_atqa, atqa, sizeof(_atqa));
   if (sak == 0x18)      _sectors = 40;
-  else if (sak == 0x01) _sectors = 5;
+  else if (sak == 0x09) _sectors = 5;
   else                  _sectors = 16;
 
   if (!c.mf1Support()) {
@@ -171,7 +166,7 @@ void ChameleonMfcScreen::_callAuth() {
 
   char msg[64];
 
-  // Discovered Keys is a viewer: after resolving the UID, load persisted
+  // Known Keys is a viewer: after resolving the UID, load persisted
   // results and display them without authenticating or running an attack.
   if (_startAction == ACTION_SHOW_KEYS) {
     _loadKeys();
@@ -295,7 +290,7 @@ void ChameleonMfcScreen::_continueRead() {
   _loadDictPicker();
 }
 
-// ── Discovered Keys ──
+// ── Known Keys ──
 
 void ChameleonMfcScreen::_buildKeyRows() {
   _rowCount = 0;
@@ -443,8 +438,10 @@ void ChameleonMfcScreen::_saveKeys() {
       buf += line;
     }
   }
-  if (buf.length() > 0)
+  if (buf.length() > 0) {
     Uni.Storage->writeFile(path.c_str(), buf.c_str());
+    MfcKeyStore::updateDiscoveredDictionary(Uni.Storage, buf);
+  }
 }
 
 // Helper: log a line then immediately redraw the action log so the user sees it live.
@@ -650,24 +647,24 @@ void ChameleonMfcScreen::_buildDumpPreview() {
         break;
       case NdefParser::RECORD_URL:
         addRow("NDEF", "URL");
-        addRow("URL", parsed.uri);
+        addWrappedRow("URL", parsed.uri);
         break;
       case NdefParser::RECORD_PHONE:
         addRow("NDEF", "Phone");
-        addRow("Phone", parsed.phone);
+        addWrappedRow("Phone", parsed.phone);
         break;
       case NdefParser::RECORD_EMAIL:
         addRow("NDEF", "Email");
-        addRow("Email", parsed.email);
+        addWrappedRow("Email", parsed.email);
         break;
       case NdefParser::RECORD_VCARD:
         addRow("NDEF", "vCard");
-        if (parsed.contact.length()) addRow("Contact", parsed.contact);
-        if (parsed.company.length()) addRow("Company", parsed.company);
-        if (parsed.address.length()) addRow("Address", parsed.address);
-        if (parsed.phone.length()) addRow("Phone", parsed.phone);
-        if (parsed.email.length()) addRow("Email", parsed.email);
-        if (parsed.website.length()) addRow("Website", parsed.website);
+        if (parsed.contact.length()) addWrappedRow("Contact", parsed.contact);
+        if (parsed.company.length()) addWrappedRow("Company", parsed.company);
+        if (parsed.address.length()) addWrappedRow("Address", parsed.address);
+        if (parsed.phone.length()) addWrappedRow("Phone", parsed.phone);
+        if (parsed.email.length()) addWrappedRow("Email", parsed.email);
+        if (parsed.website.length()) addWrappedRow("Website", parsed.website);
         break;
       default:
         addRow("NDEF", "Unsupported");
@@ -789,7 +786,7 @@ void ChameleonMfcScreen::_showDumpActions() {
   render();
   if (strcmp(r, "view") == 0) {
     _buildDumpHex();
-    _state = STATE_DUMP;
+    _state = STATE_DUMP_HEX;
     render();
   } else if (strcmp(r, "save") == 0) {
     _saveDump();
@@ -917,11 +914,12 @@ void ChameleonMfcScreen::_callDump() {
 void ChameleonMfcScreen::_loadDictPicker() {
   if (_dictPickDir.length() == 0) _dictPickDir = _kDictDir;
   _browser.root = _kDictDir;
-  uint8_t n = _browser.load(this, _dictPickDir, ".txt");
+  uint8_t n = _browser.load(this, _dictPickDir, ".txt", nullptr, BrowseFileView::STEM_CAPITALIZED,
+                            _dictPickDir == _kDictDir ? "discovered.txt" : nullptr);
 
   uint8_t baseOffset = 0;
   if (_dictPickDir == _kDictDir) {
-    _dictItems[0] = {"Built-in keys"};
+    _dictItems[0] = {"Built-in Keys"};
     baseOffset    = 1;
   }
   for (uint8_t i = 0; i < n; i++) _dictItems[i + baseOffset] = _browser.items()[i];
@@ -1519,7 +1517,7 @@ void ChameleonMfcScreen::onUpdate() {
     return;
   }
 
-  if (_state == STATE_DUMP) {
+  if (_state == STATE_DUMP_HEX) {
     if (Uni.Nav->wasPressed()) {
       auto dir = Uni.Nav->readDirection();
       if (dir == INavigation::DIR_BACK) {
@@ -1563,7 +1561,7 @@ void ChameleonMfcScreen::onRender() {
     _authLog.draw(Uni.Lcd, bodyX(), bodyY(), bodyW(), bodyH(), _authStatusBarCb, this);
     return;
   }
-  if (_state == STATE_SHOW_KEYS || _state == STATE_DUMP_RESULT || _state == STATE_DUMP) {
+  if (_state == STATE_SHOW_KEYS || _state == STATE_DUMP_RESULT || _state == STATE_DUMP_HEX) {
     _scrollView.render(bodyX(), bodyY(), bodyW(), bodyH());
     return;
   }

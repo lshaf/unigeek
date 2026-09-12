@@ -10,7 +10,7 @@ public:
   void onBack() override;
 
 private:
-  ListItem _items[3];
+  ListItem _items[5];
   BrowseFileView _browser;
   void _writeTag();
   void _eraseTag();

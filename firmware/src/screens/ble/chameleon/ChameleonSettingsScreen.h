@@ -32,5 +32,4 @@ private:
   void _togglePairing();
   void _save();
   void _reset();
-  void _clearBonds();
 };

@@ -239,7 +239,9 @@ private:
       sp.drawRoundRect(0, 0, innerW, ITEM_H, 3, TFT_WHITE);
     }
 
-    uint16_t labelColor = isCancel ? TFT_RED
+    // Cancel uses red as its accent when idle, but a selected Cancel row has
+    // a red background. Keep the selected label white so it remains legible.
+    uint16_t labelColor = isCancel ? (isSel ? TFT_WHITE : TFT_RED)
                           : (opt && opt->hasRssi ? _rssiColor(opt->rssi)
                                                 : (isSel ? TFT_WHITE : TFT_LIGHTGREY));
     sp.setTextColor(labelColor, isSel ? (isCancel ? TFT_RED : themeColor) : TFT_BLACK);

@@ -31,6 +31,7 @@ private:
     STATE_SHOW_KEYS,
     STATE_DUMP,
     STATE_DUMP_RESULT,
+    STATE_DUMP_HEX,
     STATE_DICT_SEL,
     STATE_DICT_RUN,
     STATE_DICT_LOG,
@@ -66,7 +67,7 @@ private:
 
   // MF submenu
   ListItem _mfItems[5] = {
-    {"Discovered Keys"},
+    {"Check Known Keys"},
     {"Dump Memory"},
     {"Dictionary Attack"},
     {"Static Nested"},
@@ -105,7 +106,6 @@ private:
 
   uint8_t  _trailerBlock(uint8_t sector);
   uint16_t _totalBlocks();
-  void _goMfMenu();
   void _dispatchStartAction();
   void _continueRead();
   void _callAuth();

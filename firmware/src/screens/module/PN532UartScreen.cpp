@@ -324,7 +324,7 @@ const char* PN532UartScreen::_inferType(uint8_t sak, uint16_t atqa) const {
   if (sak == 0x18) return "MF Classic 4K";
   if (sak == 0x28) return "MF Plus / SmartMX";
   if (sak == 0x20) return atqaHi == 0x03 ? "MIFARE DESFire" : "ISO14443-4";
-  if (sak == 0x00) return (atqa & 0x00FF) == 0x44 ? "MIFARE UL / NTAG" : "ISO14443A T2";
+  if (sak == 0x00) return (atqa & 0x00FF) == 0x44 ? "Ultralight / NTAG" : "ISO14443A T2";
   return "ISO14443A";
 }
 

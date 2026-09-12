@@ -2,6 +2,7 @@
 #include "core/Device.h"
 #include "core/ScreenManager.h"
 #include "ui/actions/ShowStatusAction.h"
+#include "ui/actions/InputSelectAction.h"
 #include "ui/views/ProgressView.h"
 #include "utils/nfc/NdefParser.h"
 
@@ -101,6 +102,16 @@ bool ChameleonMfcWriteScreen::_loadFile() {
   f.close();
   if (n != kClassic1KBytes) { _freeDump(); return false; }
   _dumpLen = kClassic1KBytes;
+
+  // Match the PN532 file-source behaviour: a raw Classic 1K dump carries
+  // the original 4-byte UID in manufacturer block 0. Trust it only when
+  // the BCC is valid; otherwise keep the target UID preserved.
+  const uint8_t bcc = (uint8_t)(_dump[0] ^ _dump[1] ^ _dump[2] ^ _dump[3]);
+  if (_dump[4] == bcc) {
+    memcpy(_sourceUid, _dump, 4);
+    _sourceUidLen = 4;
+    _sourceUidKnown = true;
+  }
   return true;
 }
 
@@ -132,7 +143,17 @@ bool ChameleonMfcWriteScreen::_loadSlot() {
     _sourceUidLen = anti.uidLen;
     memcpy(_sourceUid, anti.uid, anti.uidLen);
   } else {
-    _sourceUidLen = 0;
+    // Fallback for slots whose anti-collision metadata cannot be read. A
+    // Classic 1K memory image still carries a 4-byte UID in manufacturer
+    // block 0; accept it only when its BCC is valid.
+    const uint8_t bcc = (uint8_t)(_dump[0] ^ _dump[1] ^ _dump[2] ^ _dump[3]);
+    if (_dump[4] == bcc) {
+      memcpy(_sourceUid, _dump, 4);
+      _sourceUidLen = 4;
+      _sourceUidKnown = true;
+    } else {
+      _sourceUidLen = 0;
+    }
   }
 
   _restoreContext();
@@ -193,7 +214,7 @@ void ChameleonMfcWriteScreen::_buildSourcePreview() {
   _addRow("Source", source);
   _addRow("Type", "MIFARE Classic 1K");
   _addRow("UID", _sourceUidKnown ? _uidString(_sourceUid, _sourceUidLen) : String("Unknown"));
-  _addRow("Target UID", _sourceUidKnown ? "Replace if Magic" : "Preserved");
+  _addRow("UID Action", _sourceUidKnown ? (_replaceUid ? "Replace" : "Preserve") : "Preserved");
   _addRow("Blocks", "64");
   _addRow("Dump", String(_dumpLen) + " bytes");
   uint8_t* ndef = nullptr; size_t ndefLen = 0; NdefParser::Result parsed;
@@ -231,17 +252,35 @@ void ChameleonMfcWriteScreen::_buildSourcePreview() {
     };
 
     switch (parsed.kind) {
-      case NdefParser::RECORD_TEXT: _addRow("NDEF", "Text"); if (parsed.text.length()) addWrappedRow("Text", parsed.text); break;
-      case NdefParser::RECORD_URL: _addRow("NDEF", "URL"); _addRow("URL", parsed.uri); break;
-      case NdefParser::RECORD_PHONE: _addRow("NDEF", "Phone"); _addRow("Phone", parsed.phone); break;
-      case NdefParser::RECORD_EMAIL: _addRow("NDEF", "Email"); _addRow("Email", parsed.email); break;
+      case NdefParser::RECORD_TEXT:
+        _addRow("NDEF", "Text");
+        if (parsed.language.length()) _addRow("Language", parsed.language);
+        if (parsed.text.length()) addWrappedRow("Text", parsed.text);
+        break;
+      case NdefParser::RECORD_URL:
+        _addRow("NDEF", "URL");
+        addWrappedRow("URL", parsed.uri);
+        break;
+      case NdefParser::RECORD_PHONE:
+        _addRow("NDEF", "Phone");
+        addWrappedRow("Phone", parsed.phone);
+        break;
+      case NdefParser::RECORD_EMAIL:
+        _addRow("NDEF", "Email");
+        addWrappedRow("Email", parsed.email);
+        break;
       case NdefParser::RECORD_VCARD:
         _addRow("NDEF", "vCard");
-        if (parsed.contact.length()) _addRow("Contact", parsed.contact);
-        if (parsed.phone.length()) _addRow("Phone", parsed.phone);
-        if (parsed.email.length()) _addRow("Email", parsed.email);
+        if (parsed.contact.length()) addWrappedRow("Contact", parsed.contact);
+        if (parsed.company.length()) addWrappedRow("Company", parsed.company);
+        if (parsed.address.length()) addWrappedRow("Address", parsed.address);
+        if (parsed.phone.length()) addWrappedRow("Phone", parsed.phone);
+        if (parsed.email.length()) addWrappedRow("Email", parsed.email);
+        if (parsed.website.length()) addWrappedRow("Website", parsed.website);
         break;
-      default: _addRow("NDEF", "Unsupported"); break;
+      default:
+        _addRow("NDEF", "Unsupported");
+        break;
     }
   } else _addRow("NDEF", "Not found");
   if (ndef) free(ndef);
@@ -349,10 +388,12 @@ void ChameleonMfcWriteScreen::_write() {
   bool targetOk = c.scan14A(uid, &uidLen, atqa, &sak) && sak == 0x08 && c.mf1Support();
   MagicCardType magic = MagicCardType::NONE;
   bool restoreUid = false;
-  if (targetOk && _sourceUidKnown) {
+  bool uidDiffers = false;
+  const bool replaceUidRequested = targetOk && _sourceUidKnown && _replaceUid;
+  if (replaceUidRequested) {
     magic = c.detectMagicType();
-    const bool uidDiffers = uidLen != _sourceUidLen ||
-                            (uidLen == _sourceUidLen && memcmp(uid, _sourceUid, uidLen) != 0);
+    uidDiffers = uidLen != _sourceUidLen ||
+                 (uidLen == _sourceUidLen && memcmp(uid, _sourceUid, uidLen) != 0);
     restoreUid = uidDiffers &&
                  ((magic == MagicCardType::GEN1A && _sourceUidLen == 4) ||
                   (magic == MagicCardType::GEN3 && (_sourceUidLen == 4 || _sourceUidLen == 7)));
@@ -368,8 +409,14 @@ void ChameleonMfcWriteScreen::_write() {
   }
   _busy = false; _restoreContext();
 
+  // Do not leave the completed progress view behind the modal status box.
+  // ShowStatusAction clears only its own rectangle when dismissed.
+  Uni.Lcd.fillRect(bodyX(), bodyY(), bodyW(), bodyH(), TFT_BLACK);
+
   if (ok && !uidWriteFailed) {
-    ShowStatusAction::show(restoreUid ? "Tag + UID written" : "Tag written", 1600);
+    const char* status = restoreUid ? "Tag + UID written" :
+                         (replaceUidRequested && uidDiffers ? "Tag written; UID preserved" : "Tag written");
+    ShowStatusAction::show(status, 1600);
     _freeDump(); Screen.goBack(); return;
   }
   _buildSourcePreview(); render();
@@ -392,7 +439,22 @@ void ChameleonMfcWriteScreen::onUpdate() {
   if (_busy || !Uni.Nav->wasPressed()) return;
   auto dir = Uni.Nav->readDirection();
   if (dir == INavigation::DIR_BACK) { _restoreContext(); _freeDump(); Screen.goBack(); return; }
-  if (dir == INavigation::DIR_PRESS) { _write(); return; }
+  if (dir == INavigation::DIR_PRESS) {
+    if (_sourceUidKnown) {
+      static constexpr InputSelectAction::Option uidOpts[] = {
+        {"Replace UID", "replace"},
+        {"Preserve UID", "preserve"},
+      };
+      const char* choice = InputSelectAction::popup(
+          "UID", uidOpts, 2, _replaceUid ? "replace" : "preserve");
+      if (!choice) { render(); return; }
+      _replaceUid = strcmp(choice, "replace") == 0;
+      _buildSourcePreview();
+      render();
+    }
+    _write();
+    return;
+  }
   _scrollView.onNav(dir);
 }
 

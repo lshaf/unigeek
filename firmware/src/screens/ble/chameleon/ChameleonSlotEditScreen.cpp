@@ -57,9 +57,9 @@ void ChameleonSlotEditScreen::_rebuildLabels() {
   snprintf(_labels[7], sizeof(_labels[7]), "Save Nicks");
   _subs[7][0] = 0;
 
-  snprintf(_labels[8], sizeof(_labels[8]), "Tag Details");
+  snprintf(_labels[8], sizeof(_labels[8]), "Read Content");
   _subs[8][0] = 0;
-  snprintf(_labels[9], sizeof(_labels[9]), "View Data");
+  snprintf(_labels[9], sizeof(_labels[9]), "Read Memory");
   _subs[9][0] = 0;
   snprintf(_labels[10], sizeof(_labels[10]), "Load Dump to Slot");
   _subs[10][0] = 0;
@@ -532,10 +532,10 @@ bool ChameleonSlotEditScreen::_writeLfFromHex(const char* hex) {
 
 void ChameleonSlotEditScreen::_viewContent() {
   static const InputSelectAction::Option opts[] = {
-    {"HF Tag", "hf"},
-    {"LF Tag", "lf"},
+    {"HF Content", "hf"},
+    {"LF Content", "lf"},
   };
-  const char* r = InputSelectAction::popup("Tag Details", opts, 2, nullptr);
+  const char* r = InputSelectAction::popup("Read Content", opts, 2, nullptr);
   if (!r) { render(); return; }
   const bool lf = strcmp(r, "lf") == 0;
   Screen.push(new ChameleonSlotContentScreen(_slot, lf));
@@ -543,10 +543,10 @@ void ChameleonSlotEditScreen::_viewContent() {
 
 void ChameleonSlotEditScreen::_viewData() {
   static const InputSelectAction::Option opts[] = {
-    {"HF Data", "hf"},
-    {"LF Data", "lf"},
+    {"HF Memory", "hf"},
+    {"LF Memory", "lf"},
   };
-  const char* r = InputSelectAction::popup("View Data", opts, 2, nullptr);
+  const char* r = InputSelectAction::popup("Read Memory", opts, 2, nullptr);
   if (!r) { render(); return; }
   bool lf = (strcmp(r, "lf") == 0);
   Screen.push(new ChameleonSlotViewScreen(_slot, lf));

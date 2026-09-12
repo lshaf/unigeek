@@ -1,0 +1,260 @@
+#include "ChameleonMfuAdvancedScreen.h"
+#include "ChameleonMfuPagesScreen.h"
+#include "ChameleonMfuAuthUtils.h"
+#include "utils/ble/ChameleonClient.h"
+#include "core/ScreenManager.h"
+#include "ui/actions/InputNumberAction.h"
+#include "ui/actions/InputTextAction.h"
+#include "ui/actions/InputSelectAction.h"
+#include "ui/actions/ShowStatusAction.h"
+#include "ui/components/Header.h"
+
+namespace {
+const char* _mfuSensitivePageLabel(uint16_t type, uint16_t page) {
+  const uint16_t dynamicLock = ChameleonMfuAuthUtils::dynamicLockPage(type);
+  const uint16_t config0 = ChameleonMfuAuthUtils::config0(type);
+  if (type == ChameleonClient::MFU_ULTRALIGHT_C) {
+    if (page >= 40 && page <= 43) return "Security/config page";
+    if (page >= 44 && page <= 47) return "3DES key page";
+    return nullptr;
+  }
+  if (page == dynamicLock) return "Dynamic lock page";
+  if (page == config0 || page == config0 + 1) return "Configuration page";
+  if (page == config0 + 2) return "Password page";
+  if (page == config0 + 3) return "PACK page";
+  return nullptr;
+}
+
+bool _confirmSensitiveWrite(uint16_t type, uint16_t page) {
+  const char* label = _mfuSensitivePageLabel(type, page);
+  if (!label) return true;
+  static const InputSelectAction::Option opts[] = {{"Write anyway", "write"}};
+  String title = String("Warning: ") + label;
+  const char* choice = InputSelectAction::popup(title.c_str(), opts, 1, nullptr);
+  return choice && strcmp(choice, "write") == 0;
+}
+
+bool _readHex4(const char* title, uint8_t out[4]) {
+  String hex = InputTextAction::popup(title, "", InputTextAction::INPUT_HEX);
+  if (InputTextAction::wasCancelled()) return false;
+  hex.replace(" ", ""); hex.replace(":", "");
+  if (hex.length() != 8) { ShowStatusAction::show("Need 8 hex chars"); return false; }
+  for (uint8_t i = 0; i < 4; ++i) {
+    char b[3] = {hex[i * 2], hex[i * 2 + 1], 0};
+    char* e = nullptr; unsigned long v = strtoul(b, &e, 16);
+    if (!e || *e) { ShowStatusAction::show("Bad hex"); return false; }
+    out[i] = (uint8_t)v;
+  }
+  return true;
+}
+
+bool _detect(ChameleonClient& c, ChameleonClient::MfuTagInfo& info) {
+  auto& lcd = Uni.Lcd;
+  const int bx = 0, by = 26, bw = lcd.width(), bh = lcd.height() - 26;
+  lcd.fillRect(bx, by, bw, bh, TFT_BLACK);
+  lcd.setTextDatum(MC_DATUM); lcd.setTextColor(TFT_YELLOW, TFT_BLACK);
+  lcd.drawString("Place tag on reader...", bx + bw / 2, by + bh / 2);
+  return c.mfuDetect(&info);
+}
+
+bool _buildLockMasks(uint16_t type, uint16_t first, uint16_t last,
+                     uint8_t staticMask[2], uint8_t dynamicMask[3]) {
+  staticMask[0] = staticMask[1] = 0;
+  dynamicMask[0] = dynamicMask[1] = dynamicMask[2] = 0;
+  if (first > last || first < 4) return false;
+
+  for (uint16_t p = first; p <= last && p <= 15; ++p) {
+    if (p <= 7) staticMask[0] |= (uint8_t)(1u << p);
+    else staticMask[1] |= (uint8_t)(1u << (p - 8));
+  }
+  if (last <= 15) return true;
+
+  auto setGroup = [&](uint16_t start, uint16_t end, uint8_t byte, uint8_t bit) {
+    if (last >= start && first <= end) dynamicMask[byte] |= (uint8_t)(1u << bit);
+  };
+
+  switch (type) {
+    case ChameleonClient::MFU_NTAG212:
+    case ChameleonClient::MFU_ULTRALIGHT_EV1_21:
+      for (uint8_t i = 0; i < 10; ++i) setGroup(16 + i * 2, 17 + i * 2, i / 8, i % 8);
+      return true;
+    case ChameleonClient::MFU_NTAG213:
+      for (uint8_t i = 0; i < 12; ++i) setGroup(16 + i * 2, 17 + i * 2, i / 8, i % 8);
+      return true;
+    case ChameleonClient::MFU_NTAG215:
+      for (uint8_t i = 0; i < 7; ++i) setGroup(16 + i * 16, 31 + i * 16, 0, i);
+      setGroup(128, 129, 0, 7);
+      return true;
+    case ChameleonClient::MFU_NTAG216:
+      for (uint8_t i = 0; i < 8; ++i) setGroup(16 + i * 16, 31 + i * 16, 0, i);
+      for (uint8_t i = 0; i < 5; ++i) setGroup(144 + i * 16, 159 + i * 16, 1, i);
+      setGroup(224, 225, 1, 5);
+      return true;
+    case ChameleonClient::MFU_NTAG210:
+    case ChameleonClient::MFU_ULTRALIGHT_EV1_11:
+    case ChameleonClient::MFU_ULTRALIGHT:
+      return last <= 15;
+    default:
+      return false;
+  }
+}
+}
+
+void ChameleonMfuAdvancedScreen::onInit() {
+  _items[0] = {"Read Memory"};
+  _items[1] = {"Edit Memory"};
+  _items[2] = {"Set Password"};
+  _items[3] = {"Remove Password"};
+  _items[4] = {"Lock Tag"};
+  setItems(_items);
+}
+
+void ChameleonMfuAdvancedScreen::_writePage() {
+  Header header; header.render("Edit Memory");
+  auto& c = ChameleonClient::get(); uint8_t previousMode = 0;
+  const bool restoreMode = c.getMode(&previousMode); c.setMode(1);
+  ChameleonClient::MfuTagInfo info = {};
+  if (!_detect(c, info) || info.pages <= 4) { if (restoreMode) c.setMode(previousMode); render(); ShowStatusAction::show("Tag not supported"); render(); return; }
+  const int page = InputNumberAction::popup((String("Page (4..") + String(info.pages - 1) + ")").c_str(), 4, info.pages - 1, 4);
+  if (InputNumberAction::wasCancelled() || !_confirmSensitiveWrite(info.type, (uint16_t)page)) { if (restoreMode) c.setMode(previousMode); render(); return; }
+  uint8_t data[4] = {}; if (!_readHex4("Page data (8 hex)", data)) { if (restoreMode) c.setMode(previousMode); render(); return; }
+  uint8_t pwd[4] = {}; bool usePwd = false;
+  if (!ChameleonMfuAuthUtils::ensureForRange(c, info, page, page, false, pwd, usePwd)) { if (restoreMode) c.setMode(previousMode); render(); return; }
+  const bool ok = usePwd ? c.mfuWritePageSession((uint8_t)page, data)
+                         : c.mfuWritePage((uint8_t)page, data);
+  if (restoreMode) c.setMode(previousMode); render(); ShowStatusAction::show(ok ? "Page written" : "Write failed", 1600); render();
+}
+
+void ChameleonMfuAdvancedScreen::_lockTag() {
+  Header header; header.render("Lock Tag");
+  auto& c = ChameleonClient::get(); uint8_t previousMode = 0;
+  const bool restoreMode = c.getMode(&previousMode); c.setMode(1);
+  ChameleonClient::MfuTagInfo info = {};
+  if (!_detect(c, info) || info.pages <= 4 ||
+      info.type == ChameleonClient::MFU_ULTRALIGHT_C ||
+      info.type == ChameleonClient::MFU_UNKNOWN) {
+    if (restoreMode) c.setMode(previousMode); render(); ShowStatusAction::show("Lock not supported"); render(); return;
+  }
+  uint16_t lastUser = ChameleonMfuAuthUtils::dynamicLockPage(info.type);
+  if (lastUser != 0xFFFF) --lastUser; else lastUser = 15;
+  if (lastUser < 4) { if (restoreMode) c.setMode(previousMode); render(); ShowStatusAction::show("No lockable memory"); render(); return; }
+
+  static const InputSelectAction::Option opts[] = {{"Lock permanently", "lock"}};
+  if (!InputSelectAction::popup("Make tag read-only?", opts, 1, nullptr)) {
+    if (restoreMode) c.setMode(previousMode); render(); return;
+  }
+
+  uint8_t sm[2], dm[3];
+  if (!_buildLockMasks(info.type, 4, lastUser, sm, dm)) {
+    if (restoreMode) c.setMode(previousMode); render(); ShowStatusAction::show("Lock not supported"); render(); return;
+  }
+  uint8_t pwd[4] = {}; bool usePwd = false;
+  const uint16_t dyn = ChameleonMfuAuthUtils::dynamicLockPage(info.type);
+  const uint16_t authPage = dyn != 0xFFFF && (dm[0] || dm[1] || dm[2]) ? dyn : 2;
+  if (!ChameleonMfuAuthUtils::ensureForRange(c, info, authPage, authPage, false, pwd, usePwd)) {
+    if (restoreMode) c.setMode(previousMode); render(); return;
+  }
+  bool ok = true;
+  if (sm[0] || sm[1]) {
+    uint8_t p2[4] = {0, 0, sm[0], sm[1]};
+    ok = usePwd ? c.mfuWritePageSession(2, p2) : c.mfuWritePage(2, p2);
+  }
+  if (ok && dyn != 0xFFFF && (dm[0] || dm[1] || dm[2])) {
+    uint8_t cur[4] = {};
+    const bool readOk = usePwd ? c.mfuReadPageSession((uint8_t)dyn, cur)
+                               : c.mfuReadPage((uint8_t)dyn, cur);
+    if (!readOk) ok = false;
+    else {
+      cur[0] |= dm[0]; cur[1] |= dm[1]; cur[2] |= dm[2];
+      ok = usePwd ? c.mfuWritePageSession((uint8_t)dyn, cur)
+                  : c.mfuWritePage((uint8_t)dyn, cur);
+    }
+  }
+  if (restoreMode) c.setMode(previousMode); render(); ShowStatusAction::show(ok ? "Tag locked" : "Lock failed", 1600); render();
+}
+
+void ChameleonMfuAdvancedScreen::_setPassword() {
+  Header header; header.render("Set Password"); auto& c = ChameleonClient::get(); uint8_t previousMode=0;
+  const bool restoreMode=c.getMode(&previousMode); c.setMode(1); ChameleonClient::MfuTagInfo info={};
+  if (!_detect(c, info) || !ChameleonMfuAuthUtils::supportsPwd(info.type)) { if (restoreMode)c.setMode(previousMode); render(); ShowStatusAction::show("Password not supported"); render(); return; }
+  const uint16_t cfg=ChameleonMfuAuthUtils::config0(info.type);
+
+  uint8_t auth0=0xFF, access=0;
+  const bool protectionReadable=ChameleonMfuAuthUtils::readProtection(c,info,auth0,access);
+  const bool wasProtected=!protectionReadable || (auth0!=0xFF && auth0<info.pages);
+  uint8_t current[4]={}; bool usePwd=false;
+  if (wasProtected && !ChameleonMfuAuthUtils::ensureForRange(c,info,cfg,cfg+3,false,current,usePwd)) { if (restoreMode)c.setMode(previousMode); render(); return; }
+
+  uint8_t c0[4]={}, c1[4]={};
+  const bool r0=usePwd?c.mfuReadPageSession((uint8_t)cfg,c0):c.mfuReadPage((uint8_t)cfg,c0);
+  const bool r1=usePwd?c.mfuReadPageSession((uint8_t)(cfg+1),c1):c.mfuReadPage((uint8_t)(cfg+1),c1);
+  if(!r0||!r1){if(restoreMode)c.setMode(previousMode);render();ShowStatusAction::show("Read config failed");render();return;}
+
+  uint8_t newPwd[4]={};
+  if (!ChameleonMfuAuthUtils::promptPassword(newPwd, "New Password")) { if (restoreMode)c.setMode(previousMode); render(); return; }
+  static const InputSelectAction::Option modes[]={{"Write Only","w"},{"Read & Write","rw"}};
+  const char* mode=InputSelectAction::popup("Protection",modes,2,nullptr);
+  if(!mode){if(restoreMode)c.setMode(previousMode);render();return;}
+  const bool protectRead=strcmp(mode,"rw")==0;
+
+  // Set Password protects the whole user memory (page 4 onward). Keep the UI
+  // semantic by hiding AUTH0/AUTHLIM and resetting AUTHLIM to unlimited.
+  const uint8_t desiredAccess=(uint8_t)((c1[0]&~0x87u)|(protectRead?0x80u:0u));
+  const bool configLocked=(c1[0]&0x40u)!=0;
+  if(configLocked && (c0[3]!=4 || (c1[0]&0x87u)!=(desiredAccess&0x87u))){
+    if(restoreMode)c.setMode(previousMode);render();ShowStatusAction::show("Configuration locked");render();return;
+  }
+
+  bool ok=true;
+  if(!configLocked){
+    c1[0]=desiredAccess; c0[3]=4;
+    ok=usePwd?c.mfuWritePageSession((uint8_t)(cfg+1),c1):c.mfuWritePage((uint8_t)(cfg+1),c1);
+  }
+  if(ok) ok=usePwd?c.mfuWritePageSession((uint8_t)(cfg+2),newPwd):c.mfuWritePage((uint8_t)(cfg+2),newPwd);
+
+  // PWD takes effect immediately. Re-select and authenticate with the exact
+  // value just written before AUTH0 is enabled/confirmed. Keep PACK unchanged:
+  // it is not part of the text password and need not be rewritten.
+  if(ok && !c.mfuPwdAuth(newPwd,nullptr)){
+    if(restoreMode)c.setMode(previousMode);render();ShowStatusAction::show("Password verification failed");render();return;
+  }
+
+  // mfuPwdAuth() leaves the RF field/session active. If configuration pages
+  // were already protected, continue in that authenticated session.
+  if(ok && !configLocked) ok=c.mfuWritePageSession((uint8_t)cfg,c0);
+  if(restoreMode)c.setMode(previousMode); render(); ShowStatusAction::show(ok?"Password set\nRetap tag to activate":"Password setup failed", 1800); render();
+}
+
+void ChameleonMfuAdvancedScreen::_removePassword() {
+  Header header; header.render("Remove Password"); auto& c=ChameleonClient::get(); uint8_t previousMode=0;
+  const bool restoreMode=c.getMode(&previousMode); c.setMode(1); ChameleonClient::MfuTagInfo info={};
+  if(!_detect(c,info)||!ChameleonMfuAuthUtils::supportsPwd(info.type)){if(restoreMode)c.setMode(previousMode);render();ShowStatusAction::show("Password not supported");render();return;}
+  const uint16_t cfg=ChameleonMfuAuthUtils::config0(info.type); uint8_t pwd[4]={}; bool usePwd=false;
+  uint8_t auth0=0xFF, access=0;
+  const bool readable=ChameleonMfuAuthUtils::readProtection(c,info,auth0,access);
+  const bool protectedNow=!readable || (auth0!=0xFF && auth0<info.pages);
+  if(protectedNow && !ChameleonMfuAuthUtils::ensureForRange(c,info,cfg,cfg+3,false,pwd,usePwd)){if(restoreMode)c.setMode(previousMode);render();return;}
+  uint8_t c0[4]={},c1[4]={};
+  const bool r0=usePwd?c.mfuReadPageSession((uint8_t)cfg,c0):c.mfuReadPage((uint8_t)cfg,c0);
+  const bool r1=usePwd?c.mfuReadPageSession((uint8_t)(cfg+1),c1):c.mfuReadPage((uint8_t)(cfg+1),c1);
+  if(!r0||!r1){if(restoreMode)c.setMode(previousMode);render();ShowStatusAction::show("Read config failed");render();return;}
+  if(c1[0]&0x40){if(restoreMode)c.setMode(previousMode);render();ShowStatusAction::show("Configuration locked");render();return;}
+
+  c1[0]&=(uint8_t)~0x87u; c0[3]=0xFF;
+  const uint8_t defaultPwd[4]={0xFF,0xFF,0xFF,0xFF};
+  const uint8_t defaultPack[4]={0x00,0x00,0x00,0x00};
+  bool ok=usePwd?c.mfuWritePageSession((uint8_t)(cfg+1),c1):c.mfuWritePage((uint8_t)(cfg+1),c1);
+  if(ok) ok=usePwd?c.mfuWritePageSession((uint8_t)cfg,c0):c.mfuWritePage((uint8_t)cfg,c0);
+  if(ok) ok=usePwd?c.mfuWritePageSession((uint8_t)(cfg+2),defaultPwd):c.mfuWritePage((uint8_t)(cfg+2),defaultPwd);
+  if(ok) ok=usePwd?c.mfuWritePageSession((uint8_t)(cfg+3),defaultPack):c.mfuWritePage((uint8_t)(cfg+3),defaultPack);
+  if(restoreMode)c.setMode(previousMode); render(); ShowStatusAction::show(ok?"Password removed":"Remove failed", 1600); render();
+}
+
+void ChameleonMfuAdvancedScreen::onItemSelected(uint8_t index) {
+  if(index==0) Screen.push(new ChameleonMfuPagesScreen());
+  else if(index==1) _writePage();
+  else if(index==2) _setPassword();
+  else if(index==3) _removePassword();
+  else if(index==4) _lockTag();
+}
+void ChameleonMfuAdvancedScreen::onBack(){Screen.goBack();}

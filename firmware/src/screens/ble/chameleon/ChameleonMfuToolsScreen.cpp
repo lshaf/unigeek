@@ -1,9 +1,13 @@
 #include "ChameleonMfuToolsScreen.h"
 #include "ChameleonMfuScreen.h"
 #include "ChameleonMfuWriteScreen.h"
+#include "ChameleonMfuAdvancedScreen.h"
+#include "ChameleonMfuAuthUtils.h"
 #include "utils/ble/ChameleonClient.h"
 #include "core/ScreenManager.h"
 #include "ui/actions/InputSelectAction.h"
+#include "ui/actions/InputNumberAction.h"
+#include "ui/actions/InputTextAction.h"
 #include "ui/actions/ShowStatusAction.h"
 #include "ui/components/Header.h"
 #include "ui/views/ProgressView.h"
@@ -19,12 +23,14 @@ void _mfuEraseProgress(uint16_t done, uint16_t total) {
   const int pct = total ? (int)((uint32_t)done * 100u / total) : 0;
   ProgressView::progress(msg, pct);
 }
+
 }
 
 void ChameleonMfuToolsScreen::onInit() {
   _items[0] = {"Read Tag"};
   _items[1] = {"Write to Tag"};
   _items[2] = {"Erase Tag"};
+  _items[3] = {"Advanced"};
   setItems(_items);
 }
 
@@ -87,7 +93,7 @@ void ChameleonMfuToolsScreen::_writeFromSlot() {
   }
   if (!(hfType == ChameleonClient::MFU_NTAG215)) {
     render();
-    ShowStatusAction::show("Unsupported tag type", 1500);
+    ShowStatusAction::show("Tag not supported", 1500);
     render();
     return;
   }
@@ -156,11 +162,20 @@ void ChameleonMfuToolsScreen::_eraseTag() {
     return;
   }
 
+  uint8_t pwd[4] = {}; bool usePwd = false;
+  if (!ChameleonMfuAuthUtils::prepare(c, info, false, pwd, usePwd)) {
+    free(image);
+    if (restoreMode) c.setMode(previousMode);
+    render();
+    return;
+  }
+
   lcd.fillRect(bx, by, bw, bh, TFT_BLACK);
   ProgressView::init();
   ProgressView::progress("Erasing pages (0/126)...", 0);
   const bool ok = c.mfuWriteNtag215User(
-      image, (uint16_t)imageLen, _mfuEraseProgress, &info);
+      image, (uint16_t)imageLen, _mfuEraseProgress, &info,
+      usePwd ? pwd : nullptr);
   ProgressView::finish();
 
   free(image);
@@ -171,10 +186,12 @@ void ChameleonMfuToolsScreen::_eraseTag() {
   render();
 }
 
+
 void ChameleonMfuToolsScreen::onItemSelected(uint8_t index) {
   if (index == 0) Screen.push(new ChameleonMfuScreen());
   else if (index == 1) _writeTag();
   else if (index == 2) _eraseTag();
+  else if (index == 3) Screen.push(new ChameleonMfuAdvancedScreen());
 }
 
 void ChameleonMfuToolsScreen::onBack() { Screen.goBack(); }

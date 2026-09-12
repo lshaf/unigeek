@@ -1,4 +1,5 @@
 #include "ChameleonMfuWriteScreen.h"
+#include "ChameleonMfuAuthUtils.h"
 #include "core/Device.h"
 #include "core/ScreenManager.h"
 #include "ui/actions/ShowStatusAction.h"
@@ -259,13 +260,27 @@ void ChameleonMfuWriteScreen::_detectTarget() {
 
 void ChameleonMfuWriteScreen::_write() {
   _busy = true;
+  auto& c = ChameleonClient::get();
+  uint8_t pwd[4] = {}; bool usePwd = false;
+  if (!ChameleonMfuAuthUtils::prepare(c, _targetInfo, false, pwd, usePwd)) {
+    _busy = false;
+    _restoreContext();
+    render();
+    return;
+  }
   ProgressView::init();
   ProgressView::progress("Writing pages (0/126)...", 0);
-  bool ok = ChameleonClient::get().mfuWriteNtag215User(
-      _dump, _dumpLen, _mfuWriteProgress, &_targetInfo);
+  bool ok = c.mfuWriteNtag215User(
+      _dump, _dumpLen, _mfuWriteProgress, &_targetInfo,
+      usePwd ? pwd : nullptr);
   ProgressView::finish();
   _busy = false;
   _restoreContext();
+
+  // ProgressView leaves its last frame in the body area. Clear it before the
+  // modal status is shown; otherwise dismissing the status reveals remnants
+  // of the progress UI behind the Write to Tag screen.
+  Uni.Lcd.fillRect(bodyX(), bodyY(), bodyW(), bodyH(), TFT_BLACK);
 
   if (ok) {
     ShowStatusAction::show("Tag written", 1600);

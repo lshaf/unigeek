@@ -31,5 +31,4 @@ private:
   void _draw();
   void _doScan();
   void _doClone();
-  void _doT5577();
 };
