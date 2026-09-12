@@ -29,7 +29,7 @@ public:
 protected:
   using Row = ScrollListView::Row;
 
-  void setRows(Row* rows, uint8_t count)
+  void setRows(Row* rows, uint16_t count)
   {
     _view.setRows(rows, count);
   }

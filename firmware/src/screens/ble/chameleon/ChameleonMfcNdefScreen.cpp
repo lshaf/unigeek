@@ -105,8 +105,7 @@ void ChameleonMfcNdefScreen::onItemSelected(uint8_t index) {
   if (_state == STATE_MENU) {
     if (index == 0) _doRead();
     else if (index == 1) _goWriteMenu();
-    else if (index == 2) _doErase();
-    else if (index == 3) {
+    else if (index == 2) {
       _running = true;
       renderOperationTitle("Format NDEF");
       if (_scanClassic()) _formatClassic1kNdef();
@@ -114,6 +113,7 @@ void ChameleonMfcNdefScreen::onItemSelected(uint8_t index) {
       ChameleonClient::get().setMode(0);
       _goMenu();
     }
+    else if (index == 3) _doErase();
     return;
   }
   if (_state == STATE_WRITE_MENU) {

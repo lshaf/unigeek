@@ -1,7 +1,6 @@
 #include "ChameleonMfuToolsScreen.h"
 #include "ChameleonMfuScreen.h"
 #include "ChameleonMfuWriteScreen.h"
-#include "ChameleonMfuPagesScreen.h"
 #include "ChameleonMfuAdvancedScreen.h"
 #include "ChameleonMfuAuthUtils.h"
 #include "utils/ble/ChameleonClient.h"

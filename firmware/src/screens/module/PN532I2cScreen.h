@@ -29,6 +29,7 @@ private:
     STATE_SCAN_14A,
     STATE_MIFARE_MENU,
     STATE_MIFARE_TAG_MENU,
+    STATE_MIFARE_ADVANCED_MENU,
     STATE_MIFARE_NDEF_MENU,
     STATE_MIFARE_ATTACKS_MENU,
     STATE_MIFARE_KEYS_MENU,
@@ -44,7 +45,6 @@ private:
     STATE_ULTRALIGHT_TAG_MENU,
     STATE_ULTRALIGHT_ADVANCED_MENU,
     STATE_ULTRALIGHT_NDEF_MENU,
-    STATE_MAGIC_MENU,
     STATE_MAGIC_DETECT,
     STATE_RAW_RESULT,
     STATE_ULTRALIGHT_DUMP,
@@ -67,6 +67,7 @@ private:
   uint16_t _atqa   = 0;
   uint8_t  _sak    = 0;
   bool     _hasCard = false;
+  bool     _rawResultMifare = false;
   std::array<std::pair<NFCUtility::MIFARE_Key, NFCUtility::MIFARE_Key>, 40> _mfKeys;
 
   // Firmware info
@@ -83,11 +84,10 @@ private:
   String _rowValues[MAX_ROWS];
   uint16_t _rowCount = 0;
 
-  ListItem _mainItems[5] = {
+  ListItem _mainItems[4] = {
     {"Scan Tag"},
     {"MIFARE Classic"},
     {"Ultralight / NTAG"},
-    {"Magic Card"},
     {"Firmware Info"},
   };
 
@@ -107,17 +107,26 @@ private:
     {"Dictionaries"},
   };
 
-  ListItem _mfTagItems[3] = {
+  ListItem _mfTagItems[5] = {
+    {"Detect Magic"},
     {"Read Tag"},
     {"Write to Tag"},
     {"Erase Tag"},
+    {"Advanced"},
+  };
+
+  ListItem _mfAdvancedItems[4] = {
+    {"Read Memory"},
+    {"Edit Memory"},
+    {"Edit UID (Gen3)"},
+    {"Lock UID (Gen3)"},
   };
 
   ListItem _mfNdefItems[4] = {
     {"Read NDEF"},
     {"Write NDEF"},
-    {"Erase NDEF"},
     {"Format NDEF"},
+    {"Erase NDEF"},
   };
 
   ListItem _ulItems[2] = {
@@ -143,18 +152,13 @@ private:
   ListItem _ulNdefItems[4] = {
     {"Read NDEF"},
     {"Write NDEF"},
-    {"Erase NDEF"},
     {"Format NDEF"},
+    {"Erase NDEF"},
   };
 
   LogView _magicLog;
   bool _magicDetectDone = false;
 
-  ListItem _magicItems[3] = {
-    {"Detect Magic"},
-    {"Set UID (Gen3)"},
-    {"Lock UID (Gen3)"},
-  };
 
   ListItem _ntagItems[2] = {
     {"Text Record"},
@@ -216,6 +220,7 @@ private:
   void _goMain();
   void _goMifare();
   void _goMifareTag();
+  void _goMifareAdvanced();
   void _goMifareNdef();
   void _goMifareAttacks();
   void _goMifareKeys();
@@ -226,7 +231,6 @@ private:
   void _goUltralightTag();
   void _goUltralightAdvanced();
   void _goUltralightNdef();
-  void _goMagic();
   void _goDetectMagic();
   void _doNtagMenu();
 
@@ -260,6 +264,8 @@ private:
   void _doUltralightReadTag();
   void _doUltralightWriteTag();
   void _doUltralightEraseTag();
+  void _doMifareReadMemory();
+  void _doMifareEditMemory();
   void _doUltralightReadPages();
   void _doUltralightWritePage();
   void _doUltralightLockTag();

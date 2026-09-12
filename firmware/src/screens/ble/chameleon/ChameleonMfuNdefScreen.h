@@ -25,8 +25,8 @@ private:
   ListItem _menu[4] = {
     {"Read NDEF"},
     {"Write NDEF"},
-    {"Erase NDEF"},
     {"Format NDEF"},
+    {"Erase NDEF"},
   };
 
   ListItem _write[6] = {

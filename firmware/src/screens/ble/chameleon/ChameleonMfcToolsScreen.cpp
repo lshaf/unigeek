@@ -1,6 +1,8 @@
 #include "ChameleonMfcToolsScreen.h"
 #include "ChameleonMfcScreen.h"
 #include "ChameleonMfcWriteScreen.h"
+#include "ChameleonMagicScreen.h"
+#include "ChameleonMfcAdvancedScreen.h"
 #include "utils/ble/ChameleonClient.h"
 #include "core/ScreenManager.h"
 #include "ui/actions/InputSelectAction.h"
@@ -50,9 +52,11 @@ static bool _mfcWriteWithKnownKey(
 }
 
 void ChameleonMfcToolsScreen::onInit() {
-  _items[0] = {"Read Tag"};
-  _items[1] = {"Write to Tag"};
-  _items[2] = {"Erase Tag"};
+  _items[0] = {"Detect Magic"};
+  _items[1] = {"Read Tag"};
+  _items[2] = {"Write to Tag"};
+  _items[3] = {"Erase Tag"};
+  _items[4] = {"Advanced"};
   setItems(_items);
 }
 
@@ -232,9 +236,11 @@ void ChameleonMfcToolsScreen::_eraseTag() {
 }
 
 void ChameleonMfcToolsScreen::onItemSelected(uint8_t index) {
-  if (index == 0) Screen.push(new ChameleonMfcScreen());
-  else if (index == 1) _writeTag();
-  else if (index == 2) _eraseTag();
+  if (index == 0) Screen.push(new ChameleonMagicScreen());
+  else if (index == 1) Screen.push(new ChameleonMfcScreen());
+  else if (index == 2) _writeTag();
+  else if (index == 3) _eraseTag();
+  else if (index == 4) Screen.push(new ChameleonMfcAdvancedScreen());
 }
 
 void ChameleonMfcToolsScreen::onBack() { Screen.goBack(); }

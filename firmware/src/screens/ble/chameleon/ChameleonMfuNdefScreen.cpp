@@ -460,8 +460,8 @@ void ChameleonMfuNdefScreen::onItemSelected(uint8_t index) {
     switch (index) {
       case 0: read();    break;
       case 1: goWrite(); break;
-      case 2: erase();   break;
-      case 3: format();  break;
+      case 2: format();  break;
+      case 3: erase();   break;
     }
     return;
   }
