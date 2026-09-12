@@ -380,7 +380,7 @@ static void renderOperationTitle(const char* title) {
 const char* PN532I2cScreen::title() {
   switch (_state) {
     case STATE_MAIN_MENU:       return "PN532 I2C";
-    case STATE_INFO:            return "Firmware Info";
+    case STATE_DEVICE_INFO:     return "Device Info";
     case STATE_SCAN_RESULT:     return "Tag Details";
     case STATE_SCAN_14A:        return "Scan Tag";
     case STATE_MIFARE_MENU:     return "MIFARE Classic";
@@ -585,7 +585,7 @@ void PN532I2cScreen::onUpdate() {
     return;
   }
 
-  if (_state == STATE_INFO || _state == STATE_MIFARE_KEYS ||
+  if (_state == STATE_DEVICE_INFO || _state == STATE_MIFARE_KEYS ||
       _state == STATE_MIFARE_KEY_DB_VIEW || _state == STATE_RAW_RESULT) {
     if (Uni.Nav->wasPressed()) {
       auto dir = Uni.Nav->readDirection();
@@ -608,7 +608,7 @@ void PN532I2cScreen::onRender() {
     _magicLog.draw(Uni.Lcd, bodyX(), bodyY(), bodyW(), bodyH());
     return;
   }
-  if (_state == STATE_INFO || _state == STATE_SCAN_RESULT ||
+  if (_state == STATE_DEVICE_INFO || _state == STATE_SCAN_RESULT ||
       _state == STATE_MIFARE_DUMP || _state == STATE_MIFARE_DUMP_HEX ||
       _state == STATE_MIFARE_WRITE_PREVIEW ||
       _state == STATE_MIFARE_KEYS || _state == STATE_MIFARE_KEY_DB_VIEW ||
@@ -627,7 +627,7 @@ void PN532I2cScreen::onItemSelected(uint8_t index) {
         case 0: _doScan14A();         break;
         case 1: _goMifare();          break;
         case 2: _goUltralight();      break;
-        case 3: _showFirmwareInfo();  break;
+        case 3: _showDeviceInfo();    break;
       }
       break;
     case STATE_MIFARE_MENU:
@@ -1334,18 +1334,34 @@ bool PN532I2cScreen::_scanCardOrShow(uint32_t timeoutMs) {
 
 // ── actions ────────────────────────────────────────────────────────────────
 
-void PN532I2cScreen::_showFirmwareInfo() {
-  _state = STATE_INFO;
+void PN532I2cScreen::_showDeviceInfo() {
+  _state = STATE_DEVICE_INFO;
   _resetRows();
-  char buf[16];
-  sprintf(buf, "0x%02X", _fwIc);
-  _pushRow("IC", buf);
-  sprintf(buf, "%u.%u", _fwVer, _fwRev);
-  _pushRow("Version", buf);
-  sprintf(buf, "0x%02X", _fwSup);
-  _pushRow("Support", buf);
-  _pushRow("Transport", "I2C (0x24)");
+
+  char buf[24];
+  _pushRow("Device", _fwIc == 0x32 ? "PN532" : "PN5xx");
+
+  snprintf(buf, sizeof(buf), "0x%02X", _fwIc);
+  _pushRow("IC Identity", buf);
+
+  snprintf(buf, sizeof(buf), "%u.%u", _fwVer, _fwRev);
+  _pushRow("Firmware", buf);
+
+  _pushRow("Interface", "I2C");
+  _pushRow("I2C Address", "0x24");
   if (_busName) _pushRow("Bus", _busName);
+
+  String support;
+  if (_fwSup & 0x04) support += "ISO14443A";
+  if (_fwSup & 0x02) { if (support.length()) support += " / "; support += "ISO14443B"; }
+  if (_fwSup & 0x01) { if (support.length()) support += " / "; support += "ISO18092"; }
+  if (!support.length()) support = "None reported";
+  _pushRow("Supported", support);
+
+  snprintf(buf, sizeof(buf), "0x%02X", _fwSup);
+  _pushRow("Support Mask", buf);
+
+  _scrollView.resetScroll();
   _scrollView.setRows(_rows, _rowCount);
   render();
 }

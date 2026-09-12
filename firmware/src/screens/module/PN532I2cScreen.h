@@ -24,7 +24,7 @@ public:
 private:
   enum State_e {
     STATE_MAIN_MENU,
-    STATE_INFO,
+    STATE_DEVICE_INFO,
     STATE_SCAN_RESULT,
     STATE_SCAN_14A,
     STATE_MIFARE_MENU,
@@ -70,7 +70,7 @@ private:
   bool     _rawResultMifare = false;
   std::array<std::pair<NFCUtility::MIFARE_Key, NFCUtility::MIFARE_Key>, 40> _mfKeys;
 
-  // Firmware info
+  // Device information reported by GetFirmwareVersion
   uint8_t _fwIc = 0, _fwVer = 0, _fwRev = 0, _fwSup = 0;
 
   // Card type helpers
@@ -88,7 +88,7 @@ private:
     {"Scan Tag"},
     {"MIFARE Classic"},
     {"Ultralight / NTAG"},
-    {"Firmware Info"},
+    {"Device Info"},
   };
 
   ListItem _mfItems[4] = {
@@ -234,7 +234,7 @@ private:
   void _goDetectMagic();
   void _doNtagMenu();
 
-  void _showFirmwareInfo();
+  void _showDeviceInfo();
   void _doScan14A();
   void _doAuthenticate();
   bool _discoverDefaultKeys(bool checkingProgress = false);
