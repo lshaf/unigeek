@@ -106,7 +106,6 @@ private:
 
   uint8_t  _trailerBlock(uint8_t sector);
   uint16_t _totalBlocks();
-  void _goMfMenu();
   void _dispatchStartAction();
   void _continueRead();
   void _callAuth();

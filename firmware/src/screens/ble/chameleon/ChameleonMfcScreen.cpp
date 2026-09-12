@@ -87,13 +87,6 @@ void ChameleonMfcScreen::onInit() {
   _callAuth();
 }
 
-void ChameleonMfcScreen::_goMfMenu() {
-  _freeDump();
-  _state = STATE_MF_MENU;
-  setItems(_mfItems, 5);
-  render();
-}
-
 // ── Status bar callbacks ──
 
 void ChameleonMfcScreen::_authStatusBarCb(Sprite& sp, int barY, int width, void* userData) {

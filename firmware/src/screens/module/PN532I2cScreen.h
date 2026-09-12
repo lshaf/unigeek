@@ -48,8 +48,6 @@ private:
     STATE_MAGIC_DETECT,
     STATE_RAW_RESULT,
     STATE_ULTRALIGHT_DUMP,
-    STATE_EMULATE,
-    STATE_NTAG_MENU,
     STATE_NDEF_WRITE_MENU,
     STATE_NDEF_RESULT,
     STATE_NDEF_FILE_SELECT,
@@ -159,12 +157,6 @@ private:
   LogView _magicLog;
   bool _magicDetectDone = false;
 
-
-  ListItem _ntagItems[2] = {
-    {"Text Record"},
-    {"URL Record"},
-  };
-
   ListItem _ndefWriteItems[6] = {
     {"Text"},
     {"URL"},
@@ -224,7 +216,6 @@ private:
   void _goMifareNdef();
   void _goMifareAttacks();
   void _goMifareKeys();
-  void _goScan14A();
   void _openKeyDatabases();
   void _openKeyDatabase(uint8_t index);
   void _goUltralight();
@@ -232,11 +223,9 @@ private:
   void _goUltralightAdvanced();
   void _goUltralightNdef();
   void _goDetectMagic();
-  void _doNtagMenu();
 
   void _showDeviceInfo();
   void _doScan14A();
-  void _doAuthenticate();
   bool _discoverDefaultKeys(bool checkingProgress = false);
   void _loadSavedKeys();
   void _saveKeys();
@@ -313,9 +302,6 @@ private:
   void _doGen3SetUid();
   void _doGen3LockUid();
   void _doSaveDump();
-  void _doNtagText();
-  void _doNtagUrl();
-  void _emulateLoop(const uint8_t* nfcid1, const uint8_t* ndef, uint16_t ndefLen);
 
   String _hexUid(const uint8_t* uid, uint8_t len) const;
   String _hexBlock(const uint8_t* data, uint8_t len) const;

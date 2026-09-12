@@ -111,31 +111,6 @@ void ChameleonLFScreen::_doScan() {
   render();
 }
 
-void ChameleonLFScreen::_doT5577() {
-  auto& lcd = Uni.Lcd;
-  int bx = bodyX(), by = bodyY(), bw = bodyW(), bh = bodyH();
-  lcd.fillRect(bx, by, bw, bh, TFT_BLACK);
-  lcd.setTextDatum(MC_DATUM);
-  lcd.setTextColor(TFT_YELLOW, TFT_BLACK);
-  lcd.drawString("Writing T5577...", bx + bw / 2, by + bh / 2);
-
-  auto& c = ChameleonClient::get();
-  bool ok = c.writeEM410XToT5577(_uid, nullptr, nullptr, 0);
-
-  _state = STATE_RESULT;
-  _needsDraw = true;
-  render();
-
-  if (ok) {
-    int n = Achievement.inc("chameleon_t5577_write");
-    if (n == 1) Achievement.unlock("chameleon_t5577_write");
-    ShowStatusAction::show("T5577 write OK", 1200);
-  } else {
-    ShowStatusAction::show("T5577 write failed", 1200);
-  }
-  render();
-}
-
 void ChameleonLFScreen::_doClone() {
   auto& lcd = Uni.Lcd;
   int bx = bodyX(), by = bodyY(), bw = bodyW(), bh = bodyH();

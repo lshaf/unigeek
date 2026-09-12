@@ -404,8 +404,6 @@ const char* PN532I2cScreen::title() {
     case STATE_MAGIC_DETECT:    return "Detect Magic";
     case STATE_RAW_RESULT:      return "Read Memory";
     case STATE_ULTRALIGHT_DUMP: return "Tag Details";
-    case STATE_EMULATE:         return "Emulate Card";
-    case STATE_NTAG_MENU:       return "Emulate NDEF";
     case STATE_NDEF_WRITE_MENU: return "Write NDEF";
     case STATE_NDEF_RESULT:     return "NDEF Details";
     case STATE_NDEF_FILE_SELECT:return "NDEF Files";
@@ -612,8 +610,7 @@ void PN532I2cScreen::onRender() {
       _state == STATE_MIFARE_DUMP || _state == STATE_MIFARE_DUMP_HEX ||
       _state == STATE_MIFARE_WRITE_PREVIEW ||
       _state == STATE_MIFARE_KEYS || _state == STATE_MIFARE_KEY_DB_VIEW ||
-      _state == STATE_RAW_RESULT || _state == STATE_ULTRALIGHT_DUMP || _state == STATE_NDEF_RESULT ||
-      _state == STATE_EMULATE) {
+      _state == STATE_RAW_RESULT || _state == STATE_ULTRALIGHT_DUMP || _state == STATE_NDEF_RESULT) {
     _scrollView.render(bodyX(), bodyY(), bodyW(), bodyH());
     return;
   }
@@ -747,10 +744,6 @@ void PN532I2cScreen::onItemSelected(uint8_t index) {
     case STATE_DICT_SELECT:
       _doDictionaryAttackWithFile(index);
       break;
-    case STATE_NTAG_MENU:
-      if (index == 0) _doNtagText();
-      else if (index == 1) _doNtagUrl();
-      break;
     default: break;
   }
 }
@@ -813,9 +806,6 @@ void PN532I2cScreen::onBack() {
         _dictPickDir = (slash > 0) ? _dictPickDir.substring(0, slash) : _dictPath;
         _doDictionaryPicker();
       }
-      break;
-    case STATE_NTAG_MENU:
-      _goMain();
       break;
     case STATE_RAW_RESULT:
       if (_rawResultMifare) _goMifareAdvanced(); else _goUltralightAdvanced();
@@ -974,17 +964,6 @@ void PN532I2cScreen::_goMifareKeys() {
   _state = STATE_MIFARE_KEYS_MENU;
   setItems(_mfKeysItems);
   render();
-}
-
-void PN532I2cScreen::_goScan14A() {
-  _state = STATE_SCAN_14A;
-  auto& lcd = Uni.Lcd;
-  const int bx = bodyX(), by = bodyY(), bw = bodyW(), bh = bodyH();
-  lcd.fillRect(bx, by, bw, bh, TFT_BLACK);
-  lcd.setTextDatum(MC_DATUM);
-  lcd.setTextSize(1);
-  lcd.setTextColor(TFT_YELLOW, TFT_BLACK);
-  lcd.drawString("Place tag on reader...", bx + bw / 2, by + bh / 2);
 }
 
 void PN532I2cScreen::_goMifareTag() {
@@ -1571,13 +1550,6 @@ bool PN532I2cScreen::_hasReadableKeyForEverySector() const {
     if (!_mfKeys[sector].first && !_mfKeys[sector].second) return false;
   }
   return true;
-}
-
-void PN532I2cScreen::_doAuthenticate() {
-  if (!_hasCard && !_scanCardOrShow(5000)) { _goMifare(); return; }
-  if (_mfDims(_sak).first == 0) { ShowStatusAction::show("Not MIFARE Classic"); _goMifare(); return; }
-  _discoverDefaultKeys();
-  _goMifare();
 }
 
 void PN532I2cScreen::_doReadTag() {
@@ -5046,356 +5018,4 @@ void PN532I2cScreen::_doSaveDump() {
     ShowStatusAction::show("Save failed", 1500);
   }
   render();
-}
-
-// ── emulation helpers ──────────────────────────────────────────────────────
-
-// Poll PN532 status byte until ready, then read the full response packet.
-// Used after sendCommandCheckAck for commands where the response is delayed
-// (TgInitAsTarget waiting for a reader, TgGetData waiting for reader cmd, etc.).
-static bool _nfcPollResponse(TwoWire* wire, uint8_t* buf, uint8_t n, uint32_t timeoutMs) {
-  uint32_t start = millis();
-  while (millis() - start < timeoutMs) {
-    wire->requestFrom((uint8_t)PN532_I2C_ADDRESS, (uint8_t)1);
-    if (wire->available() && (wire->read() & 0x01)) {
-      _nfcReadI2C(wire, buf, n);
-      return true;
-    }
-    delay(10);
-  }
-  return false;
-}
-
-// Sends a raw PN532 command frame over I2C and reads back only the ACK frame.
-// Unlike sendCommandCheckAck, does NOT wait for the actual command response —
-// safe for long-running commands like TgInitAsTarget and TgGetData whose
-// responses arrive only when the reader acts (seconds later).
-static bool _nfcSendCmdReadAck(TwoWire* wire, const uint8_t* cmd, uint8_t cmdlen, uint32_t timeoutMs) {
-  uint8_t LEN = cmdlen + 1; // +1 for TFI byte
-  // preamble(1) + startcode(2) + LEN(1) + LCS(1) + TFI(1) + data(cmdlen) + DCS(1) + postamble(1)
-  uint8_t packet[8 + cmdlen];
-  packet[0] = 0x00; packet[1] = 0x00; packet[2] = 0xFF;
-  packet[3] = LEN;
-  packet[4] = (uint8_t)(~LEN + 1);
-  packet[5] = 0xD4; // TFI = host → PN532
-  uint8_t sum = 0xD4;
-  for (uint8_t i = 0; i < cmdlen; i++) { packet[6 + i] = cmd[i]; sum += cmd[i]; }
-  packet[6 + cmdlen] = (uint8_t)(~sum + 1);
-  packet[7 + cmdlen] = 0x00;
-
-  wire->beginTransmission(PN532_I2C_ADDRESS);
-  wire->write(packet, 8 + cmdlen);
-  wire->endTransmission();
-  delay(1); // I2C tuning (matches Adafruit SLOWDOWN)
-
-  // Wait for PN532 ready (bit 0 of status byte), then read the 6-byte ACK frame
-  uint32_t start = millis();
-  bool rdy = false;
-  while (millis() - start < timeoutMs) {
-    wire->requestFrom((uint8_t)PN532_I2C_ADDRESS, (uint8_t)1);
-    if (wire->available() && (wire->read() & 0x01)) { rdy = true; break; }
-    delay(5);
-  }
-  if (!rdy) return false;
-
-  uint8_t ack[6];
-  _nfcReadI2C(wire, ack, 6); // reads status + 6 bytes, discards status
-  return (ack[0] == 0x00 && ack[1] == 0x00 && ack[2] == 0xFF &&
-          ack[3] == 0x00 && ack[4] == 0xFF && ack[5] == 0x00);
-}
-
-// ISO7816 Type 4 tag emulation via PN532 TgInitAsTarget (mode=0x05, PICC+Passive).
-// Presents the given 3-byte NFCID1T to the reader and serves the NDEF payload
-// via CC + NDEF file selects and READ BINARY commands.
-void PN532I2cScreen::_emulateLoop(const uint8_t* nfcid1, const uint8_t* ndef, uint16_t ndefLen) {
-  Serial.printf("[EMU] nfcid1: %02X %02X %02X  ndefLen: %u\n", nfcid1[0], nfcid1[1], nfcid1[2], ndefLen);
-  Serial.printf("[EMU] SAMConfig...\n");
-  bool samOk = _nfc->SAMConfig();
-  Serial.printf("[EMU] SAMConfig: %s\n", samOk ? "ok" : "FAIL");
-
-  // NDEF file: 2-byte length header followed by the NDEF message bytes
-  static constexpr uint16_t MAX_NDEF = 128;
-  uint8_t ndefFile[MAX_NDEF + 2] = {};
-  uint16_t ndefFileLen = 2;
-  if (ndef && ndefLen > 0 && ndefLen <= MAX_NDEF) {
-    ndefFile[0] = (ndefLen >> 8) & 0xFF;
-    ndefFile[1] = ndefLen & 0xFF;
-    memcpy(&ndefFile[2], ndef, ndefLen);
-    ndefFileLen = 2 + ndefLen;
-  }
-
-  // Capability Container (CC) — fixed for Type 4 NDEF emulation
-  static constexpr uint8_t cc[] = {
-    0x00, 0x0F,        // CCLEN = 15
-    0x20,              // Mapping Version 2.0
-    0x00, 0x54,        // MLe (max read)
-    0x00, 0xFF,        // MLc (max write)
-    0x04, 0x06,        // NDEF File Control TLV: T=4 L=6
-    0xE1, 0x04,        // File Identifier
-    0x00, MAX_NDEF,    // max NDEF file size
-    0x00, 0x00         // read + write access: granted
-  };
-
-  bool running = true;
-  while (running) {
-    // SAMConfig resets PN532 RF/SAM state between sessions — required to clear
-    // residual ISO-DEP state that causes TgGetData to return 0x13 on retry.
-    _nfc->SAMConfig();
-    ShowStatusAction::show("Waiting for reader...", 0);
-
-    // TgInitAsTarget: mode=0x05 (PICC+Passive), Type 4 (SEL_RES=0x20)
-    // Use _nfcSendCmdReadAck instead of sendCommandCheckAck — the Adafruit
-    // helper waits for the full command response, which only arrives when a
-    // reader presents. _nfcSendCmdReadAck reads only the immediate ACK frame
-    // and lets us poll for the actual response separately.
-    uint8_t target[38] = {};
-    target[0] = PN532_COMMAND_TGINITASTARGET;
-    target[1] = 0x05;        // PICC only + Passive only
-    target[2] = 0x04;        // SENS_RES[0]
-    target[3] = 0x00;        // SENS_RES[1]
-    target[4] = nfcid1[0];
-    target[5] = nfcid1[1];
-    target[6] = nfcid1[2];
-    target[7] = 0x20;        // SEL_RES: ISO14443-4 compliant
-    // [8..37] = FeliCa(18) + NFCID3T(10) + GiLen(1) + TkLen(1) — all zero
-
-    Serial.printf("[EMU] TgInitAsTarget cmd[0..7]: %02X %02X %02X %02X %02X %02X %02X %02X\n",
-      target[0], target[1], target[2], target[3],
-      target[4], target[5], target[6], target[7]);
-
-    bool ackOk = _nfcSendCmdReadAck(_wire, target, 38, 1000);
-    Serial.printf("[EMU] TgInitAsTarget ACK: %s\n", ackOk ? "ok" : "FAIL");
-    if (!ackOk) {
-      ShowStatusAction::show("PN532 error");
-      break;
-    }
-
-    // Wait for reader to present — TgInitAsTargetResponse arrives when found
-    bool readerFound = false;
-    uint32_t start = millis();
-    while (millis() - start < 30000) {
-      Uni.update();
-      if (Uni.Nav->wasPressed()) {
-        if (Uni.Nav->readDirection() == INavigation::DIR_BACK) { running = false; break; }
-      }
-      _wire->requestFrom((uint8_t)PN532_I2C_ADDRESS, (uint8_t)1);
-      if (_wire->available() && (_wire->read() & 0x01)) {
-        uint8_t ibuf[20] = {};
-        _nfcReadI2C(_wire, ibuf, 20);
-        Serial.printf("[EMU] TgInitAsTarget resp[3..7]: %02X %02X %02X %02X %02X\n",
-          ibuf[3], ibuf[4], ibuf[5], ibuf[6], ibuf[7]);
-        if (ibuf[6] == (PN532_COMMAND_TGINITASTARGET + 1)) { readerFound = true; break; }
-      }
-      delay(50);
-    }
-    if (!readerFound) continue;
-    Serial.printf("[EMU] Reader found, starting APDU loop\n");
-
-    ShowStatusAction::show("Emulating...", 0);
-
-    // ISO7816 APDU exchange loop
-    enum SelectedFile { SEL_NONE, SEL_CC, SEL_NDEF } currentFile = SEL_NONE;
-    static const uint8_t kNdefApp[] = {0xD2,0x76,0x00,0x00,0x85,0x01,0x01};
-
-    while (running) {
-      Uni.update();
-      if (Uni.Nav->wasPressed()) {
-        if (Uni.Nav->readDirection() == INavigation::DIR_BACK) { running = false; break; }
-      }
-
-      // TgGetData: send command and read ACK only, then poll for the APDU
-      uint8_t tgGet[1] = { PN532_COMMAND_TGGETDATA };
-      if (!_nfcSendCmdReadAck(_wire, tgGet, 1, 500)) {
-        Serial.printf("[EMU] TgGetData ACK FAIL\n");
-        break;
-      }
-      uint8_t gbuf[70] = {};
-      bool gotApdu = false;
-      uint32_t getStart = millis();
-      while (millis() - getStart < 5000) {
-        Uni.update();
-        if (Uni.Nav->wasPressed()) {
-          if (Uni.Nav->readDirection() == INavigation::DIR_BACK) { running = false; break; }
-        }
-        _wire->requestFrom((uint8_t)PN532_I2C_ADDRESS, (uint8_t)1);
-        if (_wire->available() && (_wire->read() & 0x01)) {
-          _nfcReadI2C(_wire, gbuf, 70);
-          gotApdu = true; break;
-        }
-        delay(20);
-      }
-      if (!gotApdu || !running) {
-        if (!gotApdu) Serial.printf("[EMU] TgGetData timeout (reader gone?)\n");
-        break;
-      }
-
-      if (gbuf[5] != PN532_PN532TOHOST || gbuf[6] != (PN532_COMMAND_TGGETDATA + 1)) {
-        Serial.printf("[EMU] TgGetData bad resp: [3..8]=%02X %02X %02X %02X %02X %02X\n",
-          gbuf[3], gbuf[4], gbuf[5], gbuf[6], gbuf[7], gbuf[8]);
-        break;
-      }
-      if (gbuf[7] & 0x3F) {
-        Serial.printf("[EMU] TgGetData err: %02X  raw[3..9]=%02X %02X %02X %02X %02X %02X %02X\n",
-          gbuf[7], gbuf[3], gbuf[4], gbuf[5], gbuf[6], gbuf[7], gbuf[8], gbuf[9]);
-        break;
-      }
-      uint8_t cmdLen = gbuf[3] > 3 ? gbuf[3] - 3 : 0;
-      if (cmdLen < 2) { Serial.printf("[EMU] TgGetData short frame len=%u\n", cmdLen); break; }
-
-      uint8_t* apdu = &gbuf[8]; // [CLA, INS, P1, P2, LC, DATA...]
-      uint8_t  ins  = apdu[1];
-      uint8_t  p1   = cmdLen >= 3 ? apdu[2] : 0;
-      uint8_t  p2   = cmdLen >= 4 ? apdu[3] : 0;
-      uint8_t  lc   = cmdLen >= 5 ? apdu[4] : 0;
-      Serial.printf("[EMU] APDU INS=%02X P1=%02X P2=%02X LC=%02X\n", ins, p1, p2, lc);
-
-      uint8_t resp[66] = {};
-      uint8_t respLen  = 2;
-      resp[0] = 0x6A; resp[1] = 0x81; // default: function not supported
-
-      switch (ins) {
-        case 0xA4:  // SELECT FILE
-          if (p1 == 0x04) {
-            // SELECT by name — accept only NDEF application
-            if (lc >= 7 && memcmp(&apdu[5], kNdefApp, 7) == 0) {
-              resp[0] = 0x90; resp[1] = 0x00;
-            } else {
-              resp[0] = 0x6A; resp[1] = 0x82;  // file not found
-            }
-          } else {
-            // SELECT by file ID
-            if (lc == 2 && apdu[5] == 0xE1) {
-              if      (apdu[6] == 0x03) { currentFile = SEL_CC;   resp[0] = 0x90; resp[1] = 0x00; }
-              else if (apdu[6] == 0x04) { currentFile = SEL_NDEF; resp[0] = 0x90; resp[1] = 0x00; }
-              else                      { resp[0] = 0x6A; resp[1] = 0x82; }
-            } else {
-              resp[0] = 0x90; resp[1] = 0x00;  // accept other selects generically
-            }
-          }
-          break;
-
-        case 0xB0:  // READ BINARY
-        {
-          uint16_t offset = ((uint16_t)p1 << 8) | p2;
-          uint8_t  le     = lc;
-          const uint8_t* src    = (currentFile == SEL_CC)   ? cc       : ndefFile;
-          uint16_t        srcLen = (currentFile == SEL_CC)   ? sizeof(cc) : ndefFileLen;
-          if (currentFile == SEL_NONE || offset >= srcLen) {
-            resp[0] = 0x6A; resp[1] = 0x82;
-          } else {
-            uint8_t avail = (uint8_t)(srcLen - offset);
-            uint8_t count = (le == 0 || le > avail) ? avail : le;
-            if (count > 62) count = 62;
-            memcpy(resp, src + offset, count);
-            resp[count]   = 0x90;
-            resp[count+1] = 0x00;
-            respLen = count + 2;
-          }
-          break;
-        }
-
-        case 0xD6:  // UPDATE BINARY — accept silently (read-only emulation)
-          resp[0] = 0x90; resp[1] = 0x00;
-          break;
-
-        default:
-          resp[0] = 0x6A; resp[1] = 0x81;
-          break;
-      }
-      Serial.printf("[EMU] Response SW=%02X%02X len=%u\n", resp[respLen-2], resp[respLen-1], respLen);
-
-      // TgSetData: use sendCommandCheckAck (not the split ACK-only helper).
-      // TgSetData response comes back quickly (~100-200ms once the reader ACKs
-      // our I-block), so the second waitready in sendCommandCheckAck succeeds
-      // reliably. Using the split helper here would risk reading the reader's
-      // next APDU into sbuf (consuming it before TgGetData can fetch it).
-      pn532_packetbuffer[0] = PN532_COMMAND_TGSETDATA;
-      memcpy(&pn532_packetbuffer[1], resp, respLen);
-      if (!_nfc->sendCommandCheckAck(pn532_packetbuffer, 1 + respLen, 1000)) {
-        Serial.printf("[EMU] TgSetData FAIL\n");
-        running = false; break;
-      }
-      uint8_t sbuf[12] = {};
-      _nfcReadI2C(_wire, sbuf, 12); // response already ready after sendCommandCheckAck
-      Serial.printf("[EMU] TgSetData resp[5..7]: %02X %02X %02X\n", sbuf[5], sbuf[6], sbuf[7]);
-      if (sbuf[7] != 0x00) {
-        Serial.printf("[EMU] TgSetData status err: %02X — reader disconnected?\n", sbuf[7]);
-        break;
-      }
-    }
-  }
-
-  _nfc->SAMConfig();
-}
-
-void PN532I2cScreen::_doNtagMenu() {
-  _state = STATE_NTAG_MENU;
-  setItems(_ntagItems, 2);
-}
-
-void PN532I2cScreen::_doNtagText() {
-  String text = InputTextAction::popup("Enter text to emulate", "");
-  if (InputTextAction::wasCancelled() || text.length() == 0) { _doNtagMenu(); return; }
-  render();
-
-  // NDEF Text record: D1 01 <payloadLen> 54 02 'e' 'n' <text>
-  uint8_t ndef[128] = {};
-  uint8_t payloadLen = (uint8_t)(1 + 2 + text.length()); // status + "en" + text
-  uint16_t ndefLen = 0;
-  if (4 + payloadLen <= 128) {
-    ndef[0] = 0xD1;       // MB|ME|SR|TNF=WellKnown
-    ndef[1] = 0x01;       // Type length = 1
-    ndef[2] = payloadLen;
-    ndef[3] = 'T';
-    ndef[4] = 0x02;       // UTF-8, lang code length = 2
-    ndef[5] = 'e';
-    ndef[6] = 'n';
-    memcpy(&ndef[7], text.c_str(), text.length());
-    ndefLen = 4 + payloadLen;
-  }
-
-  static const uint8_t nfcid1[] = {0xDC, 0x44, 0x20};
-  _state = STATE_EMULATE;
-  _emulateLoop(nfcid1, ndef, ndefLen);
-  int n = Achievement.inc("pn532_emulate");
-  if (n == 1) Achievement.unlock("pn532_emulate");
-  ShowStatusAction::show("Emulation ended", 1500);
-  _doNtagMenu();
-}
-
-void PN532I2cScreen::_doNtagUrl() {
-  String url = InputTextAction::popup("Enter URL to emulate", "https://");
-  if (InputTextAction::wasCancelled() || url.length() == 0) { _doNtagMenu(); return; }
-  render();
-
-  // Strip recognized URI prefix → compact encoding per NFC Forum URI spec
-  uint8_t prefix = 0x00;
-  const char* body = url.c_str();
-  if      (url.startsWith("https://www.")) { prefix = 0x02; body += 12; }
-  else if (url.startsWith("http://www."))  { prefix = 0x01; body += 11; }
-  else if (url.startsWith("https://"))     { prefix = 0x04; body += 8; }
-  else if (url.startsWith("http://"))      { prefix = 0x03; body += 7; }
-
-  // NDEF URI record: D1 01 <payloadLen> 55 <prefix> <body>
-  uint8_t ndef[128] = {};
-  uint8_t bodyLen   = (uint8_t)strlen(body);
-  uint8_t payloadLen = 1 + bodyLen; // prefix byte + body
-  uint16_t ndefLen = 0;
-  if (4 + payloadLen <= 128) {
-    ndef[0] = 0xD1;
-    ndef[1] = 0x01;
-    ndef[2] = payloadLen;
-    ndef[3] = 'U';
-    ndef[4] = prefix;
-    memcpy(&ndef[5], body, bodyLen);
-    ndefLen = 5 + bodyLen;
-  }
-
-  static const uint8_t nfcid1[] = {0xDC, 0x44, 0x20};
-  _state = STATE_EMULATE;
-  _emulateLoop(nfcid1, ndef, ndefLen);
-  int n = Achievement.inc("pn532_emulate");
-  if (n == 1) Achievement.unlock("pn532_emulate");
-  ShowStatusAction::show("Emulation ended", 1500);
-  _doNtagMenu();
 }
