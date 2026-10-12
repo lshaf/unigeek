@@ -20,18 +20,7 @@ void ChameleonLFScanScreen::_addRow(const char* label, const String& value) {
 
 void ChameleonLFScanScreen::_draw() {
   _needsDraw = false;
-  auto& lcd = Uni.Lcd;
-  int bx = bodyX(), by = bodyY(), bw = bodyW(), bh = bodyH();
-  Sprite sp(&lcd);
-  sp.createSprite(bw, bh);
-  sp.fillSprite(TFT_BLACK);
-  sp.setTextDatum(MC_DATUM);
-  sp.setTextColor(TFT_YELLOW, TFT_BLACK);
   TagPrompt::show("Waiting for tag...", bodyX(), bodyY(), bodyW(), bodyH());
-  sp.setTextColor(TFT_WHITE, TFT_BLACK);
-  sp.drawString("[Press] Continue", bw / 2, bh / 2 + 10);
-  sp.pushSprite(bx, by);
-  sp.deleteSprite();
 }
 
 void ChameleonLFScanScreen::_buildResult() {
@@ -55,13 +44,7 @@ void ChameleonLFScanScreen::_buildResult() {
 
 void ChameleonLFScanScreen::_doScan() {
   _scanning = true;
-  auto& lcd = Uni.Lcd;
-  int bx = bodyX(), by = bodyY(), bw = bodyW(), bh = bodyH();
-  lcd.fillRect(bx, by, bw, bh, TFT_BLACK);
-  lcd.setTextDatum(MC_DATUM);
-  lcd.setTextSize(1);
-  lcd.setTextColor(TFT_YELLOW, TFT_BLACK);
-  lcd.drawString("Reading tag...", bx + bw / 2, by + bh / 2);
+  render();
 
   auto& c = ChameleonClient::get();
   uint8_t previousMode = 0;
@@ -107,6 +90,7 @@ void ChameleonLFScanScreen::_doScan() {
 void ChameleonLFScanScreen::onInit() {
   _state = STATE_IDLE;
   _needsDraw = true;
+  _doScan();
 }
 
 void ChameleonLFScanScreen::onRender() {
@@ -129,7 +113,6 @@ void ChameleonLFScanScreen::onUpdate() {
   }
   if (dir == INavigation::DIR_PRESS) {
     if (_state == STATE_RESULT) _showActions();
-    else _doScan();
     return;
   }
   if (_state == STATE_RESULT) _scrollView.onNav(dir);
