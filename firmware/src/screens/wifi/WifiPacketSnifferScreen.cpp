@@ -66,11 +66,12 @@ void WifiPacketSnifferScreen::_showMenu(bool preserveSelection) {
   }
   _menuItems[count++] = {"Start"};
   if (preserveSelection) { setCount(count); render(); }
-  else setItems(_menuItems, count);
+  else setItems(_menuItems, count, _menuIndex);
 }
 
 void WifiPacketSnifferScreen::onItemSelected(uint8_t index) {
   if (_state == STATE_MENU) {
+    _menuIndex = index;
     if (index == 0) _showFilter();
     else if (index == 1) _showChannels();
     else if (index == 2) _showBssids(false);
@@ -120,8 +121,9 @@ void WifiPacketSnifferScreen::onItemSelected(uint8_t index) {
   }
 
   if (_state == STATE_MAC) {
-    if (index == 0) { _macCount = 0; _showMacs(true); return; }
-    const uint8_t ci = index - 1;
+    if (index == 0) { _scanClients(); return; }
+    if (index == 1) { _macCount = 0; _showMacs(true); return; }
+    const uint8_t ci = index - 2;
     if (ci >= _clientMenuCount) return;
     const uint8_t* mac = _clientMenuMacs[ci];
     int found = -1;
@@ -139,7 +141,7 @@ void WifiPacketSnifferScreen::onItemSelected(uint8_t index) {
 
 void WifiPacketSnifferScreen::_showFilter(bool preserveSelection) {
   _state = STATE_FILTER;
-  strncpy(_title, "Packet Filter", sizeof(_title));
+  strncpy(_title, "Packet Sniffer", sizeof(_title));
   snprintf(_selectLabels[0], sizeof(_selectLabels[0]), "[%c] All", _filterMask == 0 ? 'x' : ' ');
   _selectItems[0] = {_selectLabels[0]};
   for (uint8_t i = 0; i < kFilterCount; ++i) {
@@ -152,7 +154,7 @@ void WifiPacketSnifferScreen::_showFilter(bool preserveSelection) {
 
 void WifiPacketSnifferScreen::_showChannels(bool preserveSelection) {
   _state = STATE_CHANNEL;
-  strncpy(_title, "Channels", sizeof(_title));
+  strncpy(_title, "Packet Sniffer", sizeof(_title));
   snprintf(_selectLabels[0], sizeof(_selectLabels[0]), "[%c] All", _channelMask == 0 ? 'x' : ' ');
   _selectItems[0] = {_selectLabels[0]};
   for (uint8_t ch = 1; ch <= 13; ++ch) {
@@ -165,7 +167,7 @@ void WifiPacketSnifferScreen::_showChannels(bool preserveSelection) {
 
 void WifiPacketSnifferScreen::_scanBssids() {
   _state = STATE_BSSID;
-  strncpy(_title, "Select Access Points", sizeof(_title));
+  strncpy(_title, "Packet Sniffer", sizeof(_title));
   render();
   ShowStatusAction::show("Scanning...", 0);
   WiFi.mode(WIFI_STA);
@@ -190,7 +192,7 @@ void WifiPacketSnifferScreen::_scanBssids() {
 void WifiPacketSnifferScreen::_showBssids(bool forceScan, bool preserveSelection) {
   if (forceScan || !_scanValid) _scanBssids();
   _state = STATE_BSSID;
-  strncpy(_title, "Select Access Points", sizeof(_title));
+  strncpy(_title, "Packet Sniffer", sizeof(_title));
   strcpy(_selectLabels[0], "Rescan");
   _selectItems[0] = {_selectLabels[0]};
   snprintf(_selectLabels[1], sizeof(_selectLabels[1]), "[%c] All", _bssidCount == 0 ? 'x' : ' ');
@@ -246,9 +248,10 @@ void WifiPacketSnifferScreen::_scanClients() {
 
 void WifiPacketSnifferScreen::_showMacs(bool preserveSelection) {
   _state = STATE_MAC;
-  strncpy(_title, "Select Clients", sizeof(_title));
-  snprintf(_selectLabels[0], sizeof(_selectLabels[0]), "[%c] All", _macCount == 0 ? 'x' : ' ');
-  _selectItems[0] = {_selectLabels[0]};
+  strncpy(_title, "Packet Sniffer", sizeof(_title));
+  _selectItems[0] = {"Rescan"};
+  snprintf(_selectLabels[1], sizeof(_selectLabels[1]), "[%c] All", _macCount == 0 ? 'x' : ' ');
+  _selectItems[1] = {_selectLabels[1]};
 
   _clientMenuCount = 0;
   for (uint8_t i = 0; i < _seenClientCount && _clientMenuCount < 20; ++i) {
@@ -263,10 +266,10 @@ void WifiPacketSnifferScreen::_showMacs(bool preserveSelection) {
 
   for (uint8_t i = 0; i < _clientMenuCount; ++i) {
     char m[18]; _formatMac(_clientMenuMacs[i], m, sizeof(m));
-    snprintf(_selectLabels[i + 1], sizeof(_selectLabels[i + 1]), "[%c] %s", _isSelectedMac(_clientMenuMacs[i]) ? 'x' : ' ', m);
-    _selectItems[i + 1] = {_selectLabels[i + 1]};
+    snprintf(_selectLabels[i + 2], sizeof(_selectLabels[i + 2]), "[%c] %s", _isSelectedMac(_clientMenuMacs[i]) ? 'x' : ' ', m);
+    _selectItems[i + 2] = {_selectLabels[i + 2]};
   }
-  const uint8_t count = _clientMenuCount + 1;
+  const uint8_t count = _clientMenuCount + 2;
   if (preserveSelection) { setCount(count); render(); }
   else setItems(_selectItems, count);
 }
@@ -521,7 +524,7 @@ void WifiPacketSnifferScreen::onUpdate() {
           ++_pausedOffset;
           const int fh = Uni.Lcd.fontHeight();
           const int lineH = fh * 2 + 4;
-          const int footerH = fh + 4;
+          const int footerH = 24;
           const uint8_t slots = (uint8_t)((bodyH() - footerH) / lineH);
           if (slots > 0 && _pausedOffset >= _pausedViewOffset + slots)
             _pausedViewOffset = _pausedOffset - slots + 1;
@@ -566,10 +569,11 @@ void WifiPacketSnifferScreen::onRender() {
 
 void WifiPacketSnifferScreen::_renderPackets() {
   Uni.Lcd.fillRect(bodyX(), bodyY(), bodyW(), bodyH(), TFT_BLACK);
+  Uni.Lcd.setTextSize(1);
   Uni.Lcd.setTextDatum(TL_DATUM);
   const int fh = Uni.Lcd.fontHeight();
   const int lineH = fh * 2 + 4;
-  const int footerH = fh + 4;
+  const int footerH = 24;
   const int slots = (bodyH() - footerH) / lineH;
   int y = bodyY();
   for (int row = slots - 1; row >= 0; --row) {
@@ -589,18 +593,27 @@ void WifiPacketSnifferScreen::_renderPackets() {
     Uni.Lcd.drawString(bot, bodyX() + 8, y + fh + 2);
     y += lineH;
   }
-  Uni.Lcd.drawFastHLine(bodyX(), bodyY() + bodyH() - footerH, bodyW(), TFT_DARKGREY);
-  Uni.Lcd.setTextColor(TFT_LIGHTGREY, TFT_BLACK);
-  Uni.Lcd.setTextDatum(TL_DATUM);
-  const char* hint = _state == STATE_RUNNING ? "[Press] Pause   [Back] Exit" : "[Press] Resume  [Hold] Details";
+  const int footerY = bodyY() + bodyH() - footerH;
+  Uni.Lcd.drawFastHLine(bodyX(), footerY, bodyW(), TFT_DARKGREY);
+  Uni.Lcd.setTextSize(1);
+  // Status is independent of the navigation hint.
   if (_captureActive) {
-    char footer[48];
-    if (_captureDrops) snprintf(footer, sizeof(footer), "REC D:%lu  %s", (unsigned long)_captureDrops, hint);
-    else snprintf(footer, sizeof(footer), "REC  %s", hint);
-    Uni.Lcd.drawString(footer, bodyX() + 2, bodyY() + bodyH() - footerH + 2);
-  } else {
-    Uni.Lcd.drawString(hint, bodyX() + 2, bodyY() + bodyH() - footerH + 2);
+    char status[32];
+    if (_captureDrops)
+      snprintf(status, sizeof(status), "REC D:%lu", (unsigned long)_captureDrops);
+    else
+      snprintf(status, sizeof(status), "REC");
+    Uni.Lcd.setTextColor(TFT_DARKGREY, TFT_BLACK);
+    Uni.Lcd.setTextDatum(TR_DATUM);
+    Uni.Lcd.drawString(status, bodyX() + bodyW() - 2, footerY + 2);
   }
+  Uni.Lcd.setTextColor(TFT_DARKGREY, TFT_BLACK);
+  Uni.Lcd.setTextDatum(BC_DATUM);
+  const char* hint = _state == STATE_RUNNING
+                   ? "[Press] Pause   [Back] Exit"
+                   : "[Press] Resume  [Hold] Details";
+  Uni.Lcd.drawString(hint, bodyX() + bodyW() / 2, footerY + footerH - 2);
+
 }
 
 void WifiPacketSnifferScreen::_renderDetails() {

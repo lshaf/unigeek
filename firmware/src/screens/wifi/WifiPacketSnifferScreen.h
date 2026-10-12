@@ -65,6 +65,7 @@ private:
   char _title[20] = "Packet Sniffer";
   State _state = STATE_MENU;
   ListItem _menuItems[7];
+  uint8_t _menuIndex = 0;
   char _filterSub[16] = "All";
   char _channelSub[16] = "All";
   char _bssidSub[16] = "All";

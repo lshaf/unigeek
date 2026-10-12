@@ -118,14 +118,15 @@ void WifiPacketMonitorScreen::onItemSelected(uint8_t index)
   }
 
   if (_state == STATE_SELECT_CLIENT) {
-    if (index == 0) {
+    if (index == 0) { _discoverClients(); return; }
+    if (index == 1) {
       _clientCount = 0;
       _clientSub = "All";
       _showClients(true);
       return;
     }
 
-    const uint8_t clientIndex = index - 1;
+    const uint8_t clientIndex = index - 2;
     if (clientIndex >= _clientMenuCount) return;
     const uint8_t* mac = _clientMenuMacs[clientIndex];
 
@@ -198,7 +199,7 @@ void WifiPacketMonitorScreen::_showMenu()
 void WifiPacketMonitorScreen::_showChannels(bool preserveSelection)
 {
   _state = STATE_SELECT_CHANNEL;
-  strncpy(_title, "Channels", sizeof(_title));
+  strncpy(_title, "Packet Monitor", sizeof(_title));
   _title[sizeof(_title) - 1] = '\0';
 
   snprintf(_channelLabels[0], sizeof(_channelLabels[0]), "[%c] All", _channelMask == 0 ? 'x' : ' ');
@@ -231,7 +232,7 @@ void WifiPacketMonitorScreen::_selectBssid()
 void WifiPacketMonitorScreen::_doBssidScan()
 {
   _state = STATE_SELECT_BSSID;
-  strncpy(_title, "Select Access Points", sizeof(_title));
+  strncpy(_title, "Packet Monitor", sizeof(_title));
   _title[sizeof(_title) - 1] = '\0';
   render();
   ShowStatusAction::show("Scanning...", 0);
@@ -295,7 +296,7 @@ void WifiPacketMonitorScreen::_rebuildBssidItems()
 void WifiPacketMonitorScreen::_showBssidScan(bool preserveSelection)
 {
   _state = STATE_SELECT_BSSID;
-  strncpy(_title, "Select Access Points", sizeof(_title));
+  strncpy(_title, "Packet Monitor", sizeof(_title));
   _title[sizeof(_title) - 1] = '\0';
 
   _rebuildBssidItems();
@@ -342,11 +343,12 @@ void WifiPacketMonitorScreen::_discoverClients()
 void WifiPacketMonitorScreen::_showClients(bool preserveSelection)
 {
   _state = STATE_SELECT_CLIENT;
-  strncpy(_title, "Select Clients", sizeof(_title));
+  strncpy(_title, "Packet Monitor", sizeof(_title));
   _title[sizeof(_title) - 1] = '\0';
 
-  snprintf(_clientLabels[0], sizeof(_clientLabels[0]), "[%c] All", _clientCount == 0 ? 'x' : ' ');
-  _clientItems[0] = {_clientLabels[0]};
+  _clientItems[0] = {"Rescan"};
+  snprintf(_clientLabels[1], sizeof(_clientLabels[1]), "[%c] All", _clientCount == 0 ? 'x' : ' ');
+  _clientItems[1] = {_clientLabels[1]};
 
   _clientMenuCount = 0;
   for (uint8_t i = 0; i < _seenClientCount && _clientMenuCount < MAX_SEEN_CLIENTS + MAX_CLIENT; i++)
@@ -364,12 +366,12 @@ void WifiPacketMonitorScreen::_showClients(bool preserveSelection)
   for (uint8_t i = 0; i < _clientMenuCount; i++) {
     char mac[18];
     _formatMac(_clientMenuMacs[i], mac, sizeof(mac));
-    snprintf(_clientLabels[i + 1], sizeof(_clientLabels[i + 1]), "[%c] %s",
+    snprintf(_clientLabels[i + 2], sizeof(_clientLabels[i + 2]), "[%c] %s",
              _isSelectedClient(_clientMenuMacs[i]) ? 'x' : ' ', mac);
-    _clientItems[i + 1] = {_clientLabels[i + 1]};
+    _clientItems[i + 2] = {_clientLabels[i + 2]};
   }
 
-  const uint8_t count = _clientMenuCount + 1;
+  const uint8_t count = _clientMenuCount + 2;
   if (preserveSelection) {
     setCount(count);
     render();
