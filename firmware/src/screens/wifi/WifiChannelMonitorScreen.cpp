@@ -399,7 +399,7 @@ void WifiChannelMonitorScreen::onRender()
 
   const int footerH = 27;
   const int rowH = (h - footerH) / _VISIBLE;
-  const int contentRight = x + w - 14;
+  const int contentRight = x + w - 7;
   if (rowH < 6 || contentRight - x < 75) return;
   lcd.setTextColor(TFT_WHITE, TFT_BLACK);
   for (uint8_t i = 0; i < _VISIBLE; ++i) {
@@ -427,7 +427,7 @@ void WifiChannelMonitorScreen::onRender()
     lcd.drawString(packetLabel, packetsRight, top + rowH / 2);
     lcd.setTextColor(TFT_WHITE, TFT_BLACK);
   }
-  drawMonitorScrollBar(x + w - 4, y, h - footerH, _NUM_CH, _VISIBLE, _scroll);
+  drawMonitorScrollBar(x + w - 3, y, h - footerH, _NUM_CH, _VISIBLE, _scroll);
   _renderHints(x, y, w, h, _view == PAUSED);
   lcd.setTextDatum(TL_DATUM);
 }
@@ -614,29 +614,31 @@ void WifiChannelMonitorScreen::_renderDetails()
     }
     if (_detailScroll > (rows > (uint8_t)visible ? rows - visible : 0))
       _detailScroll = rows > (uint8_t)visible ? rows - visible : 0;
+    const bool hasScrollbar = rows > visible;
+    const int rightEdge = x + w - (hasScrollbar ? 7 : 3);
     for (int i = 0; i < visible && i + _detailScroll < rows; ++i) {
       const uint8_t position = i + _detailScroll;
       const auto& ap = _view == AP_PAUSED ? _frozenAps[_apOrder[position]] : snapshot[position];
       const int yy = top + i * rowH;
-      lcd.fillRect(x, yy - 2, w - 5, rowH, TFT_BLACK);
+      lcd.fillRect(x, yy - 2, w - 3, rowH, TFT_BLACK);
       const bool selected = _view == AP_PAUSED && position == _apSelected;
       const uint16_t bg = selected ? Config.getThemeColor() : TFT_BLACK;
-      if (selected) lcd.fillRoundRect(x, yy - 2, w - 11, rowH, 3, bg);
+      if (selected) lcd.fillRoundRect(x, yy - 2, rightEdge - x, rowH, 3, bg);
       lcd.setTextColor(TFT_WHITE, bg);
       String name = ap.ssid[0] ? String(ap.ssid) : String("<hidden>");
-      while (name.length() && lcd.textWidth(name) > w - 120) name.remove(name.length()-1);
+      while (name.length() && lcd.textWidth(name) > rightEdge - x - 108) name.remove(name.length()-1);
       lcd.drawString(name, x + 3, yy);
       lcd.setTextDatum(TR_DATUM);
       lcd.setTextColor(selected ? TFT_WHITE : TFT_DARKGREY, bg);
-      lcd.drawString(String(ap.packets) + " pkts", x + w - 14, yy);
+      lcd.drawString(String(ap.packets) + " pkts", rightEdge - 3, yy);
       lcd.setTextDatum(TL_DATUM);
     }
   }
   if (visible > 0) {
     const int rows = _view == AP_PAUSED ? _frozenApCount : count;
     const int drawn = std::min(rows - (int)_detailScroll, visible);
-    if (drawn < visible) lcd.fillRect(x, top + std::max(0, drawn) * rowH, w - 5, (visible - std::max(0, drawn)) * rowH, TFT_BLACK);
-    drawMonitorScrollBar(x + w - 4, top, visible * rowH, rows, visible, _detailScroll);
+    if (drawn < visible) lcd.fillRect(x, top + std::max(0, drawn) * rowH, w - 3, (visible - std::max(0, drawn)) * rowH, TFT_BLACK);
+    drawMonitorScrollBar(x + w - 3, top, visible * rowH, rows, visible, _detailScroll);
   }
   _renderHints(x, y, w, h, _view == AP_PAUSED);
   lcd.setTextDatum(TL_DATUM);
@@ -697,13 +699,15 @@ void WifiChannelMonitorScreen::_renderClients()
     }
     const uint8_t maxScroll = rows > visible ? rows - visible : 0;
     if (_clientScroll > maxScroll) _clientScroll = maxScroll;
+    const bool hasScrollbar = rows > visible;
+    const int rightEdge = x + w - (hasScrollbar ? 7 : 3);
     for (int i = 0; i < visible && i + _clientScroll < rows; ++i) {
       const uint8_t pos = i + _clientScroll;
       const int yy = top + i * rowH;
-      lcd.fillRect(x, yy - 2, w - 5, rowH, TFT_BLACK);
+      lcd.fillRect(x, yy - 2, w - 3, rowH, TFT_BLACK);
       const bool selected = paused && pos == _clientSelected;
       const uint16_t bg = selected ? Config.getThemeColor() : TFT_BLACK;
-      if (selected) lcd.fillRoundRect(x, yy - 2, w - 11, rowH, 3, bg);
+      if (selected) lcd.fillRoundRect(x, yy - 2, rightEdge - x, rowH, 3, bg);
       const auto& client = paused ? _frozenClients[_clientOrder[pos]] : snapshot[pos];
       char mac[18];
       snprintf(mac, sizeof(mac), "%02X:%02X:%02X:%02X:%02X:%02X",
@@ -712,14 +716,14 @@ void WifiChannelMonitorScreen::_renderClients()
       lcd.drawString(mac, x + 3, yy);
       lcd.setTextDatum(TR_DATUM);
       lcd.setTextColor(selected ? TFT_WHITE : TFT_DARKGREY, bg);
-      lcd.drawString(String(client.packets) + " pkts", x + w - 14, yy);
+      lcd.drawString(String(client.packets) + " pkts", rightEdge - 3, yy);
       lcd.setTextDatum(TL_DATUM);
     }
   }
   if (visible > 0) {
     const int drawn = std::min((int)rows - (int)_clientScroll, visible);
-    if (drawn < visible) lcd.fillRect(x, top + std::max(0, drawn) * rowH, w - 5, (visible - std::max(0, drawn)) * rowH, TFT_BLACK);
-    drawMonitorScrollBar(x + w - 4, top, visible * rowH, rows, visible, _clientScroll);
+    if (drawn < visible) lcd.fillRect(x, top + std::max(0, drawn) * rowH, w - 3, (visible - std::max(0, drawn)) * rowH, TFT_BLACK);
+    drawMonitorScrollBar(x + w - 3, top, visible * rowH, rows, visible, _clientScroll);
   }
   _renderHints(x, y, w, h, paused);
   lcd.setTextDatum(TL_DATUM);
