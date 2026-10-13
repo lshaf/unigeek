@@ -5,6 +5,7 @@
 #include "core/AchievementManager.h"
 #include "screens/wifi/WifiMenuScreen.h"
 #include "screens/wifi/WifiPacketMonitorScreen.h"
+#include "screens/wifi/WifiPacketSnifferScreen.h"
 #include "screens/wifi/WifiFoxHuntScreen.h"
 #include "ui/actions/InputSelectAction.h"
 #include "ui/actions/ShowStatusAction.h"
@@ -202,8 +203,12 @@ void WifiChannelMonitorScreen::onUpdate()
       Uni.Nav->heldDuration() >= 700 && !_holdHandled &&
       (_view == PAUSED || _view == AP_PAUSED || _view == CLIENT_PAUSED)) {
     _holdHandled = true;
-    if (_view == PAUSED) _openPacketMonitor();
-    else _openOptions();
+    // The popup reads navigation synchronously. Consume the physical release
+    // before opening it, otherwise release can activate its first option.
+    while (Uni.Nav->isPressed()) delay(10);
+    if (Uni.Nav->wasPressed()) Uni.Nav->readDirection();
+    _holdHandled = false;
+    _openOptions();
     return;
   }
   // _holdHandled resets when the corresponding release event is consumed.
@@ -223,8 +228,7 @@ void WifiChannelMonitorScreen::onUpdate()
     }
     if (dir == INavigation::DIR_PRESS && duration >= 700 &&
         (_view == PAUSED || _view == AP_PAUSED || _view == CLIENT_PAUSED)) {
-      if (_view == PAUSED) _openPacketMonitor();
-      else _openOptions();
+      _openOptions();
       return;
     }
     if (_view == CLIENTS || _view == CLIENT_PAUSED) {
@@ -746,15 +750,51 @@ void WifiChannelMonitorScreen::_renderClients()
 
 void WifiChannelMonitorScreen::_openOptions()
 {
-  if (_view != AP_PAUSED && _view != CLIENT_PAUSED) return;
-  static const InputSelectAction::Option options[] = {
-    {"Analyze Packets", "packets", nullptr, 0, false},
+  if (_view != PAUSED && _view != AP_PAUSED && _view != CLIENT_PAUSED) return;
+  static const InputSelectAction::Option channelOptions[] = {
+    {"Packet Monitor", "monitor", nullptr, 0, false},
+    {"Packet Sniffer", "sniffer", nullptr, 0, false},
+  };
+  static const InputSelectAction::Option targetOptions[] = {
+    {"Packet Monitor", "monitor", nullptr, 0, false},
+    {"Packet Sniffer", "sniffer", nullptr, 0, false},
     {"Fox Hunt", "foxhunt", nullptr, 0, false},
   };
-  const char* choice = InputSelectAction::popup("Options", options, 2);
+  const bool target = _view != PAUSED;
+  const char* choice = InputSelectAction::popup("Options", target ? targetOptions : channelOptions,
+                                                target ? 3 : 2);
   if (choice == nullptr) { render(); return; }
-  if (strcmp(choice, "packets") == 0) _openPacketMonitor();
+  if (strcmp(choice, "monitor") == 0) _openPacketMonitor();
+  else if (strcmp(choice, "sniffer") == 0) _openPacketSniffer();
   else if (strcmp(choice, "foxhunt") == 0) _openFoxHunt();
+}
+
+void WifiChannelMonitorScreen::_openPacketSniffer()
+{
+  if (_view != PAUSED && _view != AP_PAUSED && _view != CLIENT_PAUSED) return;
+  uint8_t mac[6];
+  uint8_t bssid[6];
+  const uint8_t* apFilter = nullptr;
+  const uint8_t* client = nullptr;
+  const uint8_t channel = _view == PAUSED ? _selected + 1 : _detailChannel;
+  if (_view == AP_PAUSED) {
+    if (_apSelected >= _frozenApCount) return;
+    memcpy(bssid, _frozenAps[_apOrder[_apSelected]].bssid, 6);
+    apFilter = bssid;
+  } else if (_view == CLIENT_PAUSED) {
+    if (_clientSelected >= _frozenClientCount) return;
+    memcpy(bssid, _selectedBssid, 6);
+    apFilter = bssid;
+    memcpy(mac, _frozenClients[_clientOrder[_clientSelected]].mac, 6);
+    client = mac;
+  }
+  auto* sniffer = new WifiPacketSnifferScreen();
+  sniffer->configureFromChannel(channel, apFilter, client);
+  _active = nullptr;
+  esp_wifi_set_promiscuous_rx_cb(nullptr);
+  delay(10);
+  esp_wifi_set_promiscuous(false);
+  Screen.push(sniffer);
 }
 
 void WifiChannelMonitorScreen::_openFoxHunt()
@@ -848,7 +888,7 @@ void WifiChannelMonitorScreen::_renderHints(int x, int y, int w, int h, bool pau
   lcd.setTextDatum(BC_DATUM);
   if (paused) {
     lcd.drawString(_view == CLIENT_PAUSED ? "[Back] Resume" : "[Press] Select [Back] Resume", x + w / 2, y + h - 14);
-    lcd.drawString(_view == PAUSED ? "[Hold] Analyze traffic" : "[Hold] Options", x + w / 2, y + h - 1);
+    lcd.drawString("[Hold] Options", x + w / 2, y + h - 1);
   } else {
     // Reserve the upper hint line to prevent vertical jumps on pause.
     if (_view == LIVE) {

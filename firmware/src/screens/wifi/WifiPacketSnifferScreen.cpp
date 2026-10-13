@@ -41,7 +41,19 @@ struct SnifferPcapPktHdr {
 
 WifiPacketSnifferScreen::~WifiPacketSnifferScreen() { _stop(); }
 
-void WifiPacketSnifferScreen::onInit() { _showMenu(); }
+void WifiPacketSnifferScreen::configureFromChannel(uint8_t channel, const uint8_t bssid[6], const uint8_t* client) {
+  _integrated = true;
+  _channelMask = (channel >= 1 && channel <= 13) ? (1u << (channel - 1)) : 0;
+  _bssidCount = bssid ? 1 : 0;
+  if (bssid) memcpy(_bssids[0], bssid, 6);
+  _macCount = client ? 1 : 0;
+  if (client) { memcpy(_macs[0], client, 6); _clientChannel = channel; }
+}
+
+void WifiPacketSnifferScreen::onInit() {
+  if (_integrated) _start();
+  else _showMenu();
+}
 
 void WifiPacketSnifferScreen::_updateSummaries() {
   snprintf(_filterSub, sizeof(_filterSub), "%s", _filterMask ? "Custom" : "All");
@@ -507,7 +519,7 @@ void WifiPacketSnifferScreen::_endCapture() {
 
 void WifiPacketSnifferScreen::_start() {
   _ringHead = _ringCount = 0; _pausedOffset = 0; _pausedViewOffset = 0; _paused = false; _ringVersion = 0; _lastRenderedVersion = 0;
-  if (!_beginCapture()) { _showMenu(); return; }
+  if (!_beginCapture()) { if (_integrated) Screen.goBack(); else _showMenu(); return; }
   _state = STATE_RUNNING; strncpy(_title, "Packet Sniffer", sizeof(_title));
   WiFi.mode(WIFI_STA); WiFi.disconnect();
   esp_wifi_set_promiscuous(false);
@@ -559,7 +571,7 @@ void WifiPacketSnifferScreen::onUpdate() {
     if (Uni.Nav->wasPressed()) {
       auto d = Uni.Nav->readDirection();
       const uint32_t dur = Uni.Nav->pressDuration();
-      if (d == INavigation::DIR_BACK) { if (_state == STATE_PAUSED) _resume(); else { _stop(); _showMenu(); } return; }
+      if (d == INavigation::DIR_BACK) { if (_state == STATE_PAUSED) _resume(); else { _stop(); if (_integrated) Screen.goBack(); else _showMenu(); } return; }
       if (_state == STATE_RUNNING && d == INavigation::DIR_PRESS) { _pause(); return; }
       if (_state == STATE_PAUSED) {
         if (d == INavigation::DIR_UP && _pausedOffset + 1 < _ringCount) {
@@ -672,7 +684,7 @@ void WifiPacketSnifferScreen::_renderDetails() {
 }
 
 void WifiPacketSnifferScreen::onBack() {
-  if (_state == STATE_RUNNING || _state == STATE_PAUSED) { _stop(); _showMenu(); return; }
+  if (_state == STATE_RUNNING || _state == STATE_PAUSED) { _stop(); if (_integrated) Screen.goBack(); else _showMenu(); return; }
   if (_state == STATE_DETAILS) { _state = STATE_PAUSED; render(); return; }
   if (_state == STATE_FILTER || _state == STATE_CHANNEL || _state == STATE_BSSID || _state == STATE_MAC) { _showMenu(); return; }
   _stop(); Screen.goBack();
