@@ -160,10 +160,14 @@ void WifiChannelMonitorScreen::onInit()
   memset(_chanAccum, 0, sizeof(_chanAccum));
   memset(_displayCounts, 0, sizeof(_displayCounts));
   memset(_activity, 0, sizeof(_activity));
+  memset(_channelTotals, 0, sizeof(_channelTotals));
   for (uint8_t i = 0; i < _NUM_CH; ++i) _rank[i] = i + 1;
   _scroll = 0;
   _selected = 0;
-  _view = LIVE;
+  _view = GRAPH;
+  _graphChromeDrawn = false;
+  _graphAnimating = false;
+  memset(_graphLastH, 0, sizeof(_graphLastH));
   _apCount = 0;
   _knownApCount = 0;
   memset(_knownAps, 0, sizeof(_knownAps));
@@ -193,16 +197,12 @@ void WifiChannelMonitorScreen::onUpdate()
   if (Uni.Nav->wasPressed()) {
     const auto dir = Uni.Nav->readDirection();
     const uint32_t duration = Uni.Nav->pressDuration();
-    // In the live channel list, Hold switches to the classic graph.
-    // Both views share the same radio, sweep and validated traffic counters.
-    if (dir == INavigation::DIR_PRESS && duration >= 700 && _view == LIVE) {
-      _view = GRAPH;
-      render();
-      return;
-    }
+    // The classic graph is the entry view; Press opens the channel list.
     if (_view == GRAPH) {
-      if (dir == INavigation::DIR_BACK || dir == INavigation::DIR_PRESS) {
+      if (dir == INavigation::DIR_BACK) _quit();
+      else if (dir == INavigation::DIR_PRESS && duration < 700) {
         _view = LIVE;
+        _scroll = 0;
         render();
       }
       return;
@@ -225,8 +225,7 @@ void WifiChannelMonitorScreen::onUpdate()
         if (_view == CLIENTS) {
           esp_wifi_set_promiscuous(false);
           _view = CLIENT_PAUSED;
-          _clientSelected = 0;
-          _clientScroll = 0;
+          _clientSelected = _clientScroll;
           ClientEntry snapshot[MAX_CLIENTS];
           portENTER_CRITICAL(&_apMux);
           _frozenClientCount = _clientCount;
@@ -243,15 +242,19 @@ void WifiChannelMonitorScreen::onUpdate()
             _clientOrder[j] = item;
           }
         } else {
-          // A short press selects the highlighted client; Hold opens Packet Monitor.
+          // Short press intentionally has no action; Hold opens Packet Monitor.
         }
       } else if (dir == INavigation::DIR_DOWN || dir == INavigation::DIR_RIGHT) {
         if (_view == CLIENT_PAUSED) {
-          if (_clientSelected + 1 < _frozenClientCount) ++_clientSelected;
-        } else if (_clientScroll < _clientCount) ++_clientScroll;
+          if (_frozenClientCount) _clientSelected = (_clientSelected + 1) % _frozenClientCount;
+        } else {
+          const int visible = std::max(1, (bodyH() - 2 - 27) / 19);
+          const int maxScroll = std::max(0, (int)_clientCount - visible);
+          if (_clientScroll < maxScroll) ++_clientScroll;
+        }
       } else if (dir == INavigation::DIR_UP || dir == INavigation::DIR_LEFT) {
         if (_view == CLIENT_PAUSED) {
-          if (_clientSelected) --_clientSelected;
+          if (_frozenClientCount) _clientSelected = (_clientSelected + _frozenClientCount - 1) % _frozenClientCount;
         } else if (_clientScroll) --_clientScroll;
       }
       render();
@@ -272,8 +275,7 @@ void WifiChannelMonitorScreen::onUpdate()
         if (_view == DETAILS) {
           esp_wifi_set_promiscuous(false);
           _view = AP_PAUSED;
-          _apSelected = 0;
-          _detailScroll = 0;
+          _apSelected = _detailScroll;
           _freezeApOrder();
         } else if (_apSelected < _frozenApCount) {
           portENTER_CRITICAL(&_apMux);
@@ -288,11 +290,13 @@ void WifiChannelMonitorScreen::onUpdate()
           _clientScroll = 0;
         }
       } else if (_view == AP_PAUSED && (dir == INavigation::DIR_UP || dir == INavigation::DIR_LEFT)) {
-        if (_apSelected) --_apSelected;
+        if (_frozenApCount) _apSelected = (_apSelected + _frozenApCount - 1) % _frozenApCount;
       } else if (_view == AP_PAUSED && (dir == INavigation::DIR_DOWN || dir == INavigation::DIR_RIGHT)) {
-        if (_apSelected + 1 < _frozenApCount) ++_apSelected;
+        if (_frozenApCount) _apSelected = (_apSelected + 1) % _frozenApCount;
       } else if (_view == DETAILS && (dir == INavigation::DIR_DOWN || dir == INavigation::DIR_RIGHT)) {
-        if (_detailScroll + 1 < _apCount) ++_detailScroll;
+        const int visible = std::max(1, (bodyH() - 2 - 27) / 19);
+        const int maxScroll = std::max(0, (int)_apCount - visible);
+        if (_detailScroll < maxScroll) ++_detailScroll;
       } else if (_view == DETAILS && (dir == INavigation::DIR_UP || dir == INavigation::DIR_LEFT)) {
         if (_detailScroll) --_detailScroll;
       }
@@ -300,7 +304,7 @@ void WifiChannelMonitorScreen::onUpdate()
       return;
     }
     if (dir == INavigation::DIR_BACK) {
-      if (_view == LIVE) _quit();
+      if (_view == LIVE) { _view = GRAPH; _graphChromeDrawn = false; render(); }
       else {
         _view = LIVE;
         // Resume with a fresh, complete sweep rather than a partial window.
@@ -321,10 +325,10 @@ void WifiChannelMonitorScreen::onUpdate()
         esp_wifi_set_promiscuous(false);
         _pktCounter.store(0, std::memory_order_relaxed);
         memset(_chanAccum, 0, sizeof(_chanAccum));
-        _view = PAUSED; _selected = 0; _scroll = 0;
+        _view = PAUSED; _selected = _scroll;
       }
       else {
-        _detailChannel = _rank[_selected];
+        _detailChannel = _selected + 1;
         _view = DETAILS;
         _detailScroll = 0;
         portENTER_CRITICAL(&_apMux);
@@ -338,14 +342,15 @@ void WifiChannelMonitorScreen::onUpdate()
       return;
     }
     if (dir == INavigation::DIR_UP || dir == INavigation::DIR_LEFT) {
-      if (_view == PAUSED && _selected > 0) {
-        --_selected;
+      if (_view == PAUSED) {
+        _selected = (_selected + _NUM_CH - 1) % _NUM_CH;
         if (_selected < _scroll) _scroll = _selected;
+        if (_selected >= _scroll + _VISIBLE) _scroll = _selected - _VISIBLE + 1;
         render();
       } else if (_view == LIVE && _scroll > 0) { --_scroll; render(); }
     } else if (dir == INavigation::DIR_DOWN || dir == INavigation::DIR_RIGHT) {
-      if (_view == PAUSED && _selected + 1 < _NUM_CH) {
-        ++_selected;
+      if (_view == PAUSED) {
+        _selected = (_selected + 1) % _NUM_CH;
         if (_selected >= _scroll + _VISIBLE) _scroll = _selected - _VISIBLE + 1;
         render();
       } else if (_view == LIVE && _scroll < _NUM_CH - _VISIBLE) { ++_scroll; render(); }
@@ -356,7 +361,14 @@ void WifiChannelMonitorScreen::onUpdate()
       _lastDetailRender = millis();
       onRender();
     }
-  } else if ((_view == LIVE || _view == GRAPH) && millis() - _lastHop >= _HOP_MS) _hop();
+  } else if (_view == LIVE || _view == GRAPH) {
+    if (millis() - _lastHop >= _HOP_MS) _hop();
+    if (_view == GRAPH && _graphAnimating &&
+        millis() - _graphLastFrame >= _GRAPH_FRAME_MS) {
+      _graphLastFrame = millis();
+      _renderGraph();
+    }
+  }
 }
 
 void WifiChannelMonitorScreen::onRender()
@@ -376,43 +388,45 @@ void WifiChannelMonitorScreen::onRender()
     return;
   }
 
-  // Fixed absolute scale shared with the classic graph (PPS, Q8).
+  // Channel list: fixed channel order, verified AP count and total packets.
+  uint8_t apCounts[_NUM_CH + 1] = {};
+  portENTER_CRITICAL(&_apMux);
+  for (uint8_t i = 0; i < _knownApCount; ++i) {
+    const uint8_t ch = _knownAps[i].channel;
+    if (ch >= 1 && ch <= _NUM_CH && apCounts[ch] < 255) ++apCounts[ch];
+  }
+  portEXIT_CRITICAL(&_apMux);
 
   const int footerH = 27;
   const int rowH = (h - footerH) / _VISIBLE;
-  const int labelW = 23;
-  const int barX = x + labelW;
-  // Reserve a dedicated gutter for the scrollbar and selection outline.
-  const int contentRight = x + w - 10;
-  const int barW = contentRight - barX - 2;
-  if (rowH < 6 || barW < 10) return;
-  const int barH = rowH > 9 ? rowH - 5 : rowH - 2;
-
+  const int contentRight = x + w - 14;
+  if (rowH < 6 || contentRight - x < 75) return;
+  lcd.setTextColor(TFT_WHITE, TFT_BLACK);
   for (uint8_t i = 0; i < _VISIBLE; ++i) {
-    const uint8_t rankIndex = _scroll + i;
-    const uint8_t ch = _rank[rankIndex];
+    const uint8_t ch = _scroll + i + 1;
+    if (ch > _NUM_CH) break;
     const int top = y + i * rowH;
-    const int barY = top + (rowH - barH) / 2;
-    const uint32_t value = _activity[ch];
-    const int filled = (int)std::min<uint64_t>(barW,
-        (uint64_t)value * barW / ((uint64_t)_GRAPH_MAX_PPS * 256U));
-    uint16_t color = TFT_DARKGREY;
-    if (value) {
-      // Relative ranking tiers, with inactive channels always grey.
-      if (rankIndex < 4) color = TFT_GREEN;
-      else if (rankIndex < 9) color = TFT_YELLOW;
-      else color = TFT_RED;
-    }
     lcd.fillRect(x, top, contentRight - x + 1, rowH, TFT_BLACK);
+    lcd.setTextDatum(ML_DATUM);
+    const bool selected = _view == PAUSED && ch == _selected + 1;
+    const uint16_t bg = selected ? Config.getThemeColor() : TFT_BLACK;
+    if (selected) lcd.fillRoundRect(x, top, contentRight - x - 1, rowH, 3, bg);
+    lcd.setTextColor(TFT_WHITE, bg);
+    lcd.drawString("Channel " + String(ch), x + 3, top + rowH / 2);
+    lcd.setTextDatum(MR_DATUM);
+    // Reserve right gutter for the scrollbar and selection border.
+    // Keep separate compact columns for APs and packets without reaching the channel label.
+    const int packetsRight = contentRight - 1;
+    const int apCountRight = packetsRight - 70;
+    lcd.setTextColor(selected ? TFT_WHITE : TFT_DARKGREY, bg);
+    lcd.drawString(String(apCounts[ch]) + " APs", apCountRight, top + rowH / 2);
+    lcd.setTextColor(selected ? TFT_WHITE : TFT_DARKGREY, bg);
+    String packetLabel = String(_channelTotals[ch]) + " pkts";
+    while (packetLabel.length() > 1 && lcd.textWidth(packetLabel) > 72)
+      packetLabel.remove(0, 1);
+    lcd.drawString(packetLabel, packetsRight, top + rowH / 2);
     lcd.setTextColor(TFT_WHITE, TFT_BLACK);
-    lcd.drawString(String(ch), x + 2, top + (rowH - lcd.fontHeight()) / 2);
-    if (_view == PAUSED && rankIndex == _selected) {
-      lcd.drawRect(x, top, contentRight - x, rowH, TFT_WHITE);
-    }
-    lcd.fillRect(barX, barY, barW, barH, TFT_DARKGREY);
-    if (filled > 0) lcd.fillRect(barX, barY, filled, barH, color);
   }
-
   drawMonitorScrollBar(x + w - 4, y, h - footerH, _NUM_CH, _VISIBLE, _scroll);
   _renderHints(x, y, w, h, _view == PAUSED);
   lcd.setTextDatum(TL_DATUM);
@@ -423,39 +437,83 @@ void WifiChannelMonitorScreen::_renderGraph()
   auto& lcd = Uni.Lcd;
   const int x = bodyX(), y = bodyY(), w = bodyW(), h = bodyH();
   if (w <= 0 || h <= 32) return;
-  // Repaint only when entering the graph or when a complete sweep arrives.
-  lcd.fillRect(x, y, w, h, TFT_BLACK);
-  _lastPaintedView = GRAPH;
   lcd.setTextSize(1);
-  lcd.setTextDatum(TC_DATUM);
-  lcd.setTextColor(TFT_WHITE, TFT_BLACK);
   const int labelH = lcd.fontHeight() + 3;
-  const int plotH = h - labelH - 8;
+  const int hintH = 14;
+  const int plotH = h - labelH - 8 - hintH;
   const int stepX = w / _NUM_CH;
-  if (plotH <= 5 || stepX <= 0) return;
+  if (plotH <= 6 || stepX <= 0) return;
   const int baseline = y + plotH + 4;
-  int px[_NUM_CH + 1] = {}, py[_NUM_CH + 1] = {};
-  for (uint8_t ch = 1; ch <= _NUM_CH; ++ch) {
-    px[ch] = x + (ch - 1) * stepX + stepX / 2;
-    const int amplitude = (int)std::min<uint64_t>(plotH - 6,
-        (uint64_t)_activity[ch] * (plotH - 6) / ((uint64_t)_GRAPH_MAX_PPS * 256U));
-    py[ch] = baseline - amplitude;
-    lcd.drawString(String(ch), px[ch], baseline + 3);
+  const int maxBarH = plotH - 6;
+
+  if (!_graphChromeDrawn || _lastPaintedView != GRAPH) {
+    lcd.fillRect(x, y, w, h, TFT_BLACK);
+    lcd.setTextDatum(TC_DATUM);
+    lcd.setTextColor(TFT_WHITE, TFT_BLACK);
+    for (uint8_t ch = 1; ch <= _NUM_CH; ++ch)
+      lcd.drawString(String(ch), x + (ch - 1) * stepX + stepX / 2, baseline + 3);
+    lcd.setTextColor(TFT_DARKGREY, TFT_BLACK);
+    lcd.setTextDatum(BC_DATUM);
+    lcd.drawString("[Press] Details", x + w / 2, y + h - 1);
+    lcd.setTextDatum(TL_DATUM);
+    _graphChromeDrawn = true;
+    _lastPaintedView = GRAPH;
+    // Previous lines were cleared; repaint the new curve from a zero baseline.
+    memset(_graphLastH, 0, sizeof(_graphLastH));
+    memset(_graphStartH, 0, sizeof(_graphStartH));
+    _graphAnimStart = millis();
+    _graphAnimating = !_firstSweep;
   }
+  if (_firstSweep) return;
+
+  uint32_t maxActivity = 1;
+  for (uint8_t ch = 1; ch <= _NUM_CH; ++ch)
+    maxActivity = std::max(maxActivity, _activity[ch]);
+
+  const uint32_t elapsed = millis() - _graphAnimStart;
+  const bool done = !_graphAnimating || elapsed >= _GRAPH_ANIM_MS;
+  float t = done ? 1.0f : (float)elapsed / (float)_GRAPH_ANIM_MS;
+  t = 1.0f - (1.0f - t) * (1.0f - t);
+  uint16_t nextH[_NUM_CH + 1] = {};
+  bool changed = false;
+  for (uint8_t ch = 1; ch <= _NUM_CH; ++ch) {
+    const uint16_t target = (uint16_t)std::min<uint64_t>(maxBarH,
+        (uint64_t)_activity[ch] * maxBarH / maxActivity);
+    const int32_t delta = (int32_t)target - (int32_t)_graphStartH[ch];
+    nextH[ch] = done ? target : (uint16_t)std::max<int32_t>(0,
+        (int32_t)_graphStartH[ch] + (int32_t)(delta * t));
+    if (nextH[ch] != _graphLastH[ch]) changed = true;
+  }
+  if (!changed) { if (done) _graphAnimating = false; return; }
+
+  int cx[_NUM_CH + 1], oldY[_NUM_CH + 1], newY[_NUM_CH + 1];
+  for (uint8_t ch = 1; ch <= _NUM_CH; ++ch) {
+    cx[ch] = x + (ch - 1) * stepX + stepX / 2;
+    oldY[ch] = baseline - _graphLastH[ch];
+    newY[ch] = baseline - nextH[ch];
+  }
+  for (uint8_t ch = 1; ch < _NUM_CH; ++ch) {
+    for (int d = -1; d <= 1; ++d)
+      lcd.drawLine(cx[ch], oldY[ch] + d, cx[ch + 1], oldY[ch + 1] + d, TFT_BLACK);
+  }
+  for (uint8_t ch = 1; ch <= _NUM_CH; ++ch)
+    lcd.fillCircle(cx[ch], oldY[ch], 3, TFT_BLACK);
+
   const uint16_t color = Config.getThemeColor();
   const uint16_t glow = (uint16_t)((((color >> 11) & 31) / 3 << 11) |
                                     (((color >> 5) & 63) / 3 << 5) |
                                     ((color & 31) / 3));
   for (uint8_t ch = 1; ch < _NUM_CH; ++ch) {
-    lcd.drawLine(px[ch], py[ch] - 1, px[ch + 1], py[ch + 1] - 1, glow);
-    lcd.drawLine(px[ch], py[ch] + 1, px[ch + 1], py[ch + 1] + 1, glow);
-    lcd.drawLine(px[ch], py[ch], px[ch + 1], py[ch + 1], color);
+    lcd.drawLine(cx[ch], newY[ch] - 1, cx[ch + 1], newY[ch + 1] - 1, glow);
+    lcd.drawLine(cx[ch], newY[ch] + 1, cx[ch + 1], newY[ch + 1] + 1, glow);
+    lcd.drawLine(cx[ch], newY[ch], cx[ch + 1], newY[ch + 1], color);
   }
   for (uint8_t ch = 1; ch <= _NUM_CH; ++ch) {
-    lcd.fillCircle(px[ch], py[ch], 2, color);
-    lcd.fillCircle(px[ch], py[ch], 1, TFT_WHITE);
+    lcd.fillCircle(cx[ch], newY[ch], 2, color);
+    lcd.fillCircle(cx[ch], newY[ch], 1, TFT_WHITE);
   }
-  lcd.setTextDatum(TL_DATUM);
+  memcpy(_graphLastH, nextH, sizeof(nextH));
+  if (done) _graphAnimating = false;
 }
 
 void WifiChannelMonitorScreen::_hop()
@@ -464,6 +522,8 @@ void WifiChannelMonitorScreen::_hop()
   const uint32_t elapsedMs = std::max<uint32_t>(1, now - _lastHop);
   // Count per actual dwell time, not per full 13-channel sweep.
   const uint32_t packets = _pktCounter.exchange(0, std::memory_order_relaxed);
+  _channelTotals[_sweepCh] = (uint32_t)std::min<uint64_t>(UINT32_MAX,
+      (uint64_t)_channelTotals[_sweepCh] + packets);
   _chanAccum[_sweepCh] = (uint32_t)std::min<uint64_t>(UINT32_MAX,
       (uint64_t)packets * 1000U * 256U / elapsedMs);
   if (_sweepCh >= _NUM_CH) {
@@ -494,7 +554,13 @@ void WifiChannelMonitorScreen::_hop()
     _firstSweep = false;
     esp_wifi_set_channel(_sweepCh, WIFI_SECOND_CHAN_NONE);
     _lastHop = millis();
-    if (_view == LIVE || _view == GRAPH) onRender();
+    if (_view == GRAPH) {
+      memcpy(_graphStartH, _graphLastH, sizeof(_graphLastH));
+      _graphAnimStart = millis();
+      _graphLastFrame = millis() - _GRAPH_FRAME_MS;
+      _graphAnimating = true;
+      _renderGraph();
+    } else if (_view == LIVE) onRender();
   } else {
     ++_sweepCh;
     esp_wifi_set_channel(_sweepCh, WIFI_SECOND_CHAN_NONE);
@@ -552,24 +618,24 @@ void WifiChannelMonitorScreen::_renderDetails()
       const uint8_t position = i + _detailScroll;
       const auto& ap = _view == AP_PAUSED ? _frozenAps[_apOrder[position]] : snapshot[position];
       const int yy = top + i * rowH;
-      lcd.fillRect(x, yy - 2, w - 4, rowH, TFT_BLACK);
-      if (_view == AP_PAUSED && position == _apSelected)
-        lcd.drawRect(x, yy - 2, w - 10, rowH, TFT_WHITE);
-      const uint16_t apColor = ap.rssi >= -60 ? TFT_GREEN : ap.rssi >= -75 ? TFT_YELLOW : TFT_RED;
-      lcd.setTextColor(apColor, TFT_BLACK);
+      lcd.fillRect(x, yy - 2, w - 5, rowH, TFT_BLACK);
+      const bool selected = _view == AP_PAUSED && position == _apSelected;
+      const uint16_t bg = selected ? Config.getThemeColor() : TFT_BLACK;
+      if (selected) lcd.fillRoundRect(x, yy - 2, w - 11, rowH, 3, bg);
+      lcd.setTextColor(TFT_WHITE, bg);
       String name = ap.ssid[0] ? String(ap.ssid) : String("<hidden>");
-      while (name.length() && lcd.textWidth(name) > w - 76) name.remove(name.length()-1);
+      while (name.length() && lcd.textWidth(name) > w - 120) name.remove(name.length()-1);
       lcd.drawString(name, x + 3, yy);
       lcd.setTextDatum(TR_DATUM);
-      lcd.setTextColor(TFT_WHITE, TFT_BLACK);
-      lcd.drawString(String(ap.packets), x + w - 12, yy);
+      lcd.setTextColor(selected ? TFT_WHITE : TFT_DARKGREY, bg);
+      lcd.drawString(String(ap.packets) + " pkts", x + w - 14, yy);
       lcd.setTextDatum(TL_DATUM);
     }
   }
   if (visible > 0) {
     const int rows = _view == AP_PAUSED ? _frozenApCount : count;
     const int drawn = std::min(rows - (int)_detailScroll, visible);
-    if (drawn < visible) lcd.fillRect(x, top + std::max(0, drawn) * rowH, w - 4, (visible - std::max(0, drawn)) * rowH, TFT_BLACK);
+    if (drawn < visible) lcd.fillRect(x, top + std::max(0, drawn) * rowH, w - 5, (visible - std::max(0, drawn)) * rowH, TFT_BLACK);
     drawMonitorScrollBar(x + w - 4, top, visible * rowH, rows, visible, _detailScroll);
   }
   _renderHints(x, y, w, h, _view == AP_PAUSED);
@@ -634,24 +700,25 @@ void WifiChannelMonitorScreen::_renderClients()
     for (int i = 0; i < visible && i + _clientScroll < rows; ++i) {
       const uint8_t pos = i + _clientScroll;
       const int yy = top + i * rowH;
-      lcd.fillRect(x, yy - 2, w - 4, rowH, TFT_BLACK);
-      if (paused && pos == _clientSelected) lcd.drawRect(x, yy - 2, w - 10, rowH, TFT_WHITE);
+      lcd.fillRect(x, yy - 2, w - 5, rowH, TFT_BLACK);
+      const bool selected = paused && pos == _clientSelected;
+      const uint16_t bg = selected ? Config.getThemeColor() : TFT_BLACK;
+      if (selected) lcd.fillRoundRect(x, yy - 2, w - 11, rowH, 3, bg);
       const auto& client = paused ? _frozenClients[_clientOrder[pos]] : snapshot[pos];
       char mac[18];
       snprintf(mac, sizeof(mac), "%02X:%02X:%02X:%02X:%02X:%02X",
                client.mac[0],client.mac[1],client.mac[2],client.mac[3],client.mac[4],client.mac[5]);
-      const uint16_t clientColor = client.rssi >= -60 ? TFT_GREEN : client.rssi >= -75 ? TFT_YELLOW : TFT_RED;
-      lcd.setTextColor(clientColor, TFT_BLACK);
+      lcd.setTextColor(TFT_WHITE, bg);
       lcd.drawString(mac, x + 3, yy);
       lcd.setTextDatum(TR_DATUM);
-      lcd.setTextColor(TFT_WHITE, TFT_BLACK);
-      lcd.drawString(String(client.packets), x + w - 12, yy);
+      lcd.setTextColor(selected ? TFT_WHITE : TFT_DARKGREY, bg);
+      lcd.drawString(String(client.packets) + " pkts", x + w - 14, yy);
       lcd.setTextDatum(TL_DATUM);
     }
   }
   if (visible > 0) {
     const int drawn = std::min((int)rows - (int)_clientScroll, visible);
-    if (drawn < visible) lcd.fillRect(x, top + std::max(0, drawn) * rowH, w - 4, (visible - std::max(0, drawn)) * rowH, TFT_BLACK);
+    if (drawn < visible) lcd.fillRect(x, top + std::max(0, drawn) * rowH, w - 5, (visible - std::max(0, drawn)) * rowH, TFT_BLACK);
     drawMonitorScrollBar(x + w - 4, top, visible * rowH, rows, visible, _clientScroll);
   }
   _renderHints(x, y, w, h, paused);
@@ -664,22 +731,25 @@ void WifiChannelMonitorScreen::_openPacketMonitor()
   uint8_t mac[6];
   uint8_t bssid[6];
   const uint8_t* apFilter = nullptr;
+  const char* apSsid = nullptr;
   const uint8_t* client = nullptr;
-  const uint8_t channel = _view == PAUSED ? _rank[_selected] : _detailChannel;
+  const uint8_t channel = _view == PAUSED ? _selected + 1 : _detailChannel;
   if (_view == AP_PAUSED) {
     if (_apSelected >= _frozenApCount) return;
     memcpy(bssid, _frozenAps[_apOrder[_apSelected]].bssid, 6);
     apFilter = bssid;
+    apSsid = _frozenAps[_apOrder[_apSelected]].ssid;
   } else if (_view == CLIENT_PAUSED) {
     memcpy(bssid, _selectedBssid, 6);
     apFilter = bssid;
+    apSsid = _selectedSsid;
     if (_clientSelected < _frozenClientCount) {
       memcpy(mac, _frozenClients[_clientOrder[_clientSelected]].mac, 6);
       client = mac;
     }
   }
   auto* monitor = new WifiPacketMonitorScreen();
-  monitor->configureFromChannel(channel, apFilter, client);
+  monitor->configureFromChannel(channel, apFilter, client, apSsid);
   _active = nullptr;
   esp_wifi_set_promiscuous_rx_cb(nullptr);
   delay(10);
@@ -721,13 +791,12 @@ void WifiChannelMonitorScreen::_renderHints(int x, int y, int w, int h, bool pau
   lcd.setTextColor(TFT_DARKGREY, TFT_BLACK);
   lcd.setTextDatum(BC_DATUM);
   if (paused) {
-    lcd.drawString("[Press] Select [Back] Resume", x + w / 2, y + h - 14);
-    lcd.drawString("[Hold] Packet Monitor", x + w / 2, y + h - 1);
+    lcd.drawString(_view == CLIENT_PAUSED ? "[Back] Resume" : "[Press] Select [Back] Resume", x + w / 2, y + h - 14);
+    lcd.drawString("[Hold] Analyze traffic", x + w / 2, y + h - 1);
   } else {
     // Reserve the upper hint line to prevent vertical jumps on pause.
     if (_view == LIVE) {
-      lcd.drawString("[Press] Pause", x + w / 2, y + h - 14);
-      lcd.drawString("[Hold] Graph", x + w / 2, y + h - 1);
+      lcd.drawString("[Press] Pause", x + w / 2, y + h - 1);
     } else {
       lcd.drawString("[Press] Pause", x + w / 2, y + h - 1);
     }

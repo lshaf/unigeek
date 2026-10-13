@@ -82,7 +82,16 @@ private:
   uint32_t _chanAccum[_NUM_CH + 1] = {};
   uint32_t _displayCounts[_NUM_CH + 1] = {};
   uint32_t _activity[_NUM_CH + 1] = {};
+  uint32_t _channelTotals[_NUM_CH + 1] = {};
 
+  static constexpr uint32_t _GRAPH_ANIM_MS = 1500;
+  static constexpr uint32_t _GRAPH_FRAME_MS = 50;
+  uint16_t _graphLastH[_NUM_CH + 1] = {};
+  uint16_t _graphStartH[_NUM_CH + 1] = {};
+  uint32_t _graphAnimStart = 0;
+  uint32_t _graphLastFrame = 0;
+  bool _graphAnimating = false;
+  bool _graphChromeDrawn = false;
   void _renderGraph();
   void _renderDetails();
   void _renderClients();
