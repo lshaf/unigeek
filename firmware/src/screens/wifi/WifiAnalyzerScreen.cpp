@@ -230,6 +230,7 @@ void WifiAnalyzerScreen::_doScan()
     snprintf(e.bssid,   sizeof(e.bssid),   "%s", WiFi.BSSIDstr(i).c_str());
     snprintf(e.rssi,    sizeof(e.rssi),    "[%d] %s", rssi, _strengthLabel(rssi));
     snprintf(e.channel, sizeof(e.channel), "%d", (int)WiFi.channel(i));
+    snprintf(e.bssidDisplay, sizeof(e.bssidDisplay), "%s CH%d", e.bssid, (int)WiFi.channel(i));
     e.rssiValue = rssi;
 
     switch (WiFi.encryptionType(i)) {
@@ -260,7 +261,7 @@ void WifiAnalyzerScreen::_rebuildScanItems()
 {
   _scanItems[0] = {"Rescan"};
   for (int i = 0; i < _entryCount; i++) {
-    _scanItems[i + 1]              = {_entries[i].ssid, _entries[i].bssid};
+    _scanItems[i + 1]              = {_entries[i].ssid, _entries[i].bssidDisplay};
     _scanItems[i + 1].rssi         = (int16_t)_entries[i].rssiValue;
     _scanItems[i + 1].hasRssi      = true;
     _scanItems[i + 1].sublabelMarquee = true;
@@ -365,7 +366,7 @@ void WifiAnalyzerScreen::_refreshClients(bool force)
     snprintf(m, sizeof(m), "%02X:%02X:%02X:%02X:%02X:%02X",
              macs[i][0], macs[i][1], macs[i][2], macs[i][3], macs[i][4], macs[i][5]);
     _rows[r].label = _clientLabels[i];
-    _rows[r].value = m;
+    _rows[r].value = String(m) + " CH" + _entries[_selectedAp].channel;
     r++;
   }
   _scrollView.setRows(_rows, r);

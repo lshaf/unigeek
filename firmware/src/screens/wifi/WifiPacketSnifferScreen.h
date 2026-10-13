@@ -56,7 +56,7 @@ private:
   };
   struct ScanEntry {
     char ssid[33];
-    char bssidText[18];
+    char bssidText[24];
     uint8_t bssid[6];
     uint8_t channel;
     int rssi;

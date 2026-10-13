@@ -291,7 +291,7 @@ void WifiEapolScreen::_showScanResults() {
   _scanItems[0] = {"Rescan"};
 
   for (int i = 0; i < _scanCount; i++) {
-    _scanItems[i + 1] = {_scanLabels[i], _scanValues[i]};
+    _scanItems[i + 1] = {_scanLabels[i], _scanDisplay[i]};
     _scanItems[i + 1].rssi            = _scanRssi[i];
     _scanItems[i + 1].hasRssi         = true;
     _scanItems[i + 1].sublabelMarquee = true;
@@ -321,6 +321,7 @@ void WifiEapolScreen::_selectWifi(bool forceScan) {
     _scanChannels[i] = (uint8_t)WiFi.channel(i);
     snprintf(_scanValues[i], sizeof(_scanValues[i]), "%s",
              WiFi.BSSIDstr(i).c_str());
+    snprintf(_scanDisplay[i], sizeof(_scanDisplay[i]), "%s CH%u", _scanValues[i], (unsigned)_scanChannels[i]);
     _scanRssi[i] = (int16_t)WiFi.RSSI(i);
   }
 

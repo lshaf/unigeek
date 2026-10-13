@@ -27,6 +27,7 @@ private:
   struct WifiEntry {
     char ssid[33];
     char bssid[18];
+    char bssidDisplay[24];
     char rssi[20];
     char channel[4];
     char encryption[20];

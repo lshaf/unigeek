@@ -195,8 +195,8 @@ void WifiFoxHuntScreen::_scanClients()
     entry.bssid = mac;
     entry.rssi = sample.rssi;
     entry.channel = sample.channel;
-    _labels[_entryCount] = mac;
-    _subs[_entryCount] = "CH " + String(sample.channel);
+    _labels[_entryCount] = String(mac) + " CH" + String(sample.channel);
+    _subs[_entryCount] = "";
     ++_entryCount;
   }
   if (!_entryCount) ShowStatusAction::show("No stations found");
@@ -236,7 +236,7 @@ void WifiFoxHuntScreen::_doScan()
     e.channel = (int)WiFi.channel(i);
 
     _labels[_entryCount] = e.ssid;
-    _subs[_entryCount] = e.bssid;
+    _subs[_entryCount] = e.bssid + " CH" + String(e.channel);
     _entryCount++;
   }
 
@@ -254,7 +254,7 @@ void WifiFoxHuntScreen::_showScan()
     _items[i + 1] = {_labels[i].c_str(), _subs[i].c_str()};
     _items[i + 1].rssi = (int16_t)_entries[i].rssi;
     _items[i + 1].hasRssi = true;
-    _items[i + 1].sublabelMarquee = true;
+    _items[i + 1].sublabelMarquee = (_mode != MODE_CLIENT);
   }
 
   setItems(_items, _entryCount + 1);

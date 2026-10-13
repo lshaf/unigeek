@@ -181,8 +181,10 @@ void WifiPacketSnifferScreen::_scanBssids() {
     snprintf(e.ssid, sizeof(e.ssid), "%s", ssid.length() ? ssid.c_str() : "<hidden>");
     const uint8_t* b = WiFi.BSSID(i);
     if (b) memcpy(e.bssid, b, 6); else memset(e.bssid, 0, 6);
-    _formatMac(e.bssid, e.bssidText, sizeof(e.bssidText));
+    char macText[18];
+    _formatMac(e.bssid, macText, sizeof(macText));
     e.channel = (uint8_t)WiFi.channel(i);
+    snprintf(e.bssidText, sizeof(e.bssidText), "%s CH%u", macText, (unsigned)e.channel);
     e.rssi = WiFi.RSSI(i);
   }
   WiFi.scanDelete();
