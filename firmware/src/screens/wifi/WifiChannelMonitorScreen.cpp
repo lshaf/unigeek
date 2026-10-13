@@ -5,6 +5,8 @@
 #include "core/AchievementManager.h"
 #include "screens/wifi/WifiMenuScreen.h"
 #include "screens/wifi/WifiPacketMonitorScreen.h"
+#include "screens/wifi/WifiFoxHuntScreen.h"
+#include "ui/actions/InputSelectAction.h"
 #include "ui/actions/ShowStatusAction.h"
 
 static std::atomic<uint32_t> _pktCounter{0};
@@ -209,7 +211,8 @@ void WifiChannelMonitorScreen::onUpdate()
     }
     if (dir == INavigation::DIR_PRESS && duration >= 700 &&
         (_view == PAUSED || _view == AP_PAUSED || _view == CLIENT_PAUSED)) {
-      _openPacketMonitor();
+      if (_view == PAUSED) _openPacketMonitor();
+      else _openOptions();
       return;
     }
     if (_view == CLIENTS || _view == CLIENT_PAUSED) {
@@ -242,7 +245,7 @@ void WifiChannelMonitorScreen::onUpdate()
             _clientOrder[j] = item;
           }
         } else {
-          // Short press intentionally has no action; Hold opens Packet Monitor.
+          // Short press intentionally has no action; Hold opens Options.
         }
       } else if (dir == INavigation::DIR_DOWN || dir == INavigation::DIR_RIGHT) {
         if (_view == CLIENT_PAUSED) {
@@ -729,6 +732,43 @@ void WifiChannelMonitorScreen::_renderClients()
   lcd.setTextDatum(TL_DATUM);
 }
 
+void WifiChannelMonitorScreen::_openOptions()
+{
+  if (_view != AP_PAUSED && _view != CLIENT_PAUSED) return;
+  static const InputSelectAction::Option options[] = {
+    {"Analyze Packets", "packets", nullptr, 0, false},
+    {"Fox Hunt", "foxhunt", nullptr, 0, false},
+  };
+  const char* choice = InputSelectAction::popup("Options", options, 2);
+  if (choice == nullptr) { render(); return; }
+  if (strcmp(choice, "packets") == 0) _openPacketMonitor();
+  else if (strcmp(choice, "foxhunt") == 0) _openFoxHunt();
+}
+
+void WifiChannelMonitorScreen::_openFoxHunt()
+{
+  if (_view != AP_PAUSED && _view != CLIENT_PAUSED) return;
+  uint8_t mac[6];
+  const bool client = _view == CLIENT_PAUSED;
+  const char* ssid = nullptr;
+  if (client) {
+    if (_clientSelected >= _frozenClientCount) return;
+    memcpy(mac, _frozenClients[_clientOrder[_clientSelected]].mac, 6);
+  } else {
+    if (_apSelected >= _frozenApCount) return;
+    const auto& ap = _frozenAps[_apOrder[_apSelected]];
+    memcpy(mac, ap.bssid, 6);
+    ssid = ap.ssid;
+  }
+  auto* hunt = new WifiFoxHuntScreen();
+  hunt->configureTarget(client, mac, _detailChannel, ssid);
+  _active = nullptr;
+  esp_wifi_set_promiscuous_rx_cb(nullptr);
+  delay(10);
+  esp_wifi_set_promiscuous(false);
+  Screen.push(hunt);
+}
+
 void WifiChannelMonitorScreen::_openPacketMonitor()
 {
   if (_view != PAUSED && _view != AP_PAUSED && _view != CLIENT_PAUSED) return;
@@ -796,7 +836,7 @@ void WifiChannelMonitorScreen::_renderHints(int x, int y, int w, int h, bool pau
   lcd.setTextDatum(BC_DATUM);
   if (paused) {
     lcd.drawString(_view == CLIENT_PAUSED ? "[Back] Resume" : "[Press] Select [Back] Resume", x + w / 2, y + h - 14);
-    lcd.drawString("[Hold] Analyze traffic", x + w / 2, y + h - 1);
+    lcd.drawString(_view == PAUSED ? "[Hold] Analyze traffic" : "[Hold] Options", x + w / 2, y + h - 1);
   } else {
     // Reserve the upper hint line to prevent vertical jumps on pause.
     if (_view == LIVE) {
