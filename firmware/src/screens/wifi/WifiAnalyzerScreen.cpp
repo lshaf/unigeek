@@ -366,7 +366,7 @@ void WifiAnalyzerScreen::_refreshClients(bool force)
     snprintf(m, sizeof(m), "%02X:%02X:%02X:%02X:%02X:%02X",
              macs[i][0], macs[i][1], macs[i][2], macs[i][3], macs[i][4], macs[i][5]);
     _rows[r].label = _clientLabels[i];
-    _rows[r].value = String(m) + " CH" + _entries[_selectedAp].channel;
+    _rows[r].value = String(m);
     r++;
   }
   _scrollView.setRows(_rows, r);
