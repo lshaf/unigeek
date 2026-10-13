@@ -77,6 +77,7 @@ private:
   uint8_t  _rank[_NUM_CH] = {};
   uint32_t _lastHop = 0;
   bool     _quitting = false;
+  bool     _holdHandled = false;
   bool     _firstSweep = true;
 
   uint32_t _chanAccum[_NUM_CH + 1] = {};

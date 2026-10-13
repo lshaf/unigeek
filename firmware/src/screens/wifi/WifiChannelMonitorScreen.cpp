@@ -178,6 +178,7 @@ void WifiChannelMonitorScreen::onInit()
   _sweepCh = 1;
   _firstSweep = true;
   _quitting = false;
+  _holdHandled = false;
   _pktCounter.store(0, std::memory_order_relaxed);
   _lastPaintedView = 255;
 
@@ -196,9 +197,20 @@ void WifiChannelMonitorScreen::onInit()
 void WifiChannelMonitorScreen::onUpdate()
 {
   if (_quitting) return;
+  // Trigger while held, rather than waiting for the release event.
+  if (Uni.Nav->isPressed() && Uni.Nav->currentDirection() == INavigation::DIR_PRESS &&
+      Uni.Nav->heldDuration() >= 700 && !_holdHandled &&
+      (_view == PAUSED || _view == AP_PAUSED || _view == CLIENT_PAUSED)) {
+    _holdHandled = true;
+    if (_view == PAUSED) _openPacketMonitor();
+    else _openOptions();
+    return;
+  }
+  // _holdHandled resets when the corresponding release event is consumed.
   if (Uni.Nav->wasPressed()) {
     const auto dir = Uni.Nav->readDirection();
     const uint32_t duration = Uni.Nav->pressDuration();
+    if (_holdHandled && dir == INavigation::DIR_PRESS) { _holdHandled = false; return; }
     // The classic graph is the entry view; Press opens the channel list.
     if (_view == GRAPH) {
       if (dir == INavigation::DIR_BACK) _quit();

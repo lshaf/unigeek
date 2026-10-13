@@ -49,6 +49,7 @@ private:
   struct SeenClient {
     uint8_t  mac[6]   = {};
     uint32_t lastSeen = 0;
+    uint8_t channel = 0;
   };
 
   struct Counters {
@@ -91,6 +92,7 @@ private:
 
   uint8_t    _clients[MAX_CLIENT][6] = {};
   uint8_t    _clientCount = 0;
+  uint8_t    _clientChannel = 0;
   SeenClient _seenClients[MAX_SEEN_CLIENTS] = {};
   uint8_t    _seenClientCount = 0;
   uint8_t    _clientMenuMacs[MAX_SEEN_CLIENTS + MAX_CLIENT][6] = {};
@@ -119,7 +121,7 @@ private:
   void _rebuildBssidItems();
   void _showClients(bool preserveSelection = false);
   void _discoverClients();
-  void _observeClient(const uint8_t* mac);
+  void _observeClient(const uint8_t* mac, uint8_t channel);
   bool _isSelectedClient(const uint8_t* mac) const;
   bool _isClientCandidate(const uint8_t* mac, const uint8_t* bssid) const;
   void _start();
