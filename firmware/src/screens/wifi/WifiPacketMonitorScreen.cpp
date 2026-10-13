@@ -16,8 +16,9 @@ bool macEq(const uint8_t* a, const uint8_t* b) { return memcmp(a, b, 6) == 0; }
 bool isZeroMac(const uint8_t* m) { static const uint8_t zero[6] = {}; return macEq(m, zero); }
 }
 
-void WifiPacketMonitorScreen::configureFromChannel(uint8_t channel, const uint8_t bssid[6], const uint8_t* client)
+void WifiPacketMonitorScreen::configureFromChannel(uint8_t channel, const uint8_t bssid[6], const uint8_t* client, const char* ssid)
 {
+  snprintf(_contextSsid, sizeof(_contextSsid), "%s", ssid ? ssid : "");
   _integrated = true;
   _initialChannel = channel;
   _channelMask = (channel >= 1 && channel <= MAX_CH) ? (1u << (channel - 1)) : 0;
@@ -607,7 +608,22 @@ void WifiPacketMonitorScreen::_renderMonitor()
     if (_bssidCount) {
       char mac[18];
       _formatMac(_bssids[0], mac, sizeof(mac));
-      snprintf(context, sizeof(context), "Access Point: %s", _bssidCount == 1 ? mac : "Multiple");
+      // Match WiFi Analyzer's SSID/BSSID terminology. The Channel Monitor
+      // passes the SSID directly; manual selection resolves it from scan cache.
+      const char* ssid = _contextSsid;
+      if (_bssidCount == 1 && !ssid[0]) {
+        for (uint8_t i = 0; i < _scanCount; ++i) {
+          if (macEq(_scan[i].bssid, _bssids[0])) {
+            ssid = _scan[i].ssid;
+            break;
+          }
+        }
+      }
+      snprintf(context, sizeof(context), "SSID: %s",
+               _bssidCount != 1 ? "Multiple" : (ssid[0] ? ssid : "<hidden>"));
+      // Truncate to the available screen width, without altering the SSID.
+      while (context[0] && lcd.textWidth(context) > contentW - 4)
+        context[strlen(context) - 1] = '\0';
       lcd.drawString(context, bodyX() + 2, y + 2);
       y += rowH;
     }
@@ -626,8 +642,8 @@ void WifiPacketMonitorScreen::_renderMonitor()
         y += rowH;
       }
     }
-    lcd.drawFastHLine(bodyX() + 2, bodyY() + contextH - 3,
-                      contentW - 4, TFT_DARKGREY);
+    lcd.drawFastHLine(bodyX(), bodyY() + contextH - 3,
+                      bodyW(), TFT_DARKGREY);
   }
 
   for (int slot = 0; slot < visible; slot++) {

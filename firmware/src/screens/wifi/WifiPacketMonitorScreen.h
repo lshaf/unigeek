@@ -12,7 +12,7 @@ public:
   const char* title() override { return _title; }
   bool inhibitPowerSave() override { return _state == STATE_RUNNING; }
 
-  void configureFromChannel(uint8_t channel, const uint8_t bssid[6], const uint8_t* client = nullptr);
+  void configureFromChannel(uint8_t channel, const uint8_t bssid[6], const uint8_t* client = nullptr, const char* ssid = nullptr);
   void onInit() override;
   void onUpdate() override;
   void onRender() override;
@@ -70,6 +70,7 @@ private:
   bool _integrated = false;
   uint8_t _initialChannel = 0;
   char  _title[20] = "Packet Monitor";
+  char  _contextSsid[33] = {};
 
   uint16_t _channelMask = 0;
   uint8_t  _bssids[MAX_BSSID][6] = {};
