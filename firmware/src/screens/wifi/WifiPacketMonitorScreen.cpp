@@ -52,7 +52,9 @@ void WifiPacketMonitorScreen::onUpdate()
     }
 
     const int rowH = Uni.Lcd.fontHeight() + 5;
-    const int visible = bodyH() / rowH;
+    const int contextRows = (_channelMask ? 1 : 0) + (_bssidCount ? 1 : 0) + (_clientCount ? _clientCount : 1);
+    const int contextH = contextRows ? contextRows * rowH + 5 : 0;
+    const int visible = ((bodyH() - contextH) / rowH) > 0 ? ((bodyH() - contextH) / rowH) : 1;
     const int maxScroll = (ROW_COUNT > visible) ? ROW_COUNT - visible : 0;
 
     if ((dir == INavigation::DIR_UP || dir == INavigation::DIR_LEFT) && _scroll > 0) {
@@ -572,7 +574,9 @@ void WifiPacketMonitorScreen::_renderMonitor()
   values[13] = _fmtCount(_counters.action.load(std::memory_order_relaxed));
 
   const int rowH = lcd.fontHeight() + 5;
-  int visible = bodyH() / rowH;
+  const int contextRows = (_channelMask ? 1 : 0) + (_bssidCount ? 1 : 0) + (_clientCount ? _clientCount : 1);
+  const int contextH = contextRows ? contextRows * rowH + 5 : 0;
+  int visible = (bodyH() - contextH) / rowH;
   if (visible < 1) visible = 1;
   if (visible > ROW_COUNT) visible = ROW_COUNT;
   const int maxScroll = ROW_COUNT > visible ? ROW_COUNT - visible : 0;
@@ -582,9 +586,53 @@ void WifiPacketMonitorScreen::_renderMonitor()
   lcd.setTextSize(1);
   const int contentW = bodyW() - 7;
 
+  // Fixed capture context: show only filters that are actually active.
+  // The counters below retain their independent scroll position.
+  if (contextRows) {
+    int y = bodyY();
+    char context[64];
+    lcd.setTextDatum(TL_DATUM);
+    lcd.setTextColor(TFT_LIGHTGREY, TFT_BLACK);
+    if (_channelMask) {
+      if ((_channelMask & (_channelMask - 1)) == 0) {
+        uint8_t ch = 1;
+        while (ch <= MAX_CH && !(_channelMask & (1u << (ch - 1)))) ++ch;
+        snprintf(context, sizeof(context), "Channel: %u", ch);
+      } else {
+        snprintf(context, sizeof(context), "Channel: Multiple");
+      }
+      lcd.drawString(context, bodyX() + 2, y + 2);
+      y += rowH;
+    }
+    if (_bssidCount) {
+      char mac[18];
+      _formatMac(_bssids[0], mac, sizeof(mac));
+      snprintf(context, sizeof(context), "Access Point: %s", _bssidCount == 1 ? mac : "Multiple");
+      lcd.drawString(context, bodyX() + 2, y + 2);
+      y += rowH;
+    }
+    if (!_clientCount) {
+      lcd.drawString("Clients: All", bodyX() + 2, y + 2);
+      y += rowH;
+    } else {
+      // Show all selected MACs, comma-separated, wrapping at MAC boundaries.
+      for (uint8_t i = 0; i < _clientCount; ++i) {
+        char mac[18];
+        _formatMac(_clients[i], mac, sizeof(mac));
+        snprintf(context, sizeof(context), "%s%s%s",
+                 i == 0 ? "Clients: " : "  ", mac,
+                 i + 1 < _clientCount ? "," : "");
+        lcd.drawString(context, bodyX() + 2, y + 2);
+        y += rowH;
+      }
+    }
+    lcd.drawFastHLine(bodyX() + 2, bodyY() + contextH - 3,
+                      contentW - 4, TFT_DARKGREY);
+  }
+
   for (int slot = 0; slot < visible; slot++) {
     const int row = _scroll + slot;
-    const int y = bodyY() + slot * rowH;
+    const int y = bodyY() + contextH + slot * rowH;
     if (row == 5) {
       lcd.drawFastHLine(bodyX() + 2, y + rowH / 2, contentW - 4, TFT_DARKGREY);
       continue;
@@ -601,12 +649,12 @@ void WifiPacketMonitorScreen::_renderMonitor()
 
   if (ROW_COUNT > visible) {
     const int barX = bodyX() + bodyW() - 3;
-    const int trackH = bodyH();
+    const int trackH = bodyH() - contextH;
     int thumbH = (trackH * visible) / ROW_COUNT;
     if (thumbH < 8) thumbH = 8;
     const int travel = trackH - thumbH;
-    const int thumbY = bodyY() + (maxScroll ? (travel * _scroll) / maxScroll : 0);
-    lcd.fillRect(barX, bodyY(), 2, trackH, TFT_DARKGREY);
+    const int thumbY = bodyY() + contextH + (maxScroll ? (travel * _scroll) / maxScroll : 0);
+    lcd.fillRect(barX, bodyY() + contextH, 2, trackH, TFT_DARKGREY);
     lcd.fillRect(barX, thumbY, 2, thumbH, Config.getThemeColor());
   }
   lcd.setTextDatum(TL_DATUM);
