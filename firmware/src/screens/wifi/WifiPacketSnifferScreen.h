@@ -47,6 +47,7 @@ private:
   struct SeenClient {
     uint8_t mac[6];
     uint32_t lastSeen;
+    uint8_t channel;
   };
   struct CaptureFrame {
     uint32_t timestamp;
@@ -89,6 +90,8 @@ private:
   SeenClient _seenClients[MAX_SEEN_CLIENTS] = {};
   uint8_t _seenClientCount = 0;
   uint8_t _clientMenuMacs[20][6] = {};
+  uint8_t _clientMenuChannels[20] = {};
+  uint8_t _clientChannel = 0;
   uint8_t _clientMenuCount = 0;
 
   ListItem _selectItems[22];
@@ -125,7 +128,7 @@ private:
   void _scanBssids();
   void _showMacs(bool preserveSelection = false);
   void _scanClients();
-  void _observeClient(const uint8_t* mac);
+  void _observeClient(const uint8_t* mac, uint8_t channel);
   bool _isSelectedMac(const uint8_t* mac) const;
   bool _isClientCandidate(const uint8_t* mac, const uint8_t* bssid) const;
   void _updateSummaries();
