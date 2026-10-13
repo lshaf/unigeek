@@ -96,6 +96,8 @@ private:
   void _renderDetails();
   void _renderClients();
   void _renderHints(int x, int y, int w, int h, bool paused);
+  void _openOptions();
+  void _openFoxHunt();
   void _openPacketMonitor();
   void _freezeApOrder();
   void _hop();
