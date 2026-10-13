@@ -291,7 +291,7 @@ void WifiBeaconFloodScreen::_startScan(bool forceScan)
       memcpy(_apList[i].bssid, WiFi.BSSID(i), 6);
       _apList[i].channel = (uint8_t)WiFi.channel(i);
       _apList[i].rssi = (int16_t)WiFi.RSSI(i);
-      snprintf(_apSubLabels[i], sizeof(_apSubLabels[i]), "%s", WiFi.BSSIDstr(i).c_str());
+      snprintf(_apSubLabels[i], sizeof(_apSubLabels[i]), "%s CH%u", WiFi.BSSIDstr(i).c_str(), (unsigned)_apList[i].channel);
     }
   }
 

@@ -44,7 +44,7 @@ private:
   SpamTarget _spamTarget = SPAM_BUILTIN;
 
   ApEntry  _apList[MAX_AP]          = {};
-  char     _apSubLabels[MAX_AP][18] = {};
+  char     _apSubLabels[MAX_AP][24] = {};
   int      _apCount     = 0;
   int      _floodTarget = -1;
 
