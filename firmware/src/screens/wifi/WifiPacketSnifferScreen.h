@@ -11,6 +11,7 @@ public:
   bool inhibitPowerSave() override { return _state == STATE_RUNNING || _state == STATE_PAUSED || _state == STATE_DETAILS; }
   ~WifiPacketSnifferScreen();
 
+  void configureFromChannel(uint8_t channel, const uint8_t bssid[6], const uint8_t* client);
   void onInit() override;
   void onUpdate() override;
   void onRender() override;
@@ -72,6 +73,7 @@ private:
   char _bssidSub[16] = "All";
   char _macSub[16] = "All";
   bool _saveCapture = false;
+  bool _integrated = false;
   char _filename[40] = {};
   char _capturePath[96] = {};
 
