@@ -16,10 +16,22 @@ bool macEq(const uint8_t* a, const uint8_t* b) { return memcmp(a, b, 6) == 0; }
 bool isZeroMac(const uint8_t* m) { static const uint8_t zero[6] = {}; return macEq(m, zero); }
 }
 
+void WifiPacketMonitorScreen::configureFromChannel(uint8_t channel, const uint8_t bssid[6], const uint8_t* client)
+{
+  _integrated = true;
+  _initialChannel = channel;
+  _channelMask = (channel >= 1 && channel <= MAX_CH) ? (1u << (channel - 1)) : 0;
+  if (bssid) memcpy(_bssids[0], bssid, 6);
+  _bssidCount = bssid ? 1 : 0;
+  _clientCount = client ? 1 : 0;
+  if (client) memcpy(_clients[0], client, 6);
+}
+
 void WifiPacketMonitorScreen::onInit()
 {
   _state = STATE_MENU;
-  _showMenu();
+  if (_integrated) _start();
+  else _showMenu();
 }
 
 void WifiPacketMonitorScreen::onUpdate()
@@ -34,7 +46,8 @@ void WifiPacketMonitorScreen::onUpdate()
 
     if (dir == INavigation::DIR_BACK) {
       _stop();
-      _showMenu();
+      if (_integrated) Screen.goBack();
+      else _showMenu();
       return;
     }
 
@@ -53,7 +66,7 @@ void WifiPacketMonitorScreen::onUpdate()
   }
 
   const uint32_t now = millis();
-  if (now - _lastHop >= HOP_MS) _hop();
+  if (!_integrated && now - _lastHop >= HOP_MS) _hop();
   if (now - _lastRateSample >= RATE_MS) _updateRate();
   if (now - _lastRefresh >= REFRESH_MS) {
     _lastRefresh = now;
@@ -177,7 +190,8 @@ void WifiPacketMonitorScreen::onBack()
   }
   if (_state == STATE_RUNNING) {
     _stop();
-    _showMenu();
+    if (_integrated) Screen.goBack();
+    else _showMenu();
     return;
   }
   Screen.goBack();
@@ -426,7 +440,7 @@ void WifiPacketMonitorScreen::_start()
   _resetCounters();
   _state = STATE_RUNNING;
   _scroll = 0;
-  _hopChannel = 1;
+  _hopChannel = _integrated ? _initialChannel : 1;
   _packetsPerSecond = 0;
   _activeInstance = this;
 

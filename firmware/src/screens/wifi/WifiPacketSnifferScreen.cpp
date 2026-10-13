@@ -517,7 +517,7 @@ void WifiPacketSnifferScreen::onUpdate() {
     if (Uni.Nav->wasPressed()) {
       auto d = Uni.Nav->readDirection();
       const uint32_t dur = Uni.Nav->pressDuration();
-      if (d == INavigation::DIR_BACK) { _stop(); _showMenu(); return; }
+      if (d == INavigation::DIR_BACK) { if (_state == STATE_PAUSED) _resume(); else { _stop(); _showMenu(); } return; }
       if (_state == STATE_RUNNING && d == INavigation::DIR_PRESS) { _pause(); return; }
       if (_state == STATE_PAUSED) {
         if (d == INavigation::DIR_UP && _pausedOffset + 1 < _ringCount) {
@@ -538,7 +538,7 @@ void WifiPacketSnifferScreen::onUpdate() {
           return;
         }
         if (d == INavigation::DIR_PRESS) {
-          if (dur >= HOLD_MS) _openDetails(); else _resume();
+          _openDetails();
           return;
         }
       }
@@ -610,8 +610,8 @@ void WifiPacketSnifferScreen::_renderPackets() {
   Uni.Lcd.setTextColor(TFT_DARKGREY, TFT_BLACK);
   Uni.Lcd.setTextDatum(BC_DATUM);
   const char* hint = _state == STATE_RUNNING
-                   ? "[Press] Pause   [Back] Exit"
-                   : "[Press] Resume  [Hold] Details";
+                   ? "[Press] Pause"
+                   : "[Press] Details  [Back] Resume";
   Uni.Lcd.drawString(hint, bodyX() + bodyW() / 2, footerY + footerH - 2);
 
 }
