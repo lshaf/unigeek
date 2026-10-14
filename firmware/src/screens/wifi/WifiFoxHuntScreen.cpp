@@ -16,15 +16,21 @@ static FoxClientSample _foxClients[20];
 static volatile int _foxClientCount = 0;
 static volatile uint8_t _foxScanChannel = 1;
 
-// Only frames originating from a station: probe requests or ToDS data.
-static bool _foxStationFrame(const uint8_t* p, uint16_t len) {
-  if (len < 24) return false;
+// Use both infrastructure data directions during discovery. Tracking keeps
+// station-originated frames only, so RSSI reflects the selected transmitter.
+static const uint8_t* _foxStationAddress(const uint8_t* p, uint16_t len,
+                                         bool discovery) {
+  if (len < 24) return nullptr;
   const uint8_t type = (p[0] >> 2) & 3;
   const uint8_t subtype = (p[0] >> 4) & 15;
-  const bool toDs = (p[1] & 1) != 0;
-  const bool fromDs = (p[1] & 2) != 0;
-  if (type == 0) return subtype == 4; // Probe request.
-  return type == 2 && toDs && !fromDs;
+  if (type == 0)
+    return (subtype == 4 || subtype == 0 || subtype == 2 || subtype == 11)
+             ? p + 10 : nullptr;
+  if (type != 2) return nullptr;
+  const uint8_t ds = p[1] & 3;
+  if (ds == 1) return p + 10;
+  if (discovery && ds == 2) return p + 4;
+  return nullptr;
 }
 static bool _foxValidMac(const uint8_t* mac) {
   if (mac[0] & 1) return false;
@@ -45,8 +51,8 @@ static void _foxWifiSnifferCb(void* buf, wifi_promiscuous_pkt_type_t type)
 
   // addr2 is the transmitter. Station tracking only accepts station frames.
   if (_foxDiscovering) {
-    if (!_foxStationFrame(pkt->payload, pkt->rx_ctrl.sig_len)) return;
-    const uint8_t* mac = pkt->payload + 10;
+    const uint8_t* mac = _foxStationAddress(pkt->payload, pkt->rx_ctrl.sig_len, true);
+    if (!mac) return;
     if (!_foxValidMac(mac)) return;
     int index = 0;
     for (; index < _foxClientCount; ++index)
@@ -63,7 +69,7 @@ static void _foxWifiSnifferCb(void* buf, wifi_promiscuous_pkt_type_t type)
     return;
   }
   // Only use client-originated frames in client mode.
-  if (_foxTrackClient && !_foxStationFrame(pkt->payload, pkt->rx_ctrl.sig_len)) return;
+  if (_foxTrackClient && !_foxStationAddress(pkt->payload, pkt->rx_ctrl.sig_len, false)) return;
   const uint8_t* a2 = pkt->payload + 10;
   if (memcmp(a2, _foxTargetBssid, 6) != 0) return;
 
@@ -174,11 +180,14 @@ void WifiFoxHuntScreen::_scanClients()
   esp_wifi_set_promiscuous_rx_cb(&_foxWifiSnifferCb);
   _foxDiscovering = true;
   esp_wifi_set_promiscuous(true);
-  // A short dwell per channel; rescan is available for intermittent clients.
-  for (uint8_t channel = 1; channel <= 13; ++channel) {
+  // Revisit each channel to catch intermittent station traffic.
+  // Two complete sweeps; retain discoveries between passes.
+  for (uint8_t pass = 0; pass < 2; ++pass) {
+    for (uint8_t channel = 1; channel <= 13; ++channel) {
     _foxScanChannel = channel;
     esp_wifi_set_channel(channel, WIFI_SECOND_CHAN_NONE);
-    delay(220);
+      delay(500);
+    }
   }
   esp_wifi_set_promiscuous(false);
   _foxDiscovering = false;
