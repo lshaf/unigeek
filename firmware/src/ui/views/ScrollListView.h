@@ -14,6 +14,12 @@ public:
   struct Row {
     const char* label;
     String      value;
+    // Optional grey text at right, used by WiFi Analyzer client MAC rows.
+    const char* secondary;
+
+    Row() : label(nullptr), value(), secondary(nullptr) {}
+    Row(const char* l, const String& v, const char* s = nullptr)
+      : label(l), value(v), secondary(s) {}
   };
 
   void setRows(Row* rows, uint16_t count) {
@@ -107,9 +113,19 @@ private:
       sp.setTextDatum(TL_DATUM);
       sp.drawString(label ? label : "", 2, 3);
 
-      sp.setTextColor(actionHint ? TFT_YELLOW : TFT_WHITE);
-      sp.setTextDatum(TR_DATUM);
-      sp.drawString(_rows[idx].value.c_str(), textW, 3);
+      if (_rows[idx].secondary) {
+        // Preserve the MAC and add a short grey vendor on the right.
+        sp.setTextColor(TFT_WHITE);
+        sp.setTextDatum(TL_DATUM);
+        sp.drawString(_rows[idx].value.c_str(), 2, 3);
+        sp.setTextColor(TFT_DARKGREY);
+        sp.setTextDatum(TR_DATUM);
+        sp.drawString(_rows[idx].secondary, textW, 3);
+      } else {
+        sp.setTextColor(actionHint ? TFT_YELLOW : TFT_WHITE);
+        sp.setTextDatum(TR_DATUM);
+        sp.drawString(_rows[idx].value.c_str(), textW, 3);
+      }
 
       sp.pushSprite(_x, rowY);
       sp.deleteSprite();
