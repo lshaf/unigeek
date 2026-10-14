@@ -393,8 +393,17 @@ void WifiPacketMonitorScreen::_showClients(bool preserveSelection)
   _clientItems[1] = {_clientLabels[1]};
 
   _clientMenuCount = 0;
+  uint8_t order[MAX_SEEN_CLIENTS];
+  for (uint8_t i = 0; i < _seenClientCount; ++i) order[i] = i;
+  for (uint8_t i = 1; i < _seenClientCount; ++i) {
+    uint8_t key = order[i], j = i;
+    while (j > 0 && _seenClients[order[j - 1]].rssi < _seenClients[key].rssi) {
+      order[j] = order[j - 1]; --j;
+    }
+    order[j] = key;
+  }
   for (uint8_t i = 0; i < _seenClientCount && _clientMenuCount < MAX_SEEN_CLIENTS + MAX_CLIENT; i++)
-    memcpy(_clientMenuMacs[_clientMenuCount++], _seenClients[i].mac, 6);
+    memcpy(_clientMenuMacs[_clientMenuCount++], _seenClients[order[i]].mac, 6);
 
   // Keep selected clients visible even if the latest passive discovery did not see them.
   for (uint8_t i = 0; i < _clientCount && _clientMenuCount < MAX_SEEN_CLIENTS + MAX_CLIENT; i++) {
@@ -447,7 +456,7 @@ bool WifiPacketMonitorScreen::_isClientCandidate(const uint8_t* mac, const uint8
   return true;
 }
 
-void WifiPacketMonitorScreen::_observeClient(const uint8_t* mac, uint8_t channel)
+void WifiPacketMonitorScreen::_observeClient(const uint8_t* mac, uint8_t channel, int8_t rssi)
 {
   if (!mac || isZeroMac(mac) || (mac[0] & 0x01)) return;
 
@@ -455,6 +464,7 @@ void WifiPacketMonitorScreen::_observeClient(const uint8_t* mac, uint8_t channel
   for (uint8_t i = 0; i < _seenClientCount; i++) {
     if (macEq(_seenClients[i].mac, mac)) {
       _seenClients[i].lastSeen = now;
+      _seenClients[i].rssi = rssi;
       if (channel >= 1 && channel <= MAX_CH) _seenClients[i].channel = channel;
       return;
     }
@@ -463,6 +473,7 @@ void WifiPacketMonitorScreen::_observeClient(const uint8_t* mac, uint8_t channel
   if (_seenClientCount < MAX_SEEN_CLIENTS) {
     memcpy(_seenClients[_seenClientCount].mac, mac, 6);
     _seenClients[_seenClientCount].lastSeen = now;
+    _seenClients[_seenClientCount].rssi = rssi;
     _seenClients[_seenClientCount++].channel = channel;
     return;
   }
@@ -473,6 +484,7 @@ void WifiPacketMonitorScreen::_observeClient(const uint8_t* mac, uint8_t channel
 
   memcpy(_seenClients[oldest].mac, mac, 6);
   _seenClients[oldest].lastSeen = now;
+  _seenClients[oldest].rssi = rssi;
   _seenClients[oldest].channel = channel;
 }
 
@@ -871,7 +883,7 @@ void WifiPacketMonitorScreen::_promiscuousCb(void* buf, wifi_promiscuous_pkt_typ
     const uint8_t subtype = (frame[0] >> 4) & 0x0F;
     if ((subtype == 4 || subtype == 0 || subtype == 2 || subtype == 11) &&
         self->_isClientCandidate(src, bssid))
-      self->_observeClient(src, pkt->rx_ctrl.channel);
+      self->_observeClient(src, pkt->rx_ctrl.channel, pkt->rx_ctrl.rssi);
   } else if (pktType == WIFI_PKT_DATA) {
     const bool toDS = (frame[1] & 0x01) != 0;
     const bool fromDS = (frame[1] & 0x02) != 0;
@@ -880,7 +892,7 @@ void WifiPacketMonitorScreen::_promiscuousCb(void* buf, wifi_promiscuous_pkt_typ
     const uint8_t* station = (toDS && !fromDS) ? src :
                              (!toDS && fromDS) ? dst : nullptr;
     if (station && self->_isClientCandidate(station, bssid))
-      self->_observeClient(station, pkt->rx_ctrl.channel);
+      self->_observeClient(station, pkt->rx_ctrl.channel, pkt->rx_ctrl.rssi);
   }
 
   // When Clients is opened, the same callback is used only for passive

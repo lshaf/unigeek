@@ -348,6 +348,16 @@ void WifiAnalyzerScreen::_scanStations()
              src.mac[0], src.mac[1], src.mac[2], src.mac[3], src.mac[4], src.mac[5]);
     snprintf(dst.sublabel, sizeof(dst.sublabel), "CH%u", (unsigned)src.channel);
   }
+  // Sort only after capture ends: callback indices remain stable during scanning.
+  for (uint8_t i = 1; i < _stationCount; ++i) {
+    auto station = _stations[i];
+    uint8_t j = i;
+    while (j > 0 && _stations[j - 1].rssi < station.rssi) {
+      _stations[j] = _stations[j - 1];
+      --j;
+    }
+    _stations[j] = station;
+  }
   if (!_stationCount) ShowStatusAction::show("No stations found");
   _showScan();
 }

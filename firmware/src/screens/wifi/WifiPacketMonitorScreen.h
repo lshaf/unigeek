@@ -50,6 +50,7 @@ private:
     uint8_t  mac[6]   = {};
     uint32_t lastSeen = 0;
     uint8_t channel = 0;
+    int8_t rssi = -127;
   };
 
   struct Counters {
@@ -122,7 +123,7 @@ private:
   void _rebuildBssidItems();
   void _showClients(bool preserveSelection = false);
   void _discoverClients();
-  void _observeClient(const uint8_t* mac, uint8_t channel);
+  void _observeClient(const uint8_t* mac, uint8_t channel, int8_t rssi);
   bool _isSelectedClient(const uint8_t* mac) const;
   bool _isClientCandidate(const uint8_t* mac, const uint8_t* bssid) const;
   void _start();

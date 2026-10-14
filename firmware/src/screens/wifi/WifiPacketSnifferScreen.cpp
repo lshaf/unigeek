@@ -287,9 +287,18 @@ void WifiPacketSnifferScreen::_showMacs(bool preserveSelection) {
   _selectItems[1] = {_selectLabels[1]};
 
   _clientMenuCount = 0;
+  uint8_t order[MAX_SEEN_CLIENTS];
+  for (uint8_t i = 0; i < _seenClientCount; ++i) order[i] = i;
+  for (uint8_t i = 1; i < _seenClientCount; ++i) {
+    uint8_t key = order[i], j = i;
+    while (j > 0 && _seenClients[order[j - 1]].rssi < _seenClients[key].rssi) {
+      order[j] = order[j - 1]; --j;
+    }
+    order[j] = key;
+  }
   for (uint8_t i = 0; i < _seenClientCount && _clientMenuCount < 20; ++i) {
-    memcpy(_clientMenuMacs[_clientMenuCount], _seenClients[i].mac, 6);
-    _clientMenuChannels[_clientMenuCount++] = _seenClients[i].channel;
+    memcpy(_clientMenuMacs[_clientMenuCount], _seenClients[order[i]].mac, 6);
+    _clientMenuChannels[_clientMenuCount++] = _seenClients[order[i]].channel;
   }
   // Keep manually selected clients visible even if the observed-client cache rotated them out.
   for (uint8_t i = 0; i < _macCount && _clientMenuCount < 20; ++i) {
@@ -324,12 +333,13 @@ bool WifiPacketSnifferScreen::_isClientCandidate(const uint8_t* mac, const uint8
   return !bssid || isZeroMac(bssid) || !macEq(mac, bssid);
 }
 
-void WifiPacketSnifferScreen::_observeClient(const uint8_t* mac, uint8_t channel) {
+void WifiPacketSnifferScreen::_observeClient(const uint8_t* mac, uint8_t channel, int8_t rssi) {
   if (!mac || isZeroMac(mac) || (mac[0] & 0x01)) return;
   const uint32_t now = millis();
   for (uint8_t i = 0; i < _seenClientCount; ++i) {
     if (macEq(_seenClients[i].mac, mac)) {
       _seenClients[i].lastSeen = now;
+      _seenClients[i].rssi = rssi;
       if (channel >= 1 && channel <= 13) _seenClients[i].channel = channel;
       return;
     }
@@ -337,6 +347,7 @@ void WifiPacketSnifferScreen::_observeClient(const uint8_t* mac, uint8_t channel
   if (_seenClientCount < MAX_SEEN_CLIENTS) {
     memcpy(_seenClients[_seenClientCount].mac, mac, 6);
     _seenClients[_seenClientCount].lastSeen = now;
+    _seenClients[_seenClientCount].rssi = rssi;
     _seenClients[_seenClientCount++].channel = channel;
     return;
   }
@@ -345,6 +356,7 @@ void WifiPacketSnifferScreen::_observeClient(const uint8_t* mac, uint8_t channel
     if (_seenClients[i].lastSeen < _seenClients[oldest].lastSeen) oldest = i;
   memcpy(_seenClients[oldest].mac, mac, 6);
   _seenClients[oldest].lastSeen = now;
+  _seenClients[oldest].rssi = rssi;
   _seenClients[oldest].channel = channel;
 }
 
@@ -806,14 +818,14 @@ void WifiPacketSnifferScreen::_promiscCb(void* buf, wifi_promiscuous_pkt_type_t 
       const uint8_t subtype = (frame[0] >> 4) & 0x0f;
       if ((subtype == 4 || subtype == 0 || subtype == 2 || subtype == 11) &&
           self->_isClientCandidate(p.src, p.bssid))
-        self->_observeClient(p.src, p.channel);
+        self->_observeClient(p.src, p.channel, p.rssi);
     } else if (type == WIFI_PKT_DATA && len >= 24) {
       const bool toDS = (frame[1] & 1) != 0;
       const bool fromDS = (frame[1] & 2) != 0;
       const uint8_t* station = (toDS && !fromDS) ? p.src :
                                (!toDS && fromDS) ? p.dst : nullptr;
       if (station && self->_isClientCandidate(station, p.bssid))
-        self->_observeClient(station, p.channel);
+        self->_observeClient(station, p.channel, p.rssi);
     }
   }
   if (self->_clientScanning) return;
