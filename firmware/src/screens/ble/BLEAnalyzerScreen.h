@@ -8,7 +8,7 @@ class BLEAnalyzerScreen : public ListScreen {
 public:
   const char* title() override
   {
-    return _state == STATE_DETAIL ? _detailTitle.c_str() : "BLE Analyzer";
+    return _state == STATE_DETAIL ? _detailTitle.c_str() : "BLE Scanner";
   }
 
   ~BLEAnalyzerScreen() override;
@@ -68,6 +68,7 @@ private:
   TextScrollView _textView;
   String         _detailTitle;
 
+  void _showOptions();
   void _showList();
   void _showInfo();
   void _showDetail(const char* titleText, const String& content);
