@@ -43,7 +43,7 @@ private:
   struct KnownAp { uint8_t bssid[6]; uint8_t channel; };
   KnownAp _knownAps[MAX_KNOWN_APS] = {};
   uint8_t _knownApCount = 0;
-  struct ApEntry { uint8_t bssid[6]; char ssid[33]; uint32_t packets; int8_t rssi; };
+  struct ApEntry { uint8_t bssid[6]; char ssid[33]; uint32_t packets; int8_t rssi; uint8_t security; int8_t wps; };
   static WifiChannelMonitorScreen* _active;
   static void _captureCb(void* buf, wifi_promiscuous_pkt_type_t type);
   portMUX_TYPE _apMux = portMUX_INITIALIZER_UNLOCKED;
@@ -98,6 +98,7 @@ private:
   void _renderClients();
   void _renderHints(int x, int y, int w, int h, bool paused);
   void _openOptions();
+  void _openSelectedDetails();
   void _openFoxHunt();
   void _openPacketMonitor();
   void _openPacketSniffer();

@@ -7,8 +7,18 @@
 #include "screens/wifi/WifiPacketMonitorScreen.h"
 #include "screens/wifi/WifiPacketSnifferScreen.h"
 #include "screens/wifi/WifiFoxHuntScreen.h"
+#include "screens/wifi/WifiChannelMonitorDetailsScreen.h"
 #include "ui/actions/InputSelectAction.h"
 #include "ui/actions/ShowStatusAction.h"
+
+// Security classification from complete Beacon/Probe Response information elements.
+// 0 unknown, 1 open, 2 WEP, 3 WPA, 4 WPA2, 5 WPA3, 6 WPA2/WPA3.
+static uint8_t classifyApSecurity(bool privacy, bool rsn, bool wpa,
+                                  bool sae, bool pskOrEnterprise) {
+  if (rsn) return sae ? (pskOrEnterprise ? 6 : 5) : 4;
+  if (wpa) return 3;
+  return privacy ? 2 : 1;
+}
 
 static std::atomic<uint32_t> _pktCounter{0};
 
@@ -66,12 +76,23 @@ void WifiChannelMonitorScreen::_captureCb(void* buf, wifi_promiscuous_pkt_type_t
   const bool apAnnouncement = type == WIFI_PKT_MGMT &&
                               (subtype == 8 || subtype == 5) && len >= 36;
   uint8_t announcedChannel = 0;
+  uint8_t observedSecurity = 0;
+  int8_t observedWps = -1;
   if (apAnnouncement) {
     size_t pos = 36;
+    bool validIes = true, rsn = false, wpa = false, sae = false;
+    bool pskOrEnterprise = false, wps = false;
+    const bool privacy = (f[34] & 0x10) != 0;
     while (pos + 2 <= len) {
       const uint8_t id = f[pos], n = f[pos + 1];
       pos += 2;
-      if (n > len - pos) break;
+      if (n > len - pos) {
+        // Some promiscuous RX frames include a four-byte FCS trailer.
+        // Accept it only when exactly four bytes remain (IE header included).
+        if (len - (pos - 2) == 4) { pos -= 2; break; }
+        validIes = false;
+        break;
+      }
       if (id == 0 && n > 0 && n <= 32) {
         for (uint8_t i = 0; i < n; ++i)
           name[i] = (f[pos + i] >= 32 && f[pos + i] < 127) ? (char)f[pos + i] : '_';
@@ -80,7 +101,44 @@ void WifiChannelMonitorScreen::_captureCb(void* buf, wifi_promiscuous_pkt_type_t
       } else if (id == 61 && n >= 1 && announcedChannel == 0) {
         announcedChannel = f[pos];
       }
+      if (id == 48 && n >= 8) {
+        rsn = true;
+        // RSN: version(2), group cipher(4), pairwise count(2), suites,
+        // AKM count(2), AKM suites. Only classify WPA3 when AKM is parsed.
+        size_t q = pos + 2 + 4;
+        const size_t end = pos + n;
+        if (q + 2 <= end) {
+          const uint16_t pairs = f[q] | (uint16_t(f[q + 1]) << 8);
+          q += 2;
+          if (pairs <= (end - q) / 4) {
+            q += size_t(pairs) * 4;
+            if (q + 2 <= end) {
+              const uint16_t akms = f[q] | (uint16_t(f[q + 1]) << 8);
+              q += 2;
+              if (akms <= (end - q) / 4) {
+                for (uint16_t k = 0; k < akms; ++k, q += 4) {
+                  if (f[q] == 0 && f[q + 1] == 0x0f && f[q + 2] == 0xac) {
+                    if (f[q + 3] == 8 || f[q + 3] == 9) sae = true;
+                    else pskOrEnterprise = true;
+                  }
+                }
+              }
+            }
+          }
+        }
+      } else if (id == 221 && n >= 4 && f[pos] == 0 &&
+                 f[pos + 1] == 0x50 && f[pos + 2] == 0xf2) {
+        if (f[pos + 3] == 1) wpa = true;
+        if (f[pos + 3] == 4) wps = true;
+      }
       pos += n;
+    }
+    // A complete IE sequence may be followed by the 802.11 FCS (4 bytes).
+    // Never interpret an arbitrary truncated IE as a valid announcement.
+    if (pos != len && pos + 4 != len) validIes = false;
+    if (validIes) {
+      observedSecurity = classifyApSecurity(privacy, rsn, wpa, sae, pskOrEnterprise);
+      observedWps = wps ? 1 : 0;
     }
     // A frame received on an overlapping adjacent channel is not evidence
     // that the AP actually operates on the channel currently being scanned.
@@ -148,12 +206,18 @@ void WifiChannelMonitorScreen::_captureCb(void* buf, wifi_promiscuous_pkt_type_t
   if (index < 0 && self->_apCount < MAX_APS) {
     index = self->_apCount++;
     memcpy(self->_aps[index].bssid, bssid, 6);
+    self->_aps[index].wps = -1;
   }
   if (index >= 0) {
     auto& ap = self->_aps[index];
     ++ap.packets;
     ap.rssi = pkt->rx_ctrl.rssi;
     if (name[0]) memcpy(ap.ssid, name, sizeof(name));
+    if (apAnnouncement && observedSecurity != 0) {
+      ap.security = observedSecurity;
+      // Preserve positive WPS detection across subsequent announcements.
+      if (observedWps > 0 || ap.wps != 1) ap.wps = observedWps;
+    }
   }
   portEXIT_CRITICAL(&self->_apMux);
 }
@@ -748,17 +812,40 @@ void WifiChannelMonitorScreen::_openOptions()
     {"Packet Sniffer", "sniffer", nullptr, 0, false},
   };
   static const InputSelectAction::Option targetOptions[] = {
+    {"Details", "details", nullptr, 0, false},
     {"Packet Monitor", "monitor", nullptr, 0, false},
     {"Packet Sniffer", "sniffer", nullptr, 0, false},
     {"Fox Hunt", "foxhunt", nullptr, 0, false},
   };
   const bool target = _view != PAUSED;
   const char* choice = InputSelectAction::popup("Options", target ? targetOptions : channelOptions,
-                                                target ? 3 : 2);
+                                                target ? 4 : 2);
   if (choice == nullptr) { render(); return; }
-  if (strcmp(choice, "monitor") == 0) _openPacketMonitor();
+  if (strcmp(choice, "details") == 0) _openSelectedDetails();
+  else if (strcmp(choice, "monitor") == 0) _openPacketMonitor();
   else if (strcmp(choice, "sniffer") == 0) _openPacketSniffer();
   else if (strcmp(choice, "foxhunt") == 0) _openFoxHunt();
+}
+
+void WifiChannelMonitorScreen::_openSelectedDetails()
+{
+  if (_view != AP_PAUSED && _view != CLIENT_PAUSED) return;
+  auto* details = new WifiChannelMonitorDetailsScreen();
+  if (_view == AP_PAUSED) {
+    if (_apSelected >= _frozenApCount) { delete details; return; }
+    const auto& ap = _frozenAps[_apOrder[_apSelected]];
+    details->configureAp(ap.ssid, ap.bssid, ap.rssi, _detailChannel, ap.security, ap.wps);
+  } else {
+    if (_clientSelected >= _frozenClientCount) { delete details; return; }
+    const auto& client = _frozenClients[_clientOrder[_clientSelected]];
+    details->configureClient(client.mac, client.rssi, _detailChannel,
+                             client.packets, _selectedBssid, _selectedSsid);
+  }
+  // Preserve the paused monitor and selected row while the details are open.
+  _active = nullptr;
+  esp_wifi_set_promiscuous_rx_cb(nullptr);
+  esp_wifi_set_promiscuous(false);
+  Screen.push(details);
 }
 
 void WifiChannelMonitorScreen::_openPacketSniffer()
