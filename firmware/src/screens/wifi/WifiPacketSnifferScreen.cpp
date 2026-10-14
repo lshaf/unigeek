@@ -518,6 +518,11 @@ void WifiPacketSnifferScreen::_endCapture() {
 void WifiPacketSnifferScreen::_start() {
   _ringHead = _ringCount = 0; _pausedOffset = 0; _pausedViewOffset = 0; _paused = false; _ringVersion = 0; _lastRenderedVersion = 0;
   if (!_beginCapture()) { if (_integrated) Screen.goBack(); else _showMenu(); return; }
+  _sessionStartMs = millis();
+  _lastStatsSampleMs = _sessionStartMs;
+  _lastStatsTotal = 0;
+  _packetsPerSecond = 0;
+  _totalPackets.store(0, std::memory_order_relaxed);
   _state = STATE_RUNNING; strncpy(_title, "Packet Sniffer", sizeof(_title));
   WiFi.mode(WIFI_STA); WiFi.disconnect();
   esp_wifi_set_promiscuous(false);
@@ -561,6 +566,15 @@ void WifiPacketSnifferScreen::_hop() {
 void WifiPacketSnifferScreen::onUpdate() {
   if (_state == STATE_RUNNING || _state == STATE_PAUSED || _state == STATE_DETAILS) {
     _flushCapture();
+    const uint32_t statsNow = millis();
+    if (statsNow - _lastStatsSampleMs >= 1000) {
+      const uint32_t total = _totalPackets.load(std::memory_order_relaxed);
+      const uint32_t dt = statsNow - _lastStatsSampleMs;
+      _packetsPerSecond = (uint32_t)((uint64_t)(total - _lastStatsTotal) * 1000ULL / dt);
+      _lastStatsTotal = total;
+      _lastStatsSampleMs = statsNow;
+      if (_state == STATE_RUNNING || _state == STATE_PAUSED) render();
+    }
     if ((_state == STATE_RUNNING || _captureActive) && millis() - _lastHop >= HOP_MS) { _lastHop = millis(); _hop(); }
     if (_state == STATE_DETAILS) {
       if (Uni.Nav->wasPressed()) { auto d = Uni.Nav->readDirection(); if (d == INavigation::DIR_BACK) { _state = STATE_PAUSED; render(); } }
@@ -576,7 +590,7 @@ void WifiPacketSnifferScreen::onUpdate() {
           ++_pausedOffset;
           const int fh = Uni.Lcd.fontHeight();
           const int lineH = fh * 2 + 4;
-          const int footerH = 24;
+          const int footerH = 38;
           const uint8_t slots = (uint8_t)((bodyH() - footerH) / lineH);
           if (slots > 0 && _pausedOffset >= _pausedViewOffset + slots)
             _pausedViewOffset = _pausedOffset - slots + 1;
@@ -625,7 +639,7 @@ void WifiPacketSnifferScreen::_renderPackets() {
   Uni.Lcd.setTextDatum(TL_DATUM);
   const int fh = Uni.Lcd.fontHeight();
   const int lineH = fh * 2 + 4;
-  const int footerH = 24;
+  const int footerH = 38;
   const int slots = (bodyH() - footerH) / lineH;
   int y = bodyY();
   for (int row = slots - 1; row >= 0; --row) {
@@ -646,9 +660,27 @@ void WifiPacketSnifferScreen::_renderPackets() {
     y += lineH;
   }
   const int footerY = bodyY() + bodyH() - footerH;
-  Uni.Lcd.drawFastHLine(bodyX(), footerY, bodyW(), TFT_DARKGREY);
-  Uni.Lcd.setTextSize(1);
-  // Status is independent of the navigation hint.
+  const int separatorY = footerY + 19;
+  const uint32_t seconds = (millis() - _sessionStartMs) / 1000;
+  char elapsed[20], totalText[20], rateText[20];
+  if (seconds >= 3600)
+    snprintf(elapsed, sizeof(elapsed), "%02lu:%02lu:%02lu",
+             (unsigned long)(seconds / 3600), (unsigned long)((seconds / 60) % 60),
+             (unsigned long)(seconds % 60));
+  else
+    snprintf(elapsed, sizeof(elapsed), "%02lu:%02lu",
+             (unsigned long)(seconds / 60), (unsigned long)(seconds % 60));
+  snprintf(totalText, sizeof(totalText), "%lu", (unsigned long)_totalPackets.load(std::memory_order_relaxed));
+  snprintf(rateText, sizeof(rateText), "%lu", (unsigned long)_packetsPerSecond);
+  Uni.Lcd.setTextDatum(TL_DATUM);
+  Uni.Lcd.setTextColor(TFT_LIGHTGREY, TFT_BLACK);
+  // Compact single-line stats; reserve the bottom line for navigation hints.
+  char stats[80];
+  snprintf(stats, sizeof(stats), "Time %s  Total %s  P/s %s", elapsed, totalText, rateText);
+  while (stats[0] && Uni.Lcd.textWidth(stats) > bodyW() - 4)
+    stats[strlen(stats) - 1] = '\0';
+  Uni.Lcd.drawString(stats, bodyX() + 2, footerY + 2);
+  Uni.Lcd.drawFastHLine(bodyX(), separatorY, bodyW(), TFT_DARKGREY);
   if (_captureActive) {
     char status[32];
     if (_captureDrops)
@@ -657,7 +689,7 @@ void WifiPacketSnifferScreen::_renderPackets() {
       snprintf(status, sizeof(status), "REC");
     Uni.Lcd.setTextColor(TFT_DARKGREY, TFT_BLACK);
     Uni.Lcd.setTextDatum(TR_DATUM);
-    Uni.Lcd.drawString(status, bodyX() + bodyW() - 2, footerY + 2);
+    Uni.Lcd.drawString(status, bodyX() + bodyW() - 2, separatorY + 2);
   }
   Uni.Lcd.setTextColor(TFT_DARKGREY, TFT_BLACK);
   Uni.Lcd.setTextDatum(BC_DATUM);
@@ -669,16 +701,54 @@ void WifiPacketSnifferScreen::_renderPackets() {
 }
 
 void WifiPacketSnifferScreen::_renderDetails() {
-  Uni.Lcd.fillRect(bodyX(), bodyY(), bodyW(), bodyH(), TFT_BLACK);
-  PacketMeta p; if (!_getByOffset(_pausedOffset, p)) return;
-  char src[18], dst[18], bssid[18], line[48];
-  _formatMac(p.src, src, sizeof(src)); _formatMac(p.dst, dst, sizeof(dst)); _formatMac(p.bssid, bssid, sizeof(bssid));
-  Uni.Lcd.setTextDatum(TL_DATUM); int y = bodyY() + 2; const int fh = Uni.Lcd.fontHeight() + 2;
-#define ROW(label, fmt, ...) do { snprintf(line, sizeof(line), label "  " fmt, ##__VA_ARGS__); Uni.Lcd.drawString(line, bodyX()+2, y); y += fh; } while(0)
-  ROW("Type", "%s", _kindName(p.kind)); ROW("Channel", "%u", p.channel); ROW("RSSI", "%d dBm", p.rssi); ROW("Length", "%u", p.length);
-  ROW("Source", "%s", src); ROW("Dest", "%s", dst); if (!isZeroMac(p.bssid)) ROW("BSSID", "%s", bssid);
-  if (p.kind == K_DEAUTH) ROW("Reason", "%u", p.info);
-#undef ROW
+  auto& lcd = Uni.Lcd;
+  lcd.fillRect(bodyX(), bodyY(), bodyW(), bodyH(), TFT_BLACK);
+  PacketMeta p;
+  if (!_getByOffset(_pausedOffset, p)) return;
+
+  char src[18], dst[18], bssid[18], value[32];
+  _formatMac(p.src, src, sizeof(src));
+  _formatMac(p.dst, dst, sizeof(dst));
+  _formatMac(p.bssid, bssid, sizeof(bssid));
+
+  lcd.setTextSize(1);
+  lcd.setTextDatum(TL_DATUM);
+  const int fh = lcd.fontHeight();
+  const int gap = 2;
+  int y = bodyY() + 2;
+  const int bottom = bodyY() + bodyH();
+  const int x = bodyX() + 2;
+  const int valueRight = bodyX() + bodyW() - 2;
+
+  // Use the same frame-category palette as Packet Monitor; auxiliary labels
+  // remain grey and values white. Avoid adding information not in PacketMeta.
+  auto row = [&](const char* label, const char* text, uint16_t color = TFT_WHITE) {
+    if (y + fh > bottom) return;
+    lcd.setTextColor(TFT_DARKGREY, TFT_BLACK);
+    lcd.drawString(label, x, y);
+    lcd.setTextColor(color, TFT_BLACK);
+    lcd.setTextDatum(TR_DATUM);
+    lcd.drawString(text, valueRight, y);
+    lcd.setTextDatum(TL_DATUM);
+    y += fh + gap;
+  };
+
+  row("Type", _kindName(p.kind), _kindColor(p.kind));
+  snprintf(value, sizeof(value), "%u", (unsigned)p.subtype);
+  row("Subtype", value);
+  snprintf(value, sizeof(value), "%u", (unsigned)p.channel);
+  row("Channel", value);
+  snprintf(value, sizeof(value), "%d dBm", (int)p.rssi);
+  row("RSSI", value);
+  snprintf(value, sizeof(value), "%u bytes", (unsigned)p.length);
+  row("Length", value);
+  row("Source", src);
+  row("Dest", dst);
+  if (!isZeroMac(p.bssid)) row("BSSID", bssid);
+  if (p.kind == K_DEAUTH) {
+    snprintf(value, sizeof(value), "%u", (unsigned)p.info);
+    row("Reason", value);
+  }
 }
 
 void WifiPacketSnifferScreen::onBack() {
@@ -748,6 +818,7 @@ void WifiPacketSnifferScreen::_promiscCb(void* buf, wifi_promiscuous_pkt_type_t 
   }
   if (self->_clientScanning) return;
   if (!self->_accept(p)) return;
+  self->_totalPackets.fetch_add(1, std::memory_order_relaxed);
   if (self->_captureActive) self->_queueCapture(pkt->payload, pkt->rx_ctrl.sig_len, p.timestamp);
   self->_push(p);
 }

@@ -3,6 +3,7 @@
 #include <WiFi.h>
 #include <esp_wifi.h>
 #include <FS.h>
+#include <atomic>
 #include "ui/templates/ListScreen.h"
 
 class WifiPacketSnifferScreen : public ListScreen {
@@ -106,6 +107,11 @@ private:
   volatile uint32_t _ringVersion = 0;
   uint32_t _lastRenderedVersion = 0;
   uint32_t _lastRenderMs = 0;
+  uint32_t _sessionStartMs = 0;
+  uint32_t _lastStatsSampleMs = 0;
+  uint32_t _lastStatsTotal = 0;
+  uint32_t _packetsPerSecond = 0;
+  std::atomic<uint32_t> _totalPackets{0};
   int8_t _pausedOffset = 0; // 0 newest, positive = older
   int8_t _pausedViewOffset = 0; // newest offset currently visible while paused
   bool _paused = false;
