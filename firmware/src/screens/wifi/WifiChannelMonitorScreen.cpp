@@ -203,19 +203,16 @@ void WifiChannelMonitorScreen::onUpdate()
       Uni.Nav->heldDuration() >= 700 && !_holdHandled &&
       (_view == PAUSED || _view == AP_PAUSED || _view == CLIENT_PAUSED)) {
     _holdHandled = true;
-    // The popup reads navigation synchronously. Consume the physical release
-    // before opening it, otherwise release can activate its first option.
-    while (Uni.Nav->isPressed()) delay(10);
-    if (Uni.Nav->wasPressed()) Uni.Nav->readDirection();
-    _holdHandled = false;
+    // Match PN532 Scan Tag: fire at the hold threshold and suppress the
+    // release so the synchronous popup cannot interpret it as a selection.
+    Uni.Nav->suppressCurrentPress();
     _openOptions();
     return;
   }
-  // _holdHandled resets when the corresponding release event is consumed.
+  if (_holdHandled && !Uni.Nav->isPressed()) _holdHandled = false;
   if (Uni.Nav->wasPressed()) {
     const auto dir = Uni.Nav->readDirection();
     const uint32_t duration = Uni.Nav->pressDuration();
-    if (_holdHandled && dir == INavigation::DIR_PRESS) { _holdHandled = false; return; }
     // The classic graph is the entry view; Press opens the channel list.
     if (_view == GRAPH) {
       if (dir == INavigation::DIR_BACK) _quit();
@@ -224,11 +221,6 @@ void WifiChannelMonitorScreen::onUpdate()
         _scroll = 0;
         render();
       }
-      return;
-    }
-    if (dir == INavigation::DIR_PRESS && duration >= 700 &&
-        (_view == PAUSED || _view == AP_PAUSED || _view == CLIENT_PAUSED)) {
-      _openOptions();
       return;
     }
     if (_view == CLIENTS || _view == CLIENT_PAUSED) {
