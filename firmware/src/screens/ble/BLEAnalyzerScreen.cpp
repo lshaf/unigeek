@@ -342,16 +342,30 @@ BLEAnalyzerScreen::~BLEAnalyzerScreen()
   if (_bleScan != nullptr) {
     _stopRssiWatch();   // unregister the callback before the scan object goes away
     _bleScan->stop();
-    NimBLEDevice::deinit(true);
+    if (!_externalTarget) NimBLEDevice::deinit(true);
     _bleScan = nullptr;
   }
+}
+
+void BLEAnalyzerScreen::configureTarget(NimBLEAdvertisedDevice& device)
+{
+  _externalTarget = true;
+  _selDev = device;
+  _devices[0] = device;
+  _devCount = 1;
+  _selectedDeviceIdx = 0;
 }
 
 void BLEAnalyzerScreen::onInit()
 {
   NimBLEDevice::init("");
   _bleScan = NimBLEDevice::getScan();
-  _doScan();
+  if (_externalTarget) {
+    _showInfo();
+    _startRssiWatch();
+  } else {
+    _doScan();
+  }
 }
 
 void BLEAnalyzerScreen::onItemSelected(uint8_t index)
@@ -385,6 +399,7 @@ void BLEAnalyzerScreen::onBack()
     _showInfo();
   } else if (_state == STATE_INFO) {
     _stopRssiWatch();
+    if (_externalTarget) { Screen.goBack(); return; }
     _selectedDeviceIdx = -1;
     _showList();
   } else {

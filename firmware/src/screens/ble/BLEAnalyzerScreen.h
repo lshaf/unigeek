@@ -12,6 +12,7 @@ public:
   }
 
   ~BLEAnalyzerScreen() override;
+  void configureTarget(NimBLEAdvertisedDevice& device);
   void onInit() override;
   void onUpdate() override;
   void onRender() override;
@@ -30,6 +31,7 @@ private:
   static constexpr uint8_t  kInfoRows   = 16;
   static constexpr uint32_t kScanSeconds = 5;   // one-shot blocking sweep
 
+  bool _externalTarget = false;
   NimBLEScan*       _bleScan           = nullptr;
   NimBLEScanResults _scanResults;
   NimBLEAdvertisedDevice _devices[kMaxDevices];
