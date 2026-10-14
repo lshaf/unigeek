@@ -163,24 +163,37 @@ static void _anObserveAp(const uint8_t* p, uint16_t len) {
   }
   memcpy(_anApNames[i].ssid, ssid, sizeof(ssid));
 }
-static bool _anStationFrame(const uint8_t* p, uint16_t len) {
-  if (len < 24) return false;
+// Identify infrastructure stations in both traffic directions, plus
+// station-originated management frames. Ignore AP-only management traffic.
+static const uint8_t* _anStationAddress(const uint8_t* p, uint16_t len,
+                                        const uint8_t** ap) {
+  if (len < 24) return nullptr;
   const uint8_t type = (p[0] >> 2) & 3;
   const uint8_t subtype = (p[0] >> 4) & 15;
-  if (type == 0) return subtype == 4;
-  return type == 2 && (p[1] & 3) == 1;
+  if (type == 0) {
+    if (subtype != 4 && subtype != 0 && subtype != 2 && subtype != 11)
+      return nullptr;
+    *ap = (subtype == 4) ? nullptr : p + 16;
+    return p + 10;
+  }
+  if (type != 2) return nullptr;
+  const uint8_t ds = p[1] & 3;
+  if (ds == 1) { *ap = p + 4; return p + 10; }
+  if (ds == 2) { *ap = p + 10; return p + 4; }
+  return nullptr;
 }
 static void _anStationCb(void* buf, wifi_promiscuous_pkt_type_t type) {
   if (type != WIFI_PKT_DATA && type != WIFI_PKT_MGMT) return;
   const auto* pkt = (const wifi_promiscuous_pkt_t*)buf;
   const uint8_t* p = pkt->payload;
-  if (type == WIFI_PKT_MGMT) _anObserveAp(p, pkt->rx_ctrl.sig_len);
-  if (!_anStationFrame(p, pkt->rx_ctrl.sig_len)) return;
-  const uint8_t* mac = p + 10;
-  if ((mac[0] & 1) != 0) return;
+  const uint16_t len = pkt->rx_ctrl.sig_len;
+  if (type == WIFI_PKT_MGMT) _anObserveAp(p, len);
+  const uint8_t* ap = nullptr;
+  const uint8_t* mac = _anStationAddress(p, len, &ap);
+  if (!mac || (mac[0] & 1)) return;
   bool nonzero = false;
   for (int j = 0; j < 6; ++j) nonzero |= mac[j] != 0;
-  if (!nonzero) return;
+  if (!nonzero || (ap && memcmp(mac, ap, 6) == 0)) return;
   int i = 0;
   for (; i < _anCount; ++i)
     if (memcmp(_anStations[i].mac, mac, 6) == 0) break;
@@ -192,9 +205,8 @@ static void _anStationCb(void* buf, wifi_promiscuous_pkt_type_t type) {
   }
   _anStations[i].rssi = pkt->rx_ctrl.rssi;
   _anStations[i].channel = _anChannel;
-  // ToDS data frames identify the receiving AP in addr1.
-  if (type == WIFI_PKT_DATA && (p[1] & 3) == 1) {
-    memcpy(_anStations[i].bssid, p + 4, 6);
+  if (ap && !(ap[0] & 1)) {
+    memcpy(_anStations[i].bssid, ap, 6);
     _anStations[i].hasAp = true;
   }
 }
@@ -307,10 +319,13 @@ void WifiAnalyzerScreen::_scanStations()
   esp_wifi_set_promiscuous(false);
   esp_wifi_set_promiscuous_rx_cb(&_anStationCb);
   esp_wifi_set_promiscuous(true);
-  for (uint8_t ch = 1; ch <= 13; ++ch) {
+  // Two complete sweeps; retain discoveries between passes.
+  for (uint8_t pass = 0; pass < 2; ++pass) {
+    for (uint8_t ch = 1; ch <= 13; ++ch) {
     _anChannel = ch;
     esp_wifi_set_channel(ch, WIFI_SECOND_CHAN_NONE);
-    delay(220);
+      delay(500);
+    }
   }
   esp_wifi_set_promiscuous(false);
   esp_wifi_set_promiscuous_rx_cb(nullptr);

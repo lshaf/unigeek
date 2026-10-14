@@ -259,15 +259,13 @@ void WifiPacketSnifferScreen::_scanClients() {
   esp_wifi_set_promiscuous_rx_cb(&_promiscCb);
   esp_wifi_set_promiscuous(true);
 
-  _hopChannel = 1;
-  _lastHop = 0;
-  _hop();
-  const uint32_t started = millis();
-  while (millis() - started < 3500) {
-    delay(10);
-    if (millis() - _lastHop >= HOP_MS) {
-      _lastHop = millis();
-      _hop();
+  // Discovery only: two 500 ms sweeps over channels 1-13.
+  // Preserve the accumulated station list across both passes.
+  // Do not change HOP_MS, which also controls normal packet capture.
+  for (uint8_t pass = 0; pass < 2; ++pass) {
+    for (uint8_t channel = 1; channel <= 13; ++channel) {
+      esp_wifi_set_channel(channel, WIFI_SECOND_CHAN_NONE);
+      delay(500);
     }
   }
 
