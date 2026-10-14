@@ -28,7 +28,7 @@ private:
   static constexpr uint32_t HOP_MS     = 250;
   static constexpr uint32_t REFRESH_MS = 500;
   static constexpr uint32_t RATE_MS    = 1000;
-  static constexpr uint8_t  ROW_COUNT  = 14;
+  static constexpr uint8_t  ROW_COUNT  = 15;
 
   enum State : uint8_t {
     STATE_MENU,
@@ -104,6 +104,7 @@ private:
   uint8_t  _hopChannel = 1;
   uint32_t _lastHop = 0;
   uint32_t _lastRefresh = 0;
+  uint32_t _sessionStartMs = 0;
   uint32_t _lastRateSample = 0;
   uint32_t _lastRateTotal = 0;
   uint32_t _packetsPerSecond = 0;

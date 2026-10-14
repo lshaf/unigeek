@@ -496,6 +496,7 @@ void WifiPacketMonitorScreen::_start()
 
   const uint32_t now = millis();
   _lastRefresh = 0;
+  _sessionStartMs = now;
   _lastRateSample = now;
   _lastRateTotal = 0;
   render();
@@ -569,17 +570,17 @@ void WifiPacketMonitorScreen::_updateRate()
 uint16_t WifiPacketMonitorScreen::_rowColor(uint8_t row)
 {
   switch (row) {
-    case 2:  return TFT_MAGENTA;  // Management
-    case 3:  return TFT_WHITE;    // Data
-    case 4:  return TFT_DARKGREY; // Control
-    case 6:  return TFT_GREEN;    // Beacon
-    case 7:
-    case 8:  return TFT_CYAN;     // Probe Request / Response
-    case 9:
+    case 3:  return TFT_MAGENTA;  // Management
+    case 4:  return TFT_WHITE;    // Data
+    case 5:  return TFT_DARKGREY; // Control
+    case 7:  return TFT_GREEN;    // Beacon
+    case 8:
+    case 9:  return TFT_CYAN;     // Probe Request / Response
     case 10:
-    case 13: return TFT_MAGENTA;  // Authentication / Association / Action
-    case 11: return TFT_RED;      // Deauth/Disassoc
-    case 12: return TFT_YELLOW;   // EAPOL
+    case 11:
+    case 14: return TFT_MAGENTA;  // Authentication / Association / Action
+    case 12: return TFT_RED;      // Deauth/Disassoc
+    case 13: return TFT_YELLOW;   // EAPOL
     default: return TFT_LIGHTGREY;
   }
 }
@@ -599,25 +600,35 @@ void WifiPacketMonitorScreen::_renderMonitor()
 {
   auto& lcd = Uni.Lcd;
   const char* labels[ROW_COUNT] = {
-    "Total", "Packets/sec", "Management", "Data", "Control", nullptr,
+    "Time elapsed", "Total", "Packets/sec", "Management", "Data", "Control", nullptr,
     "Beacon", "Probe Request", "Probe Response", "Authentication",
     "Association", "Deauth/Disassoc", "EAPOL", "Action",
   };
 
   String values[ROW_COUNT];
-  values[0]  = _fmtCount(_counters.total.load(std::memory_order_relaxed));
-  values[1]  = String(_packetsPerSecond);
-  values[2]  = _fmtCount(_counters.management.load(std::memory_order_relaxed));
-  values[3]  = _fmtCount(_counters.data.load(std::memory_order_relaxed));
-  values[4]  = _fmtCount(_counters.control.load(std::memory_order_relaxed));
-  values[6]  = _fmtCount(_counters.beacon.load(std::memory_order_relaxed));
-  values[7]  = _fmtCount(_counters.probeReq.load(std::memory_order_relaxed));
-  values[8]  = _fmtCount(_counters.probeResp.load(std::memory_order_relaxed));
-  values[9]  = _fmtCount(_counters.authentication.load(std::memory_order_relaxed));
-  values[10] = _fmtCount(_counters.association.load(std::memory_order_relaxed));
-  values[11] = _fmtCount(_counters.deauthDisassoc.load(std::memory_order_relaxed));
-  values[12] = _fmtCount(_counters.eapol.load(std::memory_order_relaxed));
-  values[13] = _fmtCount(_counters.action.load(std::memory_order_relaxed));
+  const uint32_t seconds = (millis() - _sessionStartMs) / 1000;
+  char elapsedText[20];
+  if (seconds >= 3600)
+    snprintf(elapsedText, sizeof(elapsedText), "%02lu:%02lu:%02lu",
+             (unsigned long)(seconds / 3600), (unsigned long)((seconds / 60) % 60),
+             (unsigned long)(seconds % 60));
+  else
+    snprintf(elapsedText, sizeof(elapsedText), "%02lu:%02lu",
+             (unsigned long)(seconds / 60), (unsigned long)(seconds % 60));
+  values[0]  = elapsedText;
+  values[1]  = _fmtCount(_counters.total.load(std::memory_order_relaxed));
+  values[2]  = String(_packetsPerSecond);
+  values[3]  = _fmtCount(_counters.management.load(std::memory_order_relaxed));
+  values[4]  = _fmtCount(_counters.data.load(std::memory_order_relaxed));
+  values[5]  = _fmtCount(_counters.control.load(std::memory_order_relaxed));
+  values[7]  = _fmtCount(_counters.beacon.load(std::memory_order_relaxed));
+  values[8]  = _fmtCount(_counters.probeReq.load(std::memory_order_relaxed));
+  values[9]  = _fmtCount(_counters.probeResp.load(std::memory_order_relaxed));
+  values[10] = _fmtCount(_counters.authentication.load(std::memory_order_relaxed));
+  values[11] = _fmtCount(_counters.association.load(std::memory_order_relaxed));
+  values[12] = _fmtCount(_counters.deauthDisassoc.load(std::memory_order_relaxed));
+  values[13] = _fmtCount(_counters.eapol.load(std::memory_order_relaxed));
+  values[14] = _fmtCount(_counters.action.load(std::memory_order_relaxed));
 
   const int rowH = lcd.fontHeight() + 5;
   const int contextRows = ((_channelMask || (_bssidCount == 0 && _clientCount == 1 && _clientChannel)) ? 1 : 0) + (_bssidCount ? 1 : 0) + (_clientCount ? _clientCount : 1);
@@ -697,7 +708,7 @@ void WifiPacketMonitorScreen::_renderMonitor()
   for (int slot = 0; slot < visible; slot++) {
     const int row = _scroll + slot;
     const int y = bodyY() + contextH + slot * rowH;
-    if (row == 5) {
+    if (row == 6) {
       lcd.drawFastHLine(bodyX() + 2, y + rowH / 2, contentW - 4, TFT_DARKGREY);
       continue;
     }
