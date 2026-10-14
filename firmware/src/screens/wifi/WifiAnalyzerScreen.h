@@ -47,6 +47,12 @@ private:
   int                 _selectedAp        = -1;
   ScrollListView::Row _rows[INFO_ROWS + 1 + MAX_CLIENTS];
   char                _clientLabels[MAX_CLIENTS][6];
+  uint8_t             _vendorMacs[MAX_CLIENTS][6] = {};
+  char                _vendorNames[MAX_CLIENTS][12] = {};
+  bool                _vendorDone[MAX_CLIENTS] = {};
+  uint8_t             _vendorCount = 0;
+  int                 _vendorPending = -1;
+  void _updateClientVendors();
   int                 _lastClientCount   = -1;
   uint32_t            _lastClientRefresh = 0;
 

@@ -6,6 +6,7 @@
 #include "screens/wifi/WifiMenuScreen.h"
 #include "screens/wifi/WifiChannelMonitorDetailsScreen.h"
 #include "ui/actions/ShowStatusAction.h"
+#include "services/VendorResolver.h"
 
 #include <WiFi.h>
 #include <esp_wifi.h>
@@ -222,6 +223,7 @@ void WifiAnalyzerScreen::onInit()
 void WifiAnalyzerScreen::onUpdate()
 {
   if (_state == STATE_CLIENTS) {
+    _updateClientVendors();
     if (Uni.Nav->wasPressed()) {
       auto dir = Uni.Nav->readDirection();
       if (dir == INavigation::DIR_BACK) { _stopClients(); _showScan(); return; }
@@ -464,6 +466,10 @@ void WifiAnalyzerScreen::_showClients(int index)
   _apWps = -1;
   _apMgmtFrames = 0;
 
+  _vendorCount = 0;
+  _vendorPending = -1;
+  memset(_vendorDone, 0, sizeof(_vendorDone));
+  memset(_vendorNames, 0, sizeof(_vendorNames));
   _lastClientCount   = -1;
   _lastRssiShown     = 1;
   _lastClientRefresh = millis();
@@ -509,6 +515,15 @@ void WifiAnalyzerScreen::_refreshClients(bool force)
   _lastRssiShown   = rssi;
   _lastWpsShown    = wps;
 
+  // Newly discovered clients are appended to the sniffer store.
+  // Keep the per-client vendor state stable across periodic redraws.
+  for (uint8_t i = _vendorCount; i < n; ++i) {
+    memcpy(_vendorMacs[i], macs[i], 6);
+    _vendorNames[i][0] = '\0';
+    _vendorDone[i] = false;
+  }
+  _vendorCount = n;
+
   // Live RSSI from the AP's own frames; falls back to the scan value until the
   // first beacon lands on this channel.
   if (rssi != 0) {
@@ -531,16 +546,41 @@ void WifiAnalyzerScreen::_refreshClients(bool force)
                                        : String("Listening...")};
   uint8_t r = INFO_ROWS + 1;
   for (uint8_t i = 0; i < n; i++) {
-    snprintf(_clientLabels[i], sizeof(_clientLabels[i]), "#%u", (unsigned)(i + 1));
     char m[18];
     snprintf(m, sizeof(m), "%02X:%02X:%02X:%02X:%02X:%02X",
              macs[i][0], macs[i][1], macs[i][2], macs[i][3], macs[i][4], macs[i][5]);
-    _rows[r].label = _clientLabels[i];
+    _rows[r].label = "";
     _rows[r].value = String(m);
+    _rows[r].secondary = _vendorNames[i];
     r++;
   }
   _scrollView.setRows(_rows, r);
 
-  snprintf(_title, sizeof(_title), "Clients (%u)", (unsigned)n);
+  strncpy(_title, "WiFi Analyzer", sizeof(_title));
   render();
+}
+
+void WifiAnalyzerScreen::_updateClientVendors()
+{
+  auto& resolver = VendorResolver::instance();
+  if (_vendorPending >= 0) {
+    VendorResolver::Result result;
+    const int i = _vendorPending;
+    if (!resolver.poll(_vendorMacs[i], result)) return;
+    _vendorPending = -1;
+    _vendorDone[i] = true;
+    if (result.found && result.name[0]) {
+      // Fixed-width column: never overlap the 17-character MAC address.
+      strncpy(_vendorNames[i], result.name, sizeof(_vendorNames[i]) - 1);
+      _vendorNames[i][sizeof(_vendorNames[i]) - 1] = '\0';
+      _refreshClients(true); // setRows preserves scroll offset
+    }
+  }
+  // One outstanding request at a time: the shared resolver has a single
+  // pending-result slot, so never overwrite it with a batch of MACs.
+  for (uint8_t i = 0; i < _vendorCount; ++i) {
+    if (_vendorDone[i]) continue;
+    if (resolver.request(_vendorMacs[i])) _vendorPending = i;
+    return;
+  }
 }
