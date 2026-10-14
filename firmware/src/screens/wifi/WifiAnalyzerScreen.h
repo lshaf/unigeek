@@ -65,6 +65,7 @@ private:
   void _showModes();
   void _scanStations();
   void _showStationDetails(int index);
+  void _openOptions(int index);
   bool _stationMode = false;
   static constexpr int MAX_STATIONS = 20;
   struct StationEntry { uint8_t mac[6]; uint8_t bssid[6]; int8_t rssi; uint8_t channel; bool hasAp; char macText[18]; char sublabel[12]; };
