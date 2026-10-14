@@ -5,6 +5,10 @@
 #include "core/AchievementManager.h"
 #include "screens/wifi/WifiMenuScreen.h"
 #include "screens/wifi/WifiChannelMonitorDetailsScreen.h"
+#include "screens/wifi/WifiPacketMonitorScreen.h"
+#include "screens/wifi/WifiPacketSnifferScreen.h"
+#include "screens/wifi/WifiFoxHuntScreen.h"
+#include "ui/actions/InputSelectAction.h"
 #include "ui/actions/ShowStatusAction.h"
 #include "services/VendorResolver.h"
 
@@ -258,8 +262,8 @@ void WifiAnalyzerScreen::onItemSelected(uint8_t index)
     }
     const int apIndex = (int)index - 1;
     if (_stationMode) {
-      if (apIndex >= 0 && apIndex < _stationCount) _showStationDetails(apIndex);
-    } else if (apIndex >= 0 && apIndex < _entryCount) _showClients(apIndex);
+      if (apIndex >= 0 && apIndex < _stationCount) _openOptions(apIndex);
+    } else if (apIndex >= 0 && apIndex < _entryCount) _openOptions(apIndex);
   }
 }
 
@@ -364,6 +368,75 @@ void WifiAnalyzerScreen::_showStationDetails(int index)
   details->configureStation(sta.mac, sta.rssi, sta.channel,
                             sta.hasAp ? sta.bssid : nullptr, apSsid);
   Screen.push(details);
+}
+
+// The scanner displays a completed snapshot, unlike the live Traffic Monitor.
+// A short press on a result opens the same target actions without a pause step.
+void WifiAnalyzerScreen::_openOptions(int index)
+{
+  static const InputSelectAction::Option options[] = {
+    {"Details", "details", nullptr, 0, false},
+    {"Packet Monitor", "monitor", nullptr, 0, false},
+    {"Packet Sniffer", "sniffer", nullptr, 0, false},
+    {"Fox Hunt", "foxhunt", nullptr, 0, false},
+  };
+  const char* choice = InputSelectAction::popup("Options", options, 4);
+  if (!choice) { render(); return; }
+
+  // Keep the scanner's existing Details screens and their navigation intact.
+  if (strcmp(choice, "details") == 0) {
+    if (_stationMode) _showStationDetails(index);
+    else _showClients(index);
+    return;
+  }
+
+  uint8_t mac[6] = {};
+  uint8_t bssid[6] = {};
+  const uint8_t* apFilter = nullptr;
+  const uint8_t* clientFilter = nullptr;
+  const char* ssid = nullptr;
+  uint8_t channel = 0;
+
+  if (_stationMode) {
+    const auto& station = _stations[index];
+    memcpy(mac, station.mac, 6);
+    clientFilter = mac;
+    channel = station.channel;
+    if (station.hasAp) {
+      memcpy(bssid, station.bssid, 6);
+      apFilter = bssid;
+      for (uint8_t i = 0; i < _anApNameCount; ++i) {
+        if (memcmp(_anApNames[i].bssid, bssid, 6) == 0) {
+          ssid = _anApNames[i].ssid;
+          break;
+        }
+      }
+    }
+  } else {
+    const auto& ap = _entries[index];
+    unsigned bytes[6] = {};
+    if (sscanf(ap.bssid, "%02x:%02x:%02x:%02x:%02x:%02x",
+               &bytes[0], &bytes[1], &bytes[2], &bytes[3], &bytes[4], &bytes[5]) != 6)
+      return;
+    for (int i = 0; i < 6; ++i) bssid[i] = (uint8_t)bytes[i];
+    apFilter = bssid;
+    ssid = ap.ssid;
+    channel = (uint8_t)atoi(ap.channel);
+  }
+
+  if (strcmp(choice, "monitor") == 0) {
+    auto* monitor = new WifiPacketMonitorScreen();
+    monitor->configureFromChannel(channel, apFilter, clientFilter, ssid);
+    Screen.push(monitor);
+  } else if (strcmp(choice, "sniffer") == 0) {
+    auto* sniffer = new WifiPacketSnifferScreen();
+    sniffer->configureFromChannel(channel, apFilter, clientFilter);
+    Screen.push(sniffer);
+  } else if (strcmp(choice, "foxhunt") == 0) {
+    auto* hunt = new WifiFoxHuntScreen();
+    hunt->configureTarget(_stationMode, _stationMode ? mac : bssid, channel, ssid);
+    Screen.push(hunt);
+  }
 }
 
 void WifiAnalyzerScreen::_doScan()
