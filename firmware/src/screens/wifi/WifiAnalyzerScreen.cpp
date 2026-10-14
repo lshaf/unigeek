@@ -4,6 +4,7 @@
 #include "core/ConfigManager.h"
 #include "core/AchievementManager.h"
 #include "screens/wifi/WifiMenuScreen.h"
+#include "screens/wifi/WifiChannelMonitorDetailsScreen.h"
 #include "ui/actions/ShowStatusAction.h"
 
 #include <WiFi.h>
@@ -121,12 +122,89 @@ static void _clientSnifferCb(void* buf, wifi_promiscuous_pkt_type_t type)
   _addClient(sta);
 }
 
+// Passive station discovery, matching Fox Hunt's 13-channel dwell and
+// station-originated frame filter. The callback is stopped before copying data.
+struct AnalyzerStationSample { uint8_t mac[6]; uint8_t bssid[6]; int8_t rssi; uint8_t channel; bool hasAp; };
+static AnalyzerStationSample _anStations[20];
+static volatile uint8_t _anCount = 0;
+static volatile uint8_t _anChannel = 1;
+// BSSID -> SSID cache collected from Beacon/Probe Response during the same sweep.
+struct AnalyzerApName { uint8_t bssid[6]; char ssid[33]; };
+static AnalyzerApName _anApNames[40];
+static volatile uint8_t _anApNameCount = 0;
+static void _anObserveAp(const uint8_t* p, uint16_t len) {
+  if (len < 38) return;
+  const uint8_t subtype = (p[0] >> 4) & 15;
+  if (subtype != 8 && subtype != 5) return;
+  const uint8_t* bssid = p + 16;
+  if (bssid[0] & 1) return;
+  char ssid[33] = {};
+  bool found = false;
+  for (size_t pos = 36; pos + 2 <= len;) {
+    const uint8_t id = p[pos], n = p[pos + 1];
+    pos += 2;
+    if (n > len - pos) break; // Includes possible trailing FCS.
+    if (id == 0 && n <= 32) {
+      if (n == 0) return; // Hidden SSID.
+      memcpy(ssid, p + pos, n);
+      found = true;
+      break;
+    }
+    pos += n;
+  }
+  if (!found) return;
+  uint8_t i = 0;
+  for (; i < _anApNameCount; ++i)
+    if (memcmp(_anApNames[i].bssid, bssid, 6) == 0) break;
+  if (i == 40) return;
+  if (i == _anApNameCount) {
+    memcpy(_anApNames[i].bssid, bssid, 6);
+    ++_anApNameCount;
+  }
+  memcpy(_anApNames[i].ssid, ssid, sizeof(ssid));
+}
+static bool _anStationFrame(const uint8_t* p, uint16_t len) {
+  if (len < 24) return false;
+  const uint8_t type = (p[0] >> 2) & 3;
+  const uint8_t subtype = (p[0] >> 4) & 15;
+  if (type == 0) return subtype == 4;
+  return type == 2 && (p[1] & 3) == 1;
+}
+static void _anStationCb(void* buf, wifi_promiscuous_pkt_type_t type) {
+  if (type != WIFI_PKT_DATA && type != WIFI_PKT_MGMT) return;
+  const auto* pkt = (const wifi_promiscuous_pkt_t*)buf;
+  const uint8_t* p = pkt->payload;
+  if (type == WIFI_PKT_MGMT) _anObserveAp(p, pkt->rx_ctrl.sig_len);
+  if (!_anStationFrame(p, pkt->rx_ctrl.sig_len)) return;
+  const uint8_t* mac = p + 10;
+  if ((mac[0] & 1) != 0) return;
+  bool nonzero = false;
+  for (int j = 0; j < 6; ++j) nonzero |= mac[j] != 0;
+  if (!nonzero) return;
+  int i = 0;
+  for (; i < _anCount; ++i)
+    if (memcmp(_anStations[i].mac, mac, 6) == 0) break;
+  if (i == 20) return;
+  if (i == _anCount) {
+    memcpy(_anStations[i].mac, mac, 6);
+    _anStations[i].hasAp = false;
+    ++_anCount;
+  }
+  _anStations[i].rssi = pkt->rx_ctrl.rssi;
+  _anStations[i].channel = _anChannel;
+  // ToDS data frames identify the receiving AP in addr1.
+  if (type == WIFI_PKT_DATA && (p[1] & 3) == 1) {
+    memcpy(_anStations[i].bssid, p + 4, 6);
+    _anStations[i].hasAp = true;
+  }
+}
+
 // ── Lifecycle ────────────────────────────────────────────────────────────────
 
 void WifiAnalyzerScreen::onInit()
 {
   _entryCount = 0;
-  _doScan();
+  _showModes();
 }
 
 void WifiAnalyzerScreen::onUpdate()
@@ -154,13 +232,20 @@ void WifiAnalyzerScreen::onUpdate()
 
 void WifiAnalyzerScreen::onItemSelected(uint8_t index)
 {
+  if (_state == STATE_MODE) {
+    _stationMode = index == 1;
+    _doScan();
+    return;
+  }
   if (_state == STATE_SCAN) {
     if (index == 0) {
       _doScan();
       return;
     }
     const int apIndex = (int)index - 1;
-    if (apIndex >= 0 && apIndex < _entryCount) _showClients(apIndex);
+    if (_stationMode) {
+      if (apIndex >= 0 && apIndex < _stationCount) _showStationDetails(apIndex);
+    } else if (apIndex >= 0 && apIndex < _entryCount) _showClients(apIndex);
   }
 }
 
@@ -180,7 +265,8 @@ void WifiAnalyzerScreen::onBack()
     _showScan();
   } else {
     WiFi.scanDelete();
-    Screen.goBack();
+    if (_state == STATE_SCAN) _showModes();
+    else Screen.goBack();
   }
 }
 
@@ -203,12 +289,73 @@ static const char* _strengthLabel(int rssi)
   return "Very Low";
 }
 
+void WifiAnalyzerScreen::_showModes()
+{
+  _state = STATE_MODE;
+  strncpy(_title, "WiFi Analyzer", sizeof(_title));
+  _modeItems[0] = {"Access Points"};
+  _modeItems[1] = {"Clients/Stations"};
+  setItems(_modeItems, 2);
+}
+
+void WifiAnalyzerScreen::_scanStations()
+{
+  _stationCount = 0;
+  _anCount = 0;
+  _anApNameCount = 0;
+  WiFi.mode(WIFI_STA);
+  esp_wifi_set_promiscuous(false);
+  esp_wifi_set_promiscuous_rx_cb(&_anStationCb);
+  esp_wifi_set_promiscuous(true);
+  for (uint8_t ch = 1; ch <= 13; ++ch) {
+    _anChannel = ch;
+    esp_wifi_set_channel(ch, WIFI_SECOND_CHAN_NONE);
+    delay(220);
+  }
+  esp_wifi_set_promiscuous(false);
+  esp_wifi_set_promiscuous_rx_cb(nullptr);
+  const uint8_t count = _anCount;
+  for (uint8_t i = 0; i < count && i < MAX_STATIONS; ++i) {
+    auto& dst = _stations[_stationCount++];
+    const auto& src = _anStations[i];
+    memcpy(dst.mac, src.mac, 6);
+    memcpy(dst.bssid, src.bssid, 6);
+    dst.rssi = src.rssi;
+    dst.channel = src.channel;
+    dst.hasAp = src.hasAp;
+    snprintf(dst.macText, sizeof(dst.macText), "%02X:%02X:%02X:%02X:%02X:%02X",
+             src.mac[0], src.mac[1], src.mac[2], src.mac[3], src.mac[4], src.mac[5]);
+    snprintf(dst.sublabel, sizeof(dst.sublabel), "CH%u", (unsigned)src.channel);
+  }
+  if (!_stationCount) ShowStatusAction::show("No stations found");
+  _showScan();
+}
+
+void WifiAnalyzerScreen::_showStationDetails(int index)
+{
+  const auto& sta = _stations[index];
+  auto* details = new WifiChannelMonitorDetailsScreen();
+  const char* apSsid = nullptr;
+  if (sta.hasAp) {
+    for (uint8_t i = 0; i < _anApNameCount; ++i) {
+      if (memcmp(_anApNames[i].bssid, sta.bssid, 6) == 0) {
+        apSsid = _anApNames[i].ssid;
+        break;
+      }
+    }
+  }
+  details->configureStation(sta.mac, sta.rssi, sta.channel,
+                            sta.hasAp ? sta.bssid : nullptr, apSsid);
+  Screen.push(details);
+}
+
 void WifiAnalyzerScreen::_doScan()
 {
   _state = STATE_SCAN;
   strncpy(_title, "WiFi Analyzer", sizeof(_title));
   render();
   ShowStatusAction::show("Scanning...", 0);
+  if (_stationMode) { _scanStations(); return; }
 
   WiFi.mode(WIFI_STA);
   WiFi.scanDelete();
@@ -260,6 +407,14 @@ void WifiAnalyzerScreen::_doScan()
 void WifiAnalyzerScreen::_rebuildScanItems()
 {
   _scanItems[0] = {"Rescan"};
+  if (_stationMode) {
+    for (int i = 0; i < _stationCount; ++i) {
+      _scanItems[i + 1] = {_stations[i].macText, _stations[i].sublabel};
+      _scanItems[i + 1].rssi = _stations[i].rssi;
+      _scanItems[i + 1].hasRssi = true;
+    }
+    return;
+  }
   for (int i = 0; i < _entryCount; i++) {
     _scanItems[i + 1]              = {_entries[i].ssid, _entries[i].bssidDisplay};
     _scanItems[i + 1].rssi         = (int16_t)_entries[i].rssiValue;
@@ -274,7 +429,7 @@ void WifiAnalyzerScreen::_showScan()
   strncpy(_title, "WiFi Analyzer", sizeof(_title));
 
   _rebuildScanItems();
-  setItems(_scanItems, _entryCount + 1);
+  setItems(_scanItems, (_stationMode ? _stationCount : _entryCount) + 1);
 }
 
 void WifiAnalyzerScreen::_showClients(int index)

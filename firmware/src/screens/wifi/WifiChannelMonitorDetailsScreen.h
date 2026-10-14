@@ -45,6 +45,25 @@ public:
     _count = 6;
   }
 
+  // Analyzer station snapshot: no packet counter and no vendor lookup.
+  // An unassociated probe-request station may have no known AP.
+  void configureStation(const uint8_t* mac, int rssi, uint8_t channel,
+                        const uint8_t* apBssid, const char* apSsid) {
+    _client = true;
+    _setMac(_mac, mac);
+    if (apBssid) _setMac(_apMac, apBssid);
+    else _apMac = "Unknown";
+    _ssid = apSsid && apSsid[0] ? apSsid : "Unknown";
+    _rssi = String(rssi) + " dBm";
+    _channel = String(channel);
+    _rows[0] = {"MAC", _mac};
+    _rows[1] = {"RSSI", _rssi};
+    _rows[2] = {"Channel", _channel};
+    _rows[3] = {"AP BSSID", _apMac};
+    _rows[4] = {"AP SSID", _ssid};
+    _count = 5;
+  }
+
   void onInit() override { _list.setRows(_rows, _count); _list.resetScroll(); }
   void onRender() override { _list.render(bodyX(), bodyY(), bodyW(), bodyH()); }
   void onUpdate() override {
