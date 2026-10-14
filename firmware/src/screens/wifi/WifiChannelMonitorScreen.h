@@ -22,7 +22,7 @@ public:
       }
       return _headerTitle;
     }
-    return "Channel Monitor";
+    return "Traffic Monitor";
   }
   bool inhibitPowerSave() override { return true; }
 
