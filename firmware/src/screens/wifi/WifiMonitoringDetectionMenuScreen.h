@@ -13,8 +13,8 @@ public:
 
 private:
   ListItem _items[7] = {
-    {"WiFi Analyzer"},
-    {"Channel Monitor"},
+    {"WiFi Scanner"},
+    {"Traffic Monitor"},
     {"Packet Monitor"},
     {"Packet Sniffer"},
     {"WiFi Watchdog"},
