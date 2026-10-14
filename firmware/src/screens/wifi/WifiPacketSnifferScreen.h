@@ -50,6 +50,7 @@ private:
     uint8_t mac[6];
     uint32_t lastSeen;
     uint8_t channel;
+    int8_t rssi;
   };
   struct CaptureFrame {
     uint32_t timestamp;
@@ -136,7 +137,7 @@ private:
   void _scanBssids();
   void _showMacs(bool preserveSelection = false);
   void _scanClients();
-  void _observeClient(const uint8_t* mac, uint8_t channel);
+  void _observeClient(const uint8_t* mac, uint8_t channel, int8_t rssi);
   bool _isSelectedMac(const uint8_t* mac) const;
   bool _isClientCandidate(const uint8_t* mac, const uint8_t* bssid) const;
   void _updateSummaries();

@@ -192,6 +192,15 @@ void WifiFoxHuntScreen::_scanClients()
   esp_wifi_set_promiscuous(false);
   _foxDiscovering = false;
   esp_wifi_set_promiscuous_rx_cb(nullptr);
+  for (int i = 1; i < _foxClientCount; ++i) {
+    FoxClientSample sample = _foxClients[i];
+    int j = i;
+    while (j > 0 && _foxClients[j - 1].rssi < sample.rssi) {
+      _foxClients[j] = _foxClients[j - 1];
+      --j;
+    }
+    _foxClients[j] = sample;
+  }
   const int count = _foxClientCount;
   for (int i = 0; i < count && i < MAX_SCAN; ++i) {
     const FoxClientSample& sample = _foxClients[i];
