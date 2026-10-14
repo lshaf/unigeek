@@ -51,8 +51,8 @@ void WifiPacketSnifferScreen::configureFromChannel(uint8_t channel, const uint8_
 }
 
 void WifiPacketSnifferScreen::onInit() {
-  if (_integrated) _start();
-  else _showMenu();
+  // Contextual entry preselects filters but leaves capture settings editable.
+  _showMenu();
 }
 
 void WifiPacketSnifferScreen::_updateSummaries() {
