@@ -879,7 +879,14 @@ void WifiChannelMonitorScreen::_renderHints(int x, int y, int w, int h, bool pau
   lcd.setTextColor(TFT_DARKGREY, TFT_BLACK);
   lcd.setTextDatum(BC_DATUM);
   if (paused) {
-    lcd.drawString(_view == CLIENT_PAUSED ? "[Back] Resume" : "[Press] Select [Back] Resume", x + w / 2, y + h - 14);
+    const char* resumeHint = _view == CLIENT_PAUSED
+        ? "[Back] Resume Scan" : "[Press] Select [Back] Resume Scan";
+    // Keep the hint on one line when possible; fall back on compact wording.
+    if (lcd.textWidth(resumeHint) > w - 6) {
+      resumeHint = _view == CLIENT_PAUSED
+          ? "[Back] Resume" : "[Press] Select [Back] Resume";
+    }
+    lcd.drawString(resumeHint, x + w / 2, y + h - 14);
     lcd.drawString("[Hold] Options", x + w / 2, y + h - 1);
   } else {
     // Reserve the upper hint line to prevent vertical jumps on pause.
