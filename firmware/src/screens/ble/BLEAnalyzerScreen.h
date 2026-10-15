@@ -8,10 +8,11 @@ class BLEAnalyzerScreen : public ListScreen {
 public:
   const char* title() override
   {
-    return _state == STATE_DETAIL ? _detailTitle.c_str() : "BLE Analyzer";
+    return _state == STATE_DETAIL ? _detailTitle.c_str() : "BLE Scanner";
   }
 
   ~BLEAnalyzerScreen() override;
+  void configureTarget(NimBLEAdvertisedDevice& device);
   void onInit() override;
   void onUpdate() override;
   void onRender() override;
@@ -30,6 +31,7 @@ private:
   static constexpr uint8_t  kInfoRows   = 16;
   static constexpr uint32_t kScanSeconds = 5;   // one-shot blocking sweep
 
+  bool _externalTarget = false;
   NimBLEScan*       _bleScan           = nullptr;
   NimBLEScanResults _scanResults;
   NimBLEAdvertisedDevice _devices[kMaxDevices];
@@ -68,6 +70,7 @@ private:
   TextScrollView _textView;
   String         _detailTitle;
 
+  void _showOptions();
   void _showList();
   void _showInfo();
   void _showDetail(const char* titleText, const String& content);

@@ -1,4 +1,7 @@
 #include "BLEDetectorScreen.h"
+#include "BLEAnalyzerScreen.h"
+#include "BLEFoxHuntScreen.h"
+#include "ui/actions/InputSelectAction.h"
 #include "core/Device.h"
 #include "core/ScreenManager.h"
 #include "core/AchievementManager.h"
@@ -65,41 +68,68 @@ BLEDetectorScreen::~BLEDetectorScreen()
 void BLEDetectorScreen::onInit()
 {
   _instance = this;
+  _paused = false;
   _startScan();
   _draw();
 }
 
 void BLEDetectorScreen::onUpdate()
 {
+  // Child screens share the NimBLE scanner. Reattach our callback when
+  // returning, but keep the frozen selection until Back resumes scanning.
+  if (_returningFromAction) {
+    _returningFromAction = false;
+    _bleScan = NimBLEDevice::getScan();
+    if (_bleScan) {
+      _bleScan->stop();
+      _bleScan->setAdvertisedDeviceCallbacks(nullptr, false);
+    }
+    _chromeDrawn = false;
+    render();
+  }
+
   if (Uni.Nav->wasPressed()) {
     auto dir = Uni.Nav->readDirection();
-    if (dir == INavigation::DIR_BACK || dir == INavigation::DIR_PRESS) {
-      _stopScan();
-      Screen.goBack();
-      return;
-    }
-    if (dir == INavigation::DIR_UP && _scrollOffset > 0) {
-      _scrollOffset--;
+    if (_paused) {
+      if (dir == INavigation::DIR_BACK) {
+        _resume();
+        return;
+      }
+      if (dir == INavigation::DIR_PRESS && _deviceCount > 0) {
+        _showOptions();
+        return;
+      }
+      if (dir == INavigation::DIR_UP && _selected > 0) --_selected;
+      if (dir == INavigation::DIR_DOWN && _selected + 1 < _deviceCount) ++_selected;
+      _ensureSelectedVisible();
+      _chromeDrawn = false;
+      render();
+    } else {
+      if (dir == INavigation::DIR_PRESS) {
+        _pause();
+        return;
+      }
+      if (dir == INavigation::DIR_BACK) {
+        _stopScan();
+        Screen.goBack();
+        return;
+      }
+      if (dir == INavigation::DIR_UP && _scrollOffset > 0) --_scrollOffset;
+      if (dir == INavigation::DIR_DOWN) {
+        int total = _deviceCount + (_alertCount ? min(_alertCount, 5) + 1 : 0) + 1;
+        int visible = max(1, (bodyH() - 29) / 14);
+        if (_scrollOffset + visible < total) ++_scrollOffset;
+      }
       _chromeDrawn = false;
       render();
     }
-    if (dir == INavigation::DIR_DOWN) {
-      int total = _deviceCount + _alertCount;
-      int visible = bodyH() / 14;
-      if (_scrollOffset + visible < total + 2) {
-        _scrollOffset++;
-        _chromeDrawn = false;
-        render();
-      }
-    }
   }
 
-  if (_scanning && _bleScan && !_bleScan->isScanning()) {
+  if (_scanning && _bleScan && !_bleScan->isScanning())
     _bleScan->start(0, nullptr, false);
-  }
 
   uint32_t now = millis();
-  if (now - _lastDrawMs >= 500) {
+  if (!_paused && now - _lastDrawMs >= 500) {
     _purgeOld();
     _lastDrawMs = now;
     render();
@@ -148,6 +178,7 @@ void BLEDetectorScreen::_purgeOld()
   for (int i = 0; i < _deviceCount; ) {
     if (now - _devices[i].lastSeen > 5000) {
       _devices[i] = _devices[_deviceCount - 1];
+      _snapshots[i] = _snapshots[_deviceCount - 1];
       _deviceCount--;
     } else {
       i++;
@@ -244,6 +275,7 @@ void BLEDetectorScreen::_onDevice(NimBLEAdvertisedDevice* dev)
     idx = _deviceCount++;
   }
 
+  _snapshots[idx] = *dev;
   auto& d = _devices[idx];
   strncpy(d.mac, mac, sizeof(d.mac) - 1);
   d.mac[sizeof(d.mac) - 1] = '\0';
@@ -263,6 +295,69 @@ void BLEDetectorScreen::_onDevice(NimBLEAdvertisedDevice* dev)
   d.spoofed = spoofed;
   d.distance = distance;
   d.lastSeen = millis();
+}
+
+void BLEDetectorScreen::_pause()
+{
+  if (_bleScan) _bleScan->stop();
+  _scanning = false;
+  _paused = true;
+  _selected = 0;
+  _scrollOffset = 0;
+  _chromeDrawn = false;
+  render();
+}
+
+void BLEDetectorScreen::_resume()
+{
+  _paused = false;
+  _scrollOffset = 0;
+  _chromeDrawn = false;
+  if (!_bleScan) _bleScan = NimBLEDevice::getScan();
+  if (_bleScan) {
+    static ScanCallbacks callbacks;
+    _bleScan->setAdvertisedDeviceCallbacks(&callbacks, true);
+    _bleScan->setActiveScan(true);
+    _bleScan->setInterval(100);
+    _bleScan->setWindow(99);
+    _bleScan->setMaxResults(0);
+    _bleScan->start(0, nullptr, false);
+    _scanning = true;
+  }
+  render();
+}
+
+void BLEDetectorScreen::_ensureSelectedVisible()
+{
+  const int visible = max(1, (bodyH() - 29) / 14);
+  const int row = _selected + 1; // counts header is row zero
+  if (row < _scrollOffset) _scrollOffset = row;
+  if (row >= _scrollOffset + visible) _scrollOffset = row - visible + 1;
+}
+
+void BLEDetectorScreen::_showOptions()
+{
+  if (_selected < 0 || _selected >= _deviceCount) return;
+  static const InputSelectAction::Option options[] = {
+    {"Details", "details", nullptr, 0, false},
+    {"Fox Hunt", "fox", nullptr, 0, false},
+  };
+  const char* choice = InputSelectAction::popup("Options", options, 2);
+  if (!choice) { _chromeDrawn = false; render(); return; }
+
+  // Copy the snapshot before opening a child, which may reuse NimBLE buffers.
+  NimBLEAdvertisedDevice target = _snapshots[_selected];
+  if (strcmp(choice, "details") == 0) {
+    auto* details = new BLEAnalyzerScreen();
+    details->configureTarget(target);
+    _returningFromAction = true;
+    Screen.push(details);
+  } else if (strcmp(choice, "fox") == 0) {
+    auto* fox = new BLEFoxHuntScreen();
+    fox->configureTarget(target);
+    _returningFromAction = true;
+    Screen.push(fox);
+  }
 }
 
 int BLEDetectorScreen::_findByMac(const char* mac)
@@ -306,13 +401,31 @@ void BLEDetectorScreen::_draw()
 
   static constexpr int rowH = 14;
   const int contentY = bodyY() + 2;
-  const int contentH = bodyH() - 2;
+  const int contentH = bodyH() - 29;
   const int visibleRows = contentH / rowH;
 
   if (!_chromeDrawn) {
     lcd.fillRect(bodyX(), bodyY(), bodyW(), bodyH(), TFT_BLACK);
     _chromeDrawn = true;
   }
+
+  // Match Traffic Monitor: a separated, two-line footer with compact hints.
+  // Keep the upper line reserved in LIVE to avoid content jumping on pause.
+  const int footerTop = bodyY() + bodyH() - 27;
+  lcd.fillRect(bodyX(), footerTop, bodyW(), 27, TFT_BLACK);
+  lcd.drawFastHLine(bodyX(), footerTop, bodyW(), TFT_DARKGREY);
+  lcd.setTextDatum(BC_DATUM);
+  lcd.setTextColor(TFT_DARKGREY, TFT_BLACK);
+  if (_paused) {
+    lcd.drawString("[Back] Resume Scan", bodyX() + bodyW() / 2,
+                   bodyY() + bodyH() - 14);
+    lcd.drawString("[Press] Options", bodyX() + bodyW() / 2,
+                   bodyY() + bodyH() - 1);
+  } else {
+    lcd.drawString("[Press] Pause", bodyX() + bodyW() / 2,
+                   bodyY() + bodyH() - 1);
+  }
+  lcd.setTextDatum(TL_DATUM);
 
   // Empty state — single centered sprite, clear surrounding rows.
   if (_deviceCount == 0 && _alertCount == 0) {
@@ -379,6 +492,9 @@ void BLEDetectorScreen::_draw()
     else if (strcmp(d.type, "Skimmer") == 0) dotColor = TFT_RED;
     else if (strcmp(d.type, "AirTag")  == 0) dotColor = TFT_BLUE;
     else if (strncmp(d.type, "BitChat", 7) == 0) dotColor = TFT_MAGENTA;
+    if (_paused && i == _selected) {
+      sp.fillRect(0, rowY, bodyW(), rowH, TFT_DARKGREY);
+    }
     sp.fillCircle(4, rowY + 3, 3, dotColor);
 
     char label[24];

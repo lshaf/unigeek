@@ -10,6 +10,7 @@ public:
   bool inhibitPowerSave() override { return _state == STATE_TRACK; }
 
   ~BLEFoxHuntScreen() override;
+  void configureTarget(NimBLEAdvertisedDevice& device);
   void onInit() override;
   void onUpdate() override;
   void onRender() override;
@@ -27,6 +28,7 @@ private:
   NimBLEScanResults _scanResults;
   NimBLEAdvertisedDevice _devices[kMaxDevices];
   NimBLEAdvertisedDevice _selDev;
+  bool _externalTarget = false;
 
   String   _labels[kMaxDevices];
   String   _subs[kMaxDevices];

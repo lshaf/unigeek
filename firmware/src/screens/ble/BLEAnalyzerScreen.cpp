@@ -1,4 +1,7 @@
 #include "BLEAnalyzerScreen.h"
+#include "BLEFoxHuntScreen.h"
+#include "ui/actions/InputSelectAction.h"
+#include "core/ScreenManager.h"
 #include "core/Device.h"
 #include "core/ScreenManager.h"
 #include "core/AchievementManager.h"
@@ -339,16 +342,30 @@ BLEAnalyzerScreen::~BLEAnalyzerScreen()
   if (_bleScan != nullptr) {
     _stopRssiWatch();   // unregister the callback before the scan object goes away
     _bleScan->stop();
-    NimBLEDevice::deinit(true);
+    if (!_externalTarget) NimBLEDevice::deinit(true);
     _bleScan = nullptr;
   }
+}
+
+void BLEAnalyzerScreen::configureTarget(NimBLEAdvertisedDevice& device)
+{
+  _externalTarget = true;
+  _selDev = device;
+  _devices[0] = device;
+  _devCount = 1;
+  _selectedDeviceIdx = 0;
 }
 
 void BLEAnalyzerScreen::onInit()
 {
   NimBLEDevice::init("");
   _bleScan = NimBLEDevice::getScan();
-  _doScan();
+  if (_externalTarget) {
+    _showInfo();
+    _startRssiWatch();
+  } else {
+    _doScan();
+  }
 }
 
 void BLEAnalyzerScreen::onItemSelected(uint8_t index)
@@ -362,8 +379,7 @@ void BLEAnalyzerScreen::onItemSelected(uint8_t index)
     if (devIndex >= 0 && devIndex < _devCount) {
       _selectedDeviceIdx = devIndex;
       _selDev            = _devices[devIndex];
-      _showInfo();
-      _startRssiWatch();
+      _showOptions();
     }
   } else if (_state == STATE_INFO) {
     if (index == 11 && _selDev.getServiceUUIDCount() > 0)
@@ -383,6 +399,7 @@ void BLEAnalyzerScreen::onBack()
     _showInfo();
   } else if (_state == STATE_INFO) {
     _stopRssiWatch();
+    if (_externalTarget) { Screen.goBack(); return; }
     _selectedDeviceIdx = -1;
     _showList();
   } else {
@@ -542,6 +559,25 @@ void BLEAnalyzerScreen::_rebuildDevItems()
                                  _devSub[i].length() > 0 ? _devSub[i].c_str() : nullptr};
     _devItems[i + 1].rssi    = (int16_t)dev.getRSSI();
     _devItems[i + 1].hasRssi = true;
+  }
+}
+
+void BLEAnalyzerScreen::_showOptions()
+{
+  static const InputSelectAction::Option options[] = {
+    {"Details", "details", nullptr, 0, false},
+    {"Fox Hunt", "fox", nullptr, 0, false},
+  };
+  const char* choice = InputSelectAction::popup("Options", options, 2);
+  if (!choice) return;
+  if (strcmp(choice, "details") == 0) {
+    _showInfo();
+    _startRssiWatch();
+  } else if (strcmp(choice, "fox") == 0) {
+    _stopRssiWatch();
+    auto* fox = new BLEFoxHuntScreen();
+    fox->configureTarget(_selDev);
+    Screen.push(fox);
   }
 }
 

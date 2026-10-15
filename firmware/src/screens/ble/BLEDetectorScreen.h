@@ -40,6 +40,11 @@ private:
   static constexpr int kMaxAlerts  = 20;
 
   bool _scanning = false;
+  bool _paused = false;
+  bool _returningFromAction = false;
+  int _selected = 0;
+  // Full advertisement snapshots are retained for Details and Fox Hunt.
+  NimBLEAdvertisedDevice _snapshots[kMaxDevices];
   NimBLEScan* _bleScan = nullptr;
 
   DetectedDevice _devices[kMaxDevices];
@@ -56,6 +61,10 @@ private:
   void _stopScan();
   void _draw();
   void _purgeOld();
+  void _pause();
+  void _resume();
+  void _showOptions();
+  void _ensureSelectedVisible();
 
   void _onDevice(NimBLEAdvertisedDevice* dev);
   int  _findByMac(const char* mac);
