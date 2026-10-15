@@ -1,12 +1,80 @@
 #include "IPScannerScreen.h"
 #include <WiFi.h>
+#include <lwip/etharp.h>
+#include <lwip/ip4_addr.h>
+#include <lwip/netif.h>
 #include "core/ScreenManager.h"
 #include "core/AchievementManager.h"
 #include "screens/wifi/network/NetworkMenuScreen.h"
 #include "ui/actions/InputNumberAction.h"
+#include "ui/actions/InputSelectAction.h"
 #include "ui/actions/ShowStatusAction.h"
 #include "ui/views/ProgressView.h"
 #include "utils/network/ScanCancelUtil.h"
+
+// ARP cache entries are not guaranteed to survive the complete IP scan.
+// Refresh the neighbor entry for the selected host before reading it.
+static bool lookupHostMac(const char* ip, uint8_t mac[6]) {
+  ip4_addr_t target;
+  if (!ip4addr_aton(ip, &target)) return false;
+
+  auto readCache = [&]() -> bool {
+    for (int i = 0; i < ARP_TABLE_SIZE; ++i) {
+      ip4_addr_t* cachedIp = nullptr;
+      struct netif* netif = nullptr;
+      struct eth_addr* cachedMac = nullptr;
+      if (!etharp_get_entry(i, &cachedIp, &netif, &cachedMac)) continue;
+      if (!cachedIp || !cachedMac || !ip4_addr_cmp(cachedIp, &target)) continue;
+      memcpy(mac, cachedMac->addr, 6);
+      return true;
+    }
+    return false;
+  };
+
+  if (readCache()) return true;
+
+  // Only same-subnet peers can be resolved to their own MAC via ARP.
+  // The gateway MAC would be misleading for off-subnet destinations.
+  IPAddress local = WiFi.localIP();
+  IPAddress mask = WiFi.subnetMask();
+  IPAddress remote;
+  if (!remote.fromString(ip)) {
+    return false;
+  }
+  for (int i = 0; i < 4; ++i) {
+    if ((local[i] & mask[i]) != (remote[i] & mask[i])) return false;
+  }
+
+  struct netif* iface = netif_default;
+  if (!iface) return false;
+  if (etharp_request(iface, &target) != ERR_OK) return false;
+  for (int attempt = 0; attempt < 12; ++attempt) {
+    delay(25);
+    if (readCache()) return true;
+  }
+  return false;
+}
+
+// Small built-in fallback table. Unknown OUIs are deliberately not guessed.
+// A complete manufacturer database can be added independently later.
+static const char* vendorForMac(const uint8_t mac[6]) {
+  if (mac[0] & 0x02) return "Private / randomized";
+  const uint32_t oui = ((uint32_t)mac[0] << 16) | ((uint32_t)mac[1] << 8) | mac[2];
+  switch (oui) {
+    case 0x00163E: return "Xensource";
+    case 0x001A11: return "Google";
+    case 0x001B63: return "Apple";
+    case 0x001C42: return "Parallels";
+    case 0x002248: return "Microsoft";
+    case 0x0024E8: return "Dell";
+    case 0x3C5A37: return "Samsung";
+    case 0x3C22FB: return "Apple";
+    case 0xB827EB: return "Raspberry Pi";
+    case 0xDC4A3E: return "Raspberry Pi";
+    case 0xF4F5D8: return "Google";
+    default: return "Unknown";
+  }
+}
 
 // ── screen methods ─────────────────────────────────────
 
@@ -25,9 +93,10 @@ void IPScannerScreen::onInit() {
 void IPScannerScreen::onBack() {
   switch (_state) {
     case STATE_RESULT_PORT:
+    case STATE_DETAILS:
       _state = STATE_RESULT_IP;
       setPreferSublabel(true);
-      setItems(_foundItems, (_foundCount == 0) ? 1 : _foundCount);
+      setItems(_foundItems, (_foundCount == 0) ? 1 : _foundCount, _selectedHost);
       break;
     case STATE_RESULT_IP:
       _showConfiguration();
@@ -65,12 +134,43 @@ void IPScannerScreen::onItemSelected(uint8_t index) {
     if (_foundCount == 0 || _foundIPs[index].ip[0] == '\0') {
       _showConfiguration();
     } else {
-      _scanPort(_foundIPs[index].ip);
+      _selectedHost = index;
+      static const InputSelectAction::Option options[] = {
+        {"Details", "details"},
+        {"Port Scan", "ports"},
+      };
+      const char* choice = InputSelectAction::popup("Options", options, 2);
+      if (choice && strcmp(choice, "details") == 0) _showDetails(index);
+      else if (choice && strcmp(choice, "ports") == 0) _scanPort(_foundIPs[index].ip);
     }
   }
 }
 
 // ── private ────────────────────────────────────────────
+
+void IPScannerScreen::_showDetails(uint8_t index) {
+  if (index >= _foundCount) return;
+  _selectedHost = index;
+  _state = STATE_DETAILS;
+  setPreferSublabel(true);
+  _detailItems[0] = {"IP Address", _foundIPs[index].ip};
+  _detailItems[1] = {"Hostname", _foundIPs[index].hostname[0] ? _foundIPs[index].hostname : "Unknown"};
+  uint8_t mac[6];
+  if (lookupHostMac(_foundIPs[index].ip, mac)) {
+    char macText[18];
+    snprintf(macText, sizeof(macText), "%02X:%02X:%02X:%02X:%02X:%02X",
+             mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+    _detailMac = macText;
+    _detailVendor = vendorForMac(mac);
+  } else {
+    _detailMac = "Unavailable";
+    _detailVendor = "Unknown";
+  }
+  _detailItems[2] = {"MAC Address", _detailMac.c_str()};
+  _detailItems[3] = {"Vendor", _detailVendor.c_str()};
+  setItems(_detailItems, 4);
+}
+
 
 void IPScannerScreen::_showConfiguration(uint8_t selectedIndex) {
   _state = STATE_CONFIGURATION;
@@ -153,7 +253,7 @@ void IPScannerScreen::_scanPort(const char* ip) {
   if (ScanCancelUtil::wasCancelled()) {
     _state = STATE_RESULT_IP;
     setPreferSublabel(true);
-    setItems(_foundItems, _foundCount);
+    setItems(_foundItems, _foundCount, _selectedHost);
     return;
   }
 
