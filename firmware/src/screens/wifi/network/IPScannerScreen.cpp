@@ -1,5 +1,6 @@
 #include "IPScannerScreen.h"
 #include "IPScannerDetailsScreen.h"
+#include "PortScannerScreen.h"
 #include <WiFi.h>
 #include <lwip/etharp.h>
 #include <lwip/ip4_addr.h>
@@ -123,7 +124,11 @@ void IPScannerScreen::onItemSelected(uint8_t index) {
       // Redraw the screen chrome and list before opening Details or ProgressView.
       render();
       if (choice && strcmp(choice, "details") == 0) _showDetails(index);
-      else if (choice && strcmp(choice, "ports") == 0) _scanPort(_foundIPs[index].ip);
+      else if (choice && strcmp(choice, "ports") == 0) {
+        auto* scanner = new PortScannerScreen();
+        scanner->configureTarget(_foundIPs[index].ip);
+        Screen.push(scanner);
+      }
     }
   }
 }

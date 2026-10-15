@@ -12,6 +12,14 @@
 #include "ui/views/ProgressView.h"
 #include "utils/network/ScanCancelUtil.h"
 
+void PortScannerScreen::configureTarget(const char* ip) {
+  if (!ip || !*ip) return;
+  _scanMode = MODE_TARGETS;
+  _singleTargetView = true;
+  _targets[0] = ip;
+  for (uint8_t i = 1; i < MAX_TARGETS; ++i) _targets[i] = "";
+}
+
 void PortScannerScreen::onInit() {
   memset(_hosts,       0, sizeof(_hosts));
   memset(_results,     0, sizeof(_results));
@@ -108,7 +116,9 @@ void PortScannerScreen::_showInput(uint8_t selectedIndex) {
     _configCount++;
   };
 
-  add("Mode", _scanMode == MODE_RANGE ? "Range" : "Targets", CFG_MODE);
+  if (!_singleTargetView) {
+    add("Mode", _scanMode == MODE_RANGE ? "Range" : "Targets", CFG_MODE);
+  }
 
   if (_scanMode == MODE_TARGETS) {
     static const ConfigAction targetActions[MAX_TARGETS] = {
@@ -118,9 +128,10 @@ void PortScannerScreen::_showInput(uint8_t selectedIndex) {
       "Target 1", "Target 2", "Target 3", "Target 4"
     };
 
-    for (uint8_t i = 0; i < MAX_TARGETS; ++i) {
+    for (uint8_t i = 0; i < (_singleTargetView ? 1 : MAX_TARGETS); ++i) {
       _targetSubs[i] = _targets[i].length() > 0 ? _targets[i] : "-";
-      add(targetLabels[i], _targetSubs[i].c_str(), targetActions[i]);
+      add(_singleTargetView ? "Target" : targetLabels[i],
+          _targetSubs[i].c_str(), targetActions[i]);
     }
   } else {
     _startIpSub = String(_startIp);
@@ -292,7 +303,11 @@ void PortScannerScreen::_editTarget(uint8_t targetIndex, uint8_t selectedIndex) 
     : _networkPrefix();
 
   char title[16];
-  snprintf(title, sizeof(title), "Target %u", (unsigned)(targetIndex + 1));
+  if (_singleTargetView) {
+    snprintf(title, sizeof(title), "Target");
+  } else {
+    snprintf(title, sizeof(title), "Target %u", (unsigned)(targetIndex + 1));
+  }
 
   String ip = InputTextAction::popup(
     title,
