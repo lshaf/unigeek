@@ -20,7 +20,6 @@ private:
     STATE_SCANNING_IP,
     STATE_SCANNING_PORT,
     STATE_RESULT_IP,
-    STATE_DETAILS,
     STATE_RESULT_PORT
   };
 
@@ -43,9 +42,6 @@ private:
   ListItem             _openItems[PortScanUtil::MAX_RESULTS];
 
   ListItem _configItems[4];
-  ListItem _detailItems[4];
-  String _detailMac;
-  String _detailVendor;
   uint8_t _selectedHost = 0;
 
   void _showDetails(uint8_t index);

@@ -1,4 +1,5 @@
 #include "IPScannerScreen.h"
+#include "IPScannerDetailsScreen.h"
 #include <WiFi.h>
 #include <lwip/etharp.h>
 #include <lwip/ip4_addr.h>
@@ -55,27 +56,6 @@ static bool lookupHostMac(const char* ip, uint8_t mac[6]) {
   return false;
 }
 
-// Small built-in fallback table. Unknown OUIs are deliberately not guessed.
-// A complete manufacturer database can be added independently later.
-static const char* vendorForMac(const uint8_t mac[6]) {
-  if (mac[0] & 0x02) return "Private / randomized";
-  const uint32_t oui = ((uint32_t)mac[0] << 16) | ((uint32_t)mac[1] << 8) | mac[2];
-  switch (oui) {
-    case 0x00163E: return "Xensource";
-    case 0x001A11: return "Google";
-    case 0x001B63: return "Apple";
-    case 0x001C42: return "Parallels";
-    case 0x002248: return "Microsoft";
-    case 0x0024E8: return "Dell";
-    case 0x3C5A37: return "Samsung";
-    case 0x3C22FB: return "Apple";
-    case 0xB827EB: return "Raspberry Pi";
-    case 0xDC4A3E: return "Raspberry Pi";
-    case 0xF4F5D8: return "Google";
-    default: return "Unknown";
-  }
-}
-
 // ── screen methods ─────────────────────────────────────
 
 IPScannerScreen::IPScannerScreen() {
@@ -93,7 +73,6 @@ void IPScannerScreen::onInit() {
 void IPScannerScreen::onBack() {
   switch (_state) {
     case STATE_RESULT_PORT:
-    case STATE_DETAILS:
       _state = STATE_RESULT_IP;
       setPreferSublabel(true);
       setItems(_foundItems, (_foundCount == 0) ? 1 : _foundCount, _selectedHost);
@@ -140,6 +119,9 @@ void IPScannerScreen::onItemSelected(uint8_t index) {
         {"Port Scan", "ports"},
       };
       const char* choice = InputSelectAction::popup("Options", options, 2);
+      // The popup clears its rectangle but does not restore the underlying UI.
+      // Redraw the screen chrome and list before opening Details or ProgressView.
+      render();
       if (choice && strcmp(choice, "details") == 0) _showDetails(index);
       else if (choice && strcmp(choice, "ports") == 0) _scanPort(_foundIPs[index].ip);
     }
@@ -151,26 +133,13 @@ void IPScannerScreen::onItemSelected(uint8_t index) {
 void IPScannerScreen::_showDetails(uint8_t index) {
   if (index >= _foundCount) return;
   _selectedHost = index;
-  _state = STATE_DETAILS;
-  setPreferSublabel(true);
-  _detailItems[0] = {"IP Address", _foundIPs[index].ip};
-  _detailItems[1] = {"Hostname", _foundIPs[index].hostname[0] ? _foundIPs[index].hostname : "Unknown"};
-  uint8_t mac[6];
-  if (lookupHostMac(_foundIPs[index].ip, mac)) {
-    char macText[18];
-    snprintf(macText, sizeof(macText), "%02X:%02X:%02X:%02X:%02X:%02X",
-             mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
-    _detailMac = macText;
-    _detailVendor = vendorForMac(mac);
-  } else {
-    _detailMac = "Unavailable";
-    _detailVendor = "Unknown";
-  }
-  _detailItems[2] = {"MAC Address", _detailMac.c_str()};
-  _detailItems[3] = {"Vendor", _detailVendor.c_str()};
-  setItems(_detailItems, 4);
+  uint8_t mac[6] = {};
+  const bool hasMac = lookupHostMac(_foundIPs[index].ip, mac);
+  auto* details = new IPScannerDetailsScreen();
+  details->configure(_foundIPs[index].ip, _foundIPs[index].hostname,
+                     hasMac ? mac : nullptr);
+  Screen.push(details);
 }
-
 
 void IPScannerScreen::_showConfiguration(uint8_t selectedIndex) {
   _state = STATE_CONFIGURATION;
