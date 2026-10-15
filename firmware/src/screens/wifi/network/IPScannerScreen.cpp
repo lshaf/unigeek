@@ -51,7 +51,7 @@ static bool lookupHostMac(const char* ip, uint8_t mac[6]) {
   struct netif* iface = netif_default;
   if (!iface) return false;
   if (etharp_request(iface, &target) != ERR_OK) return false;
-  for (int attempt = 0; attempt < 12; ++attempt) {
+  for (int attempt = 0; attempt < 40; ++attempt) {
     delay(25);
     if (readCache()) return true;
   }
