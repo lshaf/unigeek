@@ -1,6 +1,7 @@
 #include "IPScannerScreen.h"
 #include "IPScannerDetailsScreen.h"
 #include "PortScannerScreen.h"
+#include "screens/wifi/WifiFoxHuntScreen.h"
 #include <WiFi.h>
 #include <lwip/etharp.h>
 #include <lwip/ip4_addr.h>
@@ -118,8 +119,9 @@ void IPScannerScreen::onItemSelected(uint8_t index) {
       static const InputSelectAction::Option options[] = {
         {"Details", "details"},
         {"Port Scan", "ports"},
+        {"Fox Hunt", "fox"},
       };
-      const char* choice = InputSelectAction::popup("Options", options, 2);
+      const char* choice = InputSelectAction::popup("Options", options, 3);
       // The popup clears its rectangle but does not restore the underlying UI.
       // Redraw the screen chrome and list before opening Details or ProgressView.
       render();
@@ -128,6 +130,39 @@ void IPScannerScreen::onItemSelected(uint8_t index) {
         auto* scanner = new PortScannerScreen();
         scanner->configureTarget(_foundIPs[index].ip);
         Screen.push(scanner);
+      } else if (choice && strcmp(choice, "fox") == 0) {
+        uint8_t mac[6] = {};
+        if (!lookupHostMac(_foundIPs[index].ip, mac)) {
+          ShowStatusAction::show("MAC unavailable");
+          return;
+        }
+        // IP discovery cannot distinguish APs from clients. Use station
+        // tracking for hosts on the connected WiFi network.
+        const uint8_t channel = WiFi.channel();
+        if (channel < 1 || channel > 14) {
+          ShowStatusAction::show("Channel unavailable");
+          return;
+        }
+        auto* hunt = new WifiFoxHuntScreen();
+        const uint8_t* connectedAp = WiFi.BSSID();
+        const bool validAp = connectedAp &&
+            memcmp(connectedAp, "\0\0\0\0\0\0", 6) != 0;
+        // The gateway's ARP MAC can be the router's LAN interface MAC,
+        // which differs from the BSSID used to transmit WiFi frames.
+        // For the gateway, prefer the associated AP's BSSID as a heuristic.
+        // This assumes the gateway and associated AP are the same device;
+        // on networks with a separate gateway/AP this may track the AP instead.
+        IPAddress selectedIp;
+        const bool isGateway = selectedIp.fromString(_foundIPs[index].ip) &&
+                               selectedIp == WiFi.gatewayIP();
+        if (validAp && (isGateway || memcmp(mac, connectedAp, 6) == 0)) {
+          hunt->configureTarget(false, connectedAp, channel,
+                                _foundIPs[index].hostname);
+        } else {
+          hunt->configureTransmitterTarget(mac, channel,
+                                           _foundIPs[index].hostname);
+        }
+        Screen.push(hunt);
       }
     }
   }
