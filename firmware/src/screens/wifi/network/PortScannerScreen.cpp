@@ -1,4 +1,6 @@
 #include "PortScannerScreen.h"
+#include "PortServiceDetailsScreen.h"
+#include "utils/network/ServiceProbeUtil.h"
 #include "utils/network/TargetResolveUtil.h"
 #include <WiFi.h>
 #include <ctype.h>
@@ -37,6 +39,27 @@ void PortScannerScreen::onBack() {
 }
 
 void PortScannerScreen::onItemSelected(uint8_t index) {
+  if (_state == STATE_RESULTS) {
+    if (index < _resultCount) {
+      // Same overlay pattern as Network > Rescan: render the current list,
+      // display a transient status, then perform the operation.
+      const PortScanUtil::Result selected = _results[index];
+      const String endpoint = selected.label;
+      const int colon = endpoint.lastIndexOf(':');
+      if (colon <= 0) return;
+      const String host = endpoint.substring(0, colon);
+      const uint16_t port = (uint16_t)endpoint.substring(colon + 1).toInt();
+
+      render();
+      ShowStatusAction::show("Probing...", 0);
+      const ServiceProbeUtil::Result probe = ServiceProbeUtil::probe(host.c_str(), port);
+
+      auto* details = new PortServiceDetailsScreen();
+      details->configure(selected, probe);
+      Screen.push(details);
+    }
+    return;
+  }
   if (_state != STATE_INPUT || index >= _configCount) return;
 
   switch (_configActions[index]) {
