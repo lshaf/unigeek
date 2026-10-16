@@ -116,7 +116,6 @@ private:
     ACT_ATTACK_DWELL,
     ACT_MAX_DEAUTH,
     ACT_START,
-    ACT_UNIGOTCHI,
   };
 
   // Sentinel for _chanDwellUntil meaning "do not fire any more deauths"

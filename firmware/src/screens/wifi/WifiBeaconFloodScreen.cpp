@@ -50,7 +50,7 @@ void WifiBeaconFloodScreen::onInit()
   _modeSub   = "Spam";
   _targetSub = "Built In";
   _menuItems[0] = {"Mode",   _modeSub.c_str()};
-  _menuItems[1] = {"Target", _targetSub.c_str()};
+  _menuItems[1] = {"SSIDs", _targetSub.c_str()};
   _menuItems[2] = {"Start",  nullptr};
   setItems(_menuItems, 3);
 }
@@ -240,6 +240,7 @@ void WifiBeaconFloodScreen::_updateMenuValues()
   // Always 3 rows: [Mode, Target, Start]. In-place sublabel update preserves
   // _selectedIndex so toggling Mode/Target doesn't bounce the highlight.
   _menuItems[0].sublabel = _modeSub.c_str();
+  _menuItems[1].label = (_mode == MODE_SPAM) ? "SSIDs" : "Target";
   _menuItems[1].sublabel = _targetSub.c_str();
   _menuItems[2].sublabel = (needTarget || needFile) ? _startSub.c_str() : nullptr;
   render();

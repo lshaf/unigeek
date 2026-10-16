@@ -3,7 +3,6 @@
 #include "core/ScreenManager.h"
 #include "core/AchievementManager.h"
 #include "screens/wifi/WifiMenuScreen.h"
-#include "screens/wifi/WifiUnigotchiScreen.h"
 #include "ui/actions/InputNumberAction.h"
 #include "ui/actions/ShowStatusAction.h"
 #include "utils/StorageUtil.h"
@@ -133,14 +132,13 @@ void WifiEapolScreen::_showMenu() {
 
   add("Mode", _modeSub.c_str(), ACT_MODE);
   if (_mode == MODE_TARGET) {
-    add("Target WiFi", _targetSub.c_str(), ACT_TARGET_WIFI);
+    add("Access Point", _targetSub.c_str(), ACT_TARGET_WIFI);
   } else {
     add("Discovery Dwell", _discoverySub.c_str(), ACT_DISCOVERY_DWELL);
     add("Attack Dwell",    _attackSub.c_str(),    ACT_ATTACK_DWELL);
   }
   add("Max Deauth", _deauthSub.c_str(), ACT_MAX_DEAUTH);
   add("Start",      nullptr,            ACT_START);
-  add("Unigotchi",  "auto pwn mode",    ACT_UNIGOTCHI);
 
   uint8_t selected = 0;
   for (uint8_t i = 0; i < _menuCount; ++i) {
@@ -191,9 +189,6 @@ void WifiEapolScreen::onItemSelected(uint8_t index) {
     case ACT_MAX_DEAUTH:
       _maxDeauthAttempts = InputNumberAction::popup("Max Deauth Attempts", 5, 30, _maxDeauthAttempts);
       _showMenu();
-      break;
-    case ACT_UNIGOTCHI:
-      Screen.push(new WifiUnigotchiScreen());
       break;
     case ACT_START: {
       // Target mode requires a picked AP — _target.channel only goes non-zero

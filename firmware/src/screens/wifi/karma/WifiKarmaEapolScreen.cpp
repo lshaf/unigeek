@@ -69,15 +69,15 @@ void WifiKarmaEapolScreen::onItemSelected(uint8_t index)
   if (_state != STATE_MENU) return;
   _menuIndex = index;
   switch (index) {
-    case 0: { // Save WiFi List
+    case 0: { // Save SSIDs
       _saveList = !_saveList;
       _saveListSub = _saveList ? "On" : "Off";
       _menuItems[0].sublabel = _saveListSub.c_str();
       render();
       break;
     }
-    case 1: { // Waiting Time
-      int val = InputNumberAction::popup("Wait Connect (s)", 5, 120, _waitConnect);
+    case 1: { // Connection Timeout
+      int val = InputNumberAction::popup("Connection Timeout (s)", 5, 120, _waitConnect);
       if (val >= 5) _waitConnect = val;
       _showMenu();
       break;
@@ -318,8 +318,8 @@ void WifiKarmaEapolScreen::_showMenu()
     _supportDevSub = "None";
   }
 
-  _menuItems[0] = {"Save WiFi List", _saveListSub.c_str()};
-  _menuItems[1] = {"Waiting Time",   _waitConnectSub.c_str()};
+  _menuItems[0] = {"Save SSIDs", _saveListSub.c_str()};
+  _menuItems[1] = {"Connection Timeout",   _waitConnectSub.c_str()};
   _menuItems[2] = {"Support Device", _supportDevSub.c_str()};
   _menuItems[3] = {"Start"};
   setItems(_menuItems, 4, _menuIndex);

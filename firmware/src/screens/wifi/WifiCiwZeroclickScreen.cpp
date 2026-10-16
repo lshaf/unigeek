@@ -150,8 +150,8 @@ void WifiCiwZeroclickScreen::onItemSelected(uint8_t index)
   if (_state != STATE_MENU) return;
   switch (index) {
     case 0: _selectCategories(); break;
-    case 1: _startBroadcast(); break;
-    case 2: {
+    case 4: _startBroadcast(); break;
+    case 1: {
       static constexpr InputSelectAction::Option opts[] = {
         {"3 s", "3"}, {"5 s", "5"}, {"10 s", "10"}, {"15 s", "15"}, {"30 s", "30"},
       };
@@ -163,8 +163,8 @@ void WifiCiwZeroclickScreen::onItemSelected(uint8_t index)
       render();
       break;
     }
-    case 3: _showDevices(); break;
-    case 4: _showAlerts(); break;
+    case 2: _showDevices(); break;
+    case 3: _showAlerts(); break;
   }
 }
 
@@ -243,10 +243,10 @@ void WifiCiwZeroclickScreen::_refreshMenu()
   _alertSub = String(_alertCount);
 
   _menuItems[0] = {"Categories", _catSub.c_str()};
-  _menuItems[1] = {"Start Attack"};
-  _menuItems[2] = {"Rotation", _rotSub.c_str()};
-  _menuItems[3] = {"Connected Devices", _devSub.c_str()};
-  _menuItems[4] = {"Crash Alerts", _alertSub.c_str()};
+  _menuItems[1] = {"Rotation", _rotSub.c_str()};
+  _menuItems[2] = {"Connected Devices", _devSub.c_str()};
+  _menuItems[3] = {"Crash Alerts", _alertSub.c_str()};
+  _menuItems[4] = {"Start"};
   setItems(_menuItems, 5);
 }
 

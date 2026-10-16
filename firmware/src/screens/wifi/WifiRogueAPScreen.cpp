@@ -74,17 +74,6 @@ void WifiRogueAPScreen::onItemSelected(uint8_t index) {
       break;
     }
     case 1: {
-      if (!_dnsSpoofEnabled && (!Uni.Storage || !Uni.Storage->exists(DnsSpoofServer::CONFIG_PATH))) {
-        ShowStatusAction::show("No DNS config file", 1500);
-        render();
-        break;
-      }
-      _dnsSpoofEnabled = !_dnsSpoofEnabled;
-      _menuItems[1].sublabel = _dnsSpoofEnabled ? "On" : "Off";
-      render();
-      break;
-    }
-    case 2: {
       if (!_captiveEnabled) {
         static constexpr const char* PORTALS_DIR = "/unigeek/web/portals";
         if (!Uni.Storage || !Uni.Storage->exists(PORTALS_DIR)) {
@@ -114,7 +103,18 @@ void WifiRogueAPScreen::onItemSelected(uint8_t index) {
         _captivePath = "";
         _captiveSub = "-";
       }
-      _menuItems[2].sublabel = _captiveEnabled ? _captiveSub.c_str() : "-";
+      _menuItems[1].sublabel = _captiveEnabled ? _captiveSub.c_str() : "-";
+      render();
+      break;
+    }
+    case 2: {
+      if (!_dnsSpoofEnabled && (!Uni.Storage || !Uni.Storage->exists(DnsSpoofServer::CONFIG_PATH))) {
+        ShowStatusAction::show("No DNS config file", 1500);
+        render();
+        break;
+      }
+      _dnsSpoofEnabled = !_dnsSpoofEnabled;
+      _menuItems[2].sublabel = _dnsSpoofEnabled ? "On" : "Off";
       render();
       break;
     }
@@ -131,8 +131,8 @@ void WifiRogueAPScreen::onBack() {
 void WifiRogueAPScreen::_showMenu() {
   _state = STATE_MENU;
   _menuItems[0] = {"SSID", _ssid.isEmpty() ? "-" : _ssid.c_str()};
-  _menuItems[1] = {"DNS Spoof", _dnsSpoofEnabled ? "On" : "Off"};
-  _menuItems[2] = {"Portal", _captiveEnabled ? _captiveSub.c_str() : "-"};
+  _menuItems[1] = {"Portal", _captiveEnabled ? _captiveSub.c_str() : "-"};
+  _menuItems[2] = {"DNS Spoof", _dnsSpoofEnabled ? "On" : "Off"};
   _menuItems[3] = {"Start"};
   setItems(_menuItems, 4);
 }
