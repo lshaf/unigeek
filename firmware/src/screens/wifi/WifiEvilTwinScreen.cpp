@@ -80,19 +80,7 @@ void WifiEvilTwinScreen::onItemSelected(uint8_t index)
     _menuIndex = index;
     switch (index) {
       case 0: _selectWifi();    break;
-      case 1:
-        _deauth = !_deauth;
-        _deauthSub = _deauth ? "On" : "Off";
-        _menuItems[1].sublabel = _deauthSub.c_str();
-        render();
-        break;
-      case 2:
-        _checkPwd = !_checkPwd;
-        _checkPwdSub = _checkPwd ? "On" : "Off";
-        _menuItems[2].sublabel = _checkPwdSub.c_str();
-        render();
-        break;
-      case 3: { // Portal
+      case 1: { // Portal
         _state = STATE_SELECT_PORTAL;
         // Portal folder must live under PORTALS_DIR (hardcoded into the
         // captive server) — no parent navigation here; BACK already cancels.
@@ -107,6 +95,18 @@ void WifiEvilTwinScreen::onItemSelected(uint8_t index)
         setItems(_browser.items(), n);
         break;
       }
+      case 2:
+        _deauth = !_deauth;
+        _deauthSub = _deauth ? "On" : "Off";
+        _menuItems[2].sublabel = _deauthSub.c_str();
+        render();
+        break;
+      case 3:
+        _checkPwd = !_checkPwd;
+        _checkPwdSub = _checkPwd ? "On" : "Off";
+        _menuItems[3].sublabel = _checkPwdSub.c_str();
+        render();
+        break;
       case 4: _startAttack();   break;
     }
   } else if (_state == STATE_SELECT_PORTAL && index < _browser.count()) {
@@ -198,10 +198,10 @@ void WifiEvilTwinScreen::_showMenu()
   _checkPwdSub = _checkPwd ? "On" : "Off";
   _portalSub   = _portal.portalFolder().isEmpty() ? "-" : _portal.portalFolder();
 
-  _menuItems[0] = {"Network",        _networkSub.c_str()};
-  _menuItems[1] = {"Deauth",         _deauthSub.c_str()};
-  _menuItems[2] = {"Check Password", _checkPwdSub.c_str()};
-  _menuItems[3] = {"Portal",         _portalSub.c_str()};
+  _menuItems[0] = {"Access Point",   _networkSub.c_str()};
+  _menuItems[1] = {"Portal",         _portalSub.c_str()};
+  _menuItems[2] = {"Deauth",         _deauthSub.c_str()};
+  _menuItems[3] = {"Check Password", _checkPwdSub.c_str()};
   _menuItems[4] = {"Start"};
   setItems(_menuItems, 5, _menuIndex);
 }

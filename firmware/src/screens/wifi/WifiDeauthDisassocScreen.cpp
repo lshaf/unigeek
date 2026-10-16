@@ -120,11 +120,11 @@ void WifiDeauthDisassocScreen::_showMain()
 
   if (_mode == MODE_TARGET) {
     _targetSub = _target.ssid;
-    _mainItems[1] = {"Target WiFi", _targetSub.c_str()};
-    _mainItems[2] = {"Start Deauth"};
+    _mainItems[1] = {"Access Point", _targetSub.c_str()};
+    _mainItems[2] = {"Start"};
     setItems(_mainItems, 3);
   } else {
-    _mainItems[1] = {"Start Deauth"};
+    _mainItems[1] = {"Start"};
     setItems(_mainItems, 2);
   }
 }
