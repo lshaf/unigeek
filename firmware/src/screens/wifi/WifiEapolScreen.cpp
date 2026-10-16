@@ -118,7 +118,7 @@ void WifiEapolScreen::onInit() {
 
 void WifiEapolScreen::_showMenu() {
   _modeSub      = (_mode == MODE_TARGET) ? "Target" : "All";
-  _targetSub    = _target.ssid;
+  _targetSub    = (_target.ssid.isEmpty() || _target.ssid == "-") ? "-" : _target.ssid;
   _discoverySub = String(_discoveryDwellMs) + " ms";
   _attackSub    = String(_attackDwellMs) + " ms";
   _deauthSub    = String(_maxDeauthAttempts);
@@ -195,7 +195,7 @@ void WifiEapolScreen::onItemSelected(uint8_t index) {
       // once _selectWifi() lands a scan result, so it's the canonical
       // "no target set" indicator.
       if (_mode == MODE_TARGET && _target.channel == 0) {
-        ShowStatusAction::show("Target not selected");
+        ShowStatusAction::show("Access Point not set");
         return;
       }
 

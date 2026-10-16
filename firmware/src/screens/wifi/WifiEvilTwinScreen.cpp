@@ -193,7 +193,7 @@ void WifiEvilTwinScreen::onBack()
 void WifiEvilTwinScreen::_showMenu()
 {
   _state = STATE_MENU;
-  _networkSub  = _target.ssid;
+  _networkSub  = (_target.ssid.isEmpty() || _target.ssid == "-") ? "-" : _target.ssid;
   _deauthSub   = _deauth ? "On" : "Off";
   _checkPwdSub = _checkPwd ? "On" : "Off";
   _portalSub   = _portal.portalFolder().isEmpty() ? "-" : _portal.portalFolder();
@@ -295,11 +295,11 @@ void WifiEvilTwinScreen::_startAttack()
 {
   const MacAddr blank = {0, 0, 0, 0, 0, 0};
   if (_target.ssid == "-" && memcmp(_target.bssid, blank, 6) == 0) {
-    ShowStatusAction::show("Network not selected");
+    ShowStatusAction::show("Access Point not set");
     return;
   }
   if (_portal.portalFolder().isEmpty()) {
-    ShowStatusAction::show("Portal not selected");
+    ShowStatusAction::show("Portal not set");
     return;
   }
 

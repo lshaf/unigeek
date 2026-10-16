@@ -70,7 +70,6 @@ private:
 
   String   _modeSub;
   String   _targetSub;
-  String   _startSub;
   ListItem _menuItems[3] = { {"Mode"}, {"Target"}, {"Start"} };
   ListItem _apItems[MAX_AP + 1];
   bool     _scanValid = false;
