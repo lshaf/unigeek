@@ -671,10 +671,10 @@ void SftpClientScreen::_chooseUploadDestinationMode() {
 
 void SftpClientScreen::_connect() {
   if (!_host.length()) {
-    ShowStatusAction::show("Host not set", 1200); render(); return;
+    ShowStatusAction::show("Host not set", 1500); render(); return;
   }
   if (!_username.length()) {
-    ShowStatusAction::show("Username not set", 1200); render(); return;
+    ShowStatusAction::show("Username not set", 1500); render(); return;
   }
   if (WiFi.status() != WL_CONNECTED) {
     ShowStatusAction::show("Not connected", 1500); render(); return;
@@ -685,7 +685,7 @@ void SftpClientScreen::_connect() {
 
   if (_authMode == AUTH_PASSWORD) {
     if (!_password.length()) {
-      ShowStatusAction::show("Password not set", 1200); render(); return;
+      ShowStatusAction::show("Password not set", 1500); render(); return;
     }
   } else {
     if (!_keyPath.length()) {

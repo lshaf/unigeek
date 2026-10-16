@@ -295,11 +295,11 @@ void WifiEvilTwinScreen::_startAttack()
 {
   const MacAddr blank = {0, 0, 0, 0, 0, 0};
   if (_target.ssid == "-" && memcmp(_target.bssid, blank, 6) == 0) {
-    ShowStatusAction::show("Access Point not set");
+    ShowStatusAction::show("Access Point not set", 1500);
     return;
   }
   if (_portal.portalFolder().isEmpty()) {
-    ShowStatusAction::show("Portal not set");
+    ShowStatusAction::show("Portal not set", 1500);
     return;
   }
 

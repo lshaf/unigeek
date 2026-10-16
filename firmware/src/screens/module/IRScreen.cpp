@@ -53,7 +53,7 @@ void IRScreen::_openPendingSendFile() {
   _pendingSendFile = "";
 
   if (_txPin < 0) {
-    ShowStatusAction::show("TX pin not set");
+    ShowStatusAction::show("TX pin not set", 1500);
     Screen.goBack();
     return;
   }
@@ -175,7 +175,7 @@ void IRScreen::onItemSelected(uint8_t index) {
     switch (index) {
       case 0: { // Receive
         if (_rxPin < 0) {
-          ShowStatusAction::show("RX pin not set");
+          ShowStatusAction::show("RX pin not set", 1500);
           render();
           return;
         }
@@ -197,7 +197,7 @@ void IRScreen::onItemSelected(uint8_t index) {
       }
       case 1: { // Send
         if (_txPin < 0) {
-          ShowStatusAction::show("TX pin not set");
+          ShowStatusAction::show("TX pin not set", 1500);
           render();
           return;
         }
@@ -211,7 +211,7 @@ void IRScreen::onItemSelected(uint8_t index) {
       }
       case 2: { // TV-B-Gone
         if (_txPin < 0) {
-          ShowStatusAction::show("TX pin not set");
+          ShowStatusAction::show("TX pin not set", 1500);
           render();
           return;
         }
@@ -389,7 +389,7 @@ void IRScreen::_onRecvItemAction(uint8_t index) {
 
   if (strcmp(sel, "replay") == 0) {
     if (_txPin < 0) {
-      ShowStatusAction::show("TX pin not set");
+      ShowStatusAction::show("TX pin not set", 1500);
     } else {
       #if defined(DEVICE_M5STICK_S3)
       if (_txPin == IR_TX_PIN) Uni.Power.setExtOutput(true);

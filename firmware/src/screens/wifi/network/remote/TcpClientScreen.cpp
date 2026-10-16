@@ -143,12 +143,12 @@ void TcpClientScreen::_configPort() {
 
 void TcpClientScreen::_connect() {
   if (_host.length() == 0) {
-    ShowStatusAction::show("Host not set", 1200);
+    ShowStatusAction::show("Host not set", 1500);
     render();
     return;
   }
   if (_port < 1 || _port > 65535) {
-    ShowStatusAction::show("Port not set", 1200);
+    ShowStatusAction::show("Port not set", 1500);
     render();
     return;
   }

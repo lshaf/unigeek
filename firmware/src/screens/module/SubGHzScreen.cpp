@@ -57,7 +57,7 @@ void SubGHzScreen::onInit() {
   _gdo0Pin = PinConfig.get(PIN_CONFIG_CC1101_GDO0, PIN_CONFIG_CC1101_GDO0_DEFAULT).toInt();
 
   if (_csPin < 0 || _gdo0Pin < 0) {
-    ShowStatusAction::show("CC1101 pins not set");
+    ShowStatusAction::show("CC1101 pins not set", 1500);
     Screen.goBack();
     return;
   }
@@ -202,7 +202,7 @@ void SubGHzScreen::_onMenuSelected(uint8_t index) {
     }
     case 3: { // Receive
       if (_csPin < 0 || _gdo0Pin < 0) {
-        ShowStatusAction::show("CS and GDO0 pins not set");
+        ShowStatusAction::show("CS and GDO0 pins not set", 1500);
         render();
         return;
       }
@@ -220,7 +220,7 @@ void SubGHzScreen::_onMenuSelected(uint8_t index) {
     }
     case 5: { // Send
       if (_csPin < 0) {
-        ShowStatusAction::show("CS pin not set");
+        ShowStatusAction::show("CS pin not set", 1500);
         render();
         return;
       }
@@ -233,7 +233,7 @@ void SubGHzScreen::_onMenuSelected(uint8_t index) {
     }
     case 7: { // Jammer
       if (_csPin < 0 || _gdo0Pin < 0) {
-        ShowStatusAction::show("CS and GDO0 pins not set");
+        ShowStatusAction::show("CS and GDO0 pins not set", 1500);
         render();
         return;
       }
@@ -343,7 +343,7 @@ void SubGHzScreen::_selectRssiThreshold() {
 
 void SubGHzScreen::_startScan() {
   if (_csPin < 0 || _gdo0Pin < 0) {
-    ShowStatusAction::show("CS and GDO0 pins not set");
+    ShowStatusAction::show("CS and GDO0 pins not set", 1500);
     render();
     return;
   }
@@ -367,7 +367,7 @@ void SubGHzScreen::_startScan() {
 
 void SubGHzScreen::_startRecordRaw() {
   if (_csPin < 0 || _gdo0Pin < 0) {
-    ShowStatusAction::show("CS and GDO0 pins not set");
+    ShowStatusAction::show("CS and GDO0 pins not set", 1500);
     render();
     return;
   }
@@ -591,7 +591,7 @@ void SubGHzScreen::_pickBruteRepeats() {
 
 void SubGHzScreen::_startBruteForce() {
   if (_csPin < 0 || _gdo0Pin < 0) {
-    ShowStatusAction::show("CS and GDO0 pins not set");
+    ShowStatusAction::show("CS and GDO0 pins not set", 1500);
     render();
     return;
   }
@@ -954,7 +954,7 @@ void SubGHzScreen::_pickWaterfallFreq(float& boundary) {
 
 void SubGHzScreen::_startWaterfall() {
   if (_csPin < 0 || _gdo0Pin < 0) {
-    ShowStatusAction::show("CS and GDO0 pins not set");
+    ShowStatusAction::show("CS and GDO0 pins not set", 1500);
     render();
     return;
   }

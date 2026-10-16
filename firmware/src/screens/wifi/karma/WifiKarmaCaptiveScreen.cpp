@@ -323,7 +323,7 @@ void WifiKarmaCaptiveScreen::_teardownAP()
 void WifiKarmaCaptiveScreen::_startAttack()
 {
   if (_portal.portalFolder().isEmpty()) {
-    ShowStatusAction::show("Portal not set");
+    ShowStatusAction::show("Portal not set", 1500);
     return;
   }
   if (!StorageUtil::hasSpace()) {

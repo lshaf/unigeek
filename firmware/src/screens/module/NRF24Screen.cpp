@@ -121,7 +121,7 @@ void NRF24Screen::onInit() {
   _csnPin = (int8_t)PinConfig.getInt(PIN_CONFIG_NRF24_CSN, PIN_CONFIG_NRF24_CSN_DEFAULT);
 
   if (_cePin < 0 || _csnPin < 0) {
-    ShowStatusAction::show("NRF24 CE/CSN pins not set");
+    ShowStatusAction::show("NRF24 CE/CSN pins not set", 1500);
     Screen.goBack();
     return;
   }
