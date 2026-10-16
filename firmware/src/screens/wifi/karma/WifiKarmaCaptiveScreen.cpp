@@ -64,14 +64,14 @@ void WifiKarmaCaptiveScreen::onItemSelected(uint8_t index)
   if (_state != STATE_MENU) return;
   _menuIndex = index;
   switch (index) {
-    case 0: { // Save SSIDs
+    case 1: { // Save SSIDs
       _saveList = !_saveList;
       _saveListSub = _saveList ? "On" : "Off";
-      _menuItems[0].sublabel = _saveListSub.c_str();
+      _menuItems[1].sublabel = _saveListSub.c_str();
       render();
       break;
     }
-    case 1: { // Captive Portal selection
+    case 0: { // Captive Portal selection
       _state = STATE_SELECT_PORTAL;
       uint8_t n = _browser.load(this, CaptivePortalServer::PORTALS_DIR,
                                 BrowseFileView::Mode::DIRECTORY);
@@ -201,8 +201,8 @@ void WifiKarmaCaptiveScreen::_showMenu()
   _waitConnectSub = String(_waitConnect) + "s";
   _waitInputSub   = String(_waitInput) + "s";
 
-  _menuItems[0] = {"Save SSIDs", _saveListSub.c_str()};
-  _menuItems[1] = {"Portal", _portalSub.c_str()};
+  _menuItems[0] = {"Portal", _portalSub.c_str()};
+  _menuItems[1] = {"Save SSIDs", _saveListSub.c_str()};
   _menuItems[2] = {"Connection Timeout",   _waitConnectSub.c_str()};
   _menuItems[3] = {"Input Timeout",     _waitInputSub.c_str()};
   _menuItems[4] = {"Start"};

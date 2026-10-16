@@ -87,7 +87,7 @@ void WifiKarmaEapolScreen::onItemSelected(uint8_t index)
         _notifyDone();
         _hasSupportDevice = false;
         memset(_supportMac, 0, 6);
-        _supportDevSub = "None";
+        _supportDevSub = "-";
         _menuItems[2].sublabel = _supportDevSub.c_str();
         render();
       } else {
@@ -315,7 +315,7 @@ void WifiKarmaEapolScreen::_showMenu()
              _supportMac[3], _supportMac[4], _supportMac[5]);
     _supportDevSub = String(mac);
   } else {
-    _supportDevSub = "None";
+    _supportDevSub = "-";
   }
 
   _menuItems[0] = {"Save SSIDs", _saveListSub.c_str()};
