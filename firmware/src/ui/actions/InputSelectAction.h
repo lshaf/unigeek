@@ -19,8 +19,8 @@ public:
     bool        hasRssi;
   };
 
-  static const char* popup(const char* title, const Option* options, uint8_t count, const char* defaultValue = nullptr) {
-    InputSelectAction action(title, options, count, defaultValue);
+  static const char* popup(const char* title, const Option* options, uint8_t count, const char* defaultValue = nullptr, bool defaultCancel = false) {
+    InputSelectAction action(title, options, count, defaultValue, defaultCancel);
     const char* result = action._run();
     Uni.lastActiveMs = millis();
     return result;
@@ -40,10 +40,11 @@ private:
   bool          _done          = false;
   const char*   _result        = nullptr;
 
-  explicit InputSelectAction(const char* title, const Option* options, uint8_t count, const char* defaultValue)
+  explicit InputSelectAction(const char* title, const Option* options, uint8_t count, const char* defaultValue, bool defaultCancel)
   : _title(title), _options(options),
     _count(count), _totalCount(count + 1)
   {
+    if (defaultCancel) _selectedIdx = _count;
     if (defaultValue != nullptr) {
       for (int i = 0; i < _count; i++) {
         if (strcmp(_options[i].value, defaultValue) == 0) {

@@ -88,7 +88,7 @@ void WifiAPScreen::onItemSelected(uint8_t index)
       render();
       if (InputTextAction::wasCancelled()) { render(); return; }
       if (ssid.isEmpty()) {
-        ShowStatusAction::show("SSID not set", 1500);
+        ShowStatusAction::show("SSID not set");
         render();
         return;
       }

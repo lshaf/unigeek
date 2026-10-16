@@ -16,10 +16,23 @@ bool macEq(const uint8_t* a, const uint8_t* b) { return memcmp(a, b, 6) == 0; }
 bool isZeroMac(const uint8_t* m) { static const uint8_t zero[6] = {}; return macEq(m, zero); }
 }
 
+void WifiPacketMonitorScreen::configureFromChannel(uint8_t channel, const uint8_t bssid[6], const uint8_t* client, const char* ssid)
+{
+  snprintf(_contextSsid, sizeof(_contextSsid), "%s", ssid ? ssid : "");
+  _integrated = true;
+  _initialChannel = channel;
+  _channelMask = (channel >= 1 && channel <= MAX_CH) ? (1u << (channel - 1)) : 0;
+  if (bssid) memcpy(_bssids[0], bssid, 6);
+  _bssidCount = bssid ? 1 : 0;
+  _clientCount = client ? 1 : 0;
+  if (client) { memcpy(_clients[0], client, 6); _clientChannel = channel; }
+}
+
 void WifiPacketMonitorScreen::onInit()
 {
   _state = STATE_MENU;
-  _showMenu();
+  if (_integrated) _start();
+  else _showMenu();
 }
 
 void WifiPacketMonitorScreen::onUpdate()
@@ -34,12 +47,15 @@ void WifiPacketMonitorScreen::onUpdate()
 
     if (dir == INavigation::DIR_BACK) {
       _stop();
-      _showMenu();
+      if (_integrated) Screen.goBack();
+      else _showMenu();
       return;
     }
 
     const int rowH = Uni.Lcd.fontHeight() + 5;
-    const int visible = bodyH() / rowH;
+    const int contextRows = ((_channelMask || (_bssidCount == 0 && _clientCount == 1 && _clientChannel)) ? 1 : 0) + (_bssidCount ? 1 : 0) + (_clientCount ? _clientCount : 1);
+    const int contextH = contextRows ? contextRows * rowH + 5 : 0;
+    const int visible = ((bodyH() - contextH) / rowH) > 0 ? ((bodyH() - contextH) / rowH) : 1;
     const int maxScroll = (ROW_COUNT > visible) ? ROW_COUNT - visible : 0;
 
     if ((dir == INavigation::DIR_UP || dir == INavigation::DIR_LEFT) && _scroll > 0) {
@@ -53,7 +69,7 @@ void WifiPacketMonitorScreen::onUpdate()
   }
 
   const uint32_t now = millis();
-  if (now - _lastHop >= HOP_MS) _hop();
+  if (!_integrated && now - _lastHop >= HOP_MS) _hop();
   if (now - _lastRateSample >= RATE_MS) _updateRate();
   if (now - _lastRefresh >= REFRESH_MS) {
     _lastRefresh = now;
@@ -75,6 +91,8 @@ void WifiPacketMonitorScreen::onItemSelected(uint8_t index)
   if (_state == STATE_SELECT_CHANNEL) {
     if (index == 0) _channelMask = 0;
     else if (index <= MAX_CH) _channelMask ^= (1u << (index - 1));
+    if (_clientChannel && _channelMask && !(_channelMask & (1u << (_clientChannel - 1))))
+      _clientChannel = 0;
     _channelSub = _channelMask ? "Custom" : "All";
     _showChannels(true);
     return;
@@ -88,6 +106,19 @@ void WifiPacketMonitorScreen::onItemSelected(uint8_t index)
 
     if (index == 1) {
       _bssidCount = 0;
+      // AP All supports up to four selected stations, like an explicit AP.
+      // Preserve the selected station channel when switching to AP All.
+      _clientChannel = 0;
+      if (_clientCount) {
+        for (uint8_t i = 0; i < _seenClientCount; ++i)
+          if (macEq(_seenClients[i].mac, _clients[0])) {
+            _clientChannel = _seenClients[i].channel;
+            break;
+          }
+      }
+      if (_clientChannel && _channelMask && !(_channelMask & (1u << (_clientChannel - 1))))
+        _clientChannel = 0;
+      _clientSub = _clientCount ? "Custom" : "All";
       _bssidSub = "All";
       _showBssidScan(true);
       return;
@@ -118,14 +149,16 @@ void WifiPacketMonitorScreen::onItemSelected(uint8_t index)
   }
 
   if (_state == STATE_SELECT_CLIENT) {
-    if (index == 0) {
+    if (index == 0) { _discoverClients(); return; }
+    if (index == 1) {
       _clientCount = 0;
+      _clientChannel = 0;
       _clientSub = "All";
       _showClients(true);
       return;
     }
 
-    const uint8_t clientIndex = index - 1;
+    const uint8_t clientIndex = index - 2;
     if (clientIndex >= _clientMenuCount) return;
     const uint8_t* mac = _clientMenuMacs[clientIndex];
 
@@ -138,12 +171,20 @@ void WifiPacketMonitorScreen::onItemSelected(uint8_t index)
       for (uint8_t i = (uint8_t)found; i + 1 < _clientCount; i++)
         memcpy(_clients[i], _clients[i + 1], 6);
       _clientCount--;
+      if (!_clientCount) _clientChannel = 0;
     } else if (_clientCount < MAX_CLIENT) {
       memcpy(_clients[_clientCount++], mac, 6);
     } else {
       ShowStatusAction::show("Client limit: 4", 1000);
     }
 
+    // Channel pinning applies only to one station with AP All.
+    if (_clientCount != 1 || _bssidCount) _clientChannel = 0;
+    else {
+      _clientChannel = 0;
+      for (uint8_t i = 0; i < _seenClientCount; ++i)
+        if (macEq(_seenClients[i].mac, _clients[0])) { _clientChannel = _seenClients[i].channel; break; }
+    }
     _clientSub = _clientCount ? "Custom" : "All";
     _showClients(true);
     return;
@@ -176,7 +217,8 @@ void WifiPacketMonitorScreen::onBack()
   }
   if (_state == STATE_RUNNING) {
     _stop();
-    _showMenu();
+    if (_integrated) Screen.goBack();
+    else _showMenu();
     return;
   }
   Screen.goBack();
@@ -198,7 +240,7 @@ void WifiPacketMonitorScreen::_showMenu()
 void WifiPacketMonitorScreen::_showChannels(bool preserveSelection)
 {
   _state = STATE_SELECT_CHANNEL;
-  strncpy(_title, "Channels", sizeof(_title));
+  strncpy(_title, "Packet Monitor", sizeof(_title));
   _title[sizeof(_title) - 1] = '\0';
 
   snprintf(_channelLabels[0], sizeof(_channelLabels[0]), "[%c] All", _channelMask == 0 ? 'x' : ' ');
@@ -231,7 +273,7 @@ void WifiPacketMonitorScreen::_selectBssid()
 void WifiPacketMonitorScreen::_doBssidScan()
 {
   _state = STATE_SELECT_BSSID;
-  strncpy(_title, "Select Access Points", sizeof(_title));
+  strncpy(_title, "Packet Monitor", sizeof(_title));
   _title[sizeof(_title) - 1] = '\0';
   render();
   ShowStatusAction::show("Scanning...", 0);
@@ -258,8 +300,8 @@ void WifiPacketMonitorScreen::_doBssidScan()
     e.rssi = (int32_t)WiFi.RSSI(i);
 
     snprintf(e.bssidText, sizeof(e.bssidText),
-             "%02X:%02X:%02X:%02X:%02X:%02X",
-             mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+             "%02X:%02X:%02X:%02X:%02X:%02X CH%u",
+             mac[0], mac[1], mac[2], mac[3], mac[4], mac[5], (unsigned)e.channel);
   }
 
   WiFi.scanDelete();
@@ -295,7 +337,7 @@ void WifiPacketMonitorScreen::_rebuildBssidItems()
 void WifiPacketMonitorScreen::_showBssidScan(bool preserveSelection)
 {
   _state = STATE_SELECT_BSSID;
-  strncpy(_title, "Select Access Points", sizeof(_title));
+  strncpy(_title, "Packet Monitor", sizeof(_title));
   _title[sizeof(_title) - 1] = '\0';
 
   _rebuildBssidItems();
@@ -321,13 +363,14 @@ void WifiPacketMonitorScreen::_discoverClients()
   esp_wifi_set_promiscuous_rx_cb(&_promiscuousCb);
   esp_wifi_set_promiscuous(true);
 
-  _hopChannel = 1;
-  _lastHop = 0;
-  _hop();
-  const uint32_t started = millis();
-  while (millis() - started < 3500) {
-    delay(10);
-    if (millis() - _lastHop >= HOP_MS) _hop();
+  // Discovery only: two 500 ms sweeps over channels 1-13.
+  // Preserve the accumulated station list across both passes.
+  // Do not change HOP_MS, which also controls normal packet capture.
+  for (uint8_t pass = 0; pass < 2; ++pass) {
+    for (uint8_t channel = 1; channel <= 13; ++channel) {
+      esp_wifi_set_channel(channel, WIFI_SECOND_CHAN_NONE);
+      delay(500);
+    }
   }
 
   _activeInstance = nullptr;
@@ -342,15 +385,25 @@ void WifiPacketMonitorScreen::_discoverClients()
 void WifiPacketMonitorScreen::_showClients(bool preserveSelection)
 {
   _state = STATE_SELECT_CLIENT;
-  strncpy(_title, "Select Clients", sizeof(_title));
+  strncpy(_title, "Packet Monitor", sizeof(_title));
   _title[sizeof(_title) - 1] = '\0';
 
-  snprintf(_clientLabels[0], sizeof(_clientLabels[0]), "[%c] All", _clientCount == 0 ? 'x' : ' ');
-  _clientItems[0] = {_clientLabels[0]};
+  _clientItems[0] = {"Rescan"};
+  snprintf(_clientLabels[1], sizeof(_clientLabels[1]), "[%c] All", _clientCount == 0 ? 'x' : ' ');
+  _clientItems[1] = {_clientLabels[1]};
 
   _clientMenuCount = 0;
+  uint8_t order[MAX_SEEN_CLIENTS];
+  for (uint8_t i = 0; i < _seenClientCount; ++i) order[i] = i;
+  for (uint8_t i = 1; i < _seenClientCount; ++i) {
+    uint8_t key = order[i], j = i;
+    while (j > 0 && _seenClients[order[j - 1]].rssi < _seenClients[key].rssi) {
+      order[j] = order[j - 1]; --j;
+    }
+    order[j] = key;
+  }
   for (uint8_t i = 0; i < _seenClientCount && _clientMenuCount < MAX_SEEN_CLIENTS + MAX_CLIENT; i++)
-    memcpy(_clientMenuMacs[_clientMenuCount++], _seenClients[i].mac, 6);
+    memcpy(_clientMenuMacs[_clientMenuCount++], _seenClients[order[i]].mac, 6);
 
   // Keep selected clients visible even if the latest passive discovery did not see them.
   for (uint8_t i = 0; i < _clientCount && _clientMenuCount < MAX_SEEN_CLIENTS + MAX_CLIENT; i++) {
@@ -364,12 +417,22 @@ void WifiPacketMonitorScreen::_showClients(bool preserveSelection)
   for (uint8_t i = 0; i < _clientMenuCount; i++) {
     char mac[18];
     _formatMac(_clientMenuMacs[i], mac, sizeof(mac));
-    snprintf(_clientLabels[i + 1], sizeof(_clientLabels[i + 1]), "[%c] %s",
-             _isSelectedClient(_clientMenuMacs[i]) ? 'x' : ' ', mac);
-    _clientItems[i + 1] = {_clientLabels[i + 1]};
+    uint8_t observedChannel = 0;
+    for (uint8_t j = 0; j < _seenClientCount; ++j)
+      if (macEq(_seenClients[j].mac, _clientMenuMacs[i])) {
+        observedChannel = _seenClients[j].channel;
+        break;
+      }
+    if (_bssidCount == 0 && _channelMask == 0 && observedChannel >= 1 && observedChannel <= MAX_CH)
+      snprintf(_clientLabels[i + 2], sizeof(_clientLabels[i + 2]), "[%c] %s CH%u",
+               _isSelectedClient(_clientMenuMacs[i]) ? 'x' : ' ', mac, observedChannel);
+    else
+      snprintf(_clientLabels[i + 2], sizeof(_clientLabels[i + 2]), "[%c] %s",
+               _isSelectedClient(_clientMenuMacs[i]) ? 'x' : ' ', mac);
+    _clientItems[i + 2] = {_clientLabels[i + 2]};
   }
 
-  const uint8_t count = _clientMenuCount + 1;
+  const uint8_t count = _clientMenuCount + 2;
   if (preserveSelection) {
     setCount(count);
     render();
@@ -393,7 +456,7 @@ bool WifiPacketMonitorScreen::_isClientCandidate(const uint8_t* mac, const uint8
   return true;
 }
 
-void WifiPacketMonitorScreen::_observeClient(const uint8_t* mac)
+void WifiPacketMonitorScreen::_observeClient(const uint8_t* mac, uint8_t channel, int8_t rssi)
 {
   if (!mac || isZeroMac(mac) || (mac[0] & 0x01)) return;
 
@@ -401,13 +464,17 @@ void WifiPacketMonitorScreen::_observeClient(const uint8_t* mac)
   for (uint8_t i = 0; i < _seenClientCount; i++) {
     if (macEq(_seenClients[i].mac, mac)) {
       _seenClients[i].lastSeen = now;
+      _seenClients[i].rssi = rssi;
+      if (channel >= 1 && channel <= MAX_CH) _seenClients[i].channel = channel;
       return;
     }
   }
 
   if (_seenClientCount < MAX_SEEN_CLIENTS) {
     memcpy(_seenClients[_seenClientCount].mac, mac, 6);
-    _seenClients[_seenClientCount++].lastSeen = now;
+    _seenClients[_seenClientCount].lastSeen = now;
+    _seenClients[_seenClientCount].rssi = rssi;
+    _seenClients[_seenClientCount++].channel = channel;
     return;
   }
 
@@ -417,6 +484,8 @@ void WifiPacketMonitorScreen::_observeClient(const uint8_t* mac)
 
   memcpy(_seenClients[oldest].mac, mac, 6);
   _seenClients[oldest].lastSeen = now;
+  _seenClients[oldest].rssi = rssi;
+  _seenClients[oldest].channel = channel;
 }
 
 void WifiPacketMonitorScreen::_start()
@@ -424,7 +493,7 @@ void WifiPacketMonitorScreen::_start()
   _resetCounters();
   _state = STATE_RUNNING;
   _scroll = 0;
-  _hopChannel = 1;
+  _hopChannel = _integrated ? _initialChannel : 1;
   _packetsPerSecond = 0;
   _activeInstance = this;
 
@@ -439,6 +508,7 @@ void WifiPacketMonitorScreen::_start()
 
   const uint32_t now = millis();
   _lastRefresh = 0;
+  _sessionStartMs = now;
   _lastRateSample = now;
   _lastRateTotal = 0;
   render();
@@ -471,6 +541,13 @@ void WifiPacketMonitorScreen::_resetCounters()
 
 void WifiPacketMonitorScreen::_hop()
 {
+  if (_state == STATE_RUNNING && _bssidCount == 0 && _clientCount == 1 &&
+      _clientChannel >= 1 && _clientChannel <= MAX_CH &&
+      (_channelMask == 0 || (_channelMask & (1u << (_clientChannel - 1))))) {
+    esp_wifi_set_channel(_clientChannel, WIFI_SECOND_CHAN_NONE);
+    _lastHop = millis();
+    return;
+  }
   if (_channelMask == 0) {
     esp_wifi_set_channel(_hopChannel, WIFI_SECOND_CHAN_NONE);
     _hopChannel = (_hopChannel >= MAX_CH) ? 1 : _hopChannel + 1;
@@ -505,17 +582,17 @@ void WifiPacketMonitorScreen::_updateRate()
 uint16_t WifiPacketMonitorScreen::_rowColor(uint8_t row)
 {
   switch (row) {
-    case 2:  return TFT_MAGENTA;  // Management
-    case 3:  return TFT_WHITE;    // Data
-    case 4:  return TFT_DARKGREY; // Control
-    case 6:  return TFT_GREEN;    // Beacon
-    case 7:
-    case 8:  return TFT_CYAN;     // Probe Request / Response
-    case 9:
+    case 3:  return TFT_MAGENTA;  // Management
+    case 4:  return TFT_WHITE;    // Data
+    case 5:  return TFT_DARKGREY; // Control
+    case 7:  return TFT_GREEN;    // Beacon
+    case 8:
+    case 9:  return TFT_CYAN;     // Probe Request / Response
     case 10:
-    case 13: return TFT_MAGENTA;  // Authentication / Association / Action
-    case 11: return TFT_RED;      // Deauth/Disassoc
-    case 12: return TFT_YELLOW;   // EAPOL
+    case 11:
+    case 14: return TFT_MAGENTA;  // Authentication / Association / Action
+    case 12: return TFT_RED;      // Deauth/Disassoc
+    case 13: return TFT_YELLOW;   // EAPOL
     default: return TFT_LIGHTGREY;
   }
 }
@@ -535,28 +612,40 @@ void WifiPacketMonitorScreen::_renderMonitor()
 {
   auto& lcd = Uni.Lcd;
   const char* labels[ROW_COUNT] = {
-    "Total", "Packets/sec", "Management", "Data", "Control", nullptr,
+    "Time elapsed", "Total", "Packets/sec", "Management", "Data", "Control", nullptr,
     "Beacon", "Probe Request", "Probe Response", "Authentication",
     "Association", "Deauth/Disassoc", "EAPOL", "Action",
   };
 
   String values[ROW_COUNT];
-  values[0]  = _fmtCount(_counters.total.load(std::memory_order_relaxed));
-  values[1]  = String(_packetsPerSecond);
-  values[2]  = _fmtCount(_counters.management.load(std::memory_order_relaxed));
-  values[3]  = _fmtCount(_counters.data.load(std::memory_order_relaxed));
-  values[4]  = _fmtCount(_counters.control.load(std::memory_order_relaxed));
-  values[6]  = _fmtCount(_counters.beacon.load(std::memory_order_relaxed));
-  values[7]  = _fmtCount(_counters.probeReq.load(std::memory_order_relaxed));
-  values[8]  = _fmtCount(_counters.probeResp.load(std::memory_order_relaxed));
-  values[9]  = _fmtCount(_counters.authentication.load(std::memory_order_relaxed));
-  values[10] = _fmtCount(_counters.association.load(std::memory_order_relaxed));
-  values[11] = _fmtCount(_counters.deauthDisassoc.load(std::memory_order_relaxed));
-  values[12] = _fmtCount(_counters.eapol.load(std::memory_order_relaxed));
-  values[13] = _fmtCount(_counters.action.load(std::memory_order_relaxed));
+  const uint32_t seconds = (millis() - _sessionStartMs) / 1000;
+  char elapsedText[20];
+  if (seconds >= 3600)
+    snprintf(elapsedText, sizeof(elapsedText), "%02lu:%02lu:%02lu",
+             (unsigned long)(seconds / 3600), (unsigned long)((seconds / 60) % 60),
+             (unsigned long)(seconds % 60));
+  else
+    snprintf(elapsedText, sizeof(elapsedText), "%02lu:%02lu",
+             (unsigned long)(seconds / 60), (unsigned long)(seconds % 60));
+  values[0]  = elapsedText;
+  values[1]  = _fmtCount(_counters.total.load(std::memory_order_relaxed));
+  values[2]  = String(_packetsPerSecond);
+  values[3]  = _fmtCount(_counters.management.load(std::memory_order_relaxed));
+  values[4]  = _fmtCount(_counters.data.load(std::memory_order_relaxed));
+  values[5]  = _fmtCount(_counters.control.load(std::memory_order_relaxed));
+  values[7]  = _fmtCount(_counters.beacon.load(std::memory_order_relaxed));
+  values[8]  = _fmtCount(_counters.probeReq.load(std::memory_order_relaxed));
+  values[9]  = _fmtCount(_counters.probeResp.load(std::memory_order_relaxed));
+  values[10] = _fmtCount(_counters.authentication.load(std::memory_order_relaxed));
+  values[11] = _fmtCount(_counters.association.load(std::memory_order_relaxed));
+  values[12] = _fmtCount(_counters.deauthDisassoc.load(std::memory_order_relaxed));
+  values[13] = _fmtCount(_counters.eapol.load(std::memory_order_relaxed));
+  values[14] = _fmtCount(_counters.action.load(std::memory_order_relaxed));
 
   const int rowH = lcd.fontHeight() + 5;
-  int visible = bodyH() / rowH;
+  const int contextRows = ((_channelMask || (_bssidCount == 0 && _clientCount == 1 && _clientChannel)) ? 1 : 0) + (_bssidCount ? 1 : 0) + (_clientCount ? _clientCount : 1);
+  const int contextH = contextRows ? contextRows * rowH + 5 : 0;
+  int visible = (bodyH() - contextH) / rowH;
   if (visible < 1) visible = 1;
   if (visible > ROW_COUNT) visible = ROW_COUNT;
   const int maxScroll = ROW_COUNT > visible ? ROW_COUNT - visible : 0;
@@ -566,10 +655,72 @@ void WifiPacketMonitorScreen::_renderMonitor()
   lcd.setTextSize(1);
   const int contentW = bodyW() - 7;
 
+  // Fixed capture context: show only filters that are actually active.
+  // The counters below retain their independent scroll position.
+  if (contextRows) {
+    int y = bodyY();
+    char context[64];
+    lcd.setTextDatum(TL_DATUM);
+    lcd.setTextColor(TFT_LIGHTGREY, TFT_BLACK);
+    if (_channelMask || (_bssidCount == 0 && _clientCount == 1 && _clientChannel)) {
+      if (_bssidCount == 0 && _clientCount == 1 && _clientChannel &&
+          (_channelMask == 0 || (_channelMask & (1u << (_clientChannel - 1))))) {
+        snprintf(context, sizeof(context), "Channel: %u", _clientChannel);
+      } else if (_channelMask && (_channelMask & (_channelMask - 1)) == 0) {
+        uint8_t ch = 1;
+        while (ch <= MAX_CH && !(_channelMask & (1u << (ch - 1)))) ++ch;
+        snprintf(context, sizeof(context), "Channel: %u", ch);
+      } else {
+        snprintf(context, sizeof(context), "Channel: Multiple");
+      }
+      lcd.drawString(context, bodyX() + 2, y + 2);
+      y += rowH;
+    }
+    if (_bssidCount) {
+      char mac[18];
+      _formatMac(_bssids[0], mac, sizeof(mac));
+      // Match WiFi Analyzer's SSID/BSSID terminology. The Channel Monitor
+      // passes the SSID directly; manual selection resolves it from scan cache.
+      const char* ssid = _contextSsid;
+      if (_bssidCount == 1 && !ssid[0]) {
+        for (uint8_t i = 0; i < _scanCount; ++i) {
+          if (macEq(_scan[i].bssid, _bssids[0])) {
+            ssid = _scan[i].ssid;
+            break;
+          }
+        }
+      }
+      snprintf(context, sizeof(context), "SSID: %s",
+               _bssidCount != 1 ? "Multiple" : (ssid[0] ? ssid : "<hidden>"));
+      // Truncate to the available screen width, without altering the SSID.
+      while (context[0] && lcd.textWidth(context) > contentW - 4)
+        context[strlen(context) - 1] = '\0';
+      lcd.drawString(context, bodyX() + 2, y + 2);
+      y += rowH;
+    }
+    if (!_clientCount) {
+      lcd.drawString("Clients: All", bodyX() + 2, y + 2);
+      y += rowH;
+    } else {
+      // Show all selected MACs, comma-separated, wrapping at MAC boundaries.
+      for (uint8_t i = 0; i < _clientCount; ++i) {
+        char mac[18];
+        _formatMac(_clients[i], mac, sizeof(mac));
+        snprintf(context, sizeof(context), "%s%s%s",
+                 i == 0 ? "Clients: " : "  ", mac,
+                 i + 1 < _clientCount ? "," : "");
+        lcd.drawString(context, bodyX() + 2, y + 2);
+        y += rowH;
+      }
+    }
+    lcd.drawFastHLine(bodyX(), bodyY() + contextH - 3,
+                      bodyW(), TFT_DARKGREY);
+  }
+
   for (int slot = 0; slot < visible; slot++) {
     const int row = _scroll + slot;
-    const int y = bodyY() + slot * rowH;
-    if (row == 5) {
+    const int y = bodyY() + contextH + slot * rowH;
+    if (row == 6) {
       lcd.drawFastHLine(bodyX() + 2, y + rowH / 2, contentW - 4, TFT_DARKGREY);
       continue;
     }
@@ -585,12 +736,12 @@ void WifiPacketMonitorScreen::_renderMonitor()
 
   if (ROW_COUNT > visible) {
     const int barX = bodyX() + bodyW() - 3;
-    const int trackH = bodyH();
+    const int trackH = bodyH() - contextH;
     int thumbH = (trackH * visible) / ROW_COUNT;
     if (thumbH < 8) thumbH = 8;
     const int travel = trackH - thumbH;
-    const int thumbY = bodyY() + (maxScroll ? (travel * _scroll) / maxScroll : 0);
-    lcd.fillRect(barX, bodyY(), 2, trackH, TFT_DARKGREY);
+    const int thumbY = bodyY() + contextH + (maxScroll ? (travel * _scroll) / maxScroll : 0);
+    lcd.fillRect(barX, bodyY() + contextH, 2, trackH, TFT_DARKGREY);
     lcd.fillRect(barX, thumbY, 2, thumbH, Config.getThemeColor());
   }
   lcd.setTextDatum(TL_DATUM);
@@ -725,9 +876,23 @@ void WifiPacketMonitorScreen::_promiscuousCb(void* buf, wifi_promiscuous_pkt_typ
 
   // Learn clients passively from management/data traffic within the current
   // channel/AP scope. Control frames do not carry enough role context.
-  if (pktType != WIFI_PKT_CTRL) {
-    if (self->_isClientCandidate(src, bssid)) self->_observeClient(src);
-    if (self->_isClientCandidate(dst, bssid)) self->_observeClient(dst);
+  if (pktType == WIFI_PKT_MGMT) {
+    // Management frames sent by an AP (beacons/probe responses) are not
+    // evidence that its destination is a station; only learn station senders
+    // for probe requests and station-originated association/authentication.
+    const uint8_t subtype = (frame[0] >> 4) & 0x0F;
+    if ((subtype == 4 || subtype == 0 || subtype == 2 || subtype == 11) &&
+        self->_isClientCandidate(src, bssid))
+      self->_observeClient(src, pkt->rx_ctrl.channel, pkt->rx_ctrl.rssi);
+  } else if (pktType == WIFI_PKT_DATA) {
+    const bool toDS = (frame[1] & 0x01) != 0;
+    const bool fromDS = (frame[1] & 0x02) != 0;
+    // Infrastructure frames identify the station by direction. Do not
+    // interpret WDS or ad-hoc endpoints as verified infrastructure clients.
+    const uint8_t* station = (toDS && !fromDS) ? src :
+                             (!toDS && fromDS) ? dst : nullptr;
+    if (station && self->_isClientCandidate(station, bssid))
+      self->_observeClient(station, pkt->rx_ctrl.channel, pkt->rx_ctrl.rssi);
   }
 
   // When Clients is opened, the same callback is used only for passive

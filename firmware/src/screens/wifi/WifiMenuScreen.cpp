@@ -8,6 +8,7 @@
 #include "WifiAPScreen.h"
 #include "WifiMonitoringDetectionMenuScreen.h"
 #include "WifiAttacksMenuScreen.h"
+#include "WifiUnigotchiScreen.h"
 
 void WifiMenuScreen::onInit() {
   setItems(_items);
@@ -19,6 +20,7 @@ void WifiMenuScreen::onItemSelected(uint8_t index) {
     case 1: Screen.push(new NetworkMenuScreen());                   break;
     case 2: Screen.push(new WifiMonitoringDetectionMenuScreen());     break;
     case 3: Screen.push(new WifiAttacksMenuScreen());               break;
+    case 4: Screen.push(new WifiUnigotchiScreen());                 break;
   }
 }
 

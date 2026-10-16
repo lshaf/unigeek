@@ -21,19 +21,20 @@ private:
   static constexpr int MAX_SCAN    = 20;
   static constexpr int MAX_CLIENTS = 32;  // keep in sync with kMaxClients in .cpp
 
-  enum State { STATE_SCAN, STATE_CLIENTS };
+  enum State { STATE_MODE, STATE_SCAN, STATE_CLIENTS, STATE_STATION_DETAILS };
   State _state = STATE_SCAN;
 
   struct WifiEntry {
     char ssid[33];
     char bssid[18];
+    char bssidDisplay[24];
     char rssi[20];
     char channel[4];
     char encryption[20];
     int  rssiValue = 0;
   };
 
-  char      _title[16]   = "WiFi Analyzer";
+  char      _title[16]   = "WiFi Scanner";
   WifiEntry _entries[MAX_SCAN];
   int       _entryCount  = 0;
 
@@ -46,6 +47,12 @@ private:
   int                 _selectedAp        = -1;
   ScrollListView::Row _rows[INFO_ROWS + 1 + MAX_CLIENTS];
   char                _clientLabels[MAX_CLIENTS][6];
+  uint8_t             _vendorMacs[MAX_CLIENTS][6] = {};
+  char                _vendorNames[MAX_CLIENTS][12] = {};
+  bool                _vendorDone[MAX_CLIENTS] = {};
+  uint8_t             _vendorCount = 0;
+  int                 _vendorPending = -1;
+  void _updateClientVendors();
   int                 _lastClientCount   = -1;
   uint32_t            _lastClientRefresh = 0;
 
@@ -55,6 +62,16 @@ private:
   int  _lastRssiShown   = 1;
   int  _lastWpsShown    = -2;
 
+  void _showModes();
+  void _scanStations();
+  void _showStationDetails(int index);
+  void _openOptions(int index);
+  bool _stationMode = false;
+  static constexpr int MAX_STATIONS = 20;
+  struct StationEntry { uint8_t mac[6]; uint8_t bssid[6]; int8_t rssi; uint8_t channel; bool hasAp; char macText[18]; char sublabel[12]; };
+  StationEntry _stations[MAX_STATIONS] = {};
+  int _stationCount = 0;
+  ListItem _modeItems[2];
   void _doScan();
   void _showScan();
   void _showClients(int index);

@@ -6,7 +6,6 @@
 #include "WifiPacketSnifferScreen.h"
 #include "WifiWatchdogScreen.h"
 #include "WifiWatchcatScreen.h"
-#include "WifiFoxHuntScreen.h"
 
 void WifiMonitoringDetectionMenuScreen::onInit() {
   setItems(_items);
@@ -20,7 +19,6 @@ void WifiMonitoringDetectionMenuScreen::onItemSelected(uint8_t index) {
     case 3: Screen.push(new WifiPacketSnifferScreen());  break;
     case 4: Screen.push(new WifiWatchdogScreen());       break;
     case 5: Screen.push(new WifiWatchcatScreen());       break;
-    case 6: Screen.push(new WifiFoxHuntScreen());         break;
   }
 }
 

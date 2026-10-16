@@ -12,6 +12,7 @@ public:
   const char* title() override { return _title; }
   bool inhibitPowerSave() override { return _state == STATE_RUNNING; }
 
+  void configureFromChannel(uint8_t channel, const uint8_t bssid[6], const uint8_t* client = nullptr, const char* ssid = nullptr);
   void onInit() override;
   void onUpdate() override;
   void onRender() override;
@@ -27,7 +28,7 @@ private:
   static constexpr uint32_t HOP_MS     = 250;
   static constexpr uint32_t REFRESH_MS = 500;
   static constexpr uint32_t RATE_MS    = 1000;
-  static constexpr uint8_t  ROW_COUNT  = 14;
+  static constexpr uint8_t  ROW_COUNT  = 15;
 
   enum State : uint8_t {
     STATE_MENU,
@@ -39,7 +40,7 @@ private:
 
   struct ScanEntry {
     char    ssid[33]      = {};
-    char    bssidText[18] = {};
+    char    bssidText[24] = {};
     uint8_t bssid[6]      = {};
     uint8_t channel       = 0;
     int32_t rssi          = 0;
@@ -48,6 +49,8 @@ private:
   struct SeenClient {
     uint8_t  mac[6]   = {};
     uint32_t lastSeen = 0;
+    uint8_t channel = 0;
+    int8_t rssi = -127;
   };
 
   struct Counters {
@@ -66,7 +69,10 @@ private:
   };
 
   State _state = STATE_MENU;
+  bool _integrated = false;
+  uint8_t _initialChannel = 0;
   char  _title[20] = "Packet Monitor";
+  char  _contextSsid[33] = {};
 
   uint16_t _channelMask = 0;
   uint8_t  _bssids[MAX_BSSID][6] = {};
@@ -87,6 +93,7 @@ private:
 
   uint8_t    _clients[MAX_CLIENT][6] = {};
   uint8_t    _clientCount = 0;
+  uint8_t    _clientChannel = 0;
   SeenClient _seenClients[MAX_SEEN_CLIENTS] = {};
   uint8_t    _seenClientCount = 0;
   uint8_t    _clientMenuMacs[MAX_SEEN_CLIENTS + MAX_CLIENT][6] = {};
@@ -98,6 +105,7 @@ private:
   uint8_t  _hopChannel = 1;
   uint32_t _lastHop = 0;
   uint32_t _lastRefresh = 0;
+  uint32_t _sessionStartMs = 0;
   uint32_t _lastRateSample = 0;
   uint32_t _lastRateTotal = 0;
   uint32_t _packetsPerSecond = 0;
@@ -115,7 +123,7 @@ private:
   void _rebuildBssidItems();
   void _showClients(bool preserveSelection = false);
   void _discoverClients();
-  void _observeClient(const uint8_t* mac);
+  void _observeClient(const uint8_t* mac, uint8_t channel, int8_t rssi);
   bool _isSelectedClient(const uint8_t* mac) const;
   bool _isClientCandidate(const uint8_t* mac, const uint8_t* bssid) const;
   void _start();
