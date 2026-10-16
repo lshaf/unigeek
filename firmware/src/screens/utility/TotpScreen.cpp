@@ -222,7 +222,7 @@ void TotpScreen::_updateAddLabels() {
 
 void TotpScreen::_saveNew() {
   if (_pendingName.length() == 0 || _pendingSecret.length() == 0) {
-    ShowStatusAction::show("Name or secret not set", 1200);
+    ShowStatusAction::show("Name or secret not set", 1500);
     render();
     return;
   }

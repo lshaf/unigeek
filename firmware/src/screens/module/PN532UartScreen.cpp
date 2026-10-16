@@ -184,7 +184,7 @@ bool PN532UartScreen::_initModule() {
   int rx = PinConfig.getInt(PIN_CONFIG_PN532_RX, PIN_CONFIG_PN532_RX_DEFAULT);
   int baud = PinConfig.getInt(PIN_CONFIG_PN532_BAUD, PIN_CONFIG_PN532_BAUD_DEFAULT);
   if (tx < 0 || rx < 0) {
-    ShowStatusAction::show("PN532 TX/RX pins not set");
+    ShowStatusAction::show("PN532 TX/RX pins not set", 1500);
     Screen.goBack();
     return false;
   }

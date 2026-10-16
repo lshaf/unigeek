@@ -392,7 +392,7 @@ void PasswordManagerScreen::_updateAddLabels()
 void PasswordManagerScreen::_saveEntry()
 {
   if (_pendingLabel.length() == 0) {
-    ShowStatusAction::show("Label not set", 1200);
+    ShowStatusAction::show("Label not set", 1500);
     render();
     return;
   }

@@ -185,7 +185,7 @@ void WifiDeauthDisassocScreen::_startDeauth()
   if (_mode == MODE_TARGET) {
     const MacAddr blank = {0, 0, 0, 0, 0, 0};
     if (_target.ssid == "-" && memcmp(_target.bssid, blank, 6) == 0) {
-      ShowStatusAction::show("Access Point not set");
+      ShowStatusAction::show("Access Point not set", 1500);
       return;
     }
   }

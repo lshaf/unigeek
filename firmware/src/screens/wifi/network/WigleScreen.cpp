@@ -131,7 +131,7 @@ void WigleScreen::_showUploadMenu() {
   }
   String token = WigleUtil::readToken(Uni.Storage);
   if (token.length() == 0) {
-    ShowStatusAction::show("Token not set");
+    ShowStatusAction::show("Token not set", 1500);
     return;
   }
 

@@ -304,12 +304,12 @@ void WifiBeaconFloodScreen::_startScan(bool forceScan)
 void WifiBeaconFloodScreen::_startAttack()
 {
   if (_mode == MODE_FLOOD && _floodTarget < 0) {
-    ShowStatusAction::show("Target not set");
+    ShowStatusAction::show("Target not set", 1500);
     return;
   }
 
   if (_mode == MODE_SPAM && _spamTarget == SPAM_FILE && _fileSsidCount == 0) {
-    ShowStatusAction::show("SSIDs not set");
+    ShowStatusAction::show("SSIDs not set", 1500);
     return;
   }
 

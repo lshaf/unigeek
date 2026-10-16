@@ -4678,7 +4678,7 @@ void PN532I2cScreen::_doUltralightRemovePassword() {
       _nfc, _wire, typeName, pages, auth0, access);
   const bool protectedNow = !readable || (auth0 != 0xFF && auth0 < pages);
   if (readable && !protectedNow) {
-    ShowStatusAction::show("Password not set", 1600);
+    ShowStatusAction::show("Password not set", 1500);
     _goUltralightAdvanced(); return;
   }
   if (protectedNow && !_pn532EnsureUltralightAuthForRange(

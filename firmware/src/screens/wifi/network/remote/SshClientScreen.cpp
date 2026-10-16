@@ -419,17 +419,17 @@ void SshClientScreen::_selectKey(uint8_t index) {
 
 void SshClientScreen::_connect() {
   if (_host.length() == 0) {
-    ShowStatusAction::show("Host not set", 1200);
+    ShowStatusAction::show("Host not set", 1500);
     render();
     return;
   }
   if (_username.length() == 0) {
-    ShowStatusAction::show("Username not set", 1200);
+    ShowStatusAction::show("Username not set", 1500);
     render();
     return;
   }
   if (_port < 1 || _port > 65535) {
-    ShowStatusAction::show("Port not set", 1200);
+    ShowStatusAction::show("Port not set", 1500);
     render();
     return;
   }

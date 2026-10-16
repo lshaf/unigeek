@@ -504,7 +504,7 @@ void GPSScreen::_showUploadMenu() {
   }
   String token = WigleUtil::readToken(Uni.Storage);
   if (token.length() == 0) {
-    ShowStatusAction::show("WiGLE token not set");
+    ShowStatusAction::show("WiGLE token not set", 1500);
     return;
   }
 

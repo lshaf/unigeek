@@ -59,7 +59,7 @@ void DhcpAttackScreen::onItemSelected(uint8_t index) {
 
 void DhcpAttackScreen::_start() {
   if (!_starvEnabled && !_rogueEnabled) {
-    ShowStatusAction::show("DHCP mode not set");
+    ShowStatusAction::show("DHCP mode not set", 1500);
     return;
   }
   if (WiFi.status() != WL_CONNECTED) {

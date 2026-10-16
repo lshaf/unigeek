@@ -352,7 +352,7 @@ void WikipediaScreen::_showOnThisDay() {
 
   struct tm tmv = {};
   if (!getLocalTime(&tmv, 0) || tmv.tm_year + 1900 < 2023) {
-    ShowStatusAction::show("Time not set", 1800);
+    ShowStatusAction::show("Time not set", 1500);
     return;
   }
 
