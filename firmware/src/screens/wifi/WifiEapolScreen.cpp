@@ -195,7 +195,7 @@ void WifiEapolScreen::onItemSelected(uint8_t index) {
       // once _selectWifi() lands a scan result, so it's the canonical
       // "no target set" indicator.
       if (_mode == MODE_TARGET && _target.channel == 0) {
-        ShowStatusAction::show("Access Point not set", 1500);
+        ShowStatusAction::show("Access Point not set");
         return;
       }
 
