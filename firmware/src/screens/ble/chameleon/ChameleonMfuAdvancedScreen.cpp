@@ -286,7 +286,7 @@ void ChameleonMfuAdvancedScreen::_removePassword() {
   uint8_t auth0=0xFF, access=0;
   const bool readable=ChameleonMfuAuthUtils::readProtection(c,info,auth0,access);
   const bool protectedNow=!readable || (auth0!=0xFF && auth0<info.pages);
-  if(readable && !protectedNow){if(restoreMode)c.setMode(previousMode);render();ShowStatusAction::show("Password not set", 1500);return;}
+  if(readable && !protectedNow){if(restoreMode)c.setMode(previousMode);render();ShowStatusAction::show("Password not set");return;}
   if(protectedNow && !ChameleonMfuAuthUtils::ensureForRange(c,info,cfg,cfg+3,false,pwd,usePwd)){if(restoreMode)c.setMode(previousMode);render();return;}
   uint8_t c0[4]={},c1[4]={};
   const bool r0=usePwd?c.mfuReadPageSession((uint8_t)cfg,c0):c.mfuReadPage((uint8_t)cfg,c0);

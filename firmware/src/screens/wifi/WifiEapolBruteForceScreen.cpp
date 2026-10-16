@@ -214,12 +214,12 @@ void WifiEapolBruteForceScreen::onItemSelected(uint8_t index) {
     } else if (index == 2) {
       // Start — require both selected
       if (_selectedPcap[0] == '\0') {
-        ShowStatusAction::show("PCAP not set", 1500);
+        ShowStatusAction::show("PCAP not set");
         render();
         return;
       }
       if (_selectedWordlist[0] == '\0') {
-        ShowStatusAction::show("Wordlist not set", 1500);
+        ShowStatusAction::show("Wordlist not set");
         render();
         return;
       }

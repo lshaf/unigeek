@@ -90,7 +90,7 @@ uint8_t WigleUtil::fetchStats(ScrollListView::Row* rows, uint8_t maxRows) {
   }
   String token = readToken(Uni.Storage);
   if (token.length() == 0) {
-    ShowStatusAction::show("Token not set", 1500);
+    ShowStatusAction::show("Token not set");
     return 0;
   }
 

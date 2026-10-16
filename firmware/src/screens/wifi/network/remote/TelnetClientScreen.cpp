@@ -146,12 +146,12 @@ void TelnetClientScreen::_configPort() {
 
 void TelnetClientScreen::_connect() {
   if (_host.length() == 0) {
-    ShowStatusAction::show("Host not set", 1500);
+    ShowStatusAction::show("Host not set");
     render();
     return;
   }
   if (_port < 1 || _port > 65535) {
-    ShowStatusAction::show("Port not set", 1500);
+    ShowStatusAction::show("Port not set");
     render();
     return;
   }
