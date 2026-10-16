@@ -90,7 +90,8 @@ public:
     if (_lookupVendor) {
       VendorResolver::Result result;
       if (VendorResolver::instance().poll(_stationMac, result)) {
-        _rows[_vendorRow].value = result.found ? String(result.name) : "Unknown";
+        if (result.found) _setVendorName(String(result.name));
+        else _setVendorName("Unknown");
         _list.render(bodyX(), bodyY(), bodyW(), bodyH());
       }
     }
@@ -104,6 +105,55 @@ public:
   }
 
 private:
+  // Vendor is always the last field. Continuation rows have an empty label,
+  // so ScrollListView draws them right-aligned without any global changes.
+  void _setVendorName(const String& name) {
+    _count = _vendorRow + 1;
+    _rows[_vendorRow].value = name;
+    if (name == "Unknown" || name == "Looking up..." || name.isEmpty()) {
+      _list.setRows(_rows, _count);
+      return;
+    }
+
+    // Match ScrollListView: 3px scrollbar, 4px padding, 2px label inset.
+    const int fullWidth = bodyW() - 3 - 4 - 2;
+    Uni.Lcd.setTextSize(1);
+    const int labelWidth = Uni.Lcd.textWidth("Vendor") + 8;
+    const int firstWidth = fullWidth - labelWidth;
+    if (Uni.Lcd.textWidth(name.c_str()) <= firstWidth) {
+      _list.setRows(_rows, _count);
+      return;
+    }
+
+    String remaining = name;
+    int width = firstWidth;
+    uint8_t row = _vendorRow;
+    while (remaining.length() && row < MAX_ROWS) {
+      int end = 0;
+      int lastSpace = -1;
+      for (int i = 0; i < (int)remaining.length(); ++i) {
+        String candidate = remaining.substring(0, i + 1);
+        if (Uni.Lcd.textWidth(candidate.c_str()) > width) break;
+        end = i + 1;
+        if (remaining[i] == ' ') lastSpace = i;
+      }
+      if (end == 0) end = 1; // Always make progress, even on narrow displays.
+      if (end < (int)remaining.length() && lastSpace > 0) end = lastSpace;
+      String part = remaining.substring(0, end);
+      part.trim();
+      _rows[row].value = part;
+      remaining.remove(0, end);
+      remaining.trim();
+      if (remaining.length() && row + 1 < MAX_ROWS) {
+        ++row;
+        _rows[row] = {"", ""};
+        width = fullWidth;
+      } else break;
+    }
+    _count = row + 1;
+    _list.setRows(_rows, _count);
+  }
+
   static void _setMac(String& out, const uint8_t* mac) {
     char buf[18];
     snprintf(buf, sizeof(buf), "%02X:%02X:%02X:%02X:%02X:%02X",
@@ -121,6 +171,7 @@ private:
   uint8_t _stationMac[6] = {};
   uint8_t _count = 0;
   String _mac, _apMac, _ssid, _rssi, _channel, _packets;
-  ScrollListView::Row _rows[7] = {};
+  static constexpr uint8_t MAX_ROWS = 16;
+  ScrollListView::Row _rows[MAX_ROWS] = {};
   ScrollListView _list;
 };
