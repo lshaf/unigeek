@@ -25,7 +25,8 @@ enum class UsbProfile : uint8_t {
   NONE         = 0,
   COMPOSITE    = 1,  // keyboard + mouse (DuckyScript / Mouse Jiggle / kbd relay)
   WEBAUTHN     = 2,  // FIDO2 / WebAuthn passkey
-  MASS_STORAGE = 3,  // USB Mass Storage (SD card exposed as a removable drive)
+  MASS_STORAGE = 3,
+  MSC_HID      = 4,  // Boot ISO with keyboard, registered before USB.begin()  // USB Mass Storage (SD card exposed as a removable drive)
 };
 
 // Returns the profile that has claimed USB this boot, or NONE if no

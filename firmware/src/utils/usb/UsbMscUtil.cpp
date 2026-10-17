@@ -80,7 +80,7 @@ bool UsbMscUtil::beginIso(IStorage* storage, const char* path)
     return false;
   }
 #ifdef DEVICE_HAS_WEBAUTHN
-  if (!webauthn::claimUsbProfile(webauthn::UsbProfile::MASS_STORAGE)) {
+  if (!webauthn::claimUsbProfile(webauthn::UsbProfile::MSC_HID)) {
     _failReason = FAIL_USB_BUSY;
     return false;
   }
