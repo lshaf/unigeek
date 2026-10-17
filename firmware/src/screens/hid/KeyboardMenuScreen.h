@@ -16,11 +16,12 @@ private:
   void _toggleUsbRemote();
 
 #ifdef DEVICE_HAS_WEBAUTHN
-  ListItem _items[5] = {
+  ListItem _items[6] = {
     {"USB HID"},
     {"BLE HID"},
     {"USB WebAuthn"},
     {"USB Mass Storage"},
+    {"Boot from ISO"},
     {"USB Remote"},
   };
 #elif defined(DEVICE_HAS_USB_HID)
@@ -28,6 +29,7 @@ private:
     {"USB HID"},
     {"BLE HID"},
     {"USB Mass Storage"},
+    {"Boot from ISO"},
     {"USB Remote"},
   };
 #else

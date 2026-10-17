@@ -35,6 +35,8 @@ public:
   // already active. Returns false (and sets failReason()) when the storage is
   // not a block device or USB was already claimed by another profile.
   bool begin(IStorage* storage);
+  // Expose a hybrid bootable ISO as a read-only USB disk (512-byte sectors).
+  bool beginIso(IStorage* storage, const char* path);
 
   // Eject the media. The MSC interface stays in the USB descriptor (arduino-esp32
   // cannot tear USB down), but the host sees the drive removed. A later begin()
@@ -56,6 +58,8 @@ private:
   static int32_t _onWrite(uint32_t lba, uint32_t offset, uint8_t* buffer, uint32_t bufsize);
   static bool    _onStartStop(uint8_t power_condition, bool start, bool load_eject);
 
+  fs::File   _isoFile;
+  bool       _isoMode = false;
   IStorage*  _storage     = nullptr;
   uint32_t   _blockCount  = 0;
   uint16_t   _blockSize   = 0;
