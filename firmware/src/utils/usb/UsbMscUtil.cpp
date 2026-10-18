@@ -4,6 +4,7 @@
 
 #include <USB.h>
 #include <USBMSC.h>
+#include <stdlib.h>
 
 #ifdef DEVICE_HAS_WEBAUTHN
 #include "utils/webauthn/UsbProfile.h"
@@ -98,6 +99,15 @@ bool UsbMscUtil::beginIso(IStorage* storage, const char* path)
     _failReason = FAIL_NOT_BLOCK_DEVICE;
     return false;
   }
+  // Reserve the 64 KiB cache only for the duration of an ISO session.
+  // Allocation must succeed before the USB MSC interface is exposed.
+  uint8_t* cache = static_cast<uint8_t*>(malloc(ISO_CACHE_BYTES));
+  if (!cache) {
+    file.close();
+    _failReason = FAIL_NOT_BLOCK_DEVICE;
+    return false;
+  }
+  _isoCache = cache;
   _isoFile = file;
   _isoMode = true;
   _storage = storage;
@@ -132,6 +142,8 @@ void UsbMscUtil::end()
   _isoMode = false;
   _isoCacheValid = 0;
   _storage = nullptr;
+  free(_isoCache);
+  _isoCache = nullptr;
 }
 
 int32_t UsbMscUtil::_onRead(uint32_t lba, uint32_t offset, void* buffer, uint32_t bufsize)
@@ -145,7 +157,7 @@ int32_t UsbMscUtil::_onRead(uint32_t lba, uint32_t offset, void* buffer, uint32_
   if (self._isoMode) {
     const uint64_t start = (uint64_t)lba * bs + offset;
     const uint64_t end = start + bufsize;
-    if (!self._isoFile || end > (uint64_t)self._blockCount * bs) return -1;
+    if (!self._isoFile || !self._isoCache || end > (uint64_t)self._blockCount * bs) return -1;
 
     // Read-ahead cache: 64 KiB windows aligned to 512-byte sectors.
     // Keep USB callbacks bounded and never serve bytes from a failed fill.
