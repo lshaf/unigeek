@@ -58,7 +58,6 @@ void BootIsoScreen::onItemSelected(uint8_t index) {
   String path = "/unigeek/hid/isos/" + _selected;
   // Register HID before beginIso() calls USB.begin().
   USBKeyboardUtil& keyboard = bootKeyboard();
-  BootIsoCdc::begin();  // Register CDC alongside HID and MSC before USB.begin().
   if (!UsbMscUtil::instance().beginIso(Uni.Storage, path.c_str())) {
     ShowStatusAction::show(UsbMscUtil::instance().failReason() == UsbMscUtil::FAIL_USB_BUSY
                              ? "USB busy: reboot required" : "Cannot open ISO");
@@ -66,30 +65,19 @@ void BootIsoScreen::onItemSelected(uint8_t index) {
   }
   keyboard.begin();
   _holdTriggered = false;
-  _bootSelection = 0;
-  _navMode = 0;
+  _keySelection = 0;
+  _activeBlock = 0;
+  _insideBlock = false;
   _backHoldTriggered = false;
   _mounted = true;
   render();
 }
 
 void BootIsoScreen::onUpdate() {
-  if (_mounted) BootIsoCdc::poll();
   if (!_mounted) { ListScreen::onUpdate(); return; }
-  // Long BACK returns to Boot Keys. Suppress its release to avoid switching modes.
-  if (_navMode && !_backHoldTriggered && Uni.Nav->isPressed() &&
-      Uni.Nav->currentDirection() == INavigation::DIR_BACK &&
-      Uni.Nav->heldDuration() >= 750) {
-    _backHoldTriggered = true;
-    Uni.Nav->suppressCurrentPress();
-    _navMode = 0;
-    _bootSelection = 0;
-    render();
-    return;
-  }
+
 #ifndef DEVICE_HAS_KEYBOARD
-  // Hold encoder PRESS opens the existing virtual HID keyboard.
-  if (_navMode && !_holdTriggered && Uni.Nav->isPressed() &&
+  if (!_holdTriggered && Uni.Nav->isPressed() &&
       Uni.Nav->currentDirection() == INavigation::DIR_PRESS &&
       Uni.Nav->heldDuration() >= 750) {
     _holdTriggered = true;
@@ -98,49 +86,55 @@ void BootIsoScreen::onUpdate() {
     InputTextAction::popup("USB Keyboard", "", InputTextAction::INPUT_TEXT,
                            InputTextAction::PROFILE_HID, &bootKeyboard());
     render();
+    return;
   }
 #endif
   if (!Uni.Nav->wasPressed()) return;
   const auto dir = Uni.Nav->readDirection();
   if (dir == INavigation::DIR_BACK) {
-    // The long BACK release is already suppressed by suppressCurrentPress().
-    // Do not consume the next short BACK on the Boot Keys screen.
-    onBack();
+    if (_insideBlock) {
+      _insideBlock = false;
+      render();
+    } else {
+      ejectIso();
+    }
     return;
   }
   if (dir == INavigation::DIR_PRESS && _holdTriggered) {
     _holdTriggered = false;
     return;
   }
-  if (_navMode) {
-    if (dir == INavigation::DIR_PRESS) {
-      bootKeyboard().write(KEY_RETURN);
-    } else if (dir == INavigation::DIR_DOWN || dir == INavigation::DIR_RIGHT) {
-      bootKeyboard().write(_navMode == 1 ? KEY_DOWN_ARROW : KEY_RIGHT_ARROW);
-    } else if (dir == INavigation::DIR_UP || dir == INavigation::DIR_LEFT) {
-      bootKeyboard().write(_navMode == 1 ? KEY_UP_ARROW : KEY_LEFT_ARROW);
-    }
-    return;
-  }
-  if (dir == INavigation::DIR_RIGHT || dir == INavigation::DIR_DOWN) {
-    const uint8_t previous = _bootSelection;
-    _bootSelection = (_bootSelection + 1) % 8;
-    drawVirtualKey(previous);
-    drawVirtualKey(_bootSelection);
-  } else if (dir == INavigation::DIR_LEFT || dir == INavigation::DIR_UP) {
-    const uint8_t previous = _bootSelection;
-    _bootSelection = (_bootSelection + 7) % 8;
-    drawVirtualKey(previous);
-    drawVirtualKey(_bootSelection);
-  } else if (dir == INavigation::DIR_PRESS) {
-    if (_bootSelection == 7) {
-      _navMode = 1;
-      render();
+  if (dir == INavigation::DIR_UP || dir == INavigation::DIR_LEFT ||
+      dir == INavigation::DIR_DOWN || dir == INavigation::DIR_RIGHT) {
+    const bool forward = dir == INavigation::DIR_DOWN || dir == INavigation::DIR_RIGHT;
+    if (!_insideBlock) {
+      const uint8_t previousBlock = _activeBlock;
+      _activeBlock = 1 - _activeBlock;
+      // Only the outlines change; avoid clearing the whole display.
+      drawBlockBorder(previousBlock);
+      drawBlockBorder(_activeBlock);
     } else {
-      static const uint8_t bootKeys[7] = {
-        KEY_ESC, KEY_DELETE, KEY_F1, KEY_F2, KEY_F10, KEY_F11, KEY_F12
+      const uint8_t count = _activeBlock == 0 ? 8 : 5;
+      const uint8_t previous = _keySelection;
+      _keySelection = (_keySelection + (forward ? 1 : count - 1)) % count;
+      drawVirtualKey(previous, _activeBlock);
+      drawVirtualKey(_keySelection, _activeBlock);
+    }
+  } else if (dir == INavigation::DIR_PRESS) {
+    if (!_insideBlock) {
+      _insideBlock = true;
+      _keySelection = 0;
+      render();
+    } else if (_activeBlock == 0) {
+      static const uint8_t bootKeys[8] = {
+        KEY_ESC, KEY_DELETE, KEY_F1, KEY_F2, KEY_F9, KEY_F10, KEY_F11, KEY_F12
       };
-      bootKeyboard().write(bootKeys[_bootSelection]);
+      bootKeyboard().write(bootKeys[_keySelection]);
+    } else {
+      static const uint8_t navKeys[5] = {
+        KEY_UP_ARROW, KEY_DOWN_ARROW, KEY_RETURN, KEY_LEFT_ARROW, KEY_RIGHT_ARROW
+      };
+      bootKeyboard().write(navKeys[_keySelection]);
     }
   }
 }
@@ -164,72 +158,101 @@ void BootIsoScreen::onRender() {
   }
   lcd.drawString(label, x0 + 6, y0 + 3);
 
-  const int footerH = _navMode ? 32 : 17;
-  if (!_navMode) {
-    for (uint8_t i = 0; i < 8; ++i) drawVirtualKey(i);
-  } else {
-    // Minimal navigation label centered in the content area above the hints.
-    const int midX = x0 + w / 2;
-    const int midY = y0 + 30 + (h - 30 - footerH) / 2;
-    lcd.setTextDatum(MC_DATUM);
-    lcd.setTextColor(TFT_WHITE, TFT_BLACK);
-    lcd.drawString(_navMode == 1 ? "UP/DOWN" : "LEFT/RIGHT", midX, midY);
-  }
-  lcd.drawFastHLine(x0, y0 + h - footerH, w, TFT_DARKGREY);
+  drawBlockBorder(0);
+  drawBlockBorder(1);
+  for (uint8_t i = 0; i < 8; ++i) drawVirtualKey(i, 0);
+  for (uint8_t i = 0; i < 5; ++i) drawVirtualKey(i, 1);
+  lcd.drawFastHLine(x0, y0 + h - 16, w, TFT_DARKGREY);
   lcd.setTextDatum(MC_DATUM);
   lcd.setTextColor(TFT_LIGHTGREY, TFT_BLACK);
-  if (!_navMode) {
-    lcd.drawString("[Back] Eject", x0 + w / 2, y0 + h - footerH / 2);
-  } else {
 #ifndef DEVICE_HAS_KEYBOARD
-    lcd.drawString("[Hold] Keyboard", x0 + w / 4, y0 + h - 24);
+  lcd.drawString("[Hold] Keyboard", x0 + w / 4, y0 + h - 8);
 #endif
-    lcd.drawString(_navMode == 1 ? "[Back] Switch" : "[Back] Switch Keys",
-                   x0 + (3 * w) / 4, y0 + h - 24);
-    lcd.drawString("[Hold Back] Boot Keys", x0 + w / 2, y0 + h - 8);
-  }
+  lcd.drawString("[Back] Eject", x0 + 3 * w / 4, y0 + h - 8);
 }
 
-// Repaint only one key on encoder rotation; do not clear the whole body.
-void BootIsoScreen::drawVirtualKey(uint8_t index) {
-  if (!_mounted || _navMode || index >= 8) return;
+// A block is outlined while it has focus; individual keys are highlighted only
+// after PRESS enters the block.
+void BootIsoScreen::drawBlockBorder(uint8_t block) {
   auto& lcd = Uni.Lcd;
-  const int x0 = bodyX(), y0 = bodyY();
-  const int w = bodyW(), h = bodyH();
-  const int usableH = h - 17 - 30 - 3;
-  static const char* labels[8] = {
-    "ESC", "DEL", "F1", "F2", "F10", "F11", "F12", "NAV"
-  };
+  const int x0 = bodyX(), y0 = bodyY(), w = bodyW(), h = bodyH();
+  const int top = y0 + 17;
+  const int footer = y0 + h - 18;
+  const int available = max(40, footer - top - 5);
+  const int bootH = (available * 57) / 100;
+  const int by = block == 0 ? top : top + bootH + 3;
+  const int bh = block == 0 ? bootH : available - bootH - 3;
+  const bool focused = !_insideBlock && _activeBlock == block;
+  lcd.drawRoundRect(x0 + 3, by, w - 6, bh, 4,
+                    focused ? Config.getThemeColor() : TFT_DARKGREY);
+}
+
+void BootIsoScreen::drawVirtualKey(uint8_t index, uint8_t block) {
+  if (!_mounted) return;
+  if (index >= (block == 0 ? 8 : 5)) return;
+  auto& lcd = Uni.Lcd;
+  const int x0 = bodyX(), y0 = bodyY(), w = bodyW(), h = bodyH();
+  const int top = y0 + 17;
+  const int available = max(40, y0 + h - 18 - top - 5);
+  const int bootH = (available * 57) / 100;
+  const int by = block == 0 ? top : top + bootH + 3;
+  const int bh = block == 0 ? bootH : available - bootH - 3;
+  const int cols = block == 0 ? 4 : 5;
+  const int rows = block == 0 ? 2 : 1;
   const int gap = 3;
-  const int keyW = (w - 12 - 3 * gap) / 4;
-  const int keyH = min(32, max(16, (usableH - gap) / 2));
-  const int gridW = 4 * keyW + 3 * gap;
-  const int gridH = 2 * keyH + gap;
-  const int x = x0 + (w - gridW) / 2;
-  const int y = y0 + 30 + (usableH - gridH) / 2;
-  const int bx = x + (index % 4) * (keyW + gap);
-  const int by = y + (index / 4) * (keyH + gap);
-  const bool selected = _bootSelection == index;
+  const int keyW = (w - 16 - (cols - 1) * gap) / cols;
+  const int keyH = min(27, max(12, (bh - 8 - (rows - 1) * gap) / rows));
+  const int gridW = cols * keyW + (cols - 1) * gap;
+  const int gridH = rows * keyH + (rows - 1) * gap;
+  const int x = x0 + (w - gridW) / 2 + (index % cols) * (keyW + gap);
+  const int y = by + (bh - gridH) / 2 + (index / cols) * (keyH + gap);
+  const bool selected = _insideBlock && _activeBlock == block && _keySelection == index;
   const uint16_t fill = selected ? Config.getThemeColor() : TFT_DARKGREY;
-  lcd.fillRoundRect(bx, by, keyW, keyH, 3, fill);
-  lcd.drawRoundRect(bx, by, keyW, keyH, 3,
-                    selected ? TFT_WHITE : TFT_LIGHTGREY);
+  lcd.fillRoundRect(x, y, keyW, keyH, 3, fill);
+  lcd.drawRoundRect(x, y, keyW, keyH, 3, selected ? TFT_WHITE : TFT_LIGHTGREY);
+  static const char* bootLabels[8] = {"ESC", "DEL", "F1", "F2", "F9", "F10", "F11", "F12"};
+  static const char* navLabels[5] = {"", "", "Select", "", ""};
   lcd.setTextSize(1);
   lcd.setTextDatum(MC_DATUM);
   lcd.setTextColor(TFT_WHITE, fill);
-  lcd.drawString(labels[index], bx + keyW / 2, by + keyH / 2);
+  if (block == 1 && index != 2) {
+    // Draw arrows geometrically to avoid missing font glyphs.
+    const int cx = x + keyW / 2;
+    const int cy = y + keyH / 2;
+    const int reach = min(keyW, keyH) / 4;
+    const int wing = max(2, reach / 2);
+    const uint16_t ink = TFT_WHITE;
+    if (index == 0 || index == 1) {
+      const int tipY = cy + (index == 0 ? -reach : reach);
+      const int baseY = cy + (index == 0 ? reach : -reach);
+      lcd.drawLine(cx, baseY, cx, tipY, ink);
+      lcd.drawLine(cx, tipY, cx - wing, tipY + (index == 0 ? wing : -wing), ink);
+      lcd.drawLine(cx, tipY, cx + wing, tipY + (index == 0 ? wing : -wing), ink);
+    } else {
+      const int tipX = cx + (index == 3 ? -reach : reach);
+      const int baseX = cx + (index == 3 ? reach : -reach);
+      lcd.drawLine(baseX, cy, tipX, cy, ink);
+      lcd.drawLine(tipX, cy, tipX + (index == 3 ? wing : -wing), cy - wing, ink);
+      lcd.drawLine(tipX, cy, tipX + (index == 3 ? wing : -wing), cy + wing, ink);
+    }
+  } else {
+    lcd.drawString(block == 0 ? bootLabels[index] : navLabels[index],
+                   x + keyW / 2, y + keyH / 2);
+  }
+}
+
+void BootIsoScreen::ejectIso() {
+  if (!_mounted) return;
+  bootKeyboard().releaseAll();
+  UsbMscUtil::instance().end();
+  _mounted = false;
+  Screen.goBack();
 }
 
 void BootIsoScreen::onBack() {
-  if (_mounted && _navMode) {
-    _navMode = _navMode == 1 ? 2 : 1;
-    render();
-    return;
-  }
   if (_mounted) {
-    bootKeyboard().releaseAll();
-    UsbMscUtil::instance().end();
-    _mounted = false;
+    if (_insideBlock) { _insideBlock = false; render(); }
+    return;
   }
   Screen.goBack();
 }

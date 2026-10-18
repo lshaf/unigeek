@@ -134,13 +134,14 @@ private:
   uint8_t     _hidModifiers = 0;
 
   int         _commandSelection = 0;
-  static constexpr int COMMAND_COUNT = 19;
+  static constexpr int COMMAND_COUNT = 20;
   static const char* _commandAt(int i) {
     static const char* const commands[COMMAND_COUNT] = {
-      "ls -lh", "ls -lah", "pwd", "df -h", "mount", "sudo fdisk -l",
-      "blkid", "free -h", "uname -a", "uptime", "ps", "top -b -n 1",
-      "sudo dmesg | tail -30", "ifconfig -a", "route -n",
-      "cat /proc/cpuinfo", "cat /proc/meminfo", "sudo poweroff", "sudo reboot"
+      "clear", "pwd", "cd", "cd ..", "ls -lh", "ls -lah",
+      "df -h", "mount", "blkid", "sudo fdisk -l",
+      "ps", "free -h", "du -h",
+      "uname -a", "cat /proc/cpuinfo", "sudo dmesg | tail -30",
+      "ifconfig -a", "route -n", "sudo poweroff", "sudo reboot"
     };
     return commands[i];
   }
