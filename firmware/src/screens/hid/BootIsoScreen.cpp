@@ -3,6 +3,7 @@
 #include "core/Device.h"
 #include "core/ScreenManager.h"
 #include "utils/usb/UsbMscUtil.h"
+#include "utils/usb/BootIsoCdc.h"
 #include "ui/actions/ShowStatusAction.h"
 #include "ui/actions/InputTextAction.h"
 #include "utils/keyboard/USBKeyboardUtil.h"
@@ -57,6 +58,7 @@ void BootIsoScreen::onItemSelected(uint8_t index) {
   String path = "/unigeek/hid/isos/" + _selected;
   // Register HID before beginIso() calls USB.begin().
   USBKeyboardUtil& keyboard = bootKeyboard();
+  BootIsoCdc::begin();  // Register CDC alongside HID and MSC before USB.begin().
   if (!UsbMscUtil::instance().beginIso(Uni.Storage, path.c_str())) {
     ShowStatusAction::show(UsbMscUtil::instance().failReason() == UsbMscUtil::FAIL_USB_BUSY
                              ? "USB busy: reboot required" : "Cannot open ISO");
@@ -72,6 +74,7 @@ void BootIsoScreen::onItemSelected(uint8_t index) {
 }
 
 void BootIsoScreen::onUpdate() {
+  if (_mounted) BootIsoCdc::poll();
   if (!_mounted) { ListScreen::onUpdate(); return; }
   // Long BACK returns to Boot Keys. Suppress its release to avoid switching modes.
   if (_navMode && !_backHoldTriggered && Uni.Nav->isPressed() &&
