@@ -58,6 +58,12 @@ private:
   static int32_t _onWrite(uint32_t lba, uint32_t offset, uint8_t* buffer, uint32_t bufsize);
   static bool    _onStartStop(uint8_t power_condition, bool start, bool load_eject);
 
+  // Fixed-size read-ahead buffer; allocated only once with the singleton.
+  // The TinyUSB task is the sole writer/reader of this cache.
+  static constexpr uint32_t ISO_CACHE_BYTES = 64u * 1024u;
+  uint8_t    _isoCache[ISO_CACHE_BYTES] = {};
+  uint32_t   _isoCacheStart = 0;
+  uint32_t   _isoCacheValid = 0;
   fs::File   _isoFile;
   bool       _isoMode = false;
   IStorage*  _storage     = nullptr;

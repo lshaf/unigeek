@@ -105,6 +105,7 @@ bool UsbMscUtil::beginIso(IStorage* storage, const char* path)
   _blockCount = (uint32_t)(bytes / 512);
   _hostEjected = false;
   _reads = _writes = 0;
+  _isoCacheValid = 0;
   USBMSC& m = msc();
   m.vendorID("Unigeek");
   m.productID("Boot ISO");
@@ -129,6 +130,7 @@ void UsbMscUtil::end()
   _active  = false;
   if (_isoFile) _isoFile.close();
   _isoMode = false;
+  _isoCacheValid = 0;
   _storage = nullptr;
 }
 
@@ -143,9 +145,31 @@ int32_t UsbMscUtil::_onRead(uint32_t lba, uint32_t offset, void* buffer, uint32_
   if (self._isoMode) {
     const uint64_t start = (uint64_t)lba * bs + offset;
     const uint64_t end = start + bufsize;
-    if (!self._isoFile || end > (uint64_t)self._blockCount * bs ||
-        !self._isoFile.seek((uint32_t)start)) return -1;
-    if (self._isoFile.read(static_cast<uint8_t*>(buffer), bufsize) != bufsize) return -1;
+    if (!self._isoFile || end > (uint64_t)self._blockCount * bs) return -1;
+
+    // Read-ahead cache: 64 KiB windows aligned to 512-byte sectors.
+    // Keep USB callbacks bounded and never serve bytes from a failed fill.
+    uint8_t* dst = static_cast<uint8_t*>(buffer);
+    uint32_t copied = 0;
+    while (copied < bufsize) {
+      const uint32_t pos = (uint32_t)(start + copied);
+      if (self._isoCacheValid == 0 || pos < self._isoCacheStart ||
+          (uint64_t)pos >= (uint64_t)self._isoCacheStart + self._isoCacheValid) {
+        const uint32_t window = pos & ~(ISO_CACHE_BYTES - 1u);
+        const uint32_t remaining = (uint32_t)((uint64_t)self._blockCount * bs - window);
+        const uint32_t toRead = remaining < ISO_CACHE_BYTES ? remaining : ISO_CACHE_BYTES;
+        self._isoCacheValid = 0;
+        if (!self._isoFile.seek(window)) return -1;
+        if (self._isoFile.read(self._isoCache, toRead) != toRead) return -1;
+        self._isoCacheStart = window;
+        self._isoCacheValid = toRead;
+      }
+      const uint32_t within = pos - self._isoCacheStart;
+      uint32_t chunk = self._isoCacheValid - within;
+      if (chunk > bufsize - copied) chunk = bufsize - copied;
+      memcpy(dst + copied, self._isoCache + within, chunk);
+      copied += chunk;
+    }
     self._reads += (bufsize + bs - 1) / bs;
     return (int32_t)bufsize;
   }
