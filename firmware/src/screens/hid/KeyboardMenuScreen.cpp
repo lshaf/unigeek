@@ -10,7 +10,9 @@
 #endif
 #ifdef DEVICE_HAS_USB_HID
 #include "screens/hid/MassStorageScreen.h"
+#ifdef DEVICE_SUPPORTS_BOOT_ISO
 #include "screens/hid/BootIsoScreen.h"
+#endif
 #endif
 
 // USB Remote is always the last item; its index is the array size minus one.
@@ -43,13 +45,17 @@ void KeyboardMenuScreen::onItemSelected(uint8_t index)
     Screen.push(new MassStorageScreen());
     return;
   }
+  #ifdef DEVICE_SUPPORTS_BOOT_ISO
   if (index == 4) { Screen.push(new BootIsoScreen()); return; }
+  #endif
   #else
   if (index == 2) {
     Screen.push(new MassStorageScreen());
     return;
   }
+  #ifdef DEVICE_SUPPORTS_BOOT_ISO
   if (index == 3) { Screen.push(new BootIsoScreen()); return; }
+  #endif
   #endif
 #else
   if (index == 0) {

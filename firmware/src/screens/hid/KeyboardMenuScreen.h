@@ -15,27 +15,28 @@ private:
   // USB serial). Always the last item, so its index is sizeof-derived.
   void _toggleUsbRemote();
 
-#ifdef DEVICE_HAS_WEBAUTHN
+#if defined(DEVICE_HAS_USB_HID) && defined(DEVICE_HAS_WEBAUTHN) && defined(DEVICE_SUPPORTS_BOOT_ISO)
   ListItem _items[6] = {
-    {"USB HID"},
-    {"BLE HID"},
-    {"USB WebAuthn"},
-    {"USB Mass Storage"},
-    {"Boot from ISO"},
-    {"USB Remote"},
+    {"USB HID"}, {"BLE HID"}, {"USB WebAuthn"},
+    {"USB Mass Storage"}, {"Boot from ISO"}, {"USB Remote"},
+  };
+#elif defined(DEVICE_HAS_USB_HID) && defined(DEVICE_SUPPORTS_BOOT_ISO)
+  ListItem _items[5] = {
+    {"USB HID"}, {"BLE HID"}, {"USB Mass Storage"},
+    {"Boot from ISO"}, {"USB Remote"},
   };
 #elif defined(DEVICE_HAS_USB_HID)
+  #ifdef DEVICE_HAS_WEBAUTHN
+  ListItem _items[5] = {
+    {"USB HID"}, {"BLE HID"}, {"USB WebAuthn"},
+    {"USB Mass Storage"}, {"USB Remote"},
+  };
+  #else
   ListItem _items[4] = {
-    {"USB HID"},
-    {"BLE HID"},
-    {"USB Mass Storage"},
-    {"Boot from ISO"},
-    {"USB Remote"},
+    {"USB HID"}, {"BLE HID"}, {"USB Mass Storage"}, {"USB Remote"},
   };
+  #endif
 #else
-  ListItem _items[2] = {
-    {"BLE HID"},
-    {"USB Remote"},
-  };
+  ListItem _items[2] = { {"BLE HID"}, {"USB Remote"} };
 #endif
 };
