@@ -124,13 +124,8 @@ void WebAuthnScreen::onRender()
     lcd.drawString("USB busy", bodyX() + bodyW() / 2, bodyY() + bodyH() / 2 - 16);
     lcd.setTextSize(1);
     lcd.setTextColor(TFT_LIGHTGREY, TFT_BLACK);
-    lcd.drawString("Keyboard/Mouse already",
+    lcd.drawString("Reboot required",
                    bodyX() + bodyW() / 2, bodyY() + bodyH() / 2 + 4);
-    lcd.drawString("claimed USB this boot.",
-                   bodyX() + bodyW() / 2, bodyY() + bodyH() / 2 + 16);
-    lcd.setTextColor(TFT_YELLOW, TFT_BLACK);
-    lcd.drawString("Reboot, then open WebAuthn first.",
-                   bodyX() + bodyW() / 2, bodyY() + bodyH() / 2 + 32);
     return;
   }
 

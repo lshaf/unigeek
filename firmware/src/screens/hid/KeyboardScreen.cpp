@@ -100,10 +100,7 @@ void KeyboardScreen::onRender()
     lcd.drawString("USB busy", cx, cy - 16);
     lcd.setTextSize(1);
     lcd.setTextColor(TFT_LIGHTGREY, TFT_BLACK);
-    lcd.drawString("WebAuthn already", cx, cy + 4);
-    lcd.drawString("claimed USB this boot.", cx, cy + 16);
-    lcd.setTextColor(TFT_YELLOW, TFT_BLACK);
-    lcd.drawString("Reboot, then open Keyboard first.", cx, cy + 32);
+    lcd.drawString("Reboot required", cx, cy + 4);
     return;
   }
 

@@ -17,7 +17,7 @@ static USBKeyboardUtil& bootKeyboard() {
 
 void BootIsoScreen::onInit() {
   if (!Uni.Storage || !Uni.Storage->isAvailable()) {
-    ShowStatusAction::show("Storage unavailable");
+    ShowStatusAction::show("Storage not available");
     Screen.goBack();
     return;
   }
@@ -45,7 +45,7 @@ void BootIsoScreen::onInit() {
     dir.close();
   }
   if (!_count) {
-    ShowStatusAction::show("No ISO files found");
+    ShowStatusAction::show("No ISO files available");
     Screen.goBack();
     return;
   }
@@ -60,7 +60,7 @@ void BootIsoScreen::onItemSelected(uint8_t index) {
   USBKeyboardUtil& keyboard = bootKeyboard();
   if (!UsbMscUtil::instance().beginIso(Uni.Storage, path.c_str())) {
     ShowStatusAction::show(UsbMscUtil::instance().failReason() == UsbMscUtil::FAIL_USB_BUSY
-                             ? "USB busy: reboot required" : "Cannot open ISO");
+                             ? "USB busy\nReboot required" : "Failed to open ISO");
     return;
   }
   keyboard.begin();

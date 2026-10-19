@@ -88,10 +88,7 @@ void MassStorageScreen::onRender()
     lcd.drawString("USB busy", cx, bodyY() + bodyH() / 2 - 16);
     lcd.setTextSize(1);
     lcd.setTextColor(TFT_LIGHTGREY, TFT_BLACK);
-    lcd.drawString("Another USB feature", cx, bodyY() + bodyH() / 2 + 4);
-    lcd.drawString("claimed USB this boot.", cx, bodyY() + bodyH() / 2 + 16);
-    lcd.setTextColor(TFT_YELLOW, TFT_BLACK);
-    lcd.drawString("Reboot, open Mass Storage first.", cx, bodyY() + bodyH() / 2 + 34);
+    lcd.drawString("Reboot required", cx, bodyY() + bodyH() / 2 + 4);
     return;
   }
 
