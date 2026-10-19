@@ -4,7 +4,8 @@
 #include "ui/templates/ListScreen.h"
 class BootIsoScreen : public ListScreen {
 public:
-  const char* title() override { return "Boot from ISO"; }
+  explicit BootIsoScreen(bool imgMode = false) : _imgMode(imgMode) {}
+  const char* title() override { return _imgMode ? "Boot from IMG" : "Boot from ISO"; }
   bool isFullScreen() override { return false; }
   bool inhibitPowerOff() override { return true; }
   void onInit() override;
@@ -16,6 +17,7 @@ public:
   void drawBlockBorder(uint8_t block);
   void ejectIso();
 private:
+  const bool _imgMode;
   static constexpr uint8_t MAX_ISOS = 32;
   ListItem _items[MAX_ISOS] = {};
   String _names[MAX_ISOS];

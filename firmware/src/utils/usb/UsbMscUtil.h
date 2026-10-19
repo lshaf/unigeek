@@ -37,6 +37,8 @@ public:
   bool begin(IStorage* storage);
   // Expose a hybrid bootable ISO as a read-only USB disk (512-byte sectors).
   bool beginIso(IStorage* storage, const char* path);
+  // Expose a raw disk IMG as a writable 512-byte-sector USB disk.
+  bool beginImg(IStorage* storage, const char* path);
 
   // Eject the media. The MSC interface stays in the USB descriptor (arduino-esp32
   // cannot tear USB down), but the host sees the drive removed. A later begin()
@@ -66,6 +68,7 @@ private:
   uint32_t   _isoCacheValid = 0;
   fs::File   _isoFile;
   bool       _isoMode = false;
+  bool       _imgMode = false;
   IStorage*  _storage     = nullptr;
   uint32_t   _blockCount  = 0;
   uint16_t   _blockSize   = 0;

@@ -15,15 +15,25 @@ private:
   // USB serial). Always the last item, so its index is sizeof-derived.
   void _toggleUsbRemote();
 
+<<<<<<< HEAD
 #if defined(DEVICE_HAS_USB_HID) && defined(DEVICE_HAS_WEBAUTHN) && defined(DEVICE_SUPPORTS_BOOT_ISO) && !defined(BOARD_4MB)
   ListItem _items[6] = {
+=======
+#if defined(DEVICE_HAS_USB_HID) && defined(DEVICE_HAS_WEBAUTHN) && defined(DEVICE_SUPPORTS_BOOT_ISO)
+  ListItem _items[7] = {
+>>>>>>> 9303e90b (Implement USB MSC boot from IMG with TinyCorePure64 support)
     {"USB HID"}, {"BLE HID"}, {"USB WebAuthn"},
-    {"USB Mass Storage"}, {"Boot from ISO"}, {"USB Remote"},
+    {"USB Mass Storage"}, {"Boot from ISO"}, {"Boot from IMG"}, {"USB Remote"},
   };
+<<<<<<< HEAD
 #elif defined(DEVICE_HAS_USB_HID) && defined(DEVICE_SUPPORTS_BOOT_ISO) && !defined(BOARD_4MB)
   ListItem _items[5] = {
+=======
+#elif defined(DEVICE_HAS_USB_HID) && defined(DEVICE_SUPPORTS_BOOT_ISO)
+  ListItem _items[6] = {
+>>>>>>> 9303e90b (Implement USB MSC boot from IMG with TinyCorePure64 support)
     {"USB HID"}, {"BLE HID"}, {"USB Mass Storage"},
-    {"Boot from ISO"}, {"USB Remote"},
+    {"Boot from ISO"}, {"Boot from IMG"}, {"USB Remote"},
   };
 #elif defined(DEVICE_HAS_USB_HID)
   #ifdef DEVICE_HAS_WEBAUTHN

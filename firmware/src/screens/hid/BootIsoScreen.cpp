@@ -23,8 +23,9 @@ void BootIsoScreen::onInit() {
   }
   Uni.Storage->makeDir("/unigeek");
   Uni.Storage->makeDir("/unigeek/hid");
-  Uni.Storage->makeDir("/unigeek/hid/isos");
-  fs::File dir = Uni.Storage->open("/unigeek/hid/isos", "r");
+  const char* folder = _imgMode ? "/unigeek/hid/imgs" : "/unigeek/hid/isos";
+  Uni.Storage->makeDir(folder);
+  fs::File dir = Uni.Storage->open(folder, "r");
   if (dir && dir.isDirectory()) {
     fs::File f = dir.openNextFile();
     while (f && _count < MAX_ISOS) {
@@ -33,7 +34,7 @@ void BootIsoScreen::onInit() {
       if (slash >= 0) name = name.substring(slash + 1);
       String ext = name;
       ext.toLowerCase();
-      if (!f.isDirectory() && ext.endsWith(".iso")) {
+      if (!f.isDirectory() && ext.endsWith(_imgMode ? ".img" : ".iso")) {
         _names[_count] = name;
         _items[_count].label = _names[_count].c_str();
         ++_count;
@@ -45,7 +46,7 @@ void BootIsoScreen::onInit() {
     dir.close();
   }
   if (!_count) {
-    ShowStatusAction::show("No ISO files available");
+    ShowStatusAction::show(_imgMode ? "No IMG files available" : "No ISO files available");
     Screen.goBack();
     return;
   }
@@ -55,12 +56,13 @@ void BootIsoScreen::onInit() {
 void BootIsoScreen::onItemSelected(uint8_t index) {
   if (_mounted || index >= _count) return;
   _selected = _names[index];
-  String path = "/unigeek/hid/isos/" + _selected;
+  String path = String(_imgMode ? "/unigeek/hid/imgs/" : "/unigeek/hid/isos/") + _selected;
   // Register HID before beginIso() calls USB.begin().
   USBKeyboardUtil& keyboard = bootKeyboard();
-  if (!UsbMscUtil::instance().beginIso(Uni.Storage, path.c_str())) {
+  if (!(_imgMode ? UsbMscUtil::instance().beginImg(Uni.Storage, path.c_str())
+                  : UsbMscUtil::instance().beginIso(Uni.Storage, path.c_str()))) {
     ShowStatusAction::show(UsbMscUtil::instance().failReason() == UsbMscUtil::FAIL_USB_BUSY
-                             ? "USB busy\nReboot required" : "Failed to open ISO");
+                             ? "USB busy\nReboot required" : (_imgMode ? "Failed to open IMG" : "Failed to open ISO"));
     return;
   }
   keyboard.begin();
