@@ -1,3 +1,4 @@
+#include "ui/views/ScrollbarRenderer.h"
 #include "FileViewerScreen.h"
 #include "core/Device.h"
 #include "core/ScreenManager.h"
@@ -209,13 +210,9 @@ void FileViewerScreen::_renderContent() {
 
   // Scrollbar last — always on top
   if (hasScrollbar) {
-    uint16_t maxScroll = _lineCount - _visibleLines;
-    uint16_t sbX = bodyX() + bodyW() - 2;
-    uint16_t barH = bodyH();
-    uint16_t thumbH = max((uint16_t)4, (uint16_t)(barH * _visibleLines / _lineCount));
-    uint16_t thumbY = (maxScroll > 0) ? (barH - thumbH) * _scrollOffset / maxScroll : 0;
-    lcd.fillRect(sbX, bodyY(), 2, barH, 0x2104);
-    lcd.fillRect(sbX, bodyY() + thumbY, 2, thumbH, Config.getThemeColor());
+    ScrollbarRenderer::draw(bodyX() + bodyW() - 2, bodyY(), 2, bodyH(),
+                            _lineCount, _visibleLines, _scrollOffset,
+                            4, 0x2104, Config.getThemeColor());
   }
 }
 

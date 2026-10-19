@@ -1,3 +1,4 @@
+#include "ui/views/ScrollbarRenderer.h"
 #include "AchievementScreen.h"
 #include "core/ScreenManager.h"
 #include "core/ConfigManager.h"
@@ -170,15 +171,8 @@ void AchievementScreen::_renderListItem(int16_t y, bool sel, int16_t listW,
 void AchievementScreen::_drawScrollbar(uint8_t total, uint8_t scrollOff, uint8_t visible)
 {
   static constexpr uint8_t SB_W = 3;
-  auto& lcd = Uni.Lcd;
-  int16_t sbX = bodyX() + bodyW() - SB_W;
-  int16_t sbY = bodyY();
-  int16_t sbH = bodyH();
-  lcd.fillRect(sbX, sbY, SB_W, sbH, 0x2104);
-  int16_t thumbH = sbH * (int16_t)visible / (int16_t)total;
-  if (thumbH < 8) thumbH = 8;
-  int16_t thumbY = sbY + ((int16_t)scrollOff * (sbH - thumbH)) / (int16_t)(total - visible);
-  lcd.fillRect(sbX, thumbY, SB_W, thumbH, Config.getThemeColor());
+  ScrollbarRenderer::draw(bodyX() + bodyW() - SB_W, bodyY(), SB_W, bodyH(),
+                          total, visible, scrollOff, 8, 0x2104, Config.getThemeColor());
 }
 
 // ── Custom renderers ─────────────────────────────────────────────────────────

@@ -1,3 +1,4 @@
+#include "ui/views/ScrollbarRenderer.h"
 #include "FileHexViewerScreen.h"
 #include "core/Device.h"
 #include "core/ScreenManager.h"
@@ -171,16 +172,9 @@ void FileHexViewerScreen::_renderHex()
   uint32_t totalRows  = (_fileSize + n - 1) / n;
   uint32_t currentRow = _byteOffset / n;
   if (totalRows > _visibleRows) {
-    uint16_t sbX    = bodyX() + bodyW() - 2;
-    uint16_t barH   = (uint16_t)bodyH();
-    uint32_t maxRow = totalRows - _visibleRows;
-    uint16_t thumbH = max((uint16_t)4,
-                          (uint16_t)((uint32_t)barH * _visibleRows / totalRows));
-    uint16_t thumbY = (maxRow > 0)
-                        ? (uint16_t)((uint32_t)(barH - thumbH) * currentRow / maxRow)
-                        : 0;
-    lcd.fillRect(sbX, bodyY(), 2, barH, 0x2104);
-    lcd.fillRect(sbX, bodyY() + thumbY, 2, thumbH, Config.getThemeColor());
+    ScrollbarRenderer::draw(bodyX() + bodyW() - 2, bodyY(), 2, bodyH(),
+                            totalRows, _visibleRows, currentRow,
+                            4, 0x2104, Config.getThemeColor());
   }
 }
 

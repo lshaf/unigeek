@@ -125,7 +125,7 @@ public:
     uint8_t fullyVisible = bodyH() / ITEM_H;
     int16_t leftover     = (int16_t)bodyH() - fullyVisible * (int16_t)ITEM_H;
     bool    hasPartial   = leftover >= 5;
-    int16_t listW        = bodyW() - 4;
+    int16_t listW        = bodyW() - (eff > fullyVisible ? 4 : 0);
 
     auto& lcd = Uni.Lcd;
 
@@ -280,13 +280,14 @@ public:
       int16_t sbX = bodyX() + bodyW() - SB_W;
       int16_t sbY = bodyY();
       int16_t sbH = bodyH();
-      lcd.fillRect(sbX, sbY, SB_W, sbH, 0x2104);
-      if (eff <= fullyVisible) {
-        lcd.fillRect(sbX, sbY, SB_W, sbH, Config.getThemeColor());
-      } else {
-        int16_t thumbH = sbH * (int16_t)fullyVisible / (int16_t)eff;
+      if (eff > fullyVisible) {
+        lcd.fillRect(sbX, sbY, SB_W, sbH, 0x2104);
+        int16_t thumbH = (int32_t)sbH * fullyVisible / eff;
         if (thumbH < 8) thumbH = 8;
-        int16_t thumbY = sbY + ((int16_t)_scrollOffset * (sbH - thumbH)) / (int16_t)(eff - fullyVisible);
+        if (thumbH > sbH) thumbH = sbH;
+        int16_t maxScroll = eff - fullyVisible;
+        int16_t offset = _scrollOffset > maxScroll ? maxScroll : _scrollOffset;
+        int16_t thumbY = sbY + (int32_t)offset * (sbH - thumbH) / maxScroll;
         lcd.fillRect(sbX, thumbY, SB_W, thumbH, Config.getThemeColor());
       }
     }
@@ -363,7 +364,7 @@ private:
     if (eff == 0 || _selectedIndex >= eff) return;
 
     const ListItem& item   = _items[_selectedIndex];
-    int16_t         listW  = bodyW() - 4;
+    int16_t         listW  = bodyW() - (eff > bodyH() / ITEM_H ? 4 : 0);
     int16_t         availW = listW - 12;
     const char* marqueeText = item.label;
     if (_stackedSublabels && item.sublabel) {
