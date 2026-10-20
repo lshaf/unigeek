@@ -10,7 +10,7 @@
 #endif
 #ifdef DEVICE_HAS_USB_HID
 #include "screens/hid/MassStorageScreen.h"
-#ifdef DEVICE_SUPPORTS_BOOT_ISO
+#if defined(DEVICE_SUPPORTS_BOOT_ISO) && !defined(BOARD_4MB)
 #include "screens/hid/BootIsoScreen.h"
 #endif
 #endif
@@ -45,7 +45,7 @@ void KeyboardMenuScreen::onItemSelected(uint8_t index)
     Screen.push(new MassStorageScreen());
     return;
   }
-  #ifdef DEVICE_SUPPORTS_BOOT_ISO
+  #if defined(DEVICE_SUPPORTS_BOOT_ISO) && !defined(BOARD_4MB)
   if (index == 4) { Screen.push(new BootIsoScreen()); return; }
   #endif
   #else
@@ -53,7 +53,7 @@ void KeyboardMenuScreen::onItemSelected(uint8_t index)
     Screen.push(new MassStorageScreen());
     return;
   }
-  #ifdef DEVICE_SUPPORTS_BOOT_ISO
+  #if defined(DEVICE_SUPPORTS_BOOT_ISO) && !defined(BOARD_4MB)
   if (index == 3) { Screen.push(new BootIsoScreen()); return; }
   #endif
   #endif

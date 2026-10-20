@@ -15,12 +15,12 @@ private:
   // USB serial). Always the last item, so its index is sizeof-derived.
   void _toggleUsbRemote();
 
-#if defined(DEVICE_HAS_USB_HID) && defined(DEVICE_HAS_WEBAUTHN) && defined(DEVICE_SUPPORTS_BOOT_ISO)
+#if defined(DEVICE_HAS_USB_HID) && defined(DEVICE_HAS_WEBAUTHN) && defined(DEVICE_SUPPORTS_BOOT_ISO) && !defined(BOARD_4MB)
   ListItem _items[6] = {
     {"USB HID"}, {"BLE HID"}, {"USB WebAuthn"},
     {"USB Mass Storage"}, {"Boot from ISO"}, {"USB Remote"},
   };
-#elif defined(DEVICE_HAS_USB_HID) && defined(DEVICE_SUPPORTS_BOOT_ISO)
+#elif defined(DEVICE_HAS_USB_HID) && defined(DEVICE_SUPPORTS_BOOT_ISO) && !defined(BOARD_4MB)
   ListItem _items[5] = {
     {"USB HID"}, {"BLE HID"}, {"USB Mass Storage"},
     {"Boot from ISO"}, {"USB Remote"},
