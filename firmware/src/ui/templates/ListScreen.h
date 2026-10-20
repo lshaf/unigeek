@@ -92,7 +92,7 @@ public:
       }
       else if (dir == INavigation::DIR_LEFT)
       {
-        uint8_t page = _listHeight() / ITEM_H;
+        uint8_t page = bodyH() / ITEM_H;
         _selectedIndex = (_selectedIndex >= page) ? _selectedIndex - page : 0;
         _scrollIfNeeded();
         _resetMarquee();
@@ -101,7 +101,7 @@ public:
       }
       else if (dir == INavigation::DIR_RIGHT)
       {
-        uint8_t page = _listHeight() / ITEM_H;
+        uint8_t page = bodyH() / ITEM_H;
         uint8_t last = eff - 1;
         _selectedIndex = (_selectedIndex + page <= last) ? _selectedIndex + page : last;
         _scrollIfNeeded();
@@ -122,16 +122,15 @@ public:
   void onRender() override
   {
     uint8_t eff          = _effectiveCount();
-    uint8_t fullyVisible = _listHeight() / ITEM_H;
-    int16_t leftover     = (int16_t)_listHeight() - fullyVisible * (int16_t)ITEM_H;
+    uint8_t fullyVisible = bodyH() / ITEM_H;
+    int16_t leftover     = (int16_t)bodyH() - fullyVisible * (int16_t)ITEM_H;
     bool    hasPartial   = leftover >= 5;
     int16_t listW        = bodyW() - 4;
 
     auto& lcd = Uni.Lcd;
 
-    _drawFooter();
     if (eff == 0) {
-      lcd.fillRect(bodyX(), bodyY(), bodyW(), _listHeight(), TFT_BLACK);
+      lcd.fillRect(bodyX(), bodyY(), bodyW(), bodyH(), TFT_BLACK);
       return;
     }
 
@@ -273,14 +272,14 @@ public:
       }
     }
 
-    if (usedH < (int16_t)_listHeight())
-      lcd.fillRect(bodyX(), bodyY() + usedH, bodyW(), _listHeight() - usedH, TFT_BLACK);
+    if (usedH < (int16_t)bodyH())
+      lcd.fillRect(bodyX(), bodyY() + usedH, bodyW(), bodyH() - usedH, TFT_BLACK);
 
     {
       static constexpr uint8_t SB_W = 3;
       int16_t sbX = bodyX() + bodyW() - SB_W;
       int16_t sbY = bodyY();
-      int16_t sbH = _listHeight();
+      int16_t sbH = bodyH();
       lcd.fillRect(sbX, sbY, SB_W, sbH, 0x2104);
       if (eff <= fullyVisible) {
         lcd.fillRect(sbX, sbY, SB_W, sbH, Config.getThemeColor());
@@ -297,26 +296,6 @@ public:
   virtual void onBack() { Screen.goBack(); }
 
 protected:
-  // Optional standard list footer. Reserve its height from scrolling and
-  // scrollbar calculations so the hint never obscures the last list row.
-  virtual const char* listFooterHint() const { return nullptr; }
-  uint16_t _listHeight() {
-    const uint16_t h = bodyH();
-    return listFooterHint() && h > 16 ? h - 16 : h;
-  }
-  void _drawFooter() {
-    const char* hint = listFooterHint();
-    if (!hint) return;
-    auto& lcd = Uni.Lcd;
-    const int16_t y = bodyY() + _listHeight();
-    lcd.fillRect(bodyX(), y, bodyW(), 16, TFT_BLACK);
-    lcd.drawFastHLine(bodyX(), y, bodyW(), TFT_DARKGREY);
-    lcd.setTextColor(TFT_LIGHTGREY, TFT_BLACK);
-    lcd.setTextDatum(TC_DATUM);
-    lcd.drawString(hint, bodyX() + bodyW() / 2, y + 3);
-    lcd.setTextDatum(TL_DATUM);
-  }
-
   uint8_t _selectedIndex = 0;
 
   // Render sublabels on a second line, right-aligned. Intended for detail
@@ -443,7 +422,7 @@ private:
 
   void _scrollIfNeeded()
   {
-    uint8_t visible = _listHeight() / ITEM_H;
+    uint8_t visible = bodyH() / ITEM_H;
     uint8_t eff     = _effectiveCount();
     if (_selectedIndex < _scrollOffset) {
       _scrollOffset     = _selectedIndex;
