@@ -9,6 +9,7 @@
 #include "screens/module/SubGHzScreen.h"
 #include "ui/actions/InputTextAction.h"
 #include "ui/actions/ShowStatusAction.h"
+#include <string.h>
 
 // ── Lifecycle ───────────────────────────────────────────────────────────────
 
