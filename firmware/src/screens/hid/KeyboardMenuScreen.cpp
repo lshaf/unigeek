@@ -58,7 +58,7 @@ void KeyboardMenuScreen::onItemSelected(uint8_t index)
   if (index == 3) { Screen.push(new BootIsoScreen()); return; }
   if (index == 4) { Screen.push(new BootIsoScreen(true)); return; }
   #endif
-  #endif
+#endif
 #else
   if (index == 0) {
     Screen.push(new KeyboardScreen(KeyboardScreen::MODE_BLE));
