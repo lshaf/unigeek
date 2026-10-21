@@ -46,8 +46,8 @@ void KeyboardMenuScreen::onItemSelected(uint8_t index)
     return;
   }
   #if defined(DEVICE_SUPPORTS_BOOT_ISO) && !defined(BOARD_4MB)
-  if (index == 4) { Screen.push(new BootIsoScreen()); return; }
-  if (index == 5) { Screen.push(new BootIsoScreen(true)); return; }
+  if (index == 4) { Screen.push(new BootIsoScreen(true)); return; }
+  if (index == 5) { Screen.push(new BootIsoScreen()); return; }
   #endif
   #else
   if (index == 2) {
@@ -55,8 +55,8 @@ void KeyboardMenuScreen::onItemSelected(uint8_t index)
     return;
   }
   #if defined(DEVICE_SUPPORTS_BOOT_ISO) && !defined(BOARD_4MB)
-  if (index == 3) { Screen.push(new BootIsoScreen()); return; }
-  if (index == 4) { Screen.push(new BootIsoScreen(true)); return; }
+  if (index == 3) { Screen.push(new BootIsoScreen(true)); return; }
+  if (index == 4) { Screen.push(new BootIsoScreen()); return; }
   #endif
 #endif
 #else

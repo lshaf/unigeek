@@ -18,12 +18,12 @@ private:
 #if defined(DEVICE_HAS_USB_HID) && defined(DEVICE_HAS_WEBAUTHN) && defined(DEVICE_SUPPORTS_BOOT_ISO) && !defined(BOARD_4MB)
   ListItem _items[7] = {
     {"USB HID"}, {"BLE HID"}, {"USB WebAuthn"},
-    {"USB Mass Storage"}, {"Boot from ISO"}, {"Boot from IMG"}, {"USB Remote"},
+    {"USB Mass Storage"}, {"Boot from IMG"}, {"Boot from ISO"}, {"USB Remote"},
   };
 #elif defined(DEVICE_HAS_USB_HID) && defined(DEVICE_SUPPORTS_BOOT_ISO) && !defined(BOARD_4MB)
   ListItem _items[6] = {
     {"USB HID"}, {"BLE HID"}, {"USB Mass Storage"},
-    {"Boot from ISO"}, {"Boot from IMG"}, {"USB Remote"},
+    {"Boot from IMG"}, {"Boot from ISO"}, {"USB Remote"},
   };
 #elif defined(DEVICE_HAS_USB_HID)
   #ifdef DEVICE_HAS_WEBAUTHN

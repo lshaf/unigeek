@@ -6,7 +6,7 @@
 #include "utils/usb/BootIsoCdc.h"
 #include "ui/actions/ShowStatusAction.h"
 #include "ui/actions/InputTextAction.h"
-#include "ui/actions/InputSelectAction.h"
+#include "ui/actions/ConfirmAction.h"
 #include "utils/keyboard/USBKeyboardUtil.h"
 
 // Persistent: TinyUSB retains the HID device registration for the entire boot.
@@ -356,12 +356,7 @@ void BootIsoScreen::drawVirtualKey(uint8_t index, uint8_t block) {
 void BootIsoScreen::ejectIso() {
   if (!_mounted) return;
   // The host must unmount/eject the USB disk before the MSC session ends.
-  static const InputSelectAction::Option stopOptions[] = {
-    {"Yes", "stop"}
-  };
-  const char* choice = InputSelectAction::popup(
-      "Stop USB boot?", stopOptions, 1, nullptr);
-  if (!choice || strcmp(choice, "stop") != 0) {
+  if (!ConfirmAction::popup("Stop USB boot?")) {
     render();
     return;
   }
