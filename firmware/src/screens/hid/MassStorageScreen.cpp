@@ -96,7 +96,7 @@ void MassStorageScreen::onRender()
   auto& msc = UsbMscUtil::instance();
   const bool ejected = msc.hostEjected();
 
-  static constexpr int FOOTER_H = 12;
+  static constexpr int FOOTER_H = 16;
   const int contentH = bodyH() - FOOTER_H - 1;
 
   if (!_chromeDrawn) {
@@ -105,8 +105,8 @@ void MassStorageScreen::onRender()
     lcd.drawFastHLine(bodyX(), footerY - 1, bodyW(), TFT_DARKGREY);
     lcd.setTextSize(1);
     lcd.setTextColor(TFT_DARKGREY, TFT_BLACK);
-    lcd.setTextDatum(BC_DATUM);
-    lcd.drawString("[Back] Eject", cx, footerY + 7);
+    lcd.setTextDatum(MC_DATUM);
+    lcd.drawString("[Back] Eject", cx, footerY + FOOTER_H / 2);
     _chromeDrawn = true;
   }
   _lastReads   = msc.sectorReads();
