@@ -9,6 +9,9 @@
 class ConfirmAction {
 public:
   static bool popup(const char* question, const char* description = nullptr) {
+    // Off follows the existing Yes path without drawing or consuming input.
+    if (Config.get(APP_CONFIG_CONFIRM_ACTIONS, APP_CONFIG_CONFIRM_ACTIONS_DEFAULT) == "0")
+      return true;
     ConfirmAction action(question, description);
     const bool confirmed = action.run();
     Uni.lastActiveMs = millis();
