@@ -67,6 +67,9 @@ void ImgFileManagerScreen::onInit() {
     ShowStatusAction::show("Storage unavailable");
     Screen.goBack(); return;
   }
+  Uni.Storage->makeDir("/unigeek");
+  Uni.Storage->makeDir("/unigeek/hid");
+  Uni.Storage->makeDir(IMG_DIR);
   _listImages();
   if (!_count) { ShowStatusAction::show("No IMG files available"); Screen.goBack(); }
 }

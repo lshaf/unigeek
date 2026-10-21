@@ -1,5 +1,5 @@
 #include "BootIsoScreen.h"
-#if defined(DEVICE_HAS_USB_HID) && defined(DEVICE_SUPPORTS_BOOT_ISO)
+#if defined(DEVICE_HAS_USB_HID) && defined(DEVICE_SUPPORTS_BOOT_ISO) && !defined(BOARD_4MB)
 #include "core/Device.h"
 #include "core/ScreenManager.h"
 #include "utils/usb/UsbMscUtil.h"
