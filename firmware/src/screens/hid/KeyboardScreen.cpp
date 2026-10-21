@@ -422,28 +422,16 @@ void KeyboardScreen::_handleKeyboardRelay()
 #if defined(DEVICE_M5_CARDPUTER) || defined(DEVICE_M5_CARDPUTER_ADV)
   // Cardputer: BtnG0 (boot button) exits relay
   if (digitalRead(BTN_BOOT) == LOW) {
-    // Wait for G0 release so cancelling does not immediately reopen the popup.
-    while (digitalRead(BTN_BOOT) == LOW) delay(10);
-    if (ConfirmAction::popup("Disconnect device?")) {
-      _keyboard->releaseAll();
-      _goMenu();
-    } else {
-      _connectedChromeDrawn = false;
-      render();
-    }
+    _keyboard->releaseAll();
+    _goMenu();
     return;
   }
 #elif defined(DEVICE_T_LORA_PAGER)
   // T-Lora Pager: encoder button press exits relay
   if (Uni.Nav->wasPressed()) {
     if (Uni.Nav->readDirection() == INavigation::DIR_PRESS) {
-      if (ConfirmAction::popup("Disconnect device?")) {
-        _keyboard->releaseAll();
-        _goMenu();
-      } else {
-        _connectedChromeDrawn = false;
-        render();
-      }
+      _keyboard->releaseAll();
+      _goMenu();
       return;
     }
   }
@@ -461,13 +449,8 @@ void KeyboardScreen::_handleKeyboardRelay()
   if (Uni.Nav->wasPressed()) {
     auto dir = Uni.Nav->readDirection();
     if (dir == INavigation::DIR_BACK || dir == INavigation::DIR_PRESS) {
-      if (ConfirmAction::popup("Disconnect device?")) {
-        _keyboard->releaseAll();
-        _goMenu();
-      } else {
-        _connectedChromeDrawn = false;
-        render();
-      }
+      _keyboard->releaseAll();
+      _goMenu();
       return;
     }
   }
@@ -506,12 +489,7 @@ void KeyboardScreen::_handleMouseJiggle()
   if (Uni.Nav->wasPressed()) {
     auto dir = Uni.Nav->readDirection();
     if (dir == INavigation::DIR_BACK || dir == INavigation::DIR_PRESS) {
-      if (ConfirmAction::popup("Disconnect device?")) {
-        _goMenu();
-      } else {
-        _jiggleChromeDrawn = false;
-        render();
-      }
+      _goMenu();
       return;
     }
   }
