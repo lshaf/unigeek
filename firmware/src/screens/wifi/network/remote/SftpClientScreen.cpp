@@ -1,3 +1,4 @@
+#include "ui/actions/ConfirmAction.h"
 #include "SftpClientScreen.h"
 
 #include "core/Device.h"
@@ -1206,24 +1207,8 @@ void SftpClientScreen::_chooseUploadDestination(const String& remoteDir) {
 
 bool SftpClientScreen::_confirmTransfer(const char* title, const String& name) {
   (void)name;
-
-  InputSelectAction::Option opts[] = {
-    {"Yes", "yes"},
-    {"No", "no"},
-  };
-
-  // InputSelectAction renders its title as a single-line overlay heading.
-  // Do not embed the selected filename/directory with a newline here; doing so
-  // produces visual artifacts on the UG display.
-  // File-browser screens may leave a different LCD font selected. Normalize it
-  // before opening the popup so its title/options render consistently.
   Uni.Lcd.setTextFont(1);
-  Uni.Lcd.setTextSize(1);
-  Uni.Lcd.setTextDatum(TL_DATUM);
-
-  const char* result = InputSelectAction::popup(
-    title, opts, 2, "yes");
-  return result && strcmp(result, "yes") == 0;
+  return ConfirmAction::popup(title);
 }
 
 void SftpClientScreen::_requestDownload(const String& remotePath, bool directory) {

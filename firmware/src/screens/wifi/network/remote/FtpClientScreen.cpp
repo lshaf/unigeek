@@ -1,3 +1,4 @@
+#include "ui/actions/ConfirmAction.h"
 #include "FtpClientScreen.h"
 
 #include "core/Device.h"
@@ -597,13 +598,8 @@ void FtpClientScreen::_chooseUploadDestination(const String& remoteDir) {
 }
 
 bool FtpClientScreen::_confirmTransfer(const char* title) {
-  InputSelectAction::Option opts[] = {
-    {"Yes", "yes"},
-    {"No", "no"},
-  };
   Uni.Lcd.setTextFont(1);
-  const char* result = InputSelectAction::popup(title, opts, 2, "yes");
-  return result && strcmp(result, "yes") == 0;
+  return ConfirmAction::popup(title);
 }
 
 void FtpClientScreen::_requestDownload(const String& remotePath, bool directory) {

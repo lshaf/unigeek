@@ -1,3 +1,4 @@
+#include "ui/actions/ConfirmAction.h"
 #include "WebDavClientScreen.h"
 
 #include "core/Device.h"
@@ -674,13 +675,8 @@ void WebDavClientScreen::_chooseUploadDestination(const String& path) {
 }
 
 bool WebDavClientScreen::_confirm(const char* title) {
-  static constexpr InputSelectAction::Option opts[] = {
-    {"Yes", "yes"},
-    {"No", "no"},
-  };
   Uni.Lcd.setTextFont(1);
-  const char* result = InputSelectAction::popup(title, opts, 2, "yes");
-  return result && !strcmp(result, "yes");
+  return ConfirmAction::popup(title);
 }
 
 bool WebDavClientScreen::_propfind(const String& path,

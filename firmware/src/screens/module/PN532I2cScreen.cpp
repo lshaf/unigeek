@@ -1,3 +1,4 @@
+#include "ui/actions/ConfirmAction.h"
 #include <new>
 #include "ui/components/TagPrompt.h"
 #include "PN532I2cScreen.h"
@@ -327,12 +328,8 @@ static bool _confirmUltralightSensitiveWrite(const char* typeName, uint16_t page
   const char* label = _ultralightSensitivePageLabel(typeName, page);
   if (!label) return true;
 
-  static const InputSelectAction::Option opts[] = {
-    {"Write anyway", "write"},
-  };
-  String title = String("Warning: ") + label;
-  const char* choice = InputSelectAction::popup(title.c_str(), opts, 1, nullptr);
-  return choice && strcmp(choice, "write") == 0;
+  String title = String("Write ") + label + "?";
+  return ConfirmAction::popup(title.c_str(), "Sensitive tag memory");
 }
 
 static uint16_t _ultralightConfig0(const char* typeName) {
@@ -4556,8 +4553,7 @@ void PN532I2cScreen::_doUltralightLockTag() {
   if (lastUser != 0xFFFF) --lastUser; else lastUser = 15;
   if (lastUser < 4) { ShowStatusAction::show("No lockable memory", 1600); _goUltralightAdvanced(); return; }
 
-  static const InputSelectAction::Option warn[] = {{"Lock permanently", "lock"}};
-  if (!InputSelectAction::popup("Make tag read-only?", warn, 1, nullptr)) {
+  if (!ConfirmAction::popup("Make tag read-only?", "This action cannot be undone")) {
     _goUltralightAdvanced(); return;
   }
 
@@ -6484,12 +6480,9 @@ void PN532I2cScreen::_doGen3LockUid() {
     return;
   }
 
-  static const InputSelectAction::Option opts[] = {
-    {"Lock UID permanently", "lock"},
-  };
-  const char* choice = InputSelectAction::popup("Permanent UID lock", opts, 1, nullptr);
+  const bool confirmed = ConfirmAction::popup("Lock UID permanently?", "This action cannot be undone");
   render();
-  if (!choice || strcmp(choice, "lock") != 0) { _goMifareAdvanced(); return; }
+  if (!confirmed) { _goMifareAdvanced(); return; }
 
   // The confirmation overlay may leave the card idle; use a fresh activation
   // before issuing the irreversible Gen3 lock command.

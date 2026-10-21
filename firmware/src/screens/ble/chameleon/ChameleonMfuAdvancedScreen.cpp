@@ -1,3 +1,4 @@
+#include "ui/actions/ConfirmAction.h"
 #include "ChameleonMfuAdvancedScreen.h"
 #include "ChameleonMfuAuthUtils.h"
 #include "ChameleonMfuPagesScreen.h"
@@ -36,10 +37,8 @@ const char* _mfuSensitivePageLabel(uint16_t type, uint16_t page) {
 bool _confirmSensitiveWrite(uint16_t type, uint16_t page) {
   const char* label = _mfuSensitivePageLabel(type, page);
   if (!label) return true;
-  static const InputSelectAction::Option opts[] = {{"Write anyway", "write"}};
-  String title = String("Warning: ") + label;
-  const char* choice = InputSelectAction::popup(title.c_str(), opts, 1, nullptr);
-  return choice && strcmp(choice, "write") == 0;
+  String title = String("Write ") + label + "?";
+  return ConfirmAction::popup(title.c_str(), "Sensitive tag memory");
 }
 
 bool _readHex4(const char* title, uint8_t out[4]) {
@@ -183,8 +182,7 @@ void ChameleonMfuAdvancedScreen::_lockTag() {
   if (lastUser != 0xFFFF) --lastUser; else lastUser = 15;
   if (lastUser < 4) { if (restoreMode) c.setMode(previousMode); render(); ShowStatusAction::show("No lockable memory", 1600); render(); return; }
 
-  static const InputSelectAction::Option opts[] = {{"Lock permanently", "lock"}};
-  if (!InputSelectAction::popup("Make tag read-only?", opts, 1, nullptr)) {
+  if (!ConfirmAction::popup("Make tag read-only?", "This action cannot be undone")) {
     if (restoreMode) c.setMode(previousMode); render(); return;
   }
 
