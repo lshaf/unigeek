@@ -1,3 +1,4 @@
+#include "ui/actions/ConfirmAction.h"
 #include "TcpClientScreen.h"
 
 #include "core/Device.h"
@@ -78,6 +79,10 @@ void TcpClientScreen::onRender() {
 
 void TcpClientScreen::onBack() {
   if (_state == STATE_OUTPUT) {
+    if (!ConfirmAction::popup("Disconnect from server?")) {
+      render();
+      return;
+    }
     _closeConnection(true);
   } else {
     Screen.goBack();

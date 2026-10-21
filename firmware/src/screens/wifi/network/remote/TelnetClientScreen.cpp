@@ -1,3 +1,4 @@
+#include "ui/actions/ConfirmAction.h"
 #include "TelnetClientScreen.h"
 
 #include "core/Device.h"
@@ -81,6 +82,10 @@ void TelnetClientScreen::onRender() {
 
 void TelnetClientScreen::onBack() {
   if (_state == STATE_OUTPUT) {
+    if (!ConfirmAction::popup("Disconnect from server?")) {
+      render();
+      return;
+    }
     _closeConnection(true);
   } else {
     Screen.goBack();

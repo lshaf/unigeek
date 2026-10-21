@@ -1,3 +1,4 @@
+#include "ui/actions/ConfirmAction.h"
 #include "SshClientScreen.h"
 
 #include "core/Device.h"
@@ -234,8 +235,13 @@ void SshClientScreen::onBack() {
     return;
   }
 
-  if (_state == STATE_OUTPUT) _closeConnection(true);
-  else Screen.goBack();
+  if (_state == STATE_OUTPUT) {
+    if (!ConfirmAction::popup("Disconnect from server?")) {
+      render();
+      return;
+    }
+    _closeConnection(true);
+  } else Screen.goBack();
 }
 
 void SshClientScreen::_updateLabels() {

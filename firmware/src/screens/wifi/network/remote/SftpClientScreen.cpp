@@ -311,6 +311,10 @@ void SftpClientScreen::onItemSelected(uint8_t index) {
 void SftpClientScreen::onBack() {
   if (_state == STATE_ACTION) {
     // Leaving the Download/Upload hub ends the SFTP session.
+    if (!ConfirmAction::popup("Disconnect from server?")) {
+      render();
+      return;
+    }
     _closeConnection(false);
     Screen.goBack();
     return;

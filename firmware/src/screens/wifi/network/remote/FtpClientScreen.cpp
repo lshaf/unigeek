@@ -232,6 +232,10 @@ void FtpClientScreen::onItemSelected(uint8_t index) {
 
 void FtpClientScreen::onBack() {
   if (_state == STATE_ACTION) {
+    if (!ConfirmAction::popup("Disconnect from server?")) {
+      render();
+      return;
+    }
     _closeConnection(false);
     Screen.goBack();
     return;
