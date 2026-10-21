@@ -1,4 +1,5 @@
 #include "MassStorageScreen.h"
+#include "ui/actions/ConfirmAction.h"
 
 #ifdef DEVICE_HAS_USB_HID
 
@@ -57,7 +58,7 @@ void MassStorageScreen::onUpdate()
 
   if (Uni.Nav->wasPressed()) {
     auto dir = Uni.Nav->readDirection();
-    if (dir == INavigation::DIR_BACK || dir == INavigation::DIR_PRESS) _exit();
+    if (dir == INavigation::DIR_BACK) _exit();
   }
 }
 
@@ -140,6 +141,12 @@ void MassStorageScreen::onRender()
 
 void MassStorageScreen::_exit()
 {
+  if (!ConfirmAction::popup("Stop USB storage?")) {
+    // The modal overwrites part of the cached chrome.
+    _chromeDrawn = false;
+    render();
+    return;
+  }
   UsbMscUtil::instance().end();
   Screen.goBack();
 }

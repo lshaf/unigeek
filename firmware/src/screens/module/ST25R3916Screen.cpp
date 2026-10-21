@@ -1,29 +1,27 @@
-#include "ui/actions/ConfirmAction.h"
-#include "ui/components/TagPrompt.h"
 #include "ST25R3916Screen.h"
-
+#include "core/ConfigManager.h"
 #include "core/Device.h"
 #include "core/ScreenManager.h"
-#include "ui/actions/ShowStatusAction.h"
+#include "screens/utility/NfcMemoryViewScreen.h"
+#include "ui/actions/ConfirmAction.h"
+#include "ui/actions/InputNumberAction.h"
 #include "ui/actions/InputSelectAction.h"
 #include "ui/actions/InputTextAction.h"
-#include "ui/actions/InputNumberAction.h"
-#include "core/ConfigManager.h"
-#include "ui/views/ProgressView.h"
-#include "ui/views/DictionaryKeyProgressView.h"
-#include "ui/views/DictionaryDiscoverySummary.h"
-#include "ui/views/LogView.h"
+#include "ui/actions/ShowStatusAction.h"
 #include "ui/components/Header.h"
 #include "ui/components/StatusBar.h"
 #include "ui/components/TagPrompt.h"
-#include "utils/nfc/NdefParser.h"
-#include "utils/nfc/HfDumpParser.h"
-#include "utils/nfc/NdefBuilder.h"
+#include "ui/views/DictionaryDiscoverySummary.h"
+#include "ui/views/DictionaryKeyProgressView.h"
+#include "ui/views/LogView.h"
+#include "ui/views/ProgressView.h"
+#include "utils/IdentityFile.h"
 #include "utils/nfc/HfDumpBuilder.h"
+#include "utils/nfc/HfDumpParser.h"
 #include "utils/nfc/MagicCard.h"
 #include "utils/nfc/MfcKeyStore.h"
-#include "utils/IdentityFile.h"
-#include "screens/utility/NfcMemoryViewScreen.h"
+#include "utils/nfc/NdefBuilder.h"
+#include "utils/nfc/NdefParser.h"
 #include <mbedtls/md.h>
 
 #if defined(DEVICE_HAS_ST25R3916)
@@ -2105,6 +2103,10 @@ bool ST25R3916Screen::_writeMfcDumpToTag() {
 }
 
 void ST25R3916Screen::_eraseMfcTag() {
+  if (!ConfirmAction::popup("Erase tag?", "This action cannot be undone")) {
+    _showMfcTagMenu();
+    return;
+  }
 #if defined(DEVICE_HAS_ST25R3916)
   _state = STATE_MFC_ERASING;
   render();
@@ -2625,6 +2627,10 @@ bool ST25R3916Screen::_writeMfcNdef(const uint8_t* ndef, size_t ndefLen) {
 }
 
 void ST25R3916Screen::_eraseMfcNdef() {
+  if (!ConfirmAction::popup("Erase NDEF record?", "This action cannot be undone")) {
+    _showMfcNdefMenu();
+    return;
+  }
 #if defined(DEVICE_HAS_ST25R3916)
   _state = STATE_MFC_NDEF_WRITING;
   render();
@@ -3115,6 +3121,10 @@ bool ST25R3916Screen::_writeMfuDumpToTag() {
 }
 
 void ST25R3916Screen::_eraseMfuTag() {
+  if (!ConfirmAction::popup("Erase tag?", "This action cannot be undone")) {
+    _showMfuTagMenu();
+    return;
+  }
 #if defined(DEVICE_HAS_ST25R3916)
   _state = STATE_MFU_ERASING;
   render();
@@ -3706,6 +3716,10 @@ bool ST25R3916Screen::_writeMfuNdef(const uint8_t* ndef, size_t ndefLen) {
 }
 
 void ST25R3916Screen::_eraseMfuNdef() {
+  if (!ConfirmAction::popup("Erase NDEF record?", "This action cannot be undone")) {
+    _showMfuNdefMenu();
+    return;
+  }
 #if defined(DEVICE_HAS_ST25R3916)
   _ndefMfuTarget = true;
   _state = STATE_MFU_NDEF_WRITING;
@@ -4215,6 +4229,10 @@ void ST25R3916Screen::_lockMfuTag() {
 }
 
 void ST25R3916Screen::_formatMfuNdef() {
+  if (!ConfirmAction::popup("Format tag as NDEF?", "This action cannot be undone")) {
+    _showMfuNdefMenu();
+    return;
+  }
 #if defined(DEVICE_HAS_ST25R3916)
   _state=STATE_MFU_NDEF_WRITING;render();_renderTagPrompt();ST25R3916Backend dev;
   if(!st25Begin(dev, _interface)){ShowStatusAction::show("ST25R3916 not detected");_showMfuNdefMenu();return;}
@@ -5225,8 +5243,13 @@ bool ST25R3916Screen::_experimentalWriteNdef(const uint8_t* ndef, size_t ndefLen
 
 void ST25R3916Screen::_experimentalEraseNdef(bool formatOnly) {
   static const uint8_t empty = 0;
-  if(formatOnly){if(_experimentalWriteNdef(&empty,0,true))_showExperimentalNdefMenu();else _showExperimentalNdefMenu();return;}
-  if(!ConfirmAction::popup("Erase NDEF?", "Deletes NDEF data")){_showExperimentalNdefMenu();return;}if(_experimentalWriteNdef(&empty,0,false))_showExperimentalNdefMenu();else _showExperimentalNdefMenu();
+  if(formatOnly){
+    if (!ConfirmAction::popup("Format tag as NDEF?", "This action cannot be undone")) {
+      _showExperimentalNdefMenu();
+      return;
+    }
+    if(_experimentalWriteNdef(&empty,0,true))_showExperimentalNdefMenu();else _showExperimentalNdefMenu();return;}
+  if(!ConfirmAction::popup("Erase NDEF record?", "This action cannot be undone")){_showExperimentalNdefMenu();return;}if(_experimentalWriteNdef(&empty,0,false))_showExperimentalNdefMenu();else _showExperimentalNdefMenu();
 }
 
 void ST25R3916Screen::_showDeviceInfo() {

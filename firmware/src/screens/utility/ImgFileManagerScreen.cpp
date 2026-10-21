@@ -1,3 +1,4 @@
+#include "ui/actions/ConfirmAction.h"
 #include "ImgFileManagerScreen.h"
 #include "core/Device.h"
 #include "core/ScreenManager.h"
@@ -213,6 +214,12 @@ void ImgFileManagerScreen::_executeEntryAction(uint8_t action) {
       if (!_volume.renameEntry(path, parent + newName, error)) ShowStatusAction::show(error.c_str());
     }
   } else if (action == 1) {
+    if (!ConfirmAction::popup("Delete selected item?", "This action cannot be undone")) {
+      _listDirectory(_paths[_depth]);
+      render();
+      return;
+    }
+    render();
     ShowStatusAction::show("Deleting...", 0);
     String error;
     if (!_volume.deleteEntry(path, error)) ShowStatusAction::show("Failed", 1500);

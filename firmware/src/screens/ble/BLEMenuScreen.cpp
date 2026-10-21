@@ -1,4 +1,5 @@
 #include "BLEMenuScreen.h"
+#include "ui/actions/ConfirmAction.h"
 #include "core/Device.h"
 #include "core/ScreenManager.h"
 #include "screens/MainMenuScreen.h"
@@ -33,6 +34,10 @@ void BLEMenuScreen::onItemSelected(uint8_t index)
 void BLEMenuScreen::_toggleRemoteDevice()
 {
   if (BleFM.isActive()) {
+    if (!ConfirmAction::popup("Stop BLE Remote?")) {
+      render();
+      return;
+    }
     BleFM.end();
     Mirror.setEnabled(UartFM.isActive());
   } else {

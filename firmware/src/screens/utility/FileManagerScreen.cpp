@@ -1,3 +1,4 @@
+#include "ui/actions/ConfirmAction.h"
 #include "FileManagerScreen.h"
 #include "core/Device.h"
 #include "core/ScreenManager.h"
@@ -229,6 +230,8 @@ void FileManagerScreen::_handleMenuAction(uint8_t index)
     }
 
     case ACT_DELETE: {
+      if (!ConfirmAction::popup("Delete selected item?", "This action cannot be undone")) break;
+      render();
       ShowStatusAction::show("Deleting...", 0);
       bool ok = _browser.entry(_menuSelIdx).isDir
                   ? _removeDir(targetPath)
@@ -263,6 +266,9 @@ void FileManagerScreen::_handleMenuAction(uint8_t index)
       int slash = _clipPath.lastIndexOf('/');
       String clipName = (slash >= 0) ? _clipPath.substring(slash + 1) : _clipPath;
       String destPath = base + "/" + clipName;
+      if (Uni.Storage->exists(destPath.c_str()) &&
+          !ConfirmAction::popup("Replace existing file?", "This action cannot be undone")) break;
+      render();
       ShowStatusAction::show(_clipOp == "Copy" ? "Copying..." : "Moving...", 0);
       bool ok = false;
       if (_clipOp == "Copy") {

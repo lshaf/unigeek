@@ -972,6 +972,10 @@ void PN532I2cScreen::onItemSelected(uint8_t index) {
           break;
         case 2:
           _ndefTarget = NDEF_TARGET_MIFARE_CLASSIC;
+          if (!ConfirmAction::popup("Format tag as NDEF?", "This action cannot be undone")) {
+            _goMifareNdef();
+            break;
+          }
           // Standalone Format NDEF must establish the same card context as
           // Read/Write NDEF before checking Classic dimensions.
           renderOperationTitle("Format NDEF");
@@ -4354,6 +4358,10 @@ void PN532I2cScreen::_doUltralightWriteTag() {
 }
 
 void PN532I2cScreen::_doUltralightEraseTag() {
+  if (!ConfirmAction::popup("Erase tag?", "This action cannot be undone")) {
+    _goUltralightTag();
+    return;
+  }
   renderOperationTitle("Erase Tag");
   renderTagPrompt("Waiting for tag...", bodyX(), bodyY(), bodyW(), bodyH());
   uint16_t pages = 0; const char* typeName = nullptr;
@@ -5519,6 +5527,10 @@ bool PN532I2cScreen::_writeClassicNdefRecord(const uint8_t* ndef, size_t ndefLen
 }
 
 void PN532I2cScreen::_doEraseClassicNdef() {
+  if (!ConfirmAction::popup("Erase NDEF record?", "This action cannot be undone")) {
+    _goMifareNdef();
+    return;
+  }
   renderOperationTitle("Erase NDEF");
   _ndefTarget = NDEF_TARGET_MIFARE_CLASSIC;
 
@@ -6135,6 +6147,10 @@ void PN532I2cScreen::_doWriteNdefFileSelected(uint8_t fileIndex) {
 }
 
 void PN532I2cScreen::_doEraseNdef() {
+  if (!ConfirmAction::popup("Erase NDEF record?", "This action cannot be undone")) {
+    _goUltralightNdef();
+    return;
+  }
   renderOperationTitle("Erase NDEF");
   _ndefTarget = NDEF_TARGET_ULTRALIGHT;
   renderTagPrompt("Waiting for tag...", bodyX(), bodyY(), bodyW(), bodyH());
@@ -6172,6 +6188,10 @@ void PN532I2cScreen::_doEraseNdef() {
 }
 
 void PN532I2cScreen::_doFormatNdef() {
+  if (!ConfirmAction::popup("Format tag as NDEF?", "This action cannot be undone")) {
+    _goUltralightNdef();
+    return;
+  }
   renderOperationTitle("Format NDEF");
   _ndefTarget = NDEF_TARGET_ULTRALIGHT;
   renderTagPrompt("Waiting for tag...", bodyX(), bodyY(), bodyW(), bodyH());
@@ -6859,6 +6879,10 @@ bool PN532I2cScreen::_doWriteDumpToTag(const uint8_t* dump, size_t len,
 }
 
 void PN532I2cScreen::_doEraseTag() {
+  if (!ConfirmAction::popup("Erase tag?", "This action cannot be undone")) {
+    _goMifareTag();
+    return;
+  }
   renderOperationTitle("Erase Tag");
   if (!_scanCardOrShow(5000)) { _goMifareTag(); return; }
   auto dims = _mfDims(_sak);

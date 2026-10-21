@@ -1,4 +1,5 @@
 #include "KeyboardMenuScreen.h"
+#include "ui/actions/ConfirmAction.h"
 #include "core/ScreenManager.h"
 #include "core/ScreenMirror.h"
 #include "screens/MainMenuScreen.h"
@@ -73,6 +74,10 @@ void KeyboardMenuScreen::onItemSelected(uint8_t index)
 void KeyboardMenuScreen::_toggleUsbRemote()
 {
   if (UartFM.isActive()) {
+    if (!ConfirmAction::popup("Stop USB Remote?")) {
+      render();
+      return;
+    }
     UartFM.end();
     Mirror.setEnabled(BleFM.isActive());
   } else {

@@ -105,6 +105,10 @@ void ChameleonMfcNdefScreen::onItemSelected(uint8_t index) {
     if (index == 0) _doRead();
     else if (index == 1) _goWriteMenu();
     else if (index == 2) {
+      if (!ConfirmAction::popup("Format tag as NDEF?", "This action cannot be undone")) {
+        _goMenu();
+        return;
+      }
       _running = true;
       renderOperationTitle("Format NDEF");
       if (_scanClassic()) _formatClassic1kNdef();
@@ -538,7 +542,7 @@ bool ChameleonMfcNdefScreen::_writeNdefRecord(const uint8_t* ndef, size_t ndefLe
 
   uint8_t sectors[39] = {}; size_t count = 0;
   if (!_readNdefSectors(sectors, sizeof(sectors), count)) {
-    const bool confirmed = ConfirmAction::popup("Format tag as NDEF?", "Existing data may be overwritten");
+    const bool confirmed = ConfirmAction::popup("Format tag as NDEF?", "This action cannot be undone");
     render();
     if (!confirmed || !_formatClassic1kNdef()) {
       ChameleonClient::get().setMode(0); _running = false;
@@ -609,6 +613,7 @@ bool ChameleonMfcNdefScreen::_writeNdefRecord(const uint8_t* ndef, size_t ndefLe
 }
 
 void ChameleonMfcNdefScreen::_doErase() {
+  if (!ConfirmAction::popup("Erase NDEF record?", "This action cannot be undone")) { _goMenu(); return; }
   renderOperationTitle("Erase NDEF");
   _running = true;
   if (!_scanClassic()) { _running = false; _goMenu(); return; }

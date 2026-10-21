@@ -1,3 +1,4 @@
+#include "ui/actions/ConfirmAction.h"
 #include "KeyboardScreen.h"
 #include "core/Device.h"
 #include "core/ScreenManager.h"
@@ -176,6 +177,8 @@ void KeyboardScreen::onItemSelected(uint8_t index)
     }
     if (_mode == MODE_BLE && index == idx) {
       // Reset Pair
+      if (!ConfirmAction::popup("Reset BLE pairing?")) { render(); return; }
+      render();
       _keyboard->resetPair();
       ShowStatusAction::show("Pairing reset", 1500);
       render();
@@ -209,6 +212,14 @@ void KeyboardScreen::onBack()
     _showFiles(parent);
   } else if (_state == STATE_MEDIA_MENU) {
     _goMenu();
+  } else if (_state == STATE_MENU) {
+    // Leaving the HID menu ends the USB/BLE device session.
+    // Stopping a running Ducky Script is handled separately, without a popup.
+    if (ConfirmAction::popup("Disconnect device?")) {
+      Screen.goBack();
+    } else {
+      render();
+    }
   } else {
     Screen.goBack();
   }
@@ -411,13 +422,29 @@ void KeyboardScreen::_handleKeyboardRelay()
 #if defined(DEVICE_M5_CARDPUTER) || defined(DEVICE_M5_CARDPUTER_ADV)
   // Cardputer: BtnG0 (boot button) exits relay
   if (digitalRead(BTN_BOOT) == LOW) {
-    _keyboard->releaseAll(); _goMenu(); return;
+    // Wait for G0 release so cancelling does not immediately reopen the popup.
+    while (digitalRead(BTN_BOOT) == LOW) delay(10);
+    if (ConfirmAction::popup("Disconnect keyboard?")) {
+      _keyboard->releaseAll();
+      _goMenu();
+    } else {
+      _connectedChromeDrawn = false;
+      render();
+    }
+    return;
   }
 #elif defined(DEVICE_T_LORA_PAGER)
   // T-Lora Pager: encoder button press exits relay
   if (Uni.Nav->wasPressed()) {
     if (Uni.Nav->readDirection() == INavigation::DIR_PRESS) {
-      _keyboard->releaseAll(); _goMenu(); return;
+      if (ConfirmAction::popup("Disconnect keyboard?")) {
+        _keyboard->releaseAll();
+        _goMenu();
+      } else {
+        _connectedChromeDrawn = false;
+        render();
+      }
+      return;
     }
   }
 #endif
@@ -434,8 +461,14 @@ void KeyboardScreen::_handleKeyboardRelay()
   if (Uni.Nav->wasPressed()) {
     auto dir = Uni.Nav->readDirection();
     if (dir == INavigation::DIR_BACK || dir == INavigation::DIR_PRESS) {
-      _keyboard->releaseAll();
-      _goMenu();
+      if (ConfirmAction::popup("Disconnect keyboard?")) {
+        _keyboard->releaseAll();
+        _goMenu();
+      } else {
+        _connectedChromeDrawn = false;
+        render();
+      }
+      return;
     }
   }
 #endif
@@ -473,7 +506,12 @@ void KeyboardScreen::_handleMouseJiggle()
   if (Uni.Nav->wasPressed()) {
     auto dir = Uni.Nav->readDirection();
     if (dir == INavigation::DIR_BACK || dir == INavigation::DIR_PRESS) {
-      _goMenu();
+      if (ConfirmAction::popup("Stop mouse jiggle?")) {
+        _goMenu();
+      } else {
+        _jiggleChromeDrawn = false;
+        render();
+      }
       return;
     }
   }
