@@ -34,7 +34,7 @@ void BLEMenuScreen::onItemSelected(uint8_t index)
 void BLEMenuScreen::_toggleRemoteDevice()
 {
   if (BleFM.isActive()) {
-    if (!ConfirmAction::popup("Stop BLE Remote?")) {
+    if (!ConfirmAction::popup("Disconnect device?")) {
       render();
       return;
     }

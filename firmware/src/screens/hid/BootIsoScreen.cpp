@@ -356,7 +356,7 @@ void BootIsoScreen::drawVirtualKey(uint8_t index, uint8_t block) {
 void BootIsoScreen::ejectIso() {
   if (!_mounted) return;
   // The host must unmount/eject the USB disk before the MSC session ends.
-  if (!ConfirmAction::popup("Stop USB boot?")) {
+  if (!ConfirmAction::popup("Disconnect device?")) {
     render();
     return;
   }

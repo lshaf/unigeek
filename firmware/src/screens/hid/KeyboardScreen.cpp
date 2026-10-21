@@ -424,7 +424,7 @@ void KeyboardScreen::_handleKeyboardRelay()
   if (digitalRead(BTN_BOOT) == LOW) {
     // Wait for G0 release so cancelling does not immediately reopen the popup.
     while (digitalRead(BTN_BOOT) == LOW) delay(10);
-    if (ConfirmAction::popup("Disconnect keyboard?")) {
+    if (ConfirmAction::popup("Disconnect device?")) {
       _keyboard->releaseAll();
       _goMenu();
     } else {
@@ -437,7 +437,7 @@ void KeyboardScreen::_handleKeyboardRelay()
   // T-Lora Pager: encoder button press exits relay
   if (Uni.Nav->wasPressed()) {
     if (Uni.Nav->readDirection() == INavigation::DIR_PRESS) {
-      if (ConfirmAction::popup("Disconnect keyboard?")) {
+      if (ConfirmAction::popup("Disconnect device?")) {
         _keyboard->releaseAll();
         _goMenu();
       } else {
@@ -461,7 +461,7 @@ void KeyboardScreen::_handleKeyboardRelay()
   if (Uni.Nav->wasPressed()) {
     auto dir = Uni.Nav->readDirection();
     if (dir == INavigation::DIR_BACK || dir == INavigation::DIR_PRESS) {
-      if (ConfirmAction::popup("Disconnect keyboard?")) {
+      if (ConfirmAction::popup("Disconnect device?")) {
         _keyboard->releaseAll();
         _goMenu();
       } else {
@@ -506,7 +506,7 @@ void KeyboardScreen::_handleMouseJiggle()
   if (Uni.Nav->wasPressed()) {
     auto dir = Uni.Nav->readDirection();
     if (dir == INavigation::DIR_BACK || dir == INavigation::DIR_PRESS) {
-      if (ConfirmAction::popup("Stop mouse jiggle?")) {
+      if (ConfirmAction::popup("Disconnect device?")) {
         _goMenu();
       } else {
         _jiggleChromeDrawn = false;

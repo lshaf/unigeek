@@ -74,7 +74,7 @@ void KeyboardMenuScreen::onItemSelected(uint8_t index)
 void KeyboardMenuScreen::_toggleUsbRemote()
 {
   if (UartFM.isActive()) {
-    if (!ConfirmAction::popup("Stop USB Remote?")) {
+    if (!ConfirmAction::popup("Disconnect device?")) {
       render();
       return;
     }

@@ -141,7 +141,7 @@ void MassStorageScreen::onRender()
 
 void MassStorageScreen::_exit()
 {
-  if (!ConfirmAction::popup("Stop USB storage?")) {
+  if (!ConfirmAction::popup("Disconnect device?")) {
     // The modal overwrites part of the cached chrome.
     _chromeDrawn = false;
     render();
