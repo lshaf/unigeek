@@ -24,47 +24,94 @@ private:
   const char* _question;
   const char* _description;
   bool _yesSelected = false; // Default to Cancel
+  int _lastY = 0;
+  int _lastH = 0;
 
   ConfirmAction(const char* question, const char* description)
       : _question(question ? question : ""),
         _description(description && *description ? description : nullptr) {}
 
+  // Keep the popup compact, but adapt its height to wrapped text.
   int width() const { return min(204, max(90, (int)Uni.Lcd.width() - 16)); }
-  int height() const { return PAD * 2 + LINE_H + (_description ? LINE_H + 5 : 0) + 7 + BUTTON_H; }
   int left() const { return ((int)Uni.Lcd.width() - width()) / 2; }
-  int top() const { return ((int)Uni.Lcd.height() - height()) / 2; }
 
-  static String fitText(const char* value, int maxWidth) {
-    String text(value);
-    auto& lcd = Uni.Lcd;
-    while (text.length() && lcd.textWidth(text) > maxWidth)
-      text.remove(text.length() - 1);
-    return text;
+  static void prepareText() {
+    Uni.Lcd.setTextFont(1);
+    Uni.Lcd.setTextSize(1);
+    Uni.Lcd.setTextDatum(MC_DATUM);
+  }
+
+  static void wrapText(const char* value, int maxWidth, String* lines,
+                       int& count, int maxLines) {
+    count = 0;
+    if (!value || !*value || maxLines <= 0) return;
+    String input(value);
+    input.trim();
+    while (input.length() && count < maxLines) {
+      String line;
+      while (input.length()) {
+        int space = input.indexOf(' ');
+        String word = space < 0 ? input : input.substring(0, space);
+        String candidate = line.length() ? line + " " + word : word;
+        if (Uni.Lcd.textWidth(candidate) > maxWidth && line.length()) break;
+        if (Uni.Lcd.textWidth(candidate) > maxWidth) {
+          // Even a single long word must not escape the popup.
+          while (word.length() && Uni.Lcd.textWidth(word) > maxWidth)
+            word.remove(word.length() - 1);
+          line = word;
+          input.remove(0, word.length());
+          break;
+        }
+        line = candidate;
+        input.remove(0, word.length());
+        input.trim();
+      }
+      if (!line.length()) break;
+      lines[count++] = line;
+    }
+    if (input.length() && count) {
+      String& last = lines[count - 1];
+      while (last.length() && Uni.Lcd.textWidth(last + "...") > maxWidth)
+        last.remove(last.length() - 1);
+      last += "...";
+    }
   }
 
   void draw() {
     auto& lcd = Uni.Lcd;
-    const int x = left(), y = top(), w = width(), h = height();
+    prepareText();
+    const int w = width();
+    const int maxTextW = w - PAD * 2;
+    const int maxTextLines = max(1, ((int)lcd.height() - PAD * 2 - BUTTON_H - 12) / LINE_H);
+    String questionLines[8], descriptionLines[8];
+    int questionCount = 0, descriptionCount = 0;
+    wrapText(_question, maxTextW, questionLines, questionCount, min(8, maxTextLines));
+    if (_description)
+      wrapText(_description, maxTextW, descriptionLines, descriptionCount,
+               min(8, max(0, maxTextLines - questionCount)));
+    const int descriptionGap = descriptionCount ? 5 : 0;
+    const int h = PAD * 2 + (questionCount + descriptionCount) * LINE_H
+                + descriptionGap + 7 + BUTTON_H;
+    const int x = left(), y = ((int)lcd.height() - h) / 2;
+    _lastY = y;
+    _lastH = h;
     lcd.fillRect(x, y, w, h, TFT_BLACK);
     lcd.drawRoundRect(x, y, w, h, 4, TFT_WHITE);
-    lcd.setTextSize(1);
-    lcd.setTextDatum(MC_DATUM);
     lcd.setTextColor(TFT_YELLOW, TFT_BLACK);
-    lcd.drawString(fitText(_question, w - PAD * 2), x + w / 2, y + PAD + LINE_H / 2);
-
-    int buttonsY = y + PAD + LINE_H + 7;
-    if (_description) {
+    int textY = y + PAD + LINE_H / 2;
+    for (int i = 0; i < questionCount; ++i, textY += LINE_H)
+      lcd.drawString(questionLines[i], x + w / 2, textY);
+    if (descriptionCount) {
+      textY += descriptionGap;
       lcd.setTextColor(TFT_WHITE, TFT_BLACK);
-      lcd.drawString(fitText(_description, w - PAD * 2), x + w / 2,
-                     y + PAD + LINE_H + 3 + LINE_H / 2);
-      buttonsY += LINE_H + 5;
+      for (int i = 0; i < descriptionCount; ++i, textY += LINE_H)
+        lcd.drawString(descriptionLines[i], x + w / 2, textY);
     }
-
+    const int buttonsY = y + h - PAD - BUTTON_H;
     const int buttonW = (w - PAD * 2 - GAP) / 2;
     const int firstX = x + PAD;
-    const int secondX = firstX + buttonW + GAP;
     drawButton(firstX, buttonsY, buttonW, "Yes", _yesSelected);
-    drawButton(secondX, buttonsY, buttonW, "Cancel", !_yesSelected);
+    drawButton(firstX + buttonW + GAP, buttonsY, buttonW, "Cancel", !_yesSelected);
   }
 
   static void drawButton(int x, int y, int w, const char* label, bool selected) {
@@ -77,6 +124,8 @@ private:
   }
 
   bool run() {
+    auto& lcd = Uni.Lcd;
+    const auto previousDatum = lcd.getTextDatum();
     draw();
     bool confirmed = false;
     bool done = false;
@@ -109,7 +158,8 @@ private:
       }
       delay(10);
     }
-    Uni.Lcd.fillRect(left(), top(), width(), height(), TFT_BLACK);
+    // Keep popup visible until the calling screen redraws.
+    lcd.setTextDatum(previousDatum);
     return confirmed;
   }
 };

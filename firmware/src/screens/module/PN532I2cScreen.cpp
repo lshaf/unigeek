@@ -4517,6 +4517,8 @@ void PN532I2cScreen::_doUltralightWritePage() {
     return;
   }
 
+  // Restore the operation screen before opening the next input popup.
+  if (_ultralightSensitivePageLabel(typeName, (uint16_t)page)) renderOperationTitle("Edit Memory");
   String hex = InputTextAction::popup("Page data (8 hex)", "", InputTextAction::INPUT_HEX);
   if (InputTextAction::wasCancelled()) { _goUltralightAdvanced(); return; }
   hex.replace(" ", ""); hex.replace(":", "");
@@ -4557,6 +4559,8 @@ void PN532I2cScreen::_doUltralightLockTag() {
     _goUltralightAdvanced(); return;
   }
 
+  // Dismiss the confirmation visually before any NFC work or status dialog.
+  renderOperationTitle("Lock Tag");
   uint8_t sm[2] = {}, dm[3] = {};
   if (!_pn532BuildUltralightLockMasks(typeName, 4, lastUser, sm, dm)) {
     ShowStatusAction::show("Lock not supported", 1600); _goUltralightAdvanced(); return;

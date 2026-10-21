@@ -159,6 +159,8 @@ void ChameleonMfuAdvancedScreen::_writePage() {
   if (info.pages <= 4) { if (restoreMode) c.setMode(previousMode); render(); ShowStatusAction::show("Tag not supported", 1200); return; }
   const int page = InputNumberAction::popup((String("Page (4..") + String(info.pages - 1) + ")").c_str(), 4, info.pages - 1, 4);
   if (InputNumberAction::wasCancelled() || !_confirmSensitiveWrite(info.type, (uint16_t)page)) { if (restoreMode) c.setMode(previousMode); render(); return; }
+  // The confirmation may have covered the input area; redraw before text entry.
+  if (_mfuSensitivePageLabel(info.type, (uint16_t)page)) renderOperationChrome("Edit Memory");
   uint8_t data[4] = {}; if (!_readHex4("Page data (8 hex)", data)) { if (restoreMode) c.setMode(previousMode); render(); return; }
   uint8_t pwd[4] = {}; bool usePwd = false;
   if (!ChameleonMfuAuthUtils::ensureForRange(c, info, page, page, false, pwd, usePwd)) { if (restoreMode) c.setMode(previousMode); render(); return; }
