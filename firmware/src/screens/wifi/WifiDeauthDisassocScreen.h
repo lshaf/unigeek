@@ -18,6 +18,11 @@ public:
   }
   ~WifiDeauthDisassocScreen() override;
 
+  // Contextual entry from WiFi Scanner (same idea as Packet Sniffer).
+  // Prefills target mode with AP and optional client; user can still change settings.
+  void configureFromChannel(uint8_t channel, const uint8_t* bssid,
+                            const uint8_t* client = nullptr, const char* ssid = nullptr);
+
   void onInit() override;
   void onItemSelected(uint8_t index) override;
   void onUpdate() override;

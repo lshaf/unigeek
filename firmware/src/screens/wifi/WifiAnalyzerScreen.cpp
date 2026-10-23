@@ -8,6 +8,7 @@
 #include "screens/wifi/WifiPacketMonitorScreen.h"
 #include "screens/wifi/WifiPacketSnifferScreen.h"
 #include "screens/wifi/WifiFoxHuntScreen.h"
+#include "screens/wifi/WifiDeauthDisassocScreen.h"
 #include "ui/actions/InputSelectAction.h"
 #include "ui/actions/ShowStatusAction.h"
 #include "services/VendorResolver.h"
@@ -389,8 +390,9 @@ void WifiAnalyzerScreen::_openOptions(int index)
     {"Packet Monitor", "monitor", nullptr, 0, false},
     {"Packet Sniffer", "sniffer", nullptr, 0, false},
     {"Fox Hunt", "foxhunt", nullptr, 0, false},
+    {"Deauth/Disassoc", "deauth", nullptr, 0, false},
   };
-  const char* choice = InputSelectAction::popup("Options", options, 4);
+  const char* choice = InputSelectAction::popup("Options", options, 5);
   if (!choice) { render(); return; }
 
   // Keep the scanner's existing Details screens and their navigation intact.
@@ -446,6 +448,11 @@ void WifiAnalyzerScreen::_openOptions(int index)
     auto* hunt = new WifiFoxHuntScreen();
     hunt->configureTarget(_stationMode, _stationMode ? mac : bssid, channel, ssid);
     Screen.push(hunt);
+  } else if (strcmp(choice, "deauth") == 0) {
+    // Same contextual hand-off as Sniffer: prefill AP (+ client in station mode).
+    auto* deauth = new WifiDeauthDisassocScreen();
+    deauth->configureFromChannel(channel, apFilter, clientFilter, ssid);
+    Screen.push(deauth);
   }
 }
 
