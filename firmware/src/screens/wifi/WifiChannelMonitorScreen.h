@@ -102,6 +102,7 @@ private:
   void _openFoxHunt();
   void _openPacketMonitor();
   void _openPacketSniffer();
+  void _openDeauth();
   void _freezeApOrder();
   void _hop();
   void _quit();

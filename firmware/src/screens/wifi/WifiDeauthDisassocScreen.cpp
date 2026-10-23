@@ -31,6 +31,28 @@ WifiDeauthDisassocScreen::~WifiDeauthDisassocScreen()
   }
 }
 
+// ── Contextual entry (WiFi Scanner integration) ───────────────────────────
+
+void WifiDeauthDisassocScreen::configureFromChannel(uint8_t channel, const uint8_t* bssid,
+                                                    const uint8_t* client, const char* ssid)
+{
+  _mode = MODE_TARGET;
+  _selectedClientCount = 0;
+  _selectedClientMacStr[0] = '\0';
+
+  if (bssid) {
+    memcpy(_target.bssid, bssid, 6);
+    _target.channel = (channel >= 1 && channel <= 13) ? (int)channel : 1;
+    _target.ssid = (ssid && ssid[0]) ? String(ssid) : String("-");
+  }
+
+  if (client) {
+    memcpy(_selectedClients[0], client, 6);
+    _selectedClientCount = 1;
+    _refreshSelectedClientMacStr();
+  }
+}
+
 // ── Lifecycle ─────────────────────────────────────────────────────────────
 
 void WifiDeauthDisassocScreen::onInit()

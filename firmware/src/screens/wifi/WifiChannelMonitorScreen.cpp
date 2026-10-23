@@ -7,6 +7,7 @@
 #include "screens/wifi/WifiPacketMonitorScreen.h"
 #include "screens/wifi/WifiPacketSnifferScreen.h"
 #include "screens/wifi/WifiFoxHuntScreen.h"
+#include "screens/wifi/WifiDeauthDisassocScreen.h"
 #include "screens/wifi/WifiChannelMonitorDetailsScreen.h"
 #include "ui/actions/InputSelectAction.h"
 #include "ui/actions/ShowStatusAction.h"
@@ -816,15 +817,17 @@ void WifiChannelMonitorScreen::_openOptions()
     {"Packet Monitor", "monitor", nullptr, 0, false},
     {"Packet Sniffer", "sniffer", nullptr, 0, false},
     {"Fox Hunt", "foxhunt", nullptr, 0, false},
+    {"Deauth/Disassoc", "deauth", nullptr, 0, false},
   };
   const bool target = _view != PAUSED;
   const char* choice = InputSelectAction::popup("Options", target ? targetOptions : channelOptions,
-                                                target ? 4 : 2);
+                                                target ? 5 : 2);
   if (choice == nullptr) { render(); return; }
   if (strcmp(choice, "details") == 0) _openSelectedDetails();
   else if (strcmp(choice, "monitor") == 0) _openPacketMonitor();
   else if (strcmp(choice, "sniffer") == 0) _openPacketSniffer();
   else if (strcmp(choice, "foxhunt") == 0) _openFoxHunt();
+  else if (strcmp(choice, "deauth") == 0) _openDeauth();
 }
 
 void WifiChannelMonitorScreen::_openSelectedDetails()
@@ -898,6 +901,42 @@ void WifiChannelMonitorScreen::_openFoxHunt()
   delay(10);
   esp_wifi_set_promiscuous(false);
   Screen.push(hunt);
+}
+
+void WifiChannelMonitorScreen::_openDeauth()
+{
+  // Same contextual hand-off as Sniffer / Analyzer: only when an AP or client is selected.
+  if (_view != AP_PAUSED && _view != CLIENT_PAUSED) return;
+
+  uint8_t mac[6];
+  uint8_t bssid[6];
+  const uint8_t* apFilter = nullptr;
+  const uint8_t* client = nullptr;
+  const char* ssid = nullptr;
+  const uint8_t channel = _detailChannel;
+
+  if (_view == AP_PAUSED) {
+    if (_apSelected >= _frozenApCount) return;
+    const auto& ap = _frozenAps[_apOrder[_apSelected]];
+    memcpy(bssid, ap.bssid, 6);
+    apFilter = bssid;
+    if (ap.ssid[0]) ssid = ap.ssid;
+  } else {
+    if (_clientSelected >= _frozenClientCount) return;
+    memcpy(bssid, _selectedBssid, 6);
+    apFilter = bssid;
+    if (_selectedSsid[0]) ssid = _selectedSsid;
+    memcpy(mac, _frozenClients[_clientOrder[_clientSelected]].mac, 6);
+    client = mac;
+  }
+
+  auto* deauth = new WifiDeauthDisassocScreen();
+  deauth->configureFromChannel(channel, apFilter, client, ssid);
+  _active = nullptr;
+  esp_wifi_set_promiscuous_rx_cb(nullptr);
+  delay(10);
+  esp_wifi_set_promiscuous(false);
+  Screen.push(deauth);
 }
 
 void WifiChannelMonitorScreen::_openPacketMonitor()
