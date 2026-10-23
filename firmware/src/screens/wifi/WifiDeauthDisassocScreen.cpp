@@ -37,6 +37,7 @@ void WifiDeauthDisassocScreen::configureFromChannel(uint8_t channel, const uint8
                                                     const uint8_t* client, const char* ssid)
 {
   _mode = MODE_TARGET;
+  _fromContext = true;
   _selectedClientCount = 0;
   _selectedClientMacStr[0] = '\0';
 
@@ -46,6 +47,7 @@ void WifiDeauthDisassocScreen::configureFromChannel(uint8_t channel, const uint8
     _target.ssid = (ssid && ssid[0]) ? String(ssid) : String("-");
   }
 
+  // AP context → no clients (All). Client context → that station only.
   if (client) {
     memcpy(_selectedClients[0], client, 6);
     _selectedClientCount = 1;
@@ -57,7 +59,16 @@ void WifiDeauthDisassocScreen::configureFromChannel(uint8_t channel, const uint8
 
 void WifiDeauthDisassocScreen::onInit()
 {
-  _state = STATE_MAIN;
+  if (_fromContext) {
+    // Start immediately: AP → whole BSS, client → that MAC.
+    _startDeauth();
+    if (_state != STATE_DEAUTHING) {
+      // No usable target — fall back to the normal menu.
+      _fromContext = false;
+      _showMain();
+    }
+    return;
+  }
   _showMain();
 }
 
@@ -437,7 +448,14 @@ void WifiDeauthDisassocScreen::_stopDeauth()
   _allChanHop  = 0;
   _allCount    = 0;
   ShowStatusAction::show("Stopped", 1000);
-  _showMain();
+
+  // Contextual entry: return to Scanner/Monitor. Standalone: back to Deauth menu.
+  if (_fromContext) {
+    _fromContext = false;
+    Screen.goBack();
+  } else {
+    _showMain();
+  }
 }
 
 void WifiDeauthDisassocScreen::_deauthAll()

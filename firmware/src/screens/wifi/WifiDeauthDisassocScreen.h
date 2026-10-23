@@ -18,8 +18,8 @@ public:
   }
   ~WifiDeauthDisassocScreen() override;
 
-  // Contextual entry from WiFi Scanner (same idea as Packet Sniffer).
-  // Prefills target mode with AP and optional client; user can still change settings.
+  // Contextual entry from WiFi Scanner / Traffic Monitor.
+  // Prefills AP (+ optional client) and auto-starts deauth in onInit.
   void configureFromChannel(uint8_t channel, const uint8_t* bssid,
                             const uint8_t* client = nullptr, const char* ssid = nullptr);
 
@@ -51,6 +51,7 @@ private:
   Mode   _mode  = MODE_TARGET;
   Target _target;
   uint8_t _mainSel = 0;  // keeps highlight on last selected main menu item
+  bool _fromContext = false;  // opened via configureFromChannel (Scanner/Monitor)
 
   class WifiAttackUtil* _attacker = nullptr;
 
