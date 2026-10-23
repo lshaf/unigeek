@@ -49,7 +49,7 @@ void WifiDeauthDisassocScreen::onItemSelected(uint8_t index)
     } else if (_mode == MODE_TARGET) {
       if (index == 1) _selectWifi();
       if (index == 2) {
-        if (_target.ssid == "-") ShowStatusAction::show("Access point not set");
+        if (_target.ssid == "-") ShowStatusAction::show("Access Point not set");
         else _scanClients();
       }
       if (index == 3) _startDeauth();
@@ -71,43 +71,46 @@ void WifiDeauthDisassocScreen::onItemSelected(uint8_t index)
            &_target.bssid[0], &_target.bssid[1], &_target.bssid[2],
            &_target.bssid[3], &_target.bssid[4], &_target.bssid[5]);
     _selectedClientCount = 0;
+    _selectedClientMacStr[0] = '\0';
     _showMain();
-    } else if (_state == STATE_SELECT_CLIENTS) {
+  } else if (_state == STATE_SELECT_CLIENTS) {
     if (index == 0) {
-        _scanClients();
-        return;
+      _scanClients();
+      return;
     }
 
     if (index == 1) {
-        _selectedClientCount = 0;
-        _selectedClientMacStr[0] = '\0';
-        _showClients(true);
-        return;
+      _selectedClientCount = 0;
+      _selectedClientMacStr[0] = '\0';
+      _showClients(true);
+      return;
     }
 
     const int n = (int)index - 2;
     if (n < 0 || n >= _seenClientCount) return;
 
-    const uint8_t* mac = _seenClients[n].mac;
+    const uint8_t* mac = _seenClients[_clientOrder[n]].mac;
 
-    // Deselect if already selected
-    if (_selectedClientCount > 0 &&
-        memcmp(_selectedClients[0], mac, 6) == 0) {
-        _selectedClientCount = 0;
-        _selectedClientMacStr[0] = '\0';
+    // Toggle selection (same pattern as Packet Sniffer MAX_MAC = 4)
+    int found = -1;
+    for (uint8_t i = 0; i < _selectedClientCount; ++i) {
+      if (memcmp(_selectedClients[i], mac, 6) == 0) {
+        found = (int)i;
+        break;
+      }
+    }
+    if (found >= 0) {
+      for (uint8_t i = (uint8_t)found; i + 1 < _selectedClientCount; ++i)
+        memcpy(_selectedClients[i], _selectedClients[i + 1], 6);
+      --_selectedClientCount;
+    } else if (_selectedClientCount < MAX_SELECTED_CLIENTS) {
+      memcpy(_selectedClients[_selectedClientCount++], mac, 6);
     } else {
-        // Replace previous selection
-        memcpy(_selectedClients[0], mac, 6);
-        _selectedClientCount = 1;
-        snprintf(_selectedClientMacStr, sizeof(_selectedClientMacStr),
-                 "%02X:%02X:%02X:%02X:%02X:%02X",
-                 mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+      ShowStatusAction::show("Client limit: 4", 1000);
     }
-
+    _refreshSelectedClientMacStr();
     _showClients(true);
-
-    }
-
+  }
 }
 
 void WifiDeauthDisassocScreen::onUpdate()
@@ -127,18 +130,21 @@ void WifiDeauthDisassocScreen::onUpdate()
 
     _spinIdx = (_spinIdx + 1) % 4;
 
-    if (_mode == MODE_ALL) { 
-	    _deauthAll();
-	    _statusMsg = String("Deauthing ") + _allCount + " APs..."; 
-
-    } else if (_selectedClientCount == 0) { 
-	    if (_attacker) {
-		    _attacker->deauthenticate(_target.bssid, _target.channel); 
-	            _statusMsg = String("Deauthing ") + _target.ssid + "..."; 
-	    }
+    if (_mode == MODE_ALL) {
+      _deauthAll();
+      _statusMsg = String("Deauthing ") + _allCount + " APs...";
+    } else if (_selectedClientCount == 0) {
+      if (_attacker) {
+        _attacker->deauthenticate(_target.bssid, _target.channel);
+        _statusMsg = String("Deauthing ") + _target.ssid + "...";
+      }
     } else if (_attacker) {
-	    _attacker->deauthenticate(_selectedClients[0] ,_target.bssid, _target.channel);
-             _statusMsg = String("Deauthing ") + _selectedClientMacStr + "...";
+      for (uint8_t i = 0; i < _selectedClientCount; ++i)
+        _attacker->deauthenticate(_selectedClients[i], _target.bssid, _target.channel);
+      if (_selectedClientCount == 1)
+        _statusMsg = String("Deauthing ") + _selectedClientMacStr + "...";
+      else
+        _statusMsg = String("Deauthing ") + _selectedClientCount + " clients...";
     }
 
     render();
@@ -178,7 +184,7 @@ void WifiDeauthDisassocScreen::_showMain()
     _targetSub = _target.ssid;
     _mainItems[1] = {"Access Point", _targetSub.c_str()};
     _clientsSub = _selectedClientCount ? "Custom" : "All";
-    _mainItems[2] = {"Client", _clientsSub.c_str()};
+    _mainItems[2] = {"Clients", _clientsSub.c_str()};
     _mainItems[3] = {"Start"};
   } else {
     _mainItems[1] = {"Start"};
@@ -246,6 +252,18 @@ bool WifiDeauthDisassocScreen::_clientSelected(const uint8_t* mac) const {
   for (uint8_t i = 0; i < _selectedClientCount; ++i)
     if (memcmp(_selectedClients[i], mac, 6) == 0) return true;
   return false;
+}
+
+void WifiDeauthDisassocScreen::_refreshSelectedClientMacStr()
+{
+  if (_selectedClientCount == 1) {
+    const uint8_t* m = _selectedClients[0];
+    snprintf(_selectedClientMacStr, sizeof(_selectedClientMacStr),
+             "%02X:%02X:%02X:%02X:%02X:%02X",
+             m[0], m[1], m[2], m[3], m[4], m[5]);
+  } else {
+    _selectedClientMacStr[0] = '\0';
+  }
 }
 
 void WifiDeauthDisassocScreen::_clientCb(void* buf, wifi_promiscuous_pkt_type_t type) {
@@ -318,8 +336,20 @@ void WifiDeauthDisassocScreen::_showClients(bool preserveSelection) {
   _clientItems[0] = {"Rescan"};
   snprintf(_clientLabels[1], sizeof(_clientLabels[1]), "[%c] All", _selectedClientCount ? ' ' : 'x');
   _clientItems[1] = {_clientLabels[1]};
+
+  // Sort by RSSI (strongest first), same pattern as Packet Sniffer
+  for (uint8_t i = 0; i < _seenClientCount; ++i) _clientOrder[i] = i;
+  for (uint8_t i = 1; i < _seenClientCount; ++i) {
+    uint8_t key = _clientOrder[i], j = i;
+    while (j > 0 && _seenClients[_clientOrder[j - 1]].rssi < _seenClients[key].rssi) {
+      _clientOrder[j] = _clientOrder[j - 1];
+      --j;
+    }
+    _clientOrder[j] = key;
+  }
+
   for (uint8_t i = 0; i < _seenClientCount; ++i) {
-    const auto& entry = _seenClients[i];
+    const auto& entry = _seenClients[_clientOrder[i]];
     snprintf(_clientLabels[i + 2], sizeof(_clientLabels[i + 2]),
              "[%c] %s",
              _clientSelected(entry.mac) ? 'x' : ' ', entry.macStr);
