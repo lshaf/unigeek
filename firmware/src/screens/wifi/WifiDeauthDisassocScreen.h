@@ -60,14 +60,15 @@ private:
   ListItem _mainItems[4];
   String _clientsSub;
 
-  static constexpr uint8_t MAX_SELECTED_CLIENTS = 1;
+  static constexpr uint8_t MAX_SELECTED_CLIENTS = 4;  // same limit as Packet Sniffer
   static constexpr uint8_t MAX_SEEN_CLIENTS = 20;
   struct ClientEntry { uint8_t mac[6]; int8_t rssi; char macStr[18]; };
   ClientEntry _seenClients[MAX_SEEN_CLIENTS] = {};
   uint8_t _seenClientCount = 0;
+  uint8_t _clientOrder[MAX_SEEN_CLIENTS] = {};  // display order (RSSI desc) → _seenClients index
   uint8_t _selectedClients[MAX_SELECTED_CLIENTS][6] = {};
   uint8_t _selectedClientCount = 0;
-  char _selectedClientMacStr[18] = {};  // cached formatted MAC of selected client
+  char _selectedClientMacStr[18] = {};  // cached MAC when exactly one client is selected
   ListItem _clientItems[MAX_SEEN_CLIENTS + 2];
   char _clientLabels[MAX_SEEN_CLIENTS + 2][32] = {};
   static WifiDeauthDisassocScreen* _clientScanner;
@@ -76,6 +77,7 @@ private:
   void _scanClients();
   void _showClients(bool preserveSelection = false);
   bool _clientSelected(const uint8_t* mac) const;
+  void _refreshSelectedClientMacStr();
   String   _modeSub;
   String   _targetSub;
 
