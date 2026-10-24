@@ -74,6 +74,8 @@ private:
   ListItem _apItems[MAX_AP + 1];
   bool     _scanValid = false;
 
+  uint8_t  _menuIndex = 0;   // preserves highlight when returning to menu
+
   void _updateMenuValues();
   void _showFilePicker();
   bool _loadDictFile(const String& path);
