@@ -46,6 +46,7 @@ void WifiBeaconFloodScreen::onInit()
   _mode       = MODE_SPAM;
   _spamTarget = SPAM_BUILTIN;
   _floodTarget = -1;
+  _menuIndex  = 0;
 
   _modeSub   = "Spam";
   _targetSub = "Built In";
@@ -58,12 +59,14 @@ void WifiBeaconFloodScreen::onInit()
 void WifiBeaconFloodScreen::onItemSelected(uint8_t index)
 {
   if (_state == STATE_MENU) {
+    _menuIndex = index;                 // remember where the user was
+
     if (index == 0) {
       _mode = (_mode == MODE_SPAM) ? MODE_FLOOD : MODE_SPAM;
       _updateMenuValues();
     } else if (index == 1) {
       if (_mode == MODE_SPAM) {
-        _showFilePicker();          // pick Built In or a .txt file
+        _showFilePicker();              // pick Built In or a .txt file
       } else {
         _startScan();
       }
@@ -84,7 +87,7 @@ void WifiBeaconFloodScreen::onItemSelected(uint8_t index)
       _floodTarget = apIndex;
     }
     _state = STATE_MENU;
-    setItems(_menuItems, 3);
+    setItems(_menuItems, 3, _menuIndex);
     _updateMenuValues();
     return;
   }
@@ -96,7 +99,7 @@ void WifiBeaconFloodScreen::onItemSelected(uint8_t index)
     if (baseOffset && index == 0) {
       _spamTarget = SPAM_BUILTIN;
       _state = STATE_MENU;
-      setItems(_menuItems, 3);
+      setItems(_menuItems, 3, _menuIndex);
       _updateMenuValues();
       return;
     }
@@ -115,7 +118,7 @@ void WifiBeaconFloodScreen::onItemSelected(uint8_t index)
       _spamTarget = SPAM_FILE;
     }
     _state = STATE_MENU;
-    setItems(_menuItems, 3);
+    setItems(_menuItems, 3, _menuIndex);
     _updateMenuValues();
     return;
   }
@@ -195,7 +198,7 @@ void WifiBeaconFloodScreen::onBack()
     if (_pickerDir == DICT_DIR || _pickerDir.length() == 0) {
       _pickerDir = "";
       _state = STATE_MENU;
-      setItems(_menuItems, 3);
+      setItems(_menuItems, 3, _menuIndex);
       _updateMenuValues();
       return;
     }
@@ -206,7 +209,7 @@ void WifiBeaconFloodScreen::onBack()
   }
   if (_state == STATE_SELECT_AP) {
     _state = STATE_MENU;
-    setItems(_menuItems, 3);
+    setItems(_menuItems, 3, _menuIndex);
     _updateMenuValues();
     return;
   }
@@ -230,7 +233,6 @@ void WifiBeaconFloodScreen::_updateMenuValues()
                  ? _apList[_floodTarget].ssid
                  : "-";
   }
-
 
   // Always 3 rows: [Mode, Target, Start]. In-place sublabel update preserves
   // _selectedIndex so toggling Mode/Target doesn't bounce the highlight.
@@ -330,7 +332,6 @@ void WifiBeaconFloodScreen::_startAttack()
   _lastSendMs   = 0;
   _chromeDrawn  = false;
 
-
   _state = STATE_ATTACKING;
   render();
 }
@@ -342,7 +343,7 @@ void WifiBeaconFloodScreen::_stop()
   _rounds      = 0;
   _sentThisSec = 0;
   _ratePerSec  = 0;
-  setItems(_menuItems, 3);   // restore menu list after attacking
+  setItems(_menuItems, 3, _menuIndex);   // restore menu + highlight
   _updateMenuValues();
 }
 
@@ -434,7 +435,7 @@ void WifiBeaconFloodScreen::_drawAttacking()
     snprintf(rateBuf, sizeof(rateBuf), "Rate: %d / s", _ratePerSec);
     sp.setTextSize(2);
     sp.setTextColor(above ? TFT_GREEN : TFT_WHITE, TFT_BLACK);
-    sp.drawString(rateBuf, bodyW() / 2, 14);
+    sp.drawString(rateBuf, bodyX() / 2, 14);
     sp.setTextSize(1);
     sp.setTextColor(above ? TFT_GREEN : TFT_DARKGREY, TFT_BLACK);
     sp.drawString(above ? "DETECTOR TRIPPED  (>= 50/s)" : "below threshold  (< 50/s)",

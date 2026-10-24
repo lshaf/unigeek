@@ -314,7 +314,7 @@ void WifiAnalyzerScreen::_showModes()
   strncpy(_title, "WiFi Scanner", sizeof(_title));
   _modeItems[0] = {"Access Points"};
   _modeItems[1] = {"Clients/Stations"};
-  setItems(_modeItems, 2);
+  setItems(_modeItems, 2, _stationMode ? 1 : 0);
 }
 
 void WifiAnalyzerScreen::_scanStations()
