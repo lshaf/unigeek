@@ -6,8 +6,6 @@
 #include "ui/views/ScrollListView.h"
 #include "services/VendorResolver.h"
 
-// Immutable Channel Monitor snapshot. Uses the same ScrollListView rows and
-// ordering as WiFi Analyzer, without starting another scan or client capture.
 class WifiChannelMonitorDetailsScreen : public BaseScreen {
 public:
   const char* title() override { return _client ? "Client Details" : "AP Details"; }
