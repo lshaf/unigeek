@@ -22,7 +22,7 @@ public:
       }
       return _headerTitle;
     }
-    return "Traffic Monitor";
+    return "Traffic Analyzer";
   }
   bool inhibitPowerSave() override { return true; }
 
