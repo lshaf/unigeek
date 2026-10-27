@@ -125,7 +125,7 @@ public:
     uint8_t fullyVisible = bodyH() / ITEM_H;
     int16_t leftover     = (int16_t)bodyH() - fullyVisible * (int16_t)ITEM_H;
     bool    hasPartial   = leftover >= 5;
-    int16_t listW        = bodyW() - (eff > fullyVisible ? 4 : 0);
+    int16_t listW        = bodyW() - (eff > fullyVisible ? 3 : 0);
 
     auto& lcd = Uni.Lcd;
 
