@@ -12,6 +12,11 @@ bool TerminalTransport::begin() {
   _resetRing();
   if (!_open()) return false;
 
+  if (_pollOnUiThread()) {
+    _isOpen = true;
+    return true;
+  }
+
   _stopRequest = false;
   _taskRunning = true;
   if (xTaskCreatePinnedToCore(_rxTask, "term_rx", RX_TASK_STACK, this, 1, &_task, 0) != pdPASS) {
@@ -34,6 +39,7 @@ void TerminalTransport::end() {
 
 size_t TerminalTransport::read(uint8_t* buf, size_t max) {
   if (!buf || max == 0) return 0;
+  if (_pollOnUiThread()) return _isOpen ? _readHardware(buf, max) : 0;
 
   size_t n = 0;
   portENTER_CRITICAL(&_mux);
