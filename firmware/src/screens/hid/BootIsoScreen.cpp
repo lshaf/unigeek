@@ -3,7 +3,6 @@
 #include "core/Device.h"
 #include "core/ScreenManager.h"
 #include "utils/usb/UsbMscUtil.h"
-#include "utils/usb/BootIsoCdc.h"
 #include "ui/actions/ShowStatusAction.h"
 #include "ui/actions/InputTextAction.h"
 #include "ui/actions/ConfirmAction.h"
