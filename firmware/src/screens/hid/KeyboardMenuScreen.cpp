@@ -11,6 +11,7 @@
 #endif
 #ifdef DEVICE_HAS_USB_HID
 #include "screens/hid/MassStorageScreen.h"
+#include "screens/hid/UsbSerialTerminalScreen.h"
 #if defined(DEVICE_SUPPORTS_BOOT_ISO) && !defined(BOARD_4MB)
 #include "screens/hid/BootIsoScreen.h"
 #endif
@@ -37,6 +38,7 @@ void KeyboardMenuScreen::onInit()
   _addItem("USB WebAuthn", ACT_USB_WEBAUTHN);
   #endif
   _addItem("USB Mass Storage", ACT_USB_MASS_STORAGE);
+  _addItem("USB Serial Terminal", ACT_USB_SERIAL_TERMINAL);
   #if defined(DEVICE_SUPPORTS_BOOT_ISO) && !defined(BOARD_4MB)
   _addItem("Boot from IMG", ACT_BOOT_IMG);
   _addItem("Boot from ISO", ACT_BOOT_ISO);
@@ -69,6 +71,9 @@ void KeyboardMenuScreen::onItemSelected(uint8_t index)
 #ifdef DEVICE_HAS_USB_HID
     case ACT_USB_MASS_STORAGE:
       Screen.push(new MassStorageScreen());
+      return;
+    case ACT_USB_SERIAL_TERMINAL:
+      Screen.push(new UsbSerialTerminalScreen());
       return;
   #if defined(DEVICE_SUPPORTS_BOOT_ISO) && !defined(BOARD_4MB)
     case ACT_BOOT_IMG:

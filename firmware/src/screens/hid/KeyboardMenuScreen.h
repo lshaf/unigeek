@@ -18,12 +18,13 @@ private:
     ACT_BLE_HID,
     ACT_USB_WEBAUTHN,
     ACT_USB_MASS_STORAGE,
+    ACT_USB_SERIAL_TERMINAL,
     ACT_BOOT_IMG,
     ACT_BOOT_ISO,
     ACT_USB_REMOTE,
   };
 
-  static constexpr uint8_t kMaxItems = 8;
+  static constexpr uint8_t kMaxItems = 10;
   ListItem _items[kMaxItems]   = {};
   Action   _actions[kMaxItems] = {};
   uint8_t  _itemCount          = 0;
