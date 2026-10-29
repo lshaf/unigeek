@@ -1733,7 +1733,9 @@ void ST25R3916Screen::_emulateMfuTag() {
   }
   id.sak = 0x00;
   id.atqa[0] = _mfuAtqa[0]; id.atqa[1] = _mfuAtqa[1];
-  if (id.atqa[0] == 0 && id.atqa[1] == 0) id.atqa[1] = 0x44;
+  // ATQA order matches RFAL sensRes: [0]=anticollisionInfo, [1]=platformInfo.
+  // NTAG21x answers 0x0044, i.e. {0x44, 0x00}.
+  if (id.atqa[0] == 0 && id.atqa[1] == 0) { id.atqa[0] = 0x44; id.atqa[1] = 0x00; }
   if (!_emuDev->startType2Emulation(id, _mfuDump, _mfuDumpLen)) {
     delete _emuDev; _emuDev = nullptr;
     ShowStatusAction::show("Failed", 1600); _showMfuTagMenu(); return;
@@ -2984,7 +2986,8 @@ void ST25R3916Screen::_openMfuDumpFile(uint8_t index) {
   _mfuDumpLen = 540; _mfuPages = 135; _mfuType = "NTAG215";
   _mfuUidLen = 0;
   memset(_mfuUid, 0, sizeof(_mfuUid));
-  memset(_mfuAtqa, 0, sizeof(_mfuAtqa));
+  // .bin dumps carry no ATQA; use the NTAG215 default in RFAL byte order.
+  _mfuAtqa[0] = 0x44; _mfuAtqa[1] = 0x00;
   _mfuSak = 0;
 
   if (_mfuDumpPickerForEmulation) {
