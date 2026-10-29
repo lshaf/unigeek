@@ -16,55 +16,75 @@
 #endif
 #endif
 
-// USB Remote is always the last item; its index is the array size minus one.
-#define USB_REMOTE_IDX (sizeof(_items) / sizeof(_items[0]) - 1)
+void KeyboardMenuScreen::_addItem(const char* label, Action action)
+{
+  if (_itemCount >= kMaxItems) return;
+  _items[_itemCount]       = {};
+  _items[_itemCount].label = label;
+  _actions[_itemCount] = action;
+  ++_itemCount;
+}
 
 void KeyboardMenuScreen::onInit()
 {
-  _items[USB_REMOTE_IDX].sublabel = UartFM.isActive() ? "On" : "Off";
-  setItems(_items);
+  _itemCount = 0;
+#ifdef DEVICE_HAS_USB_HID
+  _addItem("USB HID", ACT_USB_HID);
+#endif
+  _addItem("BLE HID", ACT_BLE_HID);
+#ifdef DEVICE_HAS_USB_HID
+  #ifdef DEVICE_HAS_WEBAUTHN
+  _addItem("USB WebAuthn", ACT_USB_WEBAUTHN);
+  #endif
+  _addItem("USB Mass Storage", ACT_USB_MASS_STORAGE);
+  #if defined(DEVICE_SUPPORTS_BOOT_ISO) && !defined(BOARD_4MB)
+  _addItem("Boot from IMG", ACT_BOOT_IMG);
+  _addItem("Boot from ISO", ACT_BOOT_ISO);
+  #endif
+#endif
+  _usbRemoteIdx = _itemCount;
+  _addItem("USB Remote", ACT_USB_REMOTE);
+
+  _items[_usbRemoteIdx].sublabel = UartFM.isActive() ? "On" : "Off";
+  setItems(_items, _itemCount);
 }
 
 void KeyboardMenuScreen::onItemSelected(uint8_t index)
 {
-  if (index == USB_REMOTE_IDX) { _toggleUsbRemote(); return; }
+  if (index >= _itemCount) return;
+  switch (_actions[index]) {
 #ifdef DEVICE_HAS_USB_HID
-  if (index == 0) {
-    Screen.push(new KeyboardScreen(KeyboardScreen::MODE_USB));
-    return;
-  }
-  if (index == 1) {
-    Screen.push(new KeyboardScreen(KeyboardScreen::MODE_BLE));
-    return;
-  }
-  #ifdef DEVICE_HAS_WEBAUTHN
-  if (index == 2) {
-    Screen.push(new WebAuthnScreen());
-    return;
-  }
-  if (index == 3) {
-    Screen.push(new MassStorageScreen());
-    return;
-  }
+    case ACT_USB_HID:
+      Screen.push(new KeyboardScreen(KeyboardScreen::MODE_USB));
+      return;
+#endif
+    case ACT_BLE_HID:
+      Screen.push(new KeyboardScreen(KeyboardScreen::MODE_BLE));
+      return;
+#if defined(DEVICE_HAS_USB_HID) && defined(DEVICE_HAS_WEBAUTHN)
+    case ACT_USB_WEBAUTHN:
+      Screen.push(new WebAuthnScreen());
+      return;
+#endif
+#ifdef DEVICE_HAS_USB_HID
+    case ACT_USB_MASS_STORAGE:
+      Screen.push(new MassStorageScreen());
+      return;
   #if defined(DEVICE_SUPPORTS_BOOT_ISO) && !defined(BOARD_4MB)
-  if (index == 4) { Screen.push(new BootIsoScreen(true)); return; }
-  if (index == 5) { Screen.push(new BootIsoScreen()); return; }
-  #endif
-  #else
-  if (index == 2) {
-    Screen.push(new MassStorageScreen());
-    return;
-  }
-  #if defined(DEVICE_SUPPORTS_BOOT_ISO) && !defined(BOARD_4MB)
-  if (index == 3) { Screen.push(new BootIsoScreen(true)); return; }
-  if (index == 4) { Screen.push(new BootIsoScreen()); return; }
+    case ACT_BOOT_IMG:
+      Screen.push(new BootIsoScreen(true));
+      return;
+    case ACT_BOOT_ISO:
+      Screen.push(new BootIsoScreen());
+      return;
   #endif
 #endif
-#else
-  if (index == 0) {
-    Screen.push(new KeyboardScreen(KeyboardScreen::MODE_BLE));
+    case ACT_USB_REMOTE:
+      _toggleUsbRemote();
+      return;
+    default:
+      return;
   }
-#endif
 }
 
 // Live toggle — mirrors the BLE "Remote Device" toggle. One USB-serial link
@@ -84,7 +104,7 @@ void KeyboardMenuScreen::_toggleUsbRemote()
     Mirror.setEnabled(true);
     UartFM.begin(true, true);
   }
-  _items[USB_REMOTE_IDX].sublabel = UartFM.isActive() ? "On" : "Off";
+  _items[_usbRemoteIdx].sublabel = UartFM.isActive() ? "On" : "Off";
   render();
 }
 

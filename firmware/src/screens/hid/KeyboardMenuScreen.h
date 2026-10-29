@@ -11,32 +11,27 @@ public:
   void onBack()             override;
 
 private:
-  // Live toggle: starts/stops UartFM (File Manager + Remote screen-mirror over
-  // USB serial). Always the last item, so its index is sizeof-derived.
-  void _toggleUsbRemote();
+  // Each row is bound to an action, so the board-specific #if blocks only
+  // decide which rows exist — never which index opens which screen.
+  enum Action : uint8_t {
+    ACT_USB_HID,
+    ACT_BLE_HID,
+    ACT_USB_WEBAUTHN,
+    ACT_USB_MASS_STORAGE,
+    ACT_BOOT_IMG,
+    ACT_BOOT_ISO,
+    ACT_USB_REMOTE,
+  };
 
-#if defined(DEVICE_HAS_USB_HID) && defined(DEVICE_HAS_WEBAUTHN) && defined(DEVICE_SUPPORTS_BOOT_ISO) && !defined(BOARD_4MB)
-  ListItem _items[7] = {
-    {"USB HID"}, {"BLE HID"}, {"USB WebAuthn"},
-    {"USB Mass Storage"}, {"Boot from IMG"}, {"Boot from ISO"}, {"USB Remote"},
-  };
-#elif defined(DEVICE_HAS_USB_HID) && defined(DEVICE_SUPPORTS_BOOT_ISO) && !defined(BOARD_4MB)
-  ListItem _items[6] = {
-    {"USB HID"}, {"BLE HID"}, {"USB Mass Storage"},
-    {"Boot from IMG"}, {"Boot from ISO"}, {"USB Remote"},
-  };
-#elif defined(DEVICE_HAS_USB_HID)
-  #ifdef DEVICE_HAS_WEBAUTHN
-  ListItem _items[5] = {
-    {"USB HID"}, {"BLE HID"}, {"USB WebAuthn"},
-    {"USB Mass Storage"}, {"USB Remote"},
-  };
-  #else
-  ListItem _items[4] = {
-    {"USB HID"}, {"BLE HID"}, {"USB Mass Storage"}, {"USB Remote"},
-  };
-  #endif
-#else
-  ListItem _items[2] = { {"BLE HID"}, {"USB Remote"} };
-#endif
+  static constexpr uint8_t kMaxItems = 8;
+  ListItem _items[kMaxItems]   = {};
+  Action   _actions[kMaxItems] = {};
+  uint8_t  _itemCount          = 0;
+  uint8_t  _usbRemoteIdx       = 0;
+
+  void _addItem(const char* label, Action action);
+
+  // Live toggle: starts/stops UartFM (File Manager + Remote screen-mirror over
+  // USB serial). Always the last item.
+  void _toggleUsbRemote();
 };
