@@ -491,10 +491,15 @@ void KeyboardScreen::_handleKeyboardRelay()
 #if defined(DEVICE_M5_CARDPUTER) || defined(DEVICE_M5_CARDPUTER_ADV)
     // Snapshot taken at key-down, so a quick Ctrl+C isn't sent as a plain 'c'.
     const uint8_t mods = Uni.Keyboard->keyModifiers();
+#endif
     const char c = Uni.Keyboard->getKey();
+    // HIDKeyboardUtil::press() reads bytes >= 0x80 as modifier / raw HID codes,
+    // so non-ASCII input (e.g. UTF-8 injected by the web remote) would reach the
+    // host as stray Ctrl/GUI/F-key presses. Drop it.
+    if ((uint8_t)c >= 0x80) continue;
+#if defined(DEVICE_M5_CARDPUTER) || defined(DEVICE_M5_CARDPUTER_ADV)
     sendCardputerKey(_keyboard, c, mods);
 #else
-    char c = Uni.Keyboard->getKey();
     _keyboard->write((uint8_t)c);
 #endif
   }
