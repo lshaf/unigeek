@@ -16,6 +16,67 @@
 #endif
 #include "utils/keyboard/DuckScriptUtil.h"
 
+// ── Cardputer hotkeys ───────────────────────────────────────────────────────
+#if defined(DEVICE_HAS_KEYBOARD) && (defined(DEVICE_M5_CARDPUTER) || defined(DEVICE_M5_CARDPUTER_ADV))
+namespace {
+
+// Fn layer, following the map adopted by the official M5Cardputer library
+// (m5stack/M5Cardputer#15): Fn+` = Esc, Fn+1..0,-,= = F1..F12,
+// Fn+Backspace = Delete, Fn+; , . / = arrows.
+// Each entry matches the unshifted and shifted legend, so Shift+Fn combos
+// (Shift+F5, Shift+Up...) resolve to the same key.
+struct FnKey { char n; char s; uint8_t key; };
+constexpr FnKey kFnLayer[] = {
+  {'`', '~', KEY_ESC},
+  {'1', '!', KEY_F1},  {'2', '@', KEY_F2},  {'3', '#', KEY_F3},
+  {'4', '$', KEY_F4},  {'5', '%', KEY_F5},  {'6', '^', KEY_F6},
+  {'7', '&', KEY_F7},  {'8', '*', KEY_F8},  {'9', '(', KEY_F9},
+  {'0', ')', KEY_F10}, {'-', '_', KEY_F11}, {'=', '+', KEY_F12},
+  {'\b', '\b', KEY_DELETE},
+  {';', ':', KEY_UP_ARROW},   {'.', '>', KEY_DOWN_ARROW},
+  {',', '<', KEY_LEFT_ARROW}, {'/', '?', KEY_RIGHT_ARROW},
+};
+
+uint8_t fnLayerKey(char c)
+{
+  for (const auto& e : kFnLayer)
+    if (c == e.n || c == e.s) return e.key;
+  return 0;
+}
+
+// Send one key with the Cardputer's modifiers applied:
+//   Ctrl -> Left Ctrl, Alt -> Left Alt, Opt -> Left GUI (Super/Win/Cmd).
+// Shift is already folded into printable characters by the driver ('C', '!'),
+// and kAsciiMap re-adds it on the HID side, so Ctrl+Shift+C works as is.
+// Keys whose legend doesn't change with Shift (Tab, Enter, Backspace, Space,
+// and everything from the Fn layer) get Shift sent explicitly instead.
+void sendCardputerKey(HIDKeyboardUtil* kb, char c, uint8_t mods)
+{
+  uint8_t key     = (uint8_t)c;
+  bool    special = false;
+  if (mods & IKeyboard::MOD_FN) {
+    const uint8_t k = fnLayerKey(c);
+    if (k) { key = k; special = true; }
+  }
+
+  const bool shiftAsModifier = (mods & IKeyboard::MOD_SHIFT) &&
+      (special || c == '\t' || c == '\n' || c == '\b' || c == ' ');
+
+  uint8_t held[4];
+  uint8_t n = 0;
+  if (mods & IKeyboard::MOD_CTRL) held[n++] = KEY_LEFT_CTRL;
+  if (mods & IKeyboard::MOD_ALT)  held[n++] = KEY_LEFT_ALT;
+  if (mods & IKeyboard::MOD_OPT)  held[n++] = KEY_LEFT_GUI;
+  if (shiftAsModifier)            held[n++] = KEY_LEFT_SHIFT;
+
+  for (uint8_t i = 0; i < n; i++) kb->press(held[i]);
+  kb->write(key);
+  while (n) kb->release(held[--n]);
+}
+
+} // namespace
+#endif
+
 // ── Constructor / Destructor ────────────────────────────────────────────────
 
 KeyboardScreen::KeyboardScreen(int mode) : _mode(mode)
@@ -427,8 +488,15 @@ void KeyboardScreen::_handleKeyboardRelay()
 
   // Forward all remaining keyboard chars to HID
   while (Uni.Keyboard && Uni.Keyboard->available()) {
+#if defined(DEVICE_M5_CARDPUTER) || defined(DEVICE_M5_CARDPUTER_ADV)
+    // Snapshot taken at key-down, so a quick Ctrl+C isn't sent as a plain 'c'.
+    const uint8_t mods = Uni.Keyboard->keyModifiers();
+    const char c = Uni.Keyboard->getKey();
+    sendCardputerKey(_keyboard, c, mods);
+#else
     char c = Uni.Keyboard->getKey();
     _keyboard->write((uint8_t)c);
+#endif
   }
 
   _refreshBatteryLevel();
