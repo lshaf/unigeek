@@ -29,6 +29,7 @@ enum class UsbProfile : uint8_t {
   WEBAUTHN     = 2,  // FIDO2 / WebAuthn passkey
   MASS_STORAGE = 3,  // USB Mass Storage (SD card exposed as a removable drive)
   MSC_HID      = 4,  // Boot from IMG/ISO: Mass Storage + keyboard, registered before USB.begin()
+  CDC_SERIAL   = 5,  // USB Serial Terminal: one CDC ACM port (not SERIAL: Arduino.h macro)
 };
 
 // Returns the profile that has claimed USB this boot, or NONE if no
