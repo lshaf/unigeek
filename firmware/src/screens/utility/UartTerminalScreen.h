@@ -1,88 +1,42 @@
 #pragma once
-#include "ui/templates/ListScreen.h"
-#include "ui/views/LogView.h"
-#include <HardwareSerial.h>
-#include <FS.h>
-#include <WiFi.h>
-#include <WiFiServer.h>
-#include <WiFiClient.h>
 
-class UartTerminalScreen : public ListScreen {
+#include "ui/templates/TerminalScreen.h"
+
+// UART Terminal: serial terminal over UART2 on configurable GPIOs. Setup,
+// terminal view, log modes and keys come from TerminalScreen.
+class UartTerminalScreen : public TerminalScreen {
 public:
-  const char* title() override;
-  ~UartTerminalScreen();
+  UartTerminalScreen() : TerminalScreen(LINE_END_CRLF) {}
 
-  void onInit()                      override;
-  void onUpdate()                    override;
-  void onRender()                    override;
-  void onBack()                      override;
-  void onItemSelected(uint8_t index) override;
+  void onInit() override;
+
+protected:
+  const char* _setupTitle() const override    { return "UART Setup"; }
+  const char* _terminalTitle() const override { return "UART Terminal"; }
+  const char* _logDir() const override        { return "/unigeek/utility/uart"; }
+  const char* _logBaseName() const override   { return "uart_log"; }
+  const char* _defaultApName() const override { return "UartStream"; }
+
+  uint8_t _transportItems(ListItem* out, uint8_t max) override;
+  void _onTransportItem(uint8_t index) override;
+  TerminalTransport* _createTransport() override;
+
+  void _onSessionStarted() override;
+  void _onDataReceived() override;
+  void _onDataSent() override;
+  void _onLogStarted(TerminalLog::Mode mode) override;
 
 private:
-  enum State    { STATE_CONFIG, STATE_RUNNING };
-  enum SaveMode { SAVE_NO, SAVE_FILE, SAVE_STREAM_AP, SAVE_STREAM_NET };
+  int  _baud  = 115200;
+  int  _rxPin = -1;
+  int  _txPin = -1;
+  bool _receivedThisSession = false;
 
-  State    _state    = STATE_CONFIG;
-  SaveMode _saveMode = SAVE_NO;
+  char _baudLabel[8] = {};
+  char _rxLabel[6]   = {};
+  char _txLabel[6]   = {};
 
-  // ── config values ─────────────────────────────────────────
-  int    _baud    = 115200;
-  int    _rxPin   = -1;
-  int    _txPin   = -1;
-  String _saveFilename;
-  String _apName      = "UartStream";
-  String _networkSSID;
-  String _networkBssid;
-
-  // ── config list sublabel buffers ──────────────────────────
-  char _baudLabel[8]      = {};
-  char _rxLabel[6]        = {};
-  char _txLabel[6]        = {};
-  char _saveModeLabel[16] = {};
-  char _saveLabel[32]     = {};
-  ListItem _configItems[6];
-
-  // ── terminal state ────────────────────────────────────────
-  HardwareSerial    _serial{ 2 };
-  bool              _serialRunning = false;
-  bool              _hexMode       = false;
-
-  TaskHandle_t      _taskHandle  = nullptr;
-  SemaphoreHandle_t _mutex       = nullptr;
-  String            _rxSharedBuf;
-
-  LogView  _log;
-  String   _rxLineBuf;
-  fs::File _logFile;
-  uint32_t _lastDrawMs = 0;
-
-  // ── WiFi stream state ─────────────────────────────────────
-  static constexpr int MAX_TCP_CLIENTS = 4;
-  static constexpr int TCP_PORT        = 23;
-  WiFiServer _tcpServer{TCP_PORT};
-  WiFiClient _tcpClients[MAX_TCP_CLIENTS];
-  bool       _wifiStarted = false;
-  bool       _apStarted   = false;
-
-  static void _statusBarCb(Sprite& sp, int barY, int w, void* user);
-  static void _serialTask(void* arg);
-
-  void _updateLabels();
-  void _rebuildItems();
   void _configBaud();
   void _configRx();
   void _configTx();
-  void _configSaveMode();
-  void _configSaveFile();
-  void _configApName();
-  void _configNetwork();
-  void _startTerminal();
-  void _sendCommand();
-  void _drainShared();
-  void _openLog();
-  void _closeLog();
-  void _startWifiStream();
-  void _stopWifiStream();
-  void _acceptClients();
-  void _broadcastLine(const char* line);
 };
