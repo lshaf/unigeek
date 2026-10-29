@@ -11,7 +11,8 @@
 //
 // Setup state: a list with the transport's own rows (Baud, pins, ...) followed
 // by the common rows Log Mode [+ Filename / AP Name / Network], Line Ending,
-// Display and Start.
+// Display and Start. A subclass can leave out the common rows it doesn't
+// support and rename Start.
 //
 // Terminal state: same layout and keys as the network terminals (TCP / SSH):
 // status header, scrollable output that follows new data, input line at the
@@ -55,6 +56,14 @@ protected:
   virtual TerminalTransport* _createTransport() = 0;
 
   virtual const char* _exitQuestion() const { return "Close terminal?"; }
+
+  // Which common setup rows this terminal offers (all by default). Without a
+  // row the default applies: log off, the constructor's line ending, text.
+  virtual bool _offersLogMode() const    { return true; }
+  virtual bool _offersLineEnding() const { return true; }
+  virtual bool _offersDisplay() const    { return true; }
+  virtual const char* _startLabel() const         { return "Start"; }
+  virtual const char* _startFailedMessage() const { return "Failed to start"; }
 
   // Optional hooks (achievements, extra start-up lines, ...).
   virtual void _onSessionStarted() {}

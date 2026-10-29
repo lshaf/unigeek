@@ -162,22 +162,28 @@ void TerminalScreen::_refreshItems() {
   _transportRowCount = n;
   for (uint8_t i = 0; i < n; i++) _rows[i] = ROW_TRANSPORT;
 
-  _items[n] = {"Log Mode", _logModeLabel};
-  _rows[n++] = ROW_LOG_MODE;
+  if (_offersLogMode()) {
+    _items[n] = {"Log Mode", _logModeLabel};
+    _rows[n++] = ROW_LOG_MODE;
 
-  if (_logMode != TerminalLog::MODE_OFF) {
-    const char* label = _logMode == TerminalLog::MODE_FILE      ? "Filename"
-                      : _logMode == TerminalLog::MODE_STREAM_AP ? "AP Name"
-                      :                                           "Network";
-    _items[n] = {label, _logTargetLabel};
-    _rows[n++] = ROW_LOG_TARGET;
+    if (_logMode != TerminalLog::MODE_OFF) {
+      const char* label = _logMode == TerminalLog::MODE_FILE      ? "Filename"
+                        : _logMode == TerminalLog::MODE_STREAM_AP ? "AP Name"
+                        :                                           "Network";
+      _items[n] = {label, _logTargetLabel};
+      _rows[n++] = ROW_LOG_TARGET;
+    }
   }
 
-  _items[n] = {"Line Ending", _lineEndingLabel};
-  _rows[n++] = ROW_LINE_ENDING;
-  _items[n] = {"Display", _displayLabel};
-  _rows[n++] = ROW_DISPLAY;
-  _items[n] = {"Start", nullptr};
+  if (_offersLineEnding()) {
+    _items[n] = {"Line Ending", _lineEndingLabel};
+    _rows[n++] = ROW_LINE_ENDING;
+  }
+  if (_offersDisplay()) {
+    _items[n] = {"Display", _displayLabel};
+    _rows[n++] = ROW_DISPLAY;
+  }
+  _items[n] = {_startLabel(), nullptr};
   _rows[n++] = ROW_START;
 
   setItems(_items, n, _selectedIndex);
@@ -296,7 +302,7 @@ void TerminalScreen::_startSession() {
   }
   if (!transport->begin()) {
     delete transport;
-    ShowStatusAction::show("Failed to start", 1500);
+    ShowStatusAction::show(_startFailedMessage(), 1500);
     render();
     return;
   }
