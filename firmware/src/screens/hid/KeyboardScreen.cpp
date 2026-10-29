@@ -12,8 +12,8 @@
 #include "utils/keyboard/USBKeyboardUtil.h"  // must come before BLEKeyboardUtil — TinyUSB hid.h enum must be processed before NimBLE HIDTypes.h macro
 #endif
 #include "utils/keyboard/BLEKeyboardUtil.h"
-#ifdef DEVICE_HAS_WEBAUTHN
-#include "utils/webauthn/UsbProfile.h"
+#ifdef DEVICE_HAS_USB_HID
+#include "utils/usb/UsbProfile.h"
 #endif
 #include "utils/keyboard/DuckScriptUtil.h"
 
@@ -50,7 +50,7 @@ void KeyboardScreen::onInit()
 {
 #if defined(DEVICE_HAS_USB_HID) && defined(DEVICE_HAS_WEBAUTHN)
   if (_mode == MODE_USB &&
-      webauthn::activeUsbProfile() == webauthn::UsbProfile::WEBAUTHN) {
+      usb::activeUsbProfile() == usb::UsbProfile::WEBAUTHN) {
     _profileMismatch = true;
     return;
   }

@@ -6,9 +6,7 @@
 #include <USBMSC.h>
 #include <stdlib.h>
 
-#ifdef DEVICE_HAS_WEBAUTHN
-#include "utils/webauthn/UsbProfile.h"
-#endif
+#include "utils/usb/UsbProfile.h"
 
 // The arduino-esp32 USBMSC device. Function-local static so its constructor
 // (which registers the MSC interface via tinyusb_enable_interface) runs the
@@ -41,15 +39,13 @@ bool UsbMscUtil::begin(IStorage* storage)
     return false;
   }
 
-#ifdef DEVICE_HAS_WEBAUTHN
   // Claim USB for the boot before constructing USBMSC. If keyboard/mouse or
   // WebAuthn already started USB this boot, the MSC interface can't be added
   // anymore — bail out without constructing the device.
-  if (!webauthn::claimUsbProfile(webauthn::UsbProfile::MASS_STORAGE)) {
+  if (!usb::claimUsbProfile(usb::UsbProfile::MASS_STORAGE)) {
     _failReason = FAIL_USB_BUSY;
     return false;
   }
-#endif
 
   _isoMode = false;
   _imgMode = false;
@@ -81,12 +77,10 @@ bool UsbMscUtil::beginIso(IStorage* storage, const char* path)
     _failReason = FAIL_NOT_BLOCK_DEVICE;
     return false;
   }
-#ifdef DEVICE_HAS_WEBAUTHN
-  if (!webauthn::claimUsbProfile(webauthn::UsbProfile::MSC_HID)) {
+  if (!usb::claimUsbProfile(usb::UsbProfile::MSC_HID)) {
     _failReason = FAIL_USB_BUSY;
     return false;
   }
-#endif
   fs::File file = storage->open(path, "r");
   if (!file || file.isDirectory()) {
     if (file) file.close();
@@ -139,12 +133,10 @@ bool UsbMscUtil::beginImg(IStorage* storage, const char* path)
     _failReason = FAIL_NOT_BLOCK_DEVICE;
     return false;
   }
-#ifdef DEVICE_HAS_WEBAUTHN
-  if (!webauthn::claimUsbProfile(webauthn::UsbProfile::MSC_HID)) {
+  if (!usb::claimUsbProfile(usb::UsbProfile::MSC_HID)) {
     _failReason = FAIL_USB_BUSY;
     return false;
   }
-#endif
   // r+ opens an existing image for updates without truncating it.
   fs::File file = storage->open(path, "r+");
   if (!file || file.isDirectory()) {

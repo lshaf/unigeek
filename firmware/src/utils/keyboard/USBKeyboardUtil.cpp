@@ -3,24 +3,17 @@
 #ifdef DEVICE_HAS_USB_HID
 #include <USB.h>
 
-#ifdef DEVICE_HAS_WEBAUTHN
-#include "utils/webauthn/UsbProfile.h"
-#endif
+#include "utils/usb/UsbProfile.h"
 
 USBKeyboardUtil::USBKeyboardUtil(bool bootIsoComposite)
 {
-#ifndef DEVICE_HAS_WEBAUTHN
-  (void)bootIsoComposite;
-#endif
   static bool initialized = false;
   if (!initialized) {
     initialized = true;
     bool ok = true;
-#ifdef DEVICE_HAS_WEBAUTHN
-    // Mutually exclusive with the FIDO profile — see UsbProfile.h.
-    ok = webauthn::claimUsbProfile(bootIsoComposite ? webauthn::UsbProfile::MSC_HID
-                                                : webauthn::UsbProfile::COMPOSITE);
-#endif
+    // Mutually exclusive with the other USB profiles — see UsbProfile.h.
+    ok = usb::claimUsbProfile(bootIsoComposite ? usb::UsbProfile::MSC_HID
+                                               : usb::UsbProfile::COMPOSITE);
     if (ok) {
       _hid.addDevice(this, sizeof(kHIDReportDescriptor));
     }
