@@ -105,9 +105,7 @@ void SftpClientScreen::onUpdate() {
       _password = "";
       _keyData = "";
       _workerState = WORKER_IDLE;
-      _state = STATE_CONFIG;
-      _updateLabels();
-      _rebuildConfig();
+      _returnToConfig(_connectRow());
       ShowStatusAction::show(err.c_str(), 1800);
       render();
       return;
@@ -292,17 +290,19 @@ void SftpClientScreen::onItemSelected(uint8_t index) {
 
   if (_state != STATE_CONFIG) return;
 
+  if (index == _connectRow()) {
+    _connect();
+    return;
+  }
   switch (index) {
-    case 0: _configHost();     break;
-    case 1: _configPort();     break;
-    case 2: _configUsername(); break;
-    case 3: _selectAuthMenu(); break;
-    case 4:
+    case ROW_HOST: _configHost();     break;
+    case ROW_PORT: _configPort();     break;
+    case ROW_USER: _configUsername(); break;
+    case ROW_AUTH: _selectAuthMenu(); break;
+    case ROW_SECRET:
       if (_authMode == AUTH_PASSWORD) _configPassword();
-      else if (_authMode == AUTH_PRIVATE_KEY) _openKeyPicker();
-      else _connect();
+      else                            _openKeyPicker();
       break;
-    case 5: _connect(); break;
     default: break;
   }
 }
@@ -338,18 +338,14 @@ void SftpClientScreen::onBack() {
       String parent = (slash > 0) ? _localBrowsePath.substring(0, slash) : _localBrowser.root;
       _loadKeyDir(parent, child);
     } else {
-      _state = STATE_CONFIG;
-      _updateLabels();
-      _rebuildConfig();
+      _returnToConfig(ROW_SECRET);  // key picker cancelled
       render();
     }
     return;
   }
 
   if (_state == STATE_SELECT_AUTH) {
-    _state = STATE_CONFIG;
-    _updateLabels();
-    _rebuildConfig();
+    _returnToConfig(ROW_AUTH);  // auth choice cancelled
     render();
     return;
   }
@@ -395,17 +391,13 @@ void SftpClientScreen::_beginDownload() {
   _remoteMode = REMOTE_DOWNLOAD;
 
   // Used only when no live SFTP session exists yet.
-  _state = STATE_CONFIG;
-  _updateLabels();
-  _rebuildConfig();
+  _returnToConfig(_connectRow());
   render();
 }
 
 void SftpClientScreen::_beginUpload() {
   if (_workerState != WORKER_READY) {
-    _state = STATE_CONFIG;
-    _updateLabels();
-    _rebuildConfig();
+    _returnToConfig(_connectRow());
     render();
     return;
   }
@@ -448,28 +440,31 @@ void SftpClientScreen::_updateLabels() {
   }
 }
 
-void SftpClientScreen::_rebuildConfig() {
-  uint8_t sel = _selectedIndex;
-  _configItems[0] = {"Host", _hostLabel};
-  _configItems[1] = {"Port", _portLabel};
-  _configItems[2] = {"Username", _userLabel};
-  _configItems[3] = {"Auth Method", _authLabel};
+uint8_t SftpClientScreen::_connectRow() const {
+  return (_authMode == AUTH_PASSWORD || _authMode == AUTH_PRIVATE_KEY) ? ROW_SECRET + 1 : ROW_SECRET;
+}
 
-  if (_authMode == AUTH_PASSWORD) {
-    _configItems[4] = {"Password", _passwordLabel};
-    _configItems[5] = {"Connect", nullptr};
-    if (sel > 5) sel = 5;
-    setItems(_configItems, 6, sel);
-  } else if (_authMode == AUTH_PRIVATE_KEY) {
-    _configItems[4] = {"Key File", _keyLabel};
-    _configItems[5] = {"Connect", nullptr};
-    if (sel > 5) sel = 5;
-    setItems(_configItems, 6, sel);
-  } else {
-    _configItems[4] = {"Connect", nullptr};
-    if (sel > 4) sel = 4;
-    setItems(_configItems, 5, sel);
-  }
+void SftpClientScreen::_rebuildConfig() {
+  const uint8_t connectRow = _connectRow();
+  uint8_t sel = min<uint8_t>(_selectedIndex, connectRow);
+  _configItems[ROW_HOST] = {"Host", _hostLabel};
+  _configItems[ROW_PORT] = {"Port", _portLabel};
+  _configItems[ROW_USER] = {"Username", _userLabel};
+  _configItems[ROW_AUTH] = {"Auth Method", _authLabel};
+  if (_authMode == AUTH_PASSWORD)    _configItems[ROW_SECRET] = {"Password", _passwordLabel};
+  if (_authMode == AUTH_PRIVATE_KEY) _configItems[ROW_SECRET] = {"Key File", _keyLabel};
+  _configItems[connectRow] = {"Connect", nullptr};
+  setItems(_configItems, connectRow + 1, sel);
+}
+
+// Back to the setup list with `row` highlighted. Needed whenever another list
+// (auth options, file browser, actions) was shown, since its row index would
+// leak into setup.
+void SftpClientScreen::_returnToConfig(uint8_t row) {
+  _selectedIndex = row;
+  _state = STATE_CONFIG;
+  _updateLabels();
+  _rebuildConfig();
 }
 
 void SftpClientScreen::_configHost() {
@@ -515,7 +510,7 @@ void SftpClientScreen::_configPassword() {
   String value = InputTextAction::popup(
     "Password", "", InputTextAction::INPUT_TEXT);
   if (!InputTextAction::wasCancelled()) _password = value;
-  _selectedIndex = 4;
+  _selectedIndex = ROW_SECRET;
   _updateLabels();
   _rebuildConfig();
   render();
@@ -535,10 +530,7 @@ void SftpClientScreen::_selectAuth(uint8_t index) {
   if (_authMode == AUTH_PASSWORD) _keyData = "";
   else _password = "";
 
-  _selectedIndex = 3;
-  _state = STATE_CONFIG;
-  _updateLabels();
-  _rebuildConfig();
+  _returnToConfig(ROW_AUTH);
   render();
 }
 
@@ -588,10 +580,7 @@ void SftpClientScreen::_selectKey(uint8_t index) {
   }
 
   _keyPath = e.path;
-  _selectedIndex = 4;
-  _state = STATE_CONFIG;
-  _updateLabels();
-  _rebuildConfig();
+  _returnToConfig(ROW_SECRET);
   render();
 }
 
