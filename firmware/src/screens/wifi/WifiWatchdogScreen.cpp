@@ -36,7 +36,7 @@ portMUX_TYPE WifiWatchdogScreen::_ringLock = portMUX_INITIALIZER_UNLOCKED;
 const char* WifiWatchdogScreen::title()
 {
   static constexpr const char* kNames[] = {
-    "WiFi Watchdog", "Deauth/Disassoc", "Beacon Flood", "Evil Twin"
+    "Watchdog", "Deauth/Disassoc", "Beacon Flood", "Evil Twin"
   };
   return kNames[_view];
 }

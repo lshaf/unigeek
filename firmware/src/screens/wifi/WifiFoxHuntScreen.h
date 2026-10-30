@@ -5,7 +5,7 @@
 
 class WifiFoxHuntScreen : public ListScreen {
 public:
-  const char* title() override { return "WiFi Fox Hunt"; }
+  const char* title() override { return "Fox Hunt"; }
   bool inhibitPowerSave() override { return _state == STATE_TRACK; }
 
   ~WifiFoxHuntScreen() override;

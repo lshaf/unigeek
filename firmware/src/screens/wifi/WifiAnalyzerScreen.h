@@ -34,7 +34,7 @@ private:
     int  rssiValue = 0;
   };
 
-  char      _title[16]   = "WiFi Scanner";
+  char      _title[16]   = "Scanner";
   WifiEntry _entries[MAX_SCAN];
   int       _entryCount  = 0;
 
