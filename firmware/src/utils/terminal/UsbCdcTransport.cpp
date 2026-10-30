@@ -78,9 +78,9 @@ bool UsbCdcTransport::hostConnected() {
 }
 
 void UsbCdcTransport::status(char* out, size_t len) const {
-  if (g_recovery == REC_DETACHED) snprintf(out, len, "USB: reconnecting...");
-  else if (!hostConnected())      snprintf(out, len, "USB: waiting for host");
-  else                            snprintf(out, len, "USB: connected  %lu baud", (unsigned long)cdc().baudRate());
+  if (g_recovery == REC_DETACHED) snprintf(out, len, "Reconnecting...");
+  else if (!hostConnected())      snprintf(out, len, "Waiting for host");
+  else                            snprintf(out, len, "Connected");
 }
 
 bool UsbCdcTransport::_open() {

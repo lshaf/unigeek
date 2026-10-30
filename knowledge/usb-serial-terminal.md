@@ -9,7 +9,7 @@ The device appears to a host computer as a USB serial port (USB CDC ACM), and th
 1. Plug the device into the host over USB.
 2. Open **HID > USB Serial Terminal**, adjust the setup if needed, and select **Start**.
 3. A new serial port appears on the host (`/dev/ttyACM*` on Linux, `/dev/cu.usbmodem*` on macOS, a `COM` port on Windows). Open it with any serial program — the baud rate setting does not matter.
-4. The status line changes from `USB: waiting for host` to `USB: connected` (with the host's baud setting) once a program on the host opens the port.
+4. The status line changes from `Waiting for host` to `Connected` once a program on the host opens the port.
 
 ### Login shell on a Linux host
 
@@ -21,7 +21,7 @@ Use the port name the host assigned. The login prompt appears on the device; typ
 
 ### First open after the port was idle
 
-Computers suspend idle USB devices (Linux does it about 2 seconds after the port appears, as long as no program has it open). The device can't come back from that suspend on its own, so the first time a program opens the port after it was idle, the device reconnects itself: the status line shows `USB: reconnecting...`, the port disappears for a moment and comes back, and the serial program usually reports that the port was lost. **Open the port again** and it works; while a program keeps the port open, the computer doesn't suspend the device. After the program closes the port, the next open may need the same second try.
+Computers suspend idle USB devices (Linux does it about 2 seconds after the port appears, as long as no program has it open). The device can't come back from that suspend on its own, so the first time a program opens the port after it was idle, the device reconnects itself: the status line shows `Reconnecting...`, the port disappears for a moment and comes back, and the serial program usually reports that the port was lost. **Open the port again** and it works; while a program keeps the port open, the computer doesn't suspend the device. After the program closes the port, the next open may need the same second try.
 
 ## Setup
 
@@ -32,7 +32,7 @@ Computers suspend idle USB devices (Linux does it about 2 seconds after the port
 | Line Ending | CR | CR / LF / CRLF — appended to every line you send in text mode. CR is what a hardware terminal sends and works with a Linux login shell |
 | Display | Text | Text / Hex — how data is shown and how your input is sent |
 
-There is no baud rate or pin setting: the connection is the USB cable, and the host picks the baud rate.
+There is no baud rate or pin setting: the connection is the USB cable, and the baud rate set on the host has no effect.
 
 ### Log Mode
 
