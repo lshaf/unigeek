@@ -44,8 +44,8 @@ public:
   // output visible and only allows leaving.
   virtual bool isRemoteClosed() const { return false; }
 
-  // Human-readable state shown in the terminal header, one line per '\n'
-  // (e.g. "RX:1 TX:2  115200 baud", "Connected to\n10.0.0.5:7").
+  // One-line, human-readable state shown in the terminal header
+  // (e.g. "UART 115200 RX1 TX2", "USB: waiting for host").
   virtual void status(char* out, size_t len) const = 0;
 
 protected:
