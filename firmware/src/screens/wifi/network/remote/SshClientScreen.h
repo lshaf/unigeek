@@ -109,6 +109,7 @@ private:
   void _selectKey(uint8_t index);
   void _connect();
   void _closeConnection(bool returnToConfig = true);
+  void _requestDisconnect();
 
   bool _startSshWorker();
   static void _sshWorkerEntry(void* arg);
