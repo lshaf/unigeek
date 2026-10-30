@@ -352,9 +352,9 @@ void KeyboardScreen::_renderConnected()
     const int footerY = bodyY() + bodyH() - FOOTER_H;
     lcd.drawFastHLine(bodyX(), footerY - 5, bodyW(), TFT_DARKGREY);
 #if defined(DEVICE_M5_CARDPUTER) || defined(DEVICE_M5_CARDPUTER_ADV)
-    lcd.drawString("[G0] Stop", bodyX() + bodyW() / 2, footerY + 7);
+    lcd.drawString("[BtnG0] Disconnect", bodyX() + bodyW() / 2, footerY + 7);
 #else
-    lcd.drawString("[Press] Stop", bodyX() + bodyW() / 2, footerY + 7);
+    lcd.drawString("[Press] Disconnect", bodyX() + bodyW() / 2, footerY + 7);
 #endif
 #endif
     _connectedChromeDrawn = true;
