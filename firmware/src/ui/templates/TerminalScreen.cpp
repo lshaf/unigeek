@@ -589,10 +589,7 @@ void TerminalScreen::_renderTerminal() {
   const int inputY       = y + h - INPUT_H;
   const int outputBottom = inputY - 2;
 
-  String display = _transcript.text();
-  if (display.length() == 0 && !_remoteClosed) display = "Waiting for data...";
-
-  _outputView.updateContent(display, _followOutput);
+  _outputView.updateContent(_transcript.text(), _followOutput);
   _outputView.render(x, cy, w, max(1, outputBottom - cy));
 
   lcd.drawFastHLine(x + PAD, inputY - 2, w - PAD * 2, TFT_DARKGREY);

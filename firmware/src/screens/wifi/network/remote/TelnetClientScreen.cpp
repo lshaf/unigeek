@@ -674,7 +674,6 @@ void TelnetClientScreen::_renderOutput() {
 
   String display = _transcript;
   if (_partialLine.length() > 0) display += _partialLine;
-  if (display.length() == 0 && !_remoteClosed) display = "Waiting for data...";
 
   _outputView.updateContent(display, _followOutput);
   _outputView.render(x, cy, w, max(1, outputBottom - cy));
