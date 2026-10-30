@@ -662,8 +662,10 @@ void TelnetClientScreen::_renderOutput() {
 
   // Fixed connection information at the top of every OUTPUT screen.
   lcd.setTextColor(TFT_GREEN, TFT_BLACK);
-  String connected = "Connected to " + _host + ":" + String(_port);
-  lcd.drawString(connected.c_str(), x + PAD, cy);
+  lcd.drawString("Connected to", x + PAD, cy);
+  cy += 11;
+  const String hostPort = _host + ":" + String(_port);
+  lcd.drawString(hostPort.c_str(), x + PAD, cy);
   cy += 11;
 
   lcd.drawFastHLine(x + PAD, cy, w - PAD * 2, TFT_DARKGREY);

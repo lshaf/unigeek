@@ -572,16 +572,24 @@ void TerminalScreen::_renderTerminal() {
 
   int cy = y + PAD;
 
-  // Status header, as "Connected to host:port" in the network terminals.
-  lcd.setTextColor(_remoteClosed ? TFT_DARKGREY : TFT_GREEN, TFT_BLACK);
-  lcd.drawString(_status, x + PAD, cy);
+  // Status header ("Connected to" / "host:port" in the network terminals).
+  // One line per '\n' in the transport's status text.
   if (_hex) {
     lcd.setTextDatum(TR_DATUM);
     lcd.setTextColor(TFT_YELLOW, TFT_BLACK);
     lcd.drawString("HEX", x + w - PAD, cy);
     lcd.setTextDatum(TL_DATUM);
   }
-  cy += 11;
+  lcd.setTextColor(_remoteClosed ? TFT_DARKGREY : TFT_GREEN, TFT_BLACK);
+  const char* line = _status;
+  while (true) {
+    const char* nl = strchr(line, '\n');
+    const String text = nl ? String(line).substring(0, nl - line) : String(line);
+    lcd.drawString(text.c_str(), x + PAD, cy);
+    cy += 11;
+    if (!nl) break;
+    line = nl + 1;
+  }
 
   lcd.drawFastHLine(x + PAD, cy, w - PAD * 2, TFT_DARKGREY);
   cy += 4;

@@ -1,7 +1,7 @@
 #include "TcpTransport.h"
 
 void TcpTransport::status(char* out, size_t len) const {
-  snprintf(out, len, "Connected to %s:%u", _host.c_str(), (unsigned)_port);
+  snprintf(out, len, "Connected to\n%s:%u", _host.c_str(), (unsigned)_port);
 }
 
 bool TcpTransport::_open() {

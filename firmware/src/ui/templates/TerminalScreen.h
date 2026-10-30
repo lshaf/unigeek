@@ -113,7 +113,7 @@ private:
   TextScrollView      _outputView;
   TerminalCommandLine _inputLine;
   String              _echoLine;          // terminal-keyboard local echo
-  char                _status[48]    = {};
+  char                _status[80]    = {};
   bool                _remoteClosed  = false;
   bool                _followOutput  = true;
   bool                _dirty         = false;
