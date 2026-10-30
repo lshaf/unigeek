@@ -74,8 +74,7 @@ private:
   enum TextPage : uint8_t {
     PAGE_ABC = 0,
     PAGE_SYM,
-    PAGE_HID,
-    PAGE_COMMANDS
+    PAGE_HID
   };
 
   enum SpecialNum {
@@ -132,53 +131,6 @@ private:
 
   HIDKeyboardUtil* _hidKeyboard = nullptr;
   uint8_t     _hidModifiers = 0;
-
-  int         _commandSelection = 0;
-  static constexpr int COMMAND_COUNT = 20;
-  static const char* _commandAt(int i) {
-    static const char* const commands[COMMAND_COUNT] = {
-      "clear", "pwd", "cd", "cd ..", "ls -lh", "ls -lah",
-      "df -h", "mount", "blkid", "sudo fdisk -l",
-      "ps", "free -h", "du -h",
-      "uname -a", "cat /proc/cpuinfo", "sudo dmesg | tail -30",
-      "ifconfig -a", "route -n", "sudo poweroff", "sudo reboot"
-    };
-    return commands[i];
-  }
-
-  void _drawCommands() {
-    auto& lcd = Uni.Lcd;
-    const uint16_t theme = Config.getThemeColor();
-    lcd.fillScreen(TFT_BLACK);
-    lcd.setTextDatum(TL_DATUM);
-    lcd.setTextColor(theme, TFT_BLACK);
-    lcd.drawString("Commands", PAD, PAD);
-    lcd.drawFastHLine(PAD, PAD + 10, lcd.width() - PAD * 2, theme);
-    const int top = PAD + 15;
-    const int rowH = 17;
-    const int visible = max(1, (lcd.height() - top - 4) / rowH);
-    int start = _commandSelection - visible / 2;
-    start = max(0, min(start, max(0, COMMAND_COUNT - visible)));
-    for (int row = 0; row < visible && start + row < COMMAND_COUNT; ++row) {
-      const int index = start + row;
-      const int y = top + row * rowH;
-      const bool selected = index == _commandSelection;
-      if (selected) lcd.fillRoundRect(PAD, y, lcd.width() - PAD * 2, rowH - 1, 3, theme);
-      lcd.setTextColor(selected ? TFT_WHITE : TFT_LIGHTGREY,
-                       selected ? theme : TFT_BLACK);
-      lcd.drawString(_commandAt(index), PAD + 5, y + 3);
-    }
-  }
-
-  void _sendCommand() {
-    if (!_hidKeyboard) return;
-    _hidReleaseModifiers();
-    _hidKeyboard->resetWriteStatus();
-    const char* cmd = _commandAt(_commandSelection);
-    _hidKeyboard->write(reinterpret_cast<const uint8_t*>(cmd), strlen(cmd));
-    _hidKeyboard->write(KEY_RETURN);
-    if (_profile == PROFILE_TERMINAL && _hidKeyboard->lastWriteOk()) _done = true;
-  }
 
   bool        _cursorVisible  = true;
   uint32_t    _lastBlinkTime  = 0;
@@ -449,31 +401,6 @@ private:
       UartFM.poll(); // read remote input so nav works in this dialog
       if (Mirror.dirty()) Mirror.pump(); // flush only when this overlay redrew
 
-      if (_page == PAGE_COMMANDS && _mode == INPUT_TEXT &&
-          _profile != PROFILE_STANDARD && !_classicKb) {
-        if (Uni.Nav->wasPressed()) {
-          const auto dir = Uni.Nav->readDirection();
-          if (dir == INavigation::DIR_BACK) {
-            _page = PAGE_ABC;
-            _symbolMode = false;
-            _buildSets();
-            _scrollPos = 0;
-            _drawFullGrid();
-          } else if (dir == INavigation::DIR_PRESS) {
-            _sendCommand();
-            if (!_done) _drawCommands();
-          } else if (dir == INavigation::DIR_DOWN || dir == INavigation::DIR_RIGHT) {
-            _commandSelection = (_commandSelection + 1) % COMMAND_COUNT;
-            _drawCommands();
-          } else if (dir == INavigation::DIR_UP || dir == INavigation::DIR_LEFT) {
-            _commandSelection = (_commandSelection + COMMAND_COUNT - 1) % COMMAND_COUNT;
-            _drawCommands();
-          }
-        }
-        delay(10);
-        continue;
-      }
-
       // Fire character Shift as soon as Select crosses the long-press threshold.
       // Do not wait for release. Special/action keys keep their normal release
       // behaviour so holding CAPS/SAVE/etc. cannot trigger them accidentally.
@@ -651,7 +578,6 @@ private:
           if (_profile != PROFILE_STANDARD) {
             if (_page == PAGE_ABC) _page = PAGE_SYM;
             else if (_page == PAGE_SYM) _page = PAGE_HID;
-            else if (_page == PAGE_HID && !_classicKb) _page = PAGE_COMMANDS;
             else _page = PAGE_ABC;
           } else {
             _page = (_page == PAGE_ABC) ? PAGE_SYM : PAGE_ABC;
@@ -662,8 +588,8 @@ private:
           // Back always opens the new page at its first selectable cell.
           _scrollPos = 0;
 
-          if (_page == PAGE_COMMANDS) _drawCommands();
-          else { _drawFullGrid(); _drawGridInput(); }
+          _drawFullGrid();
+          _drawGridInput();
           _cursorVisible = true;
           _lastBlinkTime = millis();
         }
