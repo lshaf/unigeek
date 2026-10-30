@@ -18,7 +18,7 @@ public:
 protected:
   const char* _setupTitle() const override    { return "Serial Terminal"; }
   const char* _terminalTitle() const override { return "Serial Terminal"; }
-  const char* _logDir() const override        { return "/unigeek/hid/usb_serial"; }
+  const char* _logDir() const override        { return "/unigeek/usb/serial"; }
   const char* _logBaseName() const override   { return "usb_serial_log"; }
   const char* _defaultApName() const override { return "UsbSerialStream"; }
 

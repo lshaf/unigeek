@@ -22,8 +22,8 @@ void BootIsoScreen::onInit() {
     return;
   }
   Uni.Storage->makeDir("/unigeek");
-  Uni.Storage->makeDir("/unigeek/hid");
-  const char* folder = _imgMode ? "/unigeek/hid/imgs" : "/unigeek/hid/isos";
+  Uni.Storage->makeDir("/unigeek/usb");
+  const char* folder = _imgMode ? "/unigeek/usb/imgs" : "/unigeek/usb/isos";
   Uni.Storage->makeDir(folder);
   fs::File dir = Uni.Storage->open(folder, "r");
   if (dir && dir.isDirectory()) {
@@ -56,7 +56,7 @@ void BootIsoScreen::onInit() {
 void BootIsoScreen::onItemSelected(uint8_t index) {
   if (_mounted || index >= _count) return;
   _selected = _names[index];
-  String path = String(_imgMode ? "/unigeek/hid/imgs/" : "/unigeek/hid/isos/") + _selected;
+  String path = String(_imgMode ? "/unigeek/usb/imgs/" : "/unigeek/usb/isos/") + _selected;
   // Register HID before beginIso() calls USB.begin().
   USBKeyboardUtil& keyboard = bootKeyboard();
   if (!(_imgMode ? UsbMscUtil::instance().beginImg(Uni.Storage, path.c_str())

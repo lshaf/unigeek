@@ -35,7 +35,7 @@ There is no baud rate or pin setting: the connection is the USB cable, and the b
 | Mode | What it does |
 |------|--------------|
 | **None** | No logging — output is on-screen only. |
-| **File** | Writes every line to `/unigeek/hid/usb_serial/<filename>.log` as it arrives. Filename suggests `YYYYMMDD_HHMMSS` when the clock is set. An existing file with the same name is overwritten. |
+| **File** | Writes every line to `/unigeek/usb/serial/<filename>.log` as it arrives. Filename suggests `YYYYMMDD_HHMMSS` when the clock is set. An existing file with the same name is overwritten. |
 | **Stream AP** | Brings up a SoftAP (default SSID `UsbSerialStream`) and a TCP server on port 23 for up to 4 clients (`nc <ap-ip> 23`). |
 | **Stream Network** | Joins a WiFi network picked from a scan and runs the same TCP-23 server on the device's LAN address. |
 

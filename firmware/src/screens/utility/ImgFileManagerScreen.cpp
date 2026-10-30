@@ -7,7 +7,7 @@
 #include <string.h>
 
 namespace {
-constexpr const char* IMG_DIR = "/unigeek/hid/imgs";
+constexpr const char* IMG_DIR = "/unigeek/usb/imgs";
 }
 
 void ImgFileManagerScreen::_closeImage() {
@@ -69,7 +69,7 @@ void ImgFileManagerScreen::onInit() {
     Screen.goBack(); return;
   }
   Uni.Storage->makeDir("/unigeek");
-  Uni.Storage->makeDir("/unigeek/hid");
+  Uni.Storage->makeDir("/unigeek/usb");
   Uni.Storage->makeDir(IMG_DIR);
   _listImages();
   if (!_count) { ShowStatusAction::show("No IMG files available"); Screen.goBack(); }
