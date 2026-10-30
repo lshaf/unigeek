@@ -311,7 +311,7 @@ static const char* _strengthLabel(int rssi)
 void WifiAnalyzerScreen::_showModes()
 {
   _state = STATE_MODE;
-  strncpy(_title, "WiFi Scanner", sizeof(_title));
+  strncpy(_title, "Scanner", sizeof(_title));
   _modeItems[0] = {"Access Points"};
   _modeItems[1] = {"Clients/Stations"};
   setItems(_modeItems, 2, _stationMode ? 1 : 0);
@@ -459,7 +459,7 @@ void WifiAnalyzerScreen::_openOptions(int index)
 void WifiAnalyzerScreen::_doScan()
 {
   _state = STATE_SCAN;
-  strncpy(_title, "WiFi Scanner", sizeof(_title));
+  strncpy(_title, "Scanner", sizeof(_title));
   render();
   ShowStatusAction::show("Scanning...", 0);
   if (_stationMode) { _scanStations(); return; }
@@ -533,7 +533,7 @@ void WifiAnalyzerScreen::_rebuildScanItems()
 void WifiAnalyzerScreen::_showScan()
 {
   _state = STATE_SCAN;
-  strncpy(_title, "WiFi Scanner", sizeof(_title));
+  strncpy(_title, "Scanner", sizeof(_title));
 
   _rebuildScanItems();
   setItems(_scanItems, (_stationMode ? _stationCount : _entryCount) + 1);
@@ -646,7 +646,7 @@ void WifiAnalyzerScreen::_refreshClients(bool force)
   }
   _scrollView.setRows(_rows, r);
 
-  strncpy(_title, "WiFi Scanner", sizeof(_title));
+  strncpy(_title, "Scanner", sizeof(_title));
   render();
 }
 

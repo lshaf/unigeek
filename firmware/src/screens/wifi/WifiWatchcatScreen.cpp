@@ -33,7 +33,7 @@ portMUX_TYPE WifiWatchcatScreen::_ringLock = portMUX_INITIALIZER_UNLOCKED;
 const char* WifiWatchcatScreen::title()
 {
   static constexpr const char* kNames[] = {
-    "WiFi Watchcat", "Probe Requests", "Authentication", "Association", "EAPOL"
+    "Watchcat", "Probe Requests", "Authentication", "Association", "EAPOL"
   };
   return kNames[_view];
 }
