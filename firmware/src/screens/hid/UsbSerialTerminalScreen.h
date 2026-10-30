@@ -22,6 +22,9 @@ protected:
   const char* _logBaseName() const override   { return "usb_serial_log"; }
   const char* _defaultApName() const override { return "UsbSerialStream"; }
 
+  // Shell output (ls, ps, ...) keeps its columns aligned, as in Telnet / SSH.
+  bool _characterWrap() const override { return true; }
+
   uint8_t _transportItems(ListItem* out, uint8_t max) override;
   void _onTransportItem(uint8_t index) override { (void)index; }
   TerminalTransport* _createTransport() override;

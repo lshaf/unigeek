@@ -48,11 +48,16 @@ KeyboardScreen::~KeyboardScreen()
 
 void KeyboardScreen::onInit()
 {
-#if defined(DEVICE_HAS_USB_HID) && defined(DEVICE_HAS_WEBAUTHN)
-  if (_mode == MODE_USB &&
-      usb::activeUsbProfile() == usb::UsbProfile::WEBAUTHN) {
-    _profileMismatch = true;
-    return;
+#ifdef DEVICE_HAS_USB_HID
+  // USB HID needs the COMPOSITE profile. Any other USB feature opened earlier
+  // this boot (WebAuthn, Mass Storage, Serial Terminal, Boot from IMG/ISO)
+  // owns USB until reboot, and the keyboard would silently never enumerate.
+  if (_mode == MODE_USB) {
+    const auto active = usb::activeUsbProfile();
+    if (active != usb::UsbProfile::NONE && active != usb::UsbProfile::COMPOSITE) {
+      _profileMismatch = true;
+      return;
+    }
   }
 #endif
   _keyboard->begin();
