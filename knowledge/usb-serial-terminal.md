@@ -1,13 +1,13 @@
 # USB Serial Terminal
 
-Accessed from **HID > USB Serial Terminal**. ESP32-S3 boards with native USB only.
+Accessed from **USB > USB Serial Terminal**. ESP32-S3 boards with native USB only.
 
 The device appears to a host computer as a USB serial port (USB CDC ACM), and this screen is the terminal on the other end of it. Anything the host writes to the port shows up on the device; anything you type on the device is sent to the host. A typical use is a login shell: run a `getty` on the host's port and log in to that machine from the device, with no network.
 
 ## How to use
 
 1. Plug the device into the host over USB.
-2. Open **HID > USB Serial Terminal**, adjust the setup if needed, and select **Start**.
+2. Open **USB > USB Serial Terminal**, adjust the setup if needed, and select **Start**.
 3. A new serial port appears on the host (`/dev/ttyACM*` on Linux, `/dev/cu.usbmodem*` on macOS, a `COM` port on Windows). Open it with any serial program — the baud rate setting does not matter.
 4. The status line changes from `Waiting for host` to `Connected` once a program on the host opens the port.
 
@@ -67,7 +67,7 @@ Leaving asks for confirmation (if confirmations are enabled in Settings) and ret
 
 Like USB MouseKeyboard, WebAuthn and Mass Storage, the serial port has to be registered before the USB stack starts, so only the **first** USB feature opened in a session gets USB. If another one was opened earlier this boot, **Start** shows **USB busy — Reboot required**.
 
-Once started, the serial port stays on the host until the device reboots; leaving the terminal only stops reading from it. Re-opening the terminal in the same session works without a reboot. Opening any USB feature also stops **HID > USB Remote** until the next reboot.
+Once started, the serial port stays on the host until the device reboots; leaving the terminal only stops reading from it. Re-opening the terminal in the same session works without a reboot. Opening any USB feature also stops **USB > USB Remote** until the next reboot.
 
 > [!note]
 > On Linux, ModemManager may probe a new `ttyACM` port by sending AT commands, which then appear on the device. If that happens, stop ModemManager or tell it to ignore the device.

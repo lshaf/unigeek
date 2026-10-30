@@ -32,7 +32,6 @@ void KeyboardMenuScreen::onInit()
 #ifdef DEVICE_HAS_USB_HID
   _addItem("USB HID", ACT_USB_HID);
 #endif
-  _addItem("BLE HID", ACT_BLE_HID);
 #ifdef DEVICE_HAS_USB_HID
   #ifdef DEVICE_HAS_WEBAUTHN
   _addItem("USB WebAuthn", ACT_USB_WEBAUTHN);
@@ -60,9 +59,6 @@ void KeyboardMenuScreen::onItemSelected(uint8_t index)
       Screen.push(new KeyboardScreen(KeyboardScreen::MODE_USB));
       return;
 #endif
-    case ACT_BLE_HID:
-      Screen.push(new KeyboardScreen(KeyboardScreen::MODE_BLE));
-      return;
 #if defined(DEVICE_HAS_USB_HID) && defined(DEVICE_HAS_WEBAUTHN)
     case ACT_USB_WEBAUTHN:
       Screen.push(new WebAuthnScreen());

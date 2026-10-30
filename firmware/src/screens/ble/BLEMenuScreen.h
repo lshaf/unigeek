@@ -13,10 +13,13 @@ public:
 private:
   void _toggleRemoteDevice();
 
-  ListItem _items[4] = {
+  static constexpr uint8_t BLE_REMOTE_IDX = 4;
+
+  ListItem _items[5] = {
     {"Monitoring & Detection"},
     {"Attacks"},
     {"Extensions"},
+    {"BLE HID"},
     {"BLE Remote"},
   };
 };

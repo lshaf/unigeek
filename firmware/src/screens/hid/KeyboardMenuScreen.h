@@ -4,7 +4,7 @@
 
 class KeyboardMenuScreen : public ListScreen {
 public:
-  const char* title() override { return "HID"; }
+  const char* title() override { return "USB"; }
 
   void onInit()             override;
   void onItemSelected(uint8_t index) override;
@@ -15,7 +15,6 @@ private:
   // decide which rows exist — never which index opens which screen.
   enum Action : uint8_t {
     ACT_USB_HID,
-    ACT_BLE_HID,
     ACT_USB_WEBAUTHN,
     ACT_USB_MASS_STORAGE,
     ACT_USB_SERIAL_TERMINAL,
