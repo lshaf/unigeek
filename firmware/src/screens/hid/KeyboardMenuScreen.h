@@ -32,6 +32,6 @@ private:
   void _addItem(const char* label, Action action);
 
   // Live toggle: starts/stops UartFM (File Manager + Remote screen-mirror over
-  // USB serial). Always the last item.
+  // USB serial). Always the first item.
   void _toggleUsbRemote();
 };

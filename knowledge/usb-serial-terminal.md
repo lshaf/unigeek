@@ -1,13 +1,13 @@
 # USB Serial Terminal
 
-Accessed from **USB > USB Serial Terminal**. ESP32-S3 boards with native USB only.
+Accessed from **USB > Serial Terminal**. ESP32-S3 boards with native USB only.
 
 The device appears to a host computer as a USB serial port (USB CDC ACM), and this screen is the terminal on the other end of it. Anything the host writes to the port shows up on the device; anything you type on the device is sent to the host. A typical use is a login shell: run a `getty` on the host's port and log in to that machine from the device, with no network.
 
 ## How to use
 
 1. Plug the device into the host over USB.
-2. Open **USB > USB Serial Terminal**, adjust the setup if needed, and select **Start**.
+2. Open **USB > Serial Terminal**, adjust the setup if needed, and select **Start**.
 3. A new serial port appears on the host (`/dev/ttyACM*` on Linux, `/dev/cu.usbmodem*` on macOS, a `COM` port on Windows). Open it with any serial program — the baud rate setting does not matter.
 4. The status line changes from `Waiting for host` to `Connected` once a program on the host opens the port.
 

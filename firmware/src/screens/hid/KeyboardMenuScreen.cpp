@@ -29,22 +29,21 @@ void KeyboardMenuScreen::_addItem(const char* label, Action action)
 void KeyboardMenuScreen::onInit()
 {
   _itemCount = 0;
+  // Only USB HID and USB Remote keep the prefix: they have BLE counterparts.
+  _usbRemoteIdx = _itemCount;
+  _addItem("USB Remote", ACT_USB_REMOTE);
 #ifdef DEVICE_HAS_USB_HID
   _addItem("USB HID", ACT_USB_HID);
-#endif
-#ifdef DEVICE_HAS_USB_HID
   #ifdef DEVICE_HAS_WEBAUTHN
-  _addItem("USB WebAuthn", ACT_USB_WEBAUTHN);
+  _addItem("WebAuthn", ACT_USB_WEBAUTHN);
   #endif
-  _addItem("USB Mass Storage", ACT_USB_MASS_STORAGE);
-  _addItem("USB Serial Terminal", ACT_USB_SERIAL_TERMINAL);
+  _addItem("Mass Storage", ACT_USB_MASS_STORAGE);
+  _addItem("Serial Terminal", ACT_USB_SERIAL_TERMINAL);
   #if defined(DEVICE_SUPPORTS_BOOT_ISO) && !defined(BOARD_4MB)
   _addItem("Boot from IMG", ACT_BOOT_IMG);
   _addItem("Boot from ISO", ACT_BOOT_ISO);
   #endif
 #endif
-  _usbRemoteIdx = _itemCount;
-  _addItem("USB Remote", ACT_USB_REMOTE);
 
   _items[_usbRemoteIdx].sublabel = UartFM.isActive() ? "On" : "Off";
   setItems(_items, _itemCount);
