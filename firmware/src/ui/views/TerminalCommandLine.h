@@ -62,14 +62,13 @@ public:
     lcd.setTextDatum(TL_DATUM);
     lcd.setTextColor(remoteClosed ? TFT_DARKGREY : TFT_WHITE, TFT_BLACK);
 
+    // Hint convention: obvious actions get no hint (leaving with Back after
+    // the session closed); the others use [Press] / [Hold] / [Back].
+    if (remoteClosed) return;  // input line left empty
+
     String line;
-    if (remoteClosed) {
-      line = "BACK: Exit";
-    } else if (keyboardDevice) {
-      line = "> " + _text + "_";
-    } else {
-      line = "> PRESS: Type";
-    }
+    if (keyboardDevice) line = "> " + _text + "_";
+    else                line = "[Press] Type";
 
     int maxChars = max(4, (w - 8) / 6);
     if ((int)line.length() > maxChars) {
