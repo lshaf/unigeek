@@ -20,11 +20,11 @@ void BLEMenuScreen::onInit()
 void BLEMenuScreen::onItemSelected(uint8_t index)
 {
   switch (index) {
-    case 0: Screen.push(new BLEMonitoringDetectionMenuScreen()); break;
-    case 1: Screen.push(new BLEAttacksMenuScreen());           break;
-    case 2: Screen.push(new BLEExtensionsMenuScreen());        break;
-    case 3: Screen.push(new KeyboardScreen(KeyboardScreen::MODE_BLE)); break;
     case BLE_REMOTE_IDX: _toggleRemoteDevice();                break;
+    case 1: Screen.push(new KeyboardScreen(KeyboardScreen::MODE_BLE)); break;
+    case 2: Screen.push(new BLEMonitoringDetectionMenuScreen()); break;
+    case 3: Screen.push(new BLEAttacksMenuScreen());           break;
+    case 4: Screen.push(new BLEExtensionsMenuScreen());        break;
   }
 }
 
