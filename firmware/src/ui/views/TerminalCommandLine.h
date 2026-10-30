@@ -15,11 +15,14 @@ public:
     ACTION_SCROLL_DOWN,
     ACTION_SCROLL_LEFT,
     ACTION_SCROLL_RIGHT,
+    ACTION_CONTROL,      // send controlByte() now, outside the line
   };
 
   static constexpr int MAX_LEN = 256;
 
   const String& text() const { return _text; }
+  // Byte to send for ACTION_CONTROL (0x01-0x1F).
+  uint8_t controlByte() const { return _control; }
   void clear() { _text = ""; }
 
   Action consume(IKeyboard* keyboard) {
@@ -28,12 +31,30 @@ public:
     uint8_t modifiers = keyboard->modifiers();
     char c = keyboard->getKey();
 
-    // The Cardputer family uses Fn + ; . , / as the four arrow keys.
+    // The Cardputer family uses Fn + ; . , / as the four arrow keys, and
+    // Fn + ` as Esc (sent immediately).
     if (modifiers & IKeyboard::MOD_FN) {
       if (c == ';') return ACTION_SCROLL_UP;
       if (c == '.') return ACTION_SCROLL_DOWN;
       if (c == ',') return ACTION_SCROLL_LEFT;
       if (c == '/') return ACTION_SCROLL_RIGHT;
+      if (c == '`' || c == '~') {
+        _control = 0x1b;
+        return ACTION_CONTROL;
+      }
+    }
+
+    // Ctrl + key is sent immediately as its control character, like the
+    // virtual terminal keyboard does (Ctrl+C = 0x03, Ctrl+[ = Esc, ...).
+    // Ctrl+C also drops the line being typed.
+    if (modifiers & IKeyboard::MOD_CTRL) {
+      const char upper = (c >= 'a' && c <= 'z') ? (char)(c - 'a' + 'A') : c;
+      if (upper >= 'A' && upper <= '_') {  // no Ctrl+@ (NUL)
+        _control = (uint8_t)(upper & 0x1f);
+        if (_control == 0x03) _text = "";
+        return ACTION_CONTROL;
+      }
+      return ACTION_NONE;  // no control character for this key
     }
 
     if (c == '\b' || c == 0x7f) {
@@ -91,5 +112,6 @@ public:
   }
 
 private:
-  String _text;
+  String  _text;
+  uint8_t _control = 0;
 };

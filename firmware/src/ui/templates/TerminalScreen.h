@@ -145,6 +145,7 @@ private:
   void _handleKeyboardInput();
   void _openInput();
   void _sendLine(const String& text);
+  void _sendControl(uint8_t byte);
   bool _sendRaw(const uint8_t* data, size_t len);
   bool _writeAll(const uint8_t* data, size_t len);
   bool _writeLineEnding();

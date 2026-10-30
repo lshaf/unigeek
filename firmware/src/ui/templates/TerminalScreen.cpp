@@ -426,6 +426,10 @@ void TerminalScreen::_handleKeyboardInput() {
     case TerminalCommandLine::ACTION_SCROLL_DOWN:  _scroll(INavigation::DIR_DOWN);  return;
     case TerminalCommandLine::ACTION_SCROLL_LEFT:  _scroll(INavigation::DIR_LEFT);  return;
     case TerminalCommandLine::ACTION_SCROLL_RIGHT: _scroll(INavigation::DIR_RIGHT); return;
+    case TerminalCommandLine::ACTION_CONTROL:
+      if (!_remoteClosed) _sendControl(_inputLine.controlByte());
+      render();
+      return;
     case TerminalCommandLine::ACTION_CHANGED:
       render();
       return;
@@ -433,6 +437,19 @@ void TerminalScreen::_handleKeyboardInput() {
       return;
   }
 #endif
+}
+
+void TerminalScreen::_sendControl(uint8_t byte) {
+  if (!_transport) return;
+  if (!_writeAll(&byte, 1)) {
+    _pushInfo("[Send failed]");
+    return;
+  }
+  // Shown as a terminal echoes it: ^C, ^[ ...
+  if (_localEcho()) _transcript.pushLine(String("> ^") + (char)(byte + 0x40));
+  _followOutput = true;
+  _dirty = true;
+  _onDataSent();
 }
 
 void TerminalScreen::_openInput() {

@@ -879,6 +879,15 @@ void SshClientScreen::_handleTerminalInput() {
     case TerminalCommandLine::ACTION_SCROLL_RIGHT:
       if (_outputView.onNav(INavigation::DIR_RIGHT)) _followOutput = _outputView.isAtBottom();
       return;
+    case TerminalCommandLine::ACTION_CONTROL:
+      // Ctrl combos go out immediately; the server echoes them.
+      if (!_remoteClosed) {
+        const uint8_t byte = _inputLine.controlByte();
+        _sendTerminalBytes(&byte, 1);
+        _followOutput = true;
+      }
+      render();
+      return;
     case TerminalCommandLine::ACTION_CHANGED:
       render();
       return;

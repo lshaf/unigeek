@@ -51,6 +51,7 @@ Same layout and keys as the UART Terminal and the TCP / Telnet / SSH clients: st
 | Type | Directly in the input line | **Press** opens the terminal keyboard |
 | Send | Enter | Enter on the terminal keyboard |
 | Scroll output | Fn + `;` `.` `,` `/` | Up / Down / Left / Right |
+| Control keys (sent immediately) | Ctrl + key (Ctrl+C, Ctrl+D, ...); Fn + `` ` `` for Esc | Ctrl / Esc on the terminal keyboard |
 | Leave | Backspace on an empty line | Back |
 
 Leaving asks for confirmation (if confirmations are enabled in Settings) and returns to the setup screen. Sending while no program on the host has the port open shows `[Send failed]`.
