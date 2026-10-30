@@ -63,16 +63,23 @@ public:
     lcd.setTextColor(remoteClosed ? TFT_DARKGREY : TFT_WHITE, TFT_BLACK);
 
     // Hint convention: obvious actions get no hint (leaving with Back after
-    // the session closed); the others use [Press] / [Hold] / [Back].
+    // the session closed); the others use [Press] / [Hold] / [Back], centered
+    // in dark grey like the other footers.
     if (remoteClosed) return;  // input line left empty
 
-    String line;
-    if (keyboardDevice) line = "> " + _text + "_";
-    else                line = "[Press] Type";
+    if (!keyboardDevice) {
+      lcd.setTextDatum(MC_DATUM);
+      lcd.setTextColor(TFT_DARKGREY, TFT_BLACK);
+      lcd.drawString("[Press] Type", x + w / 2, y + h / 2);
+      lcd.setTextDatum(TL_DATUM);
+      return;
+    }
+
+    String line = "> " + _text + "_";
 
     int maxChars = max(4, (w - 8) / 6);
     if ((int)line.length() > maxChars) {
-      if (!remoteClosed && keyboardDevice && maxChars > 3) {
+      if (maxChars > 3) {
         int keep = maxChars - 3;
         line = ">.." + line.substring(line.length() - keep);
       } else {
