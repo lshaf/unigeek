@@ -46,6 +46,8 @@ const char* TerminalScreen::title() {
 }
 
 void TerminalScreen::onInit() {
+  _outputView.setWrapMode(_characterWrap() ? TextScrollView::WRAP_CHARACTER
+                                           : TextScrollView::WRAP_WORD);
   if (_apName.length() == 0) _apName = _defaultApName();
   _refreshItems();
 }
@@ -463,11 +465,11 @@ void TerminalScreen::_sendLine(const String& text) {
                                    (isdigit((unsigned char)lo) ? lo - '0' : lo - 'A' + 10));
       ok = _writeAll(&b, 1);
     }
-    _transcript.pushLine("> [H] " + text);
+    if (_localEcho()) _transcript.pushLine("> [H] " + text);
   } else {
     if (text.length() > 0) ok = _writeAll(reinterpret_cast<const uint8_t*>(text.c_str()), text.length());
     if (ok) ok = _writeLineEnding();
-    _transcript.pushLine("> " + text);
+    if (_localEcho()) _transcript.pushLine("> " + text);
   }
 
   if (!ok) _pushInfo("[Send failed]");
@@ -484,7 +486,7 @@ bool TerminalScreen::_sendRaw(const uint8_t* data, size_t len) {
   // ending instead and echo the line typed so far.
   if (len == 2 && data[0] == '\r' && data[1] == '\n') {
     const bool ok = _writeLineEnding();
-    _transcript.pushLine("> " + _echoLine);
+    if (_localEcho()) _transcript.pushLine("> " + _echoLine);
     _echoLine = "";
     _followOutput = true;
     _dirty = true;

@@ -21,7 +21,8 @@
 //     line ending; Fn + ; . , / scroll; Backspace on an empty line leaves.
 //   - Other boards: PRESS opens the terminal keyboard, arrows scroll, BACK leaves.
 // Leaving asks for confirmation (ConfirmAction, honours the global setting) and
-// returns to the setup list. Sent lines are echoed locally as "> text".
+// returns to the setup list. Sent lines are echoed locally as "> text" unless
+// the subclass turns local echo off.
 //
 // Subclasses provide the titles, the transport rows and the transport itself.
 class TerminalScreen : public ListScreen {
@@ -64,6 +65,13 @@ protected:
   virtual bool _offersDisplay() const    { return true; }
   virtual const char* _startLabel() const         { return "Start"; }
   virtual const char* _startFailedMessage() const { return "Failed to start"; }
+
+  // Echo sent lines locally as "> text". Off when the other side echoes
+  // (Telnet, SSH).
+  virtual bool _localEcho() const { return true; }
+  // Wrap output at the character instead of the word, keeping columns of
+  // shell output aligned.
+  virtual bool _characterWrap() const { return false; }
 
   // Optional hooks (achievements, extra start-up lines, ...).
   virtual void _onSessionStarted() {}
