@@ -5,7 +5,12 @@
 #include <USB.h>
 #include <USBCDC.h>
 #include "esp32-hal-tinyusb.h"
+#include "soc/soc.h"
 #include "utils/usb/UsbProfile.h"
+
+#ifndef DR_REG_USB_BASE
+#define DR_REG_USB_BASE 0x60080000  // ESP32-S3 USB OTG
+#endif
 
 namespace {
 
@@ -18,52 +23,13 @@ USBCDC& cdc() {
 
 bool g_started = false;
 
-// Autosuspend recovery (see header). Flags are set from the Arduino USB event
-// task and handled by the RX task.
-enum RecoveryState : uint8_t { REC_IDLE, REC_PENDING, REC_DETACHED };
-
-volatile bool          g_wasMounted = false;
-volatile RecoveryState g_recovery   = REC_IDLE;
-uint32_t               g_detachedAt = 0;
-uint32_t               g_lastReattach = 0;
-bool                   g_reattached   = false;
-
-// At most one re-attach per interval, so a host that keeps suspending and
-// poking the device can't make the port flap continuously.
-constexpr uint32_t MIN_REATTACH_INTERVAL_MS = 5000;
-
-void onUsbEvent(void*, esp_event_base_t, int32_t id, void*) {
-  if (id == ARDUINO_USB_STARTED_EVENT) {
-    g_wasMounted = true;
-    g_recovery   = REC_IDLE;
-  } else if (id == ARDUINO_USB_STOPPED_EVENT && g_wasMounted && g_recovery == REC_IDLE) {
-    g_recovery = REC_PENDING;  // unmounted after a successful mount
-  }
-}
-
-// Non-blocking; called from the RX task.
-void runRecovery(uint32_t detachMs) {
-  switch (g_recovery) {
-    case REC_PENDING:
-      // Wait until the host talks to us again (resume), then make it re-enumerate.
-      if (tud_connected() && !tud_mounted() &&
-          (!g_reattached || millis() - g_lastReattach >= MIN_REATTACH_INTERVAL_MS)) {
-        tud_disconnect();
-        g_detachedAt = millis();
-        g_recovery   = REC_DETACHED;
-      }
-      break;
-    case REC_DETACHED:
-      if (millis() - g_detachedAt >= detachMs) {
-        tud_connect();
-        g_lastReattach = millis();
-        g_reattached   = true;
-        g_recovery     = REC_IDLE;  // STARTED follows once the host configures us
-      }
-      break;
-    default:
-      break;
-  }
+// Mask the OTG core's suspend interrupts (GINTMSK ErlySuspMsk | USBSuspMsk) so
+// a host suspend never reaches the stack (see header). Cheap and idempotent;
+// re-applied while reading in case the stack sets the mask again.
+void maskSuspendInterrupts() {
+  volatile uint32_t* gintmsk = reinterpret_cast<volatile uint32_t*>(DR_REG_USB_BASE + 0x018);
+  constexpr uint32_t SUSPEND_BITS = (1u << 10) | (1u << 11);
+  if (*gintmsk & SUSPEND_BITS) *gintmsk &= ~SUSPEND_BITS;
 }
 
 }  // namespace
@@ -78,9 +44,7 @@ bool UsbCdcTransport::hostConnected() {
 }
 
 void UsbCdcTransport::status(char* out, size_t len) const {
-  if (g_recovery == REC_DETACHED) snprintf(out, len, "Reconnecting...");
-  else if (!hostConnected())      snprintf(out, len, "Waiting for host");
-  else                            snprintf(out, len, "Connected");
+  snprintf(out, len, "%s", hostConnected() ? "Connected" : "Waiting for host");
 }
 
 bool UsbCdcTransport::_open() {
@@ -90,8 +54,8 @@ bool UsbCdcTransport::_open() {
     port.setRxBufferSize(CDC_RX_BUFFER);
     port.setTxTimeoutMs(TX_TIMEOUT_MS);
     port.begin(115200);
-    USB.onEvent(onUsbEvent);
     USB.begin();  // idempotent
+    maskSuspendInterrupts();
     g_started = true;
   }
 
@@ -102,7 +66,7 @@ bool UsbCdcTransport::_open() {
 }
 
 size_t UsbCdcTransport::_readHardware(uint8_t* buf, size_t capacity) {
-  runRecovery(DETACH_MS);
+  maskSuspendInterrupts();
 
   USBCDC& port = cdc();
   const int avail = port.available();
