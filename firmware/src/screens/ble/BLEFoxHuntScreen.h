@@ -6,7 +6,7 @@
 
 class BLEFoxHuntScreen : public ListScreen {
 public:
-  const char* title() override { return "BLE Fox Hunt"; }
+  const char* title() override { return "Fox Hunt"; }
   bool inhibitPowerSave() override { return _state == STATE_TRACK; }
 
   ~BLEFoxHuntScreen() override;

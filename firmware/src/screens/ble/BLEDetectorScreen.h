@@ -6,7 +6,7 @@
 
 class BLEDetectorScreen : public BaseScreen {
 public:
-  const char* title() override { return "BLE Detector"; }
+  const char* title() override { return "Detector"; }
   bool inhibitPowerOff() override { return _scanning; }
 
   ~BLEDetectorScreen() override;

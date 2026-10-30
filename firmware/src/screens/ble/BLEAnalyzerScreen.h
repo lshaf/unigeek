@@ -8,7 +8,7 @@ class BLEAnalyzerScreen : public ListScreen {
 public:
   const char* title() override
   {
-    return _state == STATE_DETAIL ? _detailTitle.c_str() : "BLE Scanner";
+    return _state == STATE_DETAIL ? _detailTitle.c_str() : "Scanner";
   }
 
   ~BLEAnalyzerScreen() override;

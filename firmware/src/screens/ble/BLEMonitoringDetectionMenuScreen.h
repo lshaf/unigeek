@@ -12,9 +12,9 @@ public:
 
 private:
   ListItem _items[4] = {
-    {"BLE Scanner"},
-    {"BLE Detector"},
-    {"BLE Watchdog"},
-    {"BLE Watchcat"},
+    {"Scanner"},
+    {"Detector"},
+    {"Watchdog"},
+    {"Watchcat"},
   };
 };
