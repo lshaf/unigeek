@@ -11,7 +11,7 @@ public:
   void onInit() override;
 
 protected:
-  const char* _setupTitle() const override    { return "UART Setup"; }
+  const char* _setupTitle() const override    { return "UART Terminal"; }
   const char* _terminalTitle() const override { return "UART Terminal"; }
   const char* _logDir() const override        { return "/unigeek/utility/uart"; }
   const char* _logBaseName() const override   { return "uart_log"; }

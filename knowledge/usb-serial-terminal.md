@@ -19,6 +19,10 @@ sudo systemctl start serial-getty@ttyACM0.service
 
 Use the port name the host assigned. The login prompt appears on the device; type the user name and password as usual.
 
+### First open after the port was idle
+
+Computers suspend idle USB devices (Linux does it about 2 seconds after the port appears, as long as no program has it open). The device can't come back from that suspend on its own, so the first time a program opens the port after it was idle, the device reconnects itself: the status line shows `USB: reconnecting...`, the port disappears for a moment and comes back, and the serial program usually reports that the port was lost. **Open the port again** and it works; while a program keeps the port open, the computer doesn't suspend the device. After the program closes the port, the next open may need the same second try.
+
 ## Setup
 
 | Field | Default | Notes |

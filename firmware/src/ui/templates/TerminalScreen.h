@@ -41,7 +41,7 @@ protected:
   explicit TerminalScreen(LineEnding defaultLineEnding) : _lineEnding(defaultLineEnding) {}
 
   // ── Subclass interface ────────────────────────────────────────────────────
-  virtual const char* _setupTitle() const    = 0;  // e.g. "UART Setup"
+  virtual const char* _setupTitle() const    = 0;  // e.g. "UART Terminal"
   virtual const char* _terminalTitle() const = 0;  // e.g. "UART Terminal"
   virtual const char* _logDir() const        = 0;  // e.g. "/unigeek/utility/uart"
   virtual const char* _logBaseName() const   = 0;  // fallback file name, e.g. "uart_log"

@@ -16,6 +16,15 @@
 //
 // Once started, the CDC port stays enumerated for the rest of the boot (USB
 // can't be torn down); end() only stops reading from it.
+//
+// Host autosuspend: hosts may suspend an idle USB device (Linux does it after
+// 2 s for a closed CDC ACM port). With this platform's USB stack the device
+// side then unmounts, while the host still sees it configured, so the port is
+// dead when the host resumes it. When that happens (we were mounted, got
+// unmounted, and the host starts talking again), the transport detaches and
+// re-attaches the device so the host enumerates it again. The serial program
+// on the host loses the port once and has to reopen it; while it stays open
+// the host doesn't suspend the device.
 class UsbCdcTransport : public TerminalTransport {
 public:
   ~UsbCdcTransport() override { end(); }
@@ -23,7 +32,7 @@ public:
   // True if USB is already owned by another profile this boot.
   static bool usbBusy();
 
-  // True while the host has the port open (DTR asserted).
+  // True while the device is configured and the host has the port open (DTR).
   static bool hostConnected();
 
   void status(char* out, size_t len) const override;
@@ -37,6 +46,7 @@ protected:
 private:
   static constexpr size_t   CDC_RX_BUFFER = 1024;
   static constexpr uint32_t TX_TIMEOUT_MS = 50;
+  static constexpr uint32_t DETACH_MS     = 300;  // detached time before re-attach
 };
 
 #endif  // DEVICE_HAS_USB_HID

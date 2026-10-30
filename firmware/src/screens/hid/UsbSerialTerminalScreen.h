@@ -16,7 +16,7 @@ public:
   UsbSerialTerminalScreen() : TerminalScreen(LINE_END_CR) {}
 
 protected:
-  const char* _setupTitle() const override    { return "USB Serial Setup"; }
+  const char* _setupTitle() const override    { return "USB Serial Terminal"; }
   const char* _terminalTitle() const override { return "USB Serial Terminal"; }
   const char* _logDir() const override        { return "/unigeek/hid/usb_serial"; }
   const char* _logBaseName() const override   { return "usb_serial_log"; }
