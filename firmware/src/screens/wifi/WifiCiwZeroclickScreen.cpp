@@ -142,29 +142,29 @@ void WifiCiwZeroclickScreen::onInit()
 {
   _instance = this;
   _state = STATE_MENU;
-  _refreshMenu();
+  _refreshMenu(ROW_CATEGORIES);
 }
 
 void WifiCiwZeroclickScreen::onItemSelected(uint8_t index)
 {
   if (_state != STATE_MENU) return;
   switch (index) {
-    case 0: _selectCategories(); break;
-    case 4: _startBroadcast(); break;
-    case 1: {
+    case ROW_CATEGORIES: _selectCategories(); break;
+    case ROW_START:      _startBroadcast();   break;
+    case ROW_ROTATION: {
       static constexpr InputSelectAction::Option opts[] = {
         {"3 s", "3"}, {"5 s", "5"}, {"10 s", "10"}, {"15 s", "15"}, {"30 s", "30"},
       };
       const char* val = InputSelectAction::popup("Rotation", opts, 5);
       if (val) {
         _rotationMs = (unsigned long)atoi(val) * 1000UL;
-        _refreshMenu();
+        _refreshMenu(ROW_ROTATION);
       }
       render();
       break;
     }
-    case 2: _showDevices(); break;
-    case 3: _showAlerts(); break;
+    case ROW_DEVICES: _showDevices(); break;
+    case ROW_ALERTS:  _showAlerts();  break;
   }
 }
 
@@ -174,8 +174,9 @@ void WifiCiwZeroclickScreen::onUpdate()
     if (Uni.Nav->wasPressed()) {
       auto dir = Uni.Nav->readDirection();
       if (dir == INavigation::DIR_BACK || dir == INavigation::DIR_PRESS) {
+        const uint8_t row = (_state == STATE_DEVICES) ? ROW_DEVICES : ROW_ALERTS;
         _state = STATE_MENU;
-        _refreshMenu();
+        _refreshMenu(row);
         return;
       }
       _scrollView.onNav(dir);
@@ -192,7 +193,7 @@ void WifiCiwZeroclickScreen::onUpdate()
     auto dir = Uni.Nav->readDirection();
     if (dir == INavigation::DIR_BACK || dir == INavigation::DIR_PRESS) {
       _stopBroadcast();
-      _refreshMenu();
+      _refreshMenu(ROW_START);
       return;
     }
   }
@@ -210,10 +211,11 @@ void WifiCiwZeroclickScreen::onBack()
 {
   if (_state == STATE_BROADCASTING) {
     _stopBroadcast();
-    _refreshMenu();
+    _refreshMenu(ROW_START);
   } else if (_state == STATE_DEVICES || _state == STATE_ALERTS) {
+    const uint8_t row = (_state == STATE_DEVICES) ? ROW_DEVICES : ROW_ALERTS;
     _state = STATE_MENU;
-    _refreshMenu();
+    _refreshMenu(row);
   } else {
     Screen.goBack();
   }
@@ -231,7 +233,7 @@ void WifiCiwZeroclickScreen::onRender()
   ListScreen::onRender();
 }
 
-void WifiCiwZeroclickScreen::_refreshMenu()
+void WifiCiwZeroclickScreen::_refreshMenu(uint8_t row)
 {
   int catCount = 0;
   for (int i = 0; i < CAT_COUNT; i++) {
@@ -242,12 +244,12 @@ void WifiCiwZeroclickScreen::_refreshMenu()
   _devSub = String(_deviceCount);
   _alertSub = String(_alertCount);
 
-  _menuItems[0] = {"Categories", _catSub.c_str()};
-  _menuItems[1] = {"Rotation", _rotSub.c_str()};
-  _menuItems[2] = {"Connected Devices", _devSub.c_str()};
-  _menuItems[3] = {"Crash Alerts", _alertSub.c_str()};
-  _menuItems[4] = {"Start"};
-  setItems(_menuItems, 5);
+  _menuItems[ROW_CATEGORIES] = {"Categories", _catSub.c_str()};
+  _menuItems[ROW_ROTATION]   = {"Rotation", _rotSub.c_str()};
+  _menuItems[ROW_DEVICES]    = {"Connected Devices", _devSub.c_str()};
+  _menuItems[ROW_ALERTS]     = {"Crash Alerts", _alertSub.c_str()};
+  _menuItems[ROW_START]      = {"Start"};
+  setItems(_menuItems, MENU_ROWS, row);
 }
 
 void WifiCiwZeroclickScreen::_loadPayloads()
@@ -452,7 +454,7 @@ void WifiCiwZeroclickScreen::_selectCategories()
     else if (v == 99) _catMask = 0;
     else if (v < CAT_COUNT) _catMask ^= (1 << v);
   }
-  _refreshMenu();
+  _refreshMenu(ROW_CATEGORIES);
 }
 
 // ── WiFi event handler (static) ─────────────────────────────────────────────

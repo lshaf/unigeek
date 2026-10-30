@@ -30,7 +30,7 @@ static void _onRoguePost(const char* clientIP, const char* domain, const char* d
 void WifiRogueAPScreen::onInit() {
   _activeRogueInstance = this;
   _ssid = "";
-  _showMenu();
+  _showMenu(ROW_SSID);
 }
 
 void WifiRogueAPScreen::onUpdate() {
@@ -55,7 +55,7 @@ void WifiRogueAPScreen::onRender() {
 void WifiRogueAPScreen::onItemSelected(uint8_t index) {
   if (_state != STATE_MENU) return;
   switch (index) {
-    case 0: {
+    case ROW_SSID: {
       String ssid = InputTextAction::popup("SSID", _ssid);
       render();
       if (InputTextAction::wasCancelled()) { render(); return; }
@@ -70,10 +70,10 @@ void WifiRogueAPScreen::onItemSelected(uint8_t index) {
         return;
       }
       _ssid = ssid;
-      _showMenu();
+      _showMenu(ROW_SSID);
       break;
     }
-    case 1: {
+    case ROW_PORTAL: {
       if (!_captiveEnabled) {
         static constexpr const char* PORTALS_DIR = "/unigeek/web/portals";
         if (!Uni.Storage || !Uni.Storage->exists(PORTALS_DIR)) {
@@ -103,22 +103,22 @@ void WifiRogueAPScreen::onItemSelected(uint8_t index) {
         _captivePath = "";
         _captiveSub = "-";
       }
-      _menuItems[1].sublabel = _captiveEnabled ? _captiveSub.c_str() : "-";
+      _menuItems[ROW_PORTAL].sublabel = _captiveEnabled ? _captiveSub.c_str() : "-";
       render();
       break;
     }
-    case 2: {
+    case ROW_DNS_SPOOF: {
       if (!_dnsSpoofEnabled && (!Uni.Storage || !Uni.Storage->exists(DnsSpoofServer::CONFIG_PATH))) {
         ShowStatusAction::show("No DNS config file", 1500);
         render();
         break;
       }
       _dnsSpoofEnabled = !_dnsSpoofEnabled;
-      _menuItems[2].sublabel = _dnsSpoofEnabled ? "On" : "Off";
+      _menuItems[ROW_DNS_SPOOF].sublabel = _dnsSpoofEnabled ? "On" : "Off";
       render();
       break;
     }
-    case 3: _startAP(); break;
+    case ROW_START: _startAP(); break;
   }
 }
 
@@ -128,13 +128,13 @@ void WifiRogueAPScreen::onBack() {
   Screen.goBack();
 }
 
-void WifiRogueAPScreen::_showMenu() {
+void WifiRogueAPScreen::_showMenu(uint8_t row) {
   _state = STATE_MENU;
-  _menuItems[0] = {"SSID", _ssid.isEmpty() ? "-" : _ssid.c_str()};
-  _menuItems[1] = {"Portal", _captiveEnabled ? _captiveSub.c_str() : "-"};
-  _menuItems[2] = {"DNS Spoof", _dnsSpoofEnabled ? "On" : "Off"};
-  _menuItems[3] = {"Start"};
-  setItems(_menuItems, 4);
+  _menuItems[ROW_SSID]      = {"SSID", _ssid.isEmpty() ? "-" : _ssid.c_str()};
+  _menuItems[ROW_PORTAL]    = {"Portal", _captiveEnabled ? _captiveSub.c_str() : "-"};
+  _menuItems[ROW_DNS_SPOOF] = {"DNS Spoof", _dnsSpoofEnabled ? "On" : "Off"};
+  _menuItems[ROW_START]     = {"Start"};
+  setItems(_menuItems, MENU_ROWS, row);
 }
 
 void WifiRogueAPScreen::_startAP() {
@@ -178,7 +178,7 @@ void WifiRogueAPScreen::_stopAP() {
   _log.clear();
   _lastDraw = 0;
   ShowStatusAction::show("AP stopped", 1500);
-  _showMenu();
+  _showMenu(ROW_START);
 }
 
 void WifiRogueAPScreen::_showLog() {
