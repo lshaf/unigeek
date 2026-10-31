@@ -250,9 +250,10 @@ void WifiWatchdogScreen::onUpdate()
 #endif
 
   } else {
-    // Same model as Traffic Analyzer. Live: [Press] pauses, [Back] returns to
-    // the grid. Paused: arrows select, [Press] opens Details (Evil Twin: the
-    // network's APs), [Hold] opens Options, [Back] resumes.
+    // Like Traffic Analyzer. Live: [Press] pauses, [Back] returns to the grid.
+    // Paused: arrows select, [Press] opens Options (Details first), [Back]
+    // resumes; [Hold] opens Options too. Evil Twin networks: [Press] lists
+    // the network's APs, where [Press] opens Options.
     const bool canAct = _paused && _view != VIEW_EVILTWIN;
     if (canAct && Uni.Nav->isPressed() && Uni.Nav->currentDirection() == INavigation::DIR_PRESS &&
         Uni.Nav->heldDuration() >= 700 && !_holdHandled) {
@@ -295,7 +296,7 @@ void WifiWatchdogScreen::onUpdate()
             _renderView();
           }
         } else {
-          _openSelectedDetails();
+          _openOptions();
         }
         return;
       }
@@ -849,7 +850,8 @@ int WifiWatchdogScreen::_listHeight()
   return bodyH() - kFooterH;
 }
 
-// Same hints as Traffic Analyzer.
+// Hints follow Traffic Analyzer, with [Press] for Options. Selecting a network
+// in Evil Twin needs no hint.
 void WifiWatchdogScreen::_renderFooter()
 {
   auto& lcd = Uni.Lcd;
@@ -860,15 +862,17 @@ void WifiWatchdogScreen::_renderFooter()
   lcd.setTextColor(TFT_DARKGREY, TFT_BLACK);
   lcd.setTextDatum(BC_DATUM);
   if (_view == VIEW_TWIN_APS) {
-    lcd.drawString("[Press] Details", x + w / 2, y + h - 14);
-    lcd.drawString("[Hold] Options", x + w / 2, y + h - 1);
+    // [Back] returns to the network list.
+    lcd.drawString("[Press] Options", x + w / 2, y + h - 1);
   } else if (_paused && _view == VIEW_EVILTWIN) {
-    const char* hint = "[Press] Select [Back] Resume";
+    const char* hint = "[Back] Resume Scan";
+    if (lcd.textWidth(hint) > w - 6) hint = "[Back] Resume";
     lcd.drawString(hint, x + w / 2, y + h - 1);
   } else if (_paused) {
-    const char* hint = "[Press] Details [Back] Resume";
+    const char* hint = "[Back] Resume Scan";
+    if (lcd.textWidth(hint) > w - 6) hint = "[Back] Resume";
     lcd.drawString(hint, x + w / 2, y + h - 14);
-    lcd.drawString("[Hold] Options", x + w / 2, y + h - 1);
+    lcd.drawString("[Press] Options", x + w / 2, y + h - 1);
   } else {
     lcd.drawString("[Press] Pause", x + w / 2, y + h - 1);
   }

@@ -196,9 +196,10 @@ void WifiWatchcatScreen::onUpdate()
     }
 #endif
   } else {
-    // Same model as Traffic Analyzer. Live: [Press] pauses, [Back] returns to
-    // the grid. Paused: arrows select, [Press] opens Details, [Hold] opens
-    // Options, [Back] resumes.
+    // Like Traffic Analyzer. Live: [Press] pauses, [Back] returns to the grid.
+    // Paused: arrows select, [Press] opens Options (Details first; there is
+    // no deeper level to select, unlike Traffic Analyzer's AP list),
+    // [Back] resumes. [Hold] opens Options too.
     if (_paused && Uni.Nav->isPressed() && Uni.Nav->currentDirection() == INavigation::DIR_PRESS &&
         Uni.Nav->heldDuration() >= 700 && !_holdHandled) {
       _holdHandled = true;
@@ -219,7 +220,7 @@ void WifiWatchcatScreen::onUpdate()
         return;
       }
       if (dir == INavigation::DIR_PRESS && duration < 700) {
-        if (_paused) _openSelectedDetails();
+        if (_paused) _openOptions();
         else         _pause();
         return;
       }
@@ -739,7 +740,7 @@ int WifiWatchcatScreen::_listHeight()
   return bodyH() - kFooterH;
 }
 
-// Same hints as Traffic Analyzer.
+// Hints follow Traffic Analyzer, with [Press] for Options.
 void WifiWatchcatScreen::_renderFooter()
 {
   auto& lcd = Uni.Lcd;
@@ -750,10 +751,10 @@ void WifiWatchcatScreen::_renderFooter()
   lcd.setTextColor(TFT_DARKGREY, TFT_BLACK);
   lcd.setTextDatum(BC_DATUM);
   if (_paused) {
-    const char* hint = "[Press] Details [Back] Resume";
-    if (lcd.textWidth(hint) > w - 6) hint = "[Press] Details [Back] Back";
+    const char* hint = "[Back] Resume Scan";
+    if (lcd.textWidth(hint) > w - 6) hint = "[Back] Resume";
     lcd.drawString(hint, x + w / 2, y + h - 14);
-    lcd.drawString("[Hold] Options", x + w / 2, y + h - 1);
+    lcd.drawString("[Press] Options", x + w / 2, y + h - 1);
   } else {
     lcd.drawString("[Press] Pause", x + w / 2, y + h - 1);
   }
