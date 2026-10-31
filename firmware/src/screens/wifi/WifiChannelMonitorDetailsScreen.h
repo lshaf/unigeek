@@ -38,7 +38,7 @@ public:
     _setMac(_mac, mac);
     _setMac(_apMac, apBssid);
     _ssid = apSsid && apSsid[0] ? apSsid : "Hidden";
-    _rssi = String(rssi) + " dBm";
+    _rssi = rssi ? String(rssi) + " dBm" : String("Unknown");
     _channel = String(channel);
     _packets = String(packets);
     _rows[0] = {"MAC", _mac};
@@ -63,7 +63,7 @@ public:
     if (apBssid) _setMac(_apMac, apBssid);
     else _apMac = "Unknown";
     _ssid = apSsid && apSsid[0] ? apSsid : "Unknown";
-    _rssi = String(rssi) + " dBm";
+    _rssi = rssi ? String(rssi) + " dBm" : String("Unknown");
     _channel = String(channel);
     _rows[0] = {"MAC", _mac};
     _rows[1] = {"RSSI", _rssi};
@@ -73,6 +73,33 @@ public:
     _rows[5] = {"Vendor", "Looking up..."};
     _vendorRow = 5;
     _count = 6;
+  }
+
+  // Watchcat probe-request station: what it searched for and how often. A
+  // locally administered (randomized) MAC can change and has no vendor.
+  void configureProbe(const uint8_t* mac, int rssi, uint8_t channel, int requests,
+                      const char (*ssids)[33], uint8_t ssidCount) {
+    _client = true;
+    _lookupVendor = true;
+    memcpy(_stationMac, mac, 6);
+    _setMac(_mac, mac);
+    _rssi = rssi ? String(rssi) + " dBm" : String("Unknown");
+    _channel = String(channel);
+    _packets = String(requests);
+    uint8_t n = 0;
+    _rows[n++] = {"MAC", _mac};
+    _rows[n++] = {"Random MAC", (mac[0] & 0x02) ? "Yes" : "No"};
+    _rows[n++] = {"RSSI", _rssi};
+    _rows[n++] = {"Channel", _channel};
+    _rows[n++] = {"Requests", _packets};
+    if (ssidCount == 0) _rows[n++] = {"Probed", "(wildcard)"};
+    for (uint8_t i = 0; i < ssidCount && i < 3; ++i) {
+      _probed[i] = ssids[i];
+      _rows[n++] = {i == 0 ? "Probed" : "", _probed[i]};
+    }
+    _rows[n] = {"Vendor", "Looking up..."};
+    _vendorRow = n;
+    _count = n + 1;
   }
 
   void onInit() override {
@@ -169,6 +196,7 @@ private:
   uint8_t _stationMac[6] = {};
   uint8_t _count = 0;
   String _mac, _apMac, _ssid, _rssi, _channel, _packets;
+  String _probed[3];
   static constexpr uint8_t MAX_ROWS = 16;
   ScrollListView::Row _rows[MAX_ROWS] = {};
   ScrollListView _list;

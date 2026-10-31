@@ -24,6 +24,9 @@ enum Action : uint8_t {
   SNIFFER  = 1 << 2,
   FOX_HUNT = 1 << 3,
   DEAUTH   = 1 << 4,
+  // Fox Hunt the station's AP (target.bssid) instead of the station. When
+  // both are offered they read "Fox Hunt (Client)" and "Fox Hunt (AP)".
+  FOX_HUNT_AP = 1 << 5,
 };
 
 // Show the "Options" popup with the allowed actions, always in the same order.
