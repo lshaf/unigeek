@@ -987,20 +987,18 @@ void WifiWatchdogScreen::_openSelectedDetails()
   Screen.push(details);
 }
 
-// Actions per list (no Deauth: Watchdog defends):
-// - Deauth/Disassoc: Details, Packet Monitor, Packet Sniffer. No Fox Hunt
-//   yet: the source is usually the real AP's address, forged, so hunting it
-//   leads to that AP, not to the attacker.
-// - Beacon Flood, Evil Twin APs: Details, Packet Monitor, Packet Sniffer,
-//   Fox Hunt (the transmitter stays on one channel).
+// Every Watchdog list offers Details, Packet Monitor, Packet Sniffer and Fox
+// Hunt (no Deauth: Watchdog defends). Fox Hunt follows every frame sent from
+// the selected address. For a deauth source that is a forged copy of a real
+// AP's address ("Spoofed AP: Likely" in Details), that includes the real
+// AP's beacons, so the reading mixes both transmitters.
 void WifiWatchdogScreen::_openOptions()
 {
   WifiTarget target;
   if (!_selectedTarget(target)) return;
-  uint8_t allowed = WifiTargetActions::DETAILS | WifiTargetActions::MONITOR |
-                    WifiTargetActions::SNIFFER;
-  if (_view != VIEW_DEAUTH) allowed |= WifiTargetActions::FOX_HUNT;
-  const auto action = WifiTargetActions::choose(allowed);
+  const auto action = WifiTargetActions::choose(
+      WifiTargetActions::DETAILS | WifiTargetActions::MONITOR |
+      WifiTargetActions::SNIFFER | WifiTargetActions::FOX_HUNT);
   if (action == WifiTargetActions::NONE) { render(); return; }
   if (action == WifiTargetActions::DETAILS) { _openSelectedDetails(); return; }
   _actionOpen = true;
