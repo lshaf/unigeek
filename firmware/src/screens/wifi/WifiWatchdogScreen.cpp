@@ -527,7 +527,7 @@ void WifiWatchdogScreen::_renderEviltwin()
   _setListState(n);
 }
 
-// The APs of the picked network: BSSID, channel and signal.
+// The APs of the picked network: BSSID and channel (signal in Details).
 void WifiWatchdogScreen::_renderTwinAps()
 {
   int n = 0;
@@ -535,7 +535,7 @@ void WifiWatchdogScreen::_renderTwinAps()
     if (n >= MAX_ITEMS) break;
     snprintf(_labels[n], sizeof(_labels[n]), "%02X:%02X:%02X:%02X:%02X:%02X",
              b.bssid[0], b.bssid[1], b.bssid[2], b.bssid[3], b.bssid[4], b.bssid[5]);
-    snprintf(_sublabels[n], sizeof(_sublabels[n]), "CH%d %d", b.channel, b.rssi);
+    snprintf(_sublabels[n], sizeof(_sublabels[n]), "CH%d", b.channel);
     _rows[n].label     = _labels[n];
     _rows[n].value     = _sublabels[n];
     _rows[n].secondary = nullptr;
@@ -614,19 +614,16 @@ void WifiWatchdogScreen::_renderDeauth()
   int n = 0;
   for (const auto& kv : items) {
     if (n >= MAX_ITEMS) break;
+    // The network (or source MAC) and the frame count, like Traffic Analyzer's
+    // "N pkts". Type and last-seen time are in Details.
     const MacAddr&     mac = kv.first;
     const DeauthEntry& e   = kv.second;
-    const char* tag = e.isDisassoc ? "DIS" : "DEA";
-    char cnt[8];
-    snprintf(cnt, sizeof(cnt), e.counter >= 1000 ? "999+" : "%d", e.counter);
     if (!e.ssid.empty())
-      snprintf(_labels[n], sizeof(_labels[n]), "%s (%s x%s)", e.ssid.c_str(), tag, cnt);
+      snprintf(_labels[n], sizeof(_labels[n]), "%s", e.ssid.c_str());
     else
-      snprintf(_labels[n], sizeof(_labels[n]), "%02X:%02X:%02X:%02X:%02X:%02X (%s x%s)",
-               mac[0], mac[1], mac[2], mac[3], mac[4], mac[5], tag, cnt);
-    const unsigned long s = (now - e.timestamp) / 1000UL;
-    if (s == 0) snprintf(_sublabels[n], sizeof(_sublabels[n]), "just now");
-    else        snprintf(_sublabels[n], sizeof(_sublabels[n]), "%lus ago", s);
+      snprintf(_labels[n], sizeof(_labels[n]), "%02X:%02X:%02X:%02X:%02X:%02X",
+               mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+    snprintf(_sublabels[n], sizeof(_sublabels[n]), e.counter >= 1000 ? "x999+" : "x%d", e.counter);
     _rows[n].label     = _labels[n];
     _rows[n].value     = _sublabels[n];
     _rows[n].secondary = nullptr;
@@ -820,8 +817,10 @@ static constexpr int kFooterH = 27;
 void WifiWatchdogScreen::_collectDeauth(std::vector<DeauthItem>& out) const
 {
   out.assign(_deauthMap.begin(), _deauthMap.end());
+  // Most active first, like Traffic Analyzer (ties: most recent first).
   std::sort(out.begin(), out.end(), [](const DeauthItem& a, const DeauthItem& b) {
-    return a.second.timestamp > b.second.timestamp;  // most recent first
+    if (a.second.counter != b.second.counter) return a.second.counter > b.second.counter;
+    return a.second.timestamp > b.second.timestamp;
   });
 }
 
@@ -969,7 +968,8 @@ void WifiWatchdogScreen::_openSelectedDetails()
     const auto& item = _deauthSnap[index];
     const DeauthEntry& e = item.second;
     details->configureDeauth(item.first.data(), e.ssid.c_str(), e.isDisassoc, e.counter,
-                             e.target.data(), e.rssi, e.channel);
+                             e.target.data(), e.rssi, e.channel,
+                             (millis() - e.timestamp) / 1000UL);
   } else if (_view == VIEW_FLOOD && index < (int)_floodSnap.size()) {
     const auto& item = _floodSnap[index];
     const BeaconEntry& e = item.second;

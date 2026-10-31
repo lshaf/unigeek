@@ -425,13 +425,14 @@ WifiWatchcatScreen::_pairMap() const
   return nullptr;
 }
 
-// Most recent first.
+// Most active first, like Traffic Analyzer (ties: most recent first).
 void WifiWatchcatScreen::_collectProbes(std::vector<ProbeItem>& out) const
 {
   out.clear();
   out.reserve(_probeMap.size());
   for (const auto& kv : _probeMap) out.push_back(kv);
   std::sort(out.begin(), out.end(), [](const ProbeItem& a, const ProbeItem& b) {
+    if (a.second.count != b.second.count) return a.second.count > b.second.count;
     return a.second.timestamp > b.second.timestamp;
   });
   if (out.size() > (size_t)MAX_ROWS) out.resize(MAX_ROWS);
@@ -445,6 +446,7 @@ void WifiWatchcatScreen::_collectPairs(std::vector<PairItem>& out) const
   out.reserve(map->size());
   for (const auto& kv : *map) out.push_back(kv);
   std::sort(out.begin(), out.end(), [](const PairItem& a, const PairItem& b) {
+    if (a.second.count != b.second.count) return a.second.count > b.second.count;
     return a.second.timestamp > b.second.timestamp;
   });
   if (out.size() > (size_t)MAX_ROWS) out.resize(MAX_ROWS);
@@ -834,7 +836,7 @@ void WifiWatchcatScreen::_openSelectedDetails()
     const auto& item = _pairSnap[index];
     const ActivityEntry& e = item.second;
     details->configureClient(item.first.sta.data(), e.rssi, e.channel, e.count,
-                             item.first.ap.data(), e.ssid);
+                             item.first.ap.data(), e.ssid[0] ? e.ssid : nullptr, "Frames");
   }
   _releaseRadio();
   Screen.push(details);

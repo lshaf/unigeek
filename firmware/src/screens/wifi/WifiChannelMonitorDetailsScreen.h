@@ -18,7 +18,7 @@ public:
     _lookupVendor = true;
     memcpy(_stationMac, bssid, 6);
     _setMac(_mac, bssid);
-    _ssid = ssid && ssid[0] ? ssid : "Hidden";
+    _ssid = ssid && ssid[0] ? ssid : "<hidden>";
     _rssi = _formatRssi(rssi);
     _channel = String(channel);
     static const char* labels[] = {"Unknown", "Open", "WEP", "WPA", "WPA2", "WPA3", "WPA2/WPA3"};
@@ -33,21 +33,24 @@ public:
     _count = 7;
   }
 
+  // apSsid: nullptr = not known (shown "Unknown"), "" = hidden network.
+  // countLabel names what packets counts (Watchcat counts "Frames").
   void configureClient(const uint8_t* mac, int rssi, uint8_t channel,
-                       uint32_t packets, const uint8_t* apBssid, const char* apSsid) {
+                       uint32_t packets, const uint8_t* apBssid, const char* apSsid,
+                       const char* countLabel = "Packets") {
     _client = true;
     _lookupVendor = true;
     memcpy(_stationMac, mac, 6);
     _setMac(_mac, mac);
     _setMac(_apMac, apBssid);
-    _ssid = apSsid && apSsid[0] ? apSsid : "Hidden";
+    _ssid = !apSsid ? "Unknown" : apSsid[0] ? apSsid : "<hidden>";
     _rssi = rssi ? String(rssi) + " dBm" : String("Unknown");
     _channel = String(channel);
     _packets = String(packets);
     _rows[0] = {"MAC", _mac};
     _rows[1] = {"RSSI", _rssi};
     _rows[2] = {"Channel", _channel};
-    _rows[3] = {"Packets", _packets};
+    _rows[3] = {countLabel, _packets};
     _rows[4] = {"AP BSSID", _apMac};
     _rows[5] = {"AP SSID", _ssid};
     _rows[6] = {"Vendor", "Looking up..."};
@@ -113,7 +116,7 @@ public:
     _lookupVendor = true;
     memcpy(_stationMac, bssid, 6);
     _setMac(_mac, bssid);
-    _ssid = ssid && ssid[0] ? ssid : "Hidden";
+    _ssid = ssid && ssid[0] ? ssid : "<hidden>";
     _rssi = rssi ? _formatRssi(rssi) : String("Unknown");
     _channel = String(channel);
     _packets = extraValue;
@@ -132,7 +135,8 @@ public:
   // when it matches a beaconing AP (ssid known), it is most likely spoofed,
   // and the vendor is the AP's, not the attacker's.
   void configureDeauth(const uint8_t* source, const char* ssid, bool disassoc, int frames,
-                       const uint8_t* target, int rssi, uint8_t channel) {
+                       const uint8_t* target, int rssi, uint8_t channel,
+                       unsigned long secondsAgo) {
     _title = disassoc ? "Disassoc Source" : "Deauth Source";
     _client = false;
     _lookupVendor = true;
@@ -150,12 +154,14 @@ public:
     _rows[1] = {"Spoofed AP", spoofed ? "Likely" : "No"};
     _rows[2] = {"Network", _ssid};
     _rows[3] = {"Target", _apMac};
+    _lastSeen = secondsAgo == 0 ? String("just now") : String(secondsAgo) + "s ago";
     _rows[4] = {"Frames", _packets};
-    _rows[5] = {"RSSI", _rssi};
-    _rows[6] = {"Channel", _channel};
-    _rows[7] = {"Vendor", "Looking up..."};
-    _vendorRow = 7;
-    _count = 8;
+    _rows[5] = {"Last seen", _lastSeen};
+    _rows[6] = {"RSSI", _rssi};
+    _rows[7] = {"Channel", _channel};
+    _rows[8] = {"Vendor", "Looking up..."};
+    _vendorRow = 8;
+    _count = 9;
   }
 
   void onInit() override {
@@ -254,6 +260,7 @@ private:
   uint8_t _count = 0;
   String _mac, _apMac, _ssid, _rssi, _channel, _packets;
   String _probed[3];
+  String _lastSeen;
   static constexpr uint8_t MAX_ROWS = 16;
   ScrollListView::Row _rows[MAX_ROWS] = {};
   ScrollListView _list;
