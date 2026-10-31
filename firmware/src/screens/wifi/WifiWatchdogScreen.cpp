@@ -861,18 +861,18 @@ void WifiWatchdogScreen::_renderFooter()
   lcd.drawFastHLine(x, footerTop, w, TFT_DARKGREY);
   lcd.setTextColor(TFT_DARKGREY, TFT_BLACK);
   lcd.setTextDatum(BC_DATUM);
+  // Shared layout: Options on the upper line, Pause / Resume on the lower.
+  const char* resume = "[Back] Resume Scan";
+  if (lcd.textWidth(resume) > w - 6) resume = "[Back] Resume";
   if (_view == VIEW_TWIN_APS) {
-    // [Back] returns to the network list.
-    lcd.drawString("[Press] Options", x + w / 2, y + h - 1);
+    // [Back] returns to the network list: no hint needed.
+    lcd.drawString("[Press] Options", x + w / 2, y + h - 14);
   } else if (_paused && _view == VIEW_EVILTWIN) {
-    const char* hint = "[Back] Resume Scan";
-    if (lcd.textWidth(hint) > w - 6) hint = "[Back] Resume";
-    lcd.drawString(hint, x + w / 2, y + h - 1);
+    // A network is not a device: no Options at this level.
+    lcd.drawString(resume, x + w / 2, y + h - 1);
   } else if (_paused) {
-    const char* hint = "[Back] Resume Scan";
-    if (lcd.textWidth(hint) > w - 6) hint = "[Back] Resume";
-    lcd.drawString(hint, x + w / 2, y + h - 14);
-    lcd.drawString("[Press] Options", x + w / 2, y + h - 1);
+    lcd.drawString("[Press] Options", x + w / 2, y + h - 14);
+    lcd.drawString(resume, x + w / 2, y + h - 1);
   } else {
     lcd.drawString("[Press] Pause", x + w / 2, y + h - 1);
   }

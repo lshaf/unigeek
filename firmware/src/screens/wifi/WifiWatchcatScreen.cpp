@@ -750,11 +750,12 @@ void WifiWatchcatScreen::_renderFooter()
   lcd.drawFastHLine(x, footerTop, w, TFT_DARKGREY);
   lcd.setTextColor(TFT_DARKGREY, TFT_BLACK);
   lcd.setTextDatum(BC_DATUM);
+  // Shared layout: Options on the upper line, Pause / Resume on the lower.
   if (_paused) {
     const char* hint = "[Back] Resume Scan";
     if (lcd.textWidth(hint) > w - 6) hint = "[Back] Resume";
-    lcd.drawString(hint, x + w / 2, y + h - 14);
-    lcd.drawString("[Press] Options", x + w / 2, y + h - 1);
+    lcd.drawString("[Press] Options", x + w / 2, y + h - 14);
+    lcd.drawString(hint, x + w / 2, y + h - 1);
   } else {
     lcd.drawString("[Press] Pause", x + w / 2, y + h - 1);
   }

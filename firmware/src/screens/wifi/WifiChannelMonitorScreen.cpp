@@ -915,12 +915,14 @@ void WifiChannelMonitorScreen::_renderHints(int x, int y, int w, int h, bool pau
   lcd.drawFastHLine(x, footerTop, w, TFT_DARKGREY);
   lcd.setTextColor(TFT_DARKGREY, TFT_BLACK);
   lcd.setTextDatum(BC_DATUM);
+  // Footer layout shared with Watchcat / Watchdog: the Options hint on the
+  // upper line, Pause / Resume on the lower one. Selecting an AP or a channel
+  // needs no hint: it is clear from context.
   if (paused) {
-    // Selecting an AP or a channel needs no hint: it is clear from context.
     const char* resumeHint = "[Back] Resume Scan";
     if (lcd.textWidth(resumeHint) > w - 6) resumeHint = "[Back] Resume";
-    lcd.drawString(resumeHint, x + w / 2, y + h - 14);
-    lcd.drawString("[Hold] Options", x + w / 2, y + h - 1);
+    lcd.drawString("[Hold] Options", x + w / 2, y + h - 14);
+    lcd.drawString(resumeHint, x + w / 2, y + h - 1);
   } else {
     // Reserve the upper hint line to prevent vertical jumps on pause.
     if (_view == LIVE) {
