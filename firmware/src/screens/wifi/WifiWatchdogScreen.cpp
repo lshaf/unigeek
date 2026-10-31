@@ -850,8 +850,8 @@ int WifiWatchdogScreen::_listHeight()
   return bodyH() - kFooterH;
 }
 
-// Hints follow Traffic Analyzer, with [Press] for Options. Selecting a network
-// in Evil Twin needs no hint.
+// Hints follow Traffic Analyzer, with [Press] for Options; "[Press] Select"
+// where Press opens a deeper list (Evil Twin networks).
 void WifiWatchdogScreen::_renderFooter()
 {
   auto& lcd = Uni.Lcd;
@@ -868,7 +868,8 @@ void WifiWatchdogScreen::_renderFooter()
     // [Back] returns to the network list: no hint needed.
     lcd.drawString("[Press] Options", x + w / 2, y + h - 14);
   } else if (_paused && _view == VIEW_EVILTWIN) {
-    // A network is not a device: no Options at this level.
+    // Press opens the network's APs; a network is not a device, so no Options.
+    lcd.drawString("[Press] Select", x + w / 2, y + h - 14);
     lcd.drawString(resume, x + w / 2, y + h - 1);
   } else if (_paused) {
     lcd.drawString("[Press] Options", x + w / 2, y + h - 14);
