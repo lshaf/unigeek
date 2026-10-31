@@ -645,15 +645,13 @@ void WifiWatchdogScreen::_renderFlood()
   int n = 0;
   for (const auto& kv : items) {
     if (n >= MAX_ITEMS) break;
+    // Same row as Scanner's AP list: SSID, then "BSSID CHx". The beacon rate
+    // is in Details.
     const MacAddr&     mac = kv.first;
     const BeaconEntry& e   = kv.second;
-    const bool flood = e.ratePerSec >= FLOOD_THRESHOLD;
-    if (e.ssid[0] != '\0')
-      snprintf(_labels[n], sizeof(_labels[n]), "%s  %d/s", e.ssid, e.ratePerSec);
-    else
-      snprintf(_labels[n], sizeof(_labels[n]), "%02X:%02X:%02X:%02X:%02X:%02X  %d/s",
-               mac[0], mac[1], mac[2], mac[3], mac[4], mac[5], e.ratePerSec);
-    snprintf(_sublabels[n], sizeof(_sublabels[n]), "%s", flood ? "Beacon flood" : "Normal");
+    snprintf(_labels[n], sizeof(_labels[n]), "%s", e.ssid[0] ? e.ssid : "<hidden>");
+    snprintf(_sublabels[n], sizeof(_sublabels[n]), "%02X:%02X:%02X:%02X:%02X:%02X CH%d",
+             mac[0], mac[1], mac[2], mac[3], mac[4], mac[5], e.channel);
     _rows[n].label     = _labels[n];
     _rows[n].value     = _sublabels[n];
     _rows[n].secondary = nullptr;
@@ -827,9 +825,12 @@ void WifiWatchdogScreen::_collectDeauth(std::vector<DeauthItem>& out) const
   });
 }
 
+// Only BSSIDs above the flood threshold, like the grid count.
 void WifiWatchdogScreen::_collectFlood(std::vector<FloodItem>& out) const
 {
-  out.assign(_beaconMap.begin(), _beaconMap.end());
+  out.clear();
+  for (const auto& kv : _beaconMap)
+    if (kv.second.ratePerSec >= FLOOD_THRESHOLD) out.push_back(kv);
   std::sort(out.begin(), out.end(), [](const FloodItem& a, const FloodItem& b) {
     return a.second.ratePerSec > b.second.ratePerSec;  // busiest first
   });
@@ -986,14 +987,20 @@ void WifiWatchdogScreen::_openSelectedDetails()
   Screen.push(details);
 }
 
-// No Deauth here: Watchdog defends.
+// Actions per list (no Deauth: Watchdog defends):
+// - Deauth/Disassoc: Details, Packet Monitor, Packet Sniffer. No Fox Hunt
+//   yet: the source is usually the real AP's address, forged, so hunting it
+//   leads to that AP, not to the attacker.
+// - Beacon Flood, Evil Twin APs: Details, Packet Monitor, Packet Sniffer,
+//   Fox Hunt (the transmitter stays on one channel).
 void WifiWatchdogScreen::_openOptions()
 {
   WifiTarget target;
   if (!_selectedTarget(target)) return;
-  const auto action = WifiTargetActions::choose(
-      WifiTargetActions::DETAILS | WifiTargetActions::MONITOR |
-      WifiTargetActions::SNIFFER | WifiTargetActions::FOX_HUNT);
+  uint8_t allowed = WifiTargetActions::DETAILS | WifiTargetActions::MONITOR |
+                    WifiTargetActions::SNIFFER;
+  if (_view != VIEW_DEAUTH) allowed |= WifiTargetActions::FOX_HUNT;
+  const auto action = WifiTargetActions::choose(allowed);
   if (action == WifiTargetActions::NONE) { render(); return; }
   if (action == WifiTargetActions::DETAILS) { _openSelectedDetails(); return; }
   _actionOpen = true;

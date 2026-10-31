@@ -840,14 +840,19 @@ void WifiWatchcatScreen::_openSelectedDetails()
   Screen.push(details);
 }
 
-// No Deauth here: Watchcat observes. Station/AP pairs can hunt either side.
+// Actions per list (no Deauth: Watchcat observes):
+// - Probe Requests: Details, Fox Hunt. The station is not associated and hops
+//   channels, so a single-channel Packet Monitor / Sniffer would see little.
+// - Authentication / Association / EAPOL: Details, Packet Monitor, Packet
+//   Sniffer, and Fox Hunt on either side of the station/AP pair.
 void WifiWatchcatScreen::_openOptions()
 {
   WifiTarget target;
   if (!_selectedTarget(target)) return;
-  uint8_t allowed = WifiTargetActions::DETAILS | WifiTargetActions::MONITOR |
-                    WifiTargetActions::SNIFFER | WifiTargetActions::FOX_HUNT;
-  if (_view != VIEW_PROBES) allowed |= WifiTargetActions::FOX_HUNT_AP;
+  uint8_t allowed = WifiTargetActions::DETAILS | WifiTargetActions::FOX_HUNT;
+  if (_view != VIEW_PROBES)
+    allowed |= WifiTargetActions::MONITOR | WifiTargetActions::SNIFFER |
+               WifiTargetActions::FOX_HUNT_AP;
 
   const auto action = WifiTargetActions::choose(allowed);
   if (action == WifiTargetActions::NONE) { render(); return; }
