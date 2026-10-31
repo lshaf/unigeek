@@ -526,7 +526,9 @@ void WifiChannelMonitorScreen::_renderGraph()
       lcd.drawString(String(ch), x + (ch - 1) * stepX + stepX / 2, baseline + 3);
     lcd.setTextColor(TFT_DARKGREY, TFT_BLACK);
     lcd.setTextDatum(BC_DATUM);
-    lcd.drawString("[Press] Details", x + w / 2, y + h - 1);
+    // Press opens the channel list (then APs, clients, Options): the analysis
+    // behind this overview. "Details" now names the Options entry.
+    lcd.drawString("[Press] Analyze", x + w / 2, y + h - 1);
     lcd.setTextDatum(TL_DATUM);
     _graphChromeDrawn = true;
     _lastPaintedView = GRAPH;
