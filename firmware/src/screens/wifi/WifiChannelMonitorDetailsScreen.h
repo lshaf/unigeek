@@ -8,7 +8,10 @@
 
 class WifiChannelMonitorDetailsScreen : public BaseScreen {
 public:
-  const char* title() override { return _client ? "Client Details" : "AP Details"; }
+  const char* title() override {
+    if (_title) return _title;
+    return _client ? "Client Details" : "AP Details";
+  }
 
   void configureAp(const char* ssid, const uint8_t* bssid, int rssi, uint8_t channel, uint8_t security, int8_t wps) {
     _client = false;
@@ -102,6 +105,59 @@ public:
     _count = n + 1;
   }
 
+  // Watchdog AP-like source (Beacon Flood, Evil Twin): no security / WPS data,
+  // optionally one extra row (e.g. the beacon rate).
+  void configureBssid(const char* ssid, const uint8_t* bssid, int rssi, uint8_t channel,
+                      const char* extraLabel = nullptr, const String& extraValue = String()) {
+    _client = false;
+    _lookupVendor = true;
+    memcpy(_stationMac, bssid, 6);
+    _setMac(_mac, bssid);
+    _ssid = ssid && ssid[0] ? ssid : "Hidden";
+    _rssi = rssi ? _formatRssi(rssi) : String("Unknown");
+    _channel = String(channel);
+    _packets = extraValue;
+    uint8_t n = 0;
+    _rows[n++] = {"SSID", _ssid};
+    _rows[n++] = {"BSSID", _mac};
+    if (extraLabel) _rows[n++] = {extraLabel, _packets};
+    _rows[n++] = {"RSSI", _rssi};
+    _rows[n++] = {"Channel", _channel};
+    _rows[n] = {"Vendor", "Looking up..."};
+    _vendorRow = n;
+    _count = n + 1;
+  }
+
+  // Watchdog deauth/disassoc source. The source address is easily forged:
+  // when it matches a beaconing AP (ssid known), it is most likely spoofed,
+  // and the vendor is the AP's, not the attacker's.
+  void configureDeauth(const uint8_t* source, const char* ssid, bool disassoc, int frames,
+                       const uint8_t* target, int rssi, uint8_t channel) {
+    _title = disassoc ? "Disassoc Source" : "Deauth Source";
+    _client = false;
+    _lookupVendor = true;
+    memcpy(_stationMac, source, 6);
+    _setMac(_mac, source);
+    static const uint8_t kBroadcast[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+    if (memcmp(target, kBroadcast, 6) == 0) _apMac = "All clients";
+    else _setMac(_apMac, target);
+    const bool spoofed = ssid && ssid[0];
+    _ssid = spoofed ? ssid : "Unknown";
+    _rssi = rssi ? _formatRssi(rssi) : String("Unknown");
+    _channel = String(channel);
+    _packets = String(frames);
+    _rows[0] = {"Source", _mac};
+    _rows[1] = {"Spoofed AP", spoofed ? "Likely" : "No"};
+    _rows[2] = {"Network", _ssid};
+    _rows[3] = {"Target", _apMac};
+    _rows[4] = {"Frames", _packets};
+    _rows[5] = {"RSSI", _rssi};
+    _rows[6] = {"Channel", _channel};
+    _rows[7] = {"Vendor", "Looking up..."};
+    _vendorRow = 7;
+    _count = 8;
+  }
+
   void onInit() override {
     _list.setRows(_rows, _count);
     _list.resetScroll();
@@ -190,6 +246,7 @@ private:
                            rssi >= -70 ? "Better" : rssi >= -80 ? "Low" : "Very Low";
     return "[" + String(rssi) + "] " + strength;
   }
+  const char* _title = nullptr;
   bool _client = false;
   bool _lookupVendor = false;
   uint8_t _vendorRow = 5;

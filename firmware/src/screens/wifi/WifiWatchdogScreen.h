@@ -10,6 +10,8 @@
 #include "ui/templates/BaseScreen.h"
 #include "ui/views/ScrollListView.h"
 
+struct WifiTarget;
+
 class WifiWatchdogScreen : public BaseScreen
 {
 public:
@@ -50,27 +52,38 @@ public:
     }
   };
 
+  // The source address of deauth frames is easily forged: when it matches a
+  // beaconing AP (ssid known), it is most likely spoofed. target = address 1
+  // (FF:FF:FF:FF:FF:FF = every client).
   struct DeauthEntry {
     std::string   ssid;
     unsigned long timestamp  = 0;
     int           counter    = 0;
     bool          isDisassoc = false;
+    MacAddr       target     = {};
+    int8_t        rssi       = 0;
+    uint8_t       channel    = 0;
   };
 
   struct BeaconWindow {
     char     ssid[33] = {};
     uint16_t count    = 0;
+    int8_t   rssi     = 0;
+    uint8_t  channel  = 0;
   };
 
   struct BeaconEntry {
     char          ssid[33]   = {};
     int           ratePerSec = 0;
     unsigned long lastSeen   = 0;
+    int8_t        rssi       = 0;
+    uint8_t       channel    = 0;
   };
 
   struct BssidInfo {
     MacAddr bssid;
     uint8_t channel;
+    int8_t  rssi;
   };
 
   static std::unordered_map<MacAddr, std::string,                MacHash, MacEqual> _ssidMap;
@@ -94,22 +107,29 @@ private:
   // flood keeps refreshing "last seen") until the heap is exhausted.
   static constexpr size_t        MAX_TRACKED_MAC = 256;
 
-  enum View  { VIEW_OVERALL, VIEW_DEAUTH, VIEW_FLOOD, VIEW_EVILTWIN };
+  // VIEW_TWIN_APS: the APs of the network picked in the paused Evil Twin list.
+  enum View  { VIEW_OVERALL, VIEW_DEAUTH, VIEW_FLOOD, VIEW_EVILTWIN, VIEW_TWIN_APS };
 
   struct DeauthEvent {
     MacAddr       mac;
+    MacAddr       target;
     unsigned long timestamp;
     bool          isDisassoc;
+    int8_t        rssi;
+    uint8_t       channel;
   };
 
   struct SsidEvent {
     MacAddr bssid;
     char    ssid[33];
     uint8_t channel;
+    int8_t  rssi;
   };
 
   struct BeaconEvent {
     MacAddr bssid;
+    int8_t  rssi;
+    uint8_t channel;
   };
 
   static DeauthEvent     _ring[MAX_RING];
@@ -137,6 +157,20 @@ private:
   int                 _prevCounts[4]    = {-1, -1, -1, -1};
   int                 _karmaBaseline    = 0;
   ScrollListView      _scroll;
+
+  // Paused lists (Traffic Analyzer style): frozen snapshots, so the selection
+  // can't move while the live maps change.
+  using DeauthItem = std::pair<MacAddr, DeauthEntry>;
+  using FloodItem  = std::pair<MacAddr, BeaconEntry>;
+  using TwinItem   = std::pair<std::string, std::vector<BssidInfo>>;
+  bool                    _paused      = false;
+  bool                    _holdHandled = false;
+  bool                    _actionOpen  = false;  // a tool was pushed from a list
+  int                     _twinSel     = 0;      // network row to return to
+  std::vector<DeauthItem> _deauthSnap;
+  std::vector<FloodItem>  _floodSnap;
+  std::vector<TwinItem>   _twinSnap;
+  TwinItem                _twinAps;              // network shown in VIEW_TWIN_APS
   ScrollListView::Row _rows[MAX_ROWS]          = {};
   char                _labels[MAX_ROWS][64]    = {};
   char                _sublabels[MAX_ITEMS][64] = {};
@@ -150,6 +184,19 @@ private:
   void _renderDeauth();
   void _renderFlood();
   void _renderEviltwin();
+  void _renderTwinAps();
   void _setListState(int newCount);
   void _drawBackButton();
+  void _collectDeauth(std::vector<DeauthItem>& out) const;
+  void _collectFlood(std::vector<FloodItem>& out) const;
+  void _collectTwins(std::vector<TwinItem>& out) const;
+  int  _listHeight();
+  void _renderFooter();
+  void _pause();
+  void _resume();
+  void _leaveList();
+  bool _selectedTarget(WifiTarget& target) const;
+  void _openSelectedDetails();
+  void _openOptions();
+  void _releaseRadio();
 };
