@@ -4,12 +4,8 @@
 #include "core/ConfigManager.h"
 #include "core/AchievementManager.h"
 #include "screens/wifi/WifiMenuScreen.h"
-#include "screens/wifi/WifiPacketMonitorScreen.h"
-#include "screens/wifi/WifiPacketSnifferScreen.h"
-#include "screens/wifi/WifiFoxHuntScreen.h"
-#include "screens/wifi/WifiDeauthDisassocScreen.h"
 #include "screens/wifi/WifiChannelMonitorDetailsScreen.h"
-#include "ui/actions/InputSelectAction.h"
+#include "screens/wifi/WifiTargetActions.h"
 #include "ui/actions/ShowStatusAction.h"
 
 // Security classification from complete Beacon/Probe Response information elements.
@@ -807,27 +803,62 @@ void WifiChannelMonitorScreen::_renderClients()
 
 void WifiChannelMonitorScreen::_openOptions()
 {
-  if (_view != PAUSED && _view != AP_PAUSED && _view != CLIENT_PAUSED) return;
-  static const InputSelectAction::Option channelOptions[] = {
-    {"Packet Monitor", "monitor", nullptr, 0, false},
-    {"Packet Sniffer", "sniffer", nullptr, 0, false},
-  };
-  static const InputSelectAction::Option targetOptions[] = {
-    {"Details", "details", nullptr, 0, false},
-    {"Packet Monitor", "monitor", nullptr, 0, false},
-    {"Packet Sniffer", "sniffer", nullptr, 0, false},
-    {"Fox Hunt", "foxhunt", nullptr, 0, false},
-    {"Deauth/Disassoc", "deauth", nullptr, 0, false},
-  };
-  const bool target = _view != PAUSED;
-  const char* choice = InputSelectAction::popup("Options", target ? targetOptions : channelOptions,
-                                                target ? 5 : 2);
-  if (choice == nullptr) { render(); return; }
-  if (strcmp(choice, "details") == 0) _openSelectedDetails();
-  else if (strcmp(choice, "monitor") == 0) _openPacketMonitor();
-  else if (strcmp(choice, "sniffer") == 0) _openPacketSniffer();
-  else if (strcmp(choice, "foxhunt") == 0) _openFoxHunt();
-  else if (strcmp(choice, "deauth") == 0) _openDeauth();
+  // Channel list: only the channel-wide tools.
+  if (_view == PAUSED) {
+    const auto action = WifiTargetActions::choose(WifiTargetActions::MONITOR |
+                                                  WifiTargetActions::SNIFFER);
+    if (action == WifiTargetActions::NONE) { render(); return; }
+    const uint8_t channel = _selected + 1;
+    _releaseRadio();
+    WifiTargetActions::openChannel(action, channel);
+    return;
+  }
+
+  WifiTarget target;
+  if (!_selectedTarget(target)) return;
+  const auto action = WifiTargetActions::choose(
+      WifiTargetActions::DETAILS | WifiTargetActions::MONITOR | WifiTargetActions::SNIFFER |
+      WifiTargetActions::FOX_HUNT | WifiTargetActions::DEAUTH);
+  if (action == WifiTargetActions::NONE) { render(); return; }
+  if (action == WifiTargetActions::DETAILS) { _openSelectedDetails(); return; }
+  _releaseRadio();
+  WifiTargetActions::open(action, target);
+}
+
+// The AP or client highlighted in a paused list, as a target for the shared
+// Options actions. False when nothing valid is selected.
+bool WifiChannelMonitorScreen::_selectedTarget(WifiTarget& target)
+{
+  target = WifiTarget{};
+  target.channel = _detailChannel;
+  if (_view == AP_PAUSED) {
+    if (_apSelected >= _frozenApCount) return false;
+    const auto& ap = _frozenAps[_apOrder[_apSelected]];
+    target.client = false;
+    memcpy(target.mac, ap.bssid, 6);
+    memcpy(target.bssid, ap.bssid, 6);
+    memcpy(target.ssid, ap.ssid, sizeof(target.ssid));
+    return true;
+  }
+  if (_view == CLIENT_PAUSED) {
+    if (_clientSelected >= _frozenClientCount) return false;
+    target.client = true;
+    target.hasAp  = true;
+    memcpy(target.mac, _frozenClients[_clientOrder[_clientSelected]].mac, 6);
+    memcpy(target.bssid, _selectedBssid, 6);
+    memcpy(target.ssid, _selectedSsid, sizeof(target.ssid));
+    return true;
+  }
+  return false;
+}
+
+// Hand the radio over to the screen being opened; onRestore() takes it back.
+void WifiChannelMonitorScreen::_releaseRadio()
+{
+  _active = nullptr;
+  esp_wifi_set_promiscuous_rx_cb(nullptr);
+  delay(10);
+  esp_wifi_set_promiscuous(false);
 }
 
 void WifiChannelMonitorScreen::_openSelectedDetails()
@@ -849,126 +880,6 @@ void WifiChannelMonitorScreen::_openSelectedDetails()
   esp_wifi_set_promiscuous_rx_cb(nullptr);
   esp_wifi_set_promiscuous(false);
   Screen.push(details);
-}
-
-void WifiChannelMonitorScreen::_openPacketSniffer()
-{
-  if (_view != PAUSED && _view != AP_PAUSED && _view != CLIENT_PAUSED) return;
-  uint8_t mac[6];
-  uint8_t bssid[6];
-  const uint8_t* apFilter = nullptr;
-  const uint8_t* client = nullptr;
-  const uint8_t channel = _view == PAUSED ? _selected + 1 : _detailChannel;
-  if (_view == AP_PAUSED) {
-    if (_apSelected >= _frozenApCount) return;
-    memcpy(bssid, _frozenAps[_apOrder[_apSelected]].bssid, 6);
-    apFilter = bssid;
-  } else if (_view == CLIENT_PAUSED) {
-    if (_clientSelected >= _frozenClientCount) return;
-    memcpy(bssid, _selectedBssid, 6);
-    apFilter = bssid;
-    memcpy(mac, _frozenClients[_clientOrder[_clientSelected]].mac, 6);
-    client = mac;
-  }
-  auto* sniffer = new WifiPacketSnifferScreen();
-  sniffer->configureFromChannel(channel, apFilter, client);
-  _active = nullptr;
-  esp_wifi_set_promiscuous_rx_cb(nullptr);
-  delay(10);
-  esp_wifi_set_promiscuous(false);
-  Screen.push(sniffer);
-}
-
-void WifiChannelMonitorScreen::_openFoxHunt()
-{
-  if (_view != AP_PAUSED && _view != CLIENT_PAUSED) return;
-  uint8_t mac[6];
-  const bool client = _view == CLIENT_PAUSED;
-  const char* ssid = nullptr;
-  if (client) {
-    if (_clientSelected >= _frozenClientCount) return;
-    memcpy(mac, _frozenClients[_clientOrder[_clientSelected]].mac, 6);
-  } else {
-    if (_apSelected >= _frozenApCount) return;
-    const auto& ap = _frozenAps[_apOrder[_apSelected]];
-    memcpy(mac, ap.bssid, 6);
-    ssid = ap.ssid;
-  }
-  auto* hunt = new WifiFoxHuntScreen();
-  hunt->configureTarget(client, mac, _detailChannel, ssid);
-  _active = nullptr;
-  esp_wifi_set_promiscuous_rx_cb(nullptr);
-  delay(10);
-  esp_wifi_set_promiscuous(false);
-  Screen.push(hunt);
-}
-
-void WifiChannelMonitorScreen::_openDeauth()
-{
-  // Same contextual hand-off as Sniffer / Analyzer: only when an AP or client is selected.
-  if (_view != AP_PAUSED && _view != CLIENT_PAUSED) return;
-
-  uint8_t mac[6];
-  uint8_t bssid[6];
-  const uint8_t* apFilter = nullptr;
-  const uint8_t* client = nullptr;
-  const char* ssid = nullptr;
-  const uint8_t channel = _detailChannel;
-
-  if (_view == AP_PAUSED) {
-    if (_apSelected >= _frozenApCount) return;
-    const auto& ap = _frozenAps[_apOrder[_apSelected]];
-    memcpy(bssid, ap.bssid, 6);
-    apFilter = bssid;
-    if (ap.ssid[0]) ssid = ap.ssid;
-  } else {
-    if (_clientSelected >= _frozenClientCount) return;
-    memcpy(bssid, _selectedBssid, 6);
-    apFilter = bssid;
-    if (_selectedSsid[0]) ssid = _selectedSsid;
-    memcpy(mac, _frozenClients[_clientOrder[_clientSelected]].mac, 6);
-    client = mac;
-  }
-
-  auto* deauth = new WifiDeauthDisassocScreen();
-  deauth->configureFromChannel(channel, apFilter, client, ssid);
-  _active = nullptr;
-  esp_wifi_set_promiscuous_rx_cb(nullptr);
-  delay(10);
-  esp_wifi_set_promiscuous(false);
-  Screen.push(deauth);
-}
-
-void WifiChannelMonitorScreen::_openPacketMonitor()
-{
-  if (_view != PAUSED && _view != AP_PAUSED && _view != CLIENT_PAUSED) return;
-  uint8_t mac[6];
-  uint8_t bssid[6];
-  const uint8_t* apFilter = nullptr;
-  const char* apSsid = nullptr;
-  const uint8_t* client = nullptr;
-  const uint8_t channel = _view == PAUSED ? _selected + 1 : _detailChannel;
-  if (_view == AP_PAUSED) {
-    if (_apSelected >= _frozenApCount) return;
-    memcpy(bssid, _frozenAps[_apOrder[_apSelected]].bssid, 6);
-    apFilter = bssid;
-    apSsid = _frozenAps[_apOrder[_apSelected]].ssid;
-  } else if (_view == CLIENT_PAUSED) {
-    memcpy(bssid, _selectedBssid, 6);
-    apFilter = bssid;
-    apSsid = _selectedSsid;
-    if (_clientSelected < _frozenClientCount) {
-      memcpy(mac, _frozenClients[_clientOrder[_clientSelected]].mac, 6);
-      client = mac;
-    }
-  }
-  auto* monitor = new WifiPacketMonitorScreen();
-  monitor->configureFromChannel(channel, apFilter, client, apSsid);
-  _active = nullptr;
-  esp_wifi_set_promiscuous_rx_cb(nullptr);
-  delay(10);
-  esp_wifi_set_promiscuous(false);
-  Screen.push(monitor);
 }
 
 void WifiChannelMonitorScreen::onRestore()

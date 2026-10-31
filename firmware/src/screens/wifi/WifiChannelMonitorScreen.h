@@ -6,6 +6,8 @@
 
 #include "ui/templates/BaseScreen.h"
 
+struct WifiTarget;
+
 class WifiChannelMonitorScreen : public BaseScreen
 {
 public:
@@ -99,10 +101,8 @@ private:
   void _renderHints(int x, int y, int w, int h, bool paused);
   void _openOptions();
   void _openSelectedDetails();
-  void _openFoxHunt();
-  void _openPacketMonitor();
-  void _openPacketSniffer();
-  void _openDeauth();
+  bool _selectedTarget(WifiTarget& target);
+  void _releaseRadio();
   void _freezeApOrder();
   void _hop();
   void _quit();
