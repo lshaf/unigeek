@@ -103,6 +103,7 @@ void WifiWatchdogScreen::onInit()
   _lastSpamMs = 0;
 
   _karmaBaseline = Achievement.getInt("wifi_karma_attack_detected");
+  _karmaRan      = false;
 
   WiFi.mode(WIFI_MODE_STA);
   esp_wifi_set_promiscuous(true);
@@ -186,7 +187,8 @@ void WifiWatchdogScreen::onUpdate()
           const int idx = row * 2 + col;
           if (idx == 3) {
             Uni.Nav->setSuppressKeys(false);
-            Screen.push(new WifiKarmaDetectorScreen());
+            _karmaRan = true;
+          Screen.push(new WifiKarmaDetectorScreen());
             return;
           }
           static constexpr View kViewMap[] = {VIEW_DEAUTH, VIEW_FLOOD, VIEW_EVILTWIN};
@@ -216,6 +218,7 @@ void WifiWatchdogScreen::onUpdate()
         if (Uni.Speaker) Uni.Speaker->beep();
       } else if (dir == INavigation::DIR_PRESS) {
         if (_gridSel == 3) {
+          _karmaRan = true;
           Screen.push(new WifiKarmaDetectorScreen());
           return;
         }
@@ -771,7 +774,8 @@ void WifiWatchdogScreen::_drawGridCell(int idx, int count)
   sp.drawRoundRect(2, 2, cellW - 4, cellH - 4, 4, held ? Config.getThemeColor() : 0x2104);
   sp.setTextSize(1);
   sp.setTextDatum(TC_DATUM);
-  sp.setTextColor(held ? TFT_WHITE : TFT_LIGHTGREY, TFT_BLACK);
+  const bool dimmed = (idx == 3 && !_karmaRan);  // Karma: runs only on demand
+  sp.setTextColor(held ? TFT_WHITE : (dimmed ? TFT_DARKGREY : TFT_LIGHTGREY), TFT_BLACK);
   sp.drawString(kNames[idx], cellW / 2, 8);
   char buf[6];
   snprintf(buf, sizeof(buf), "%d", count);
@@ -795,7 +799,8 @@ void WifiWatchdogScreen::_drawGridCell(int idx, int count)
   sp.drawRoundRect(2, 2, cellW - 4, cellH - 4, 4, sel ? Config.getThemeColor() : 0x2104);
   sp.setTextSize(1);
   sp.setTextDatum(TC_DATUM);
-  sp.setTextColor(sel ? TFT_WHITE : TFT_LIGHTGREY, TFT_BLACK);
+  const bool dimmed = (idx == 3 && !_karmaRan);  // Karma: runs only on demand
+  sp.setTextColor(sel ? TFT_WHITE : (dimmed ? TFT_DARKGREY : TFT_LIGHTGREY), TFT_BLACK);
   sp.drawString(kNames[idx], cellW / 2, 8);
   char buf[6];
   snprintf(buf, sizeof(buf), "%d", count);

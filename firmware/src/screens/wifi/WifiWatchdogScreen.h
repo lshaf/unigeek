@@ -183,6 +183,9 @@ private:
   int                 _holdCell         = -1;
   int                 _prevCounts[4]    = {-1, -1, -1, -1};
   int                 _karmaBaseline    = 0;
+  // Karma detection is active and only runs inside Karma Detector: until it
+  // has been opened from this Watchdog, its tile is dimmed.
+  bool                _karmaRan         = false;
   ScrollListView      _scroll;
 
   // Paused lists (Traffic Analyzer style): frozen snapshots, so the selection
