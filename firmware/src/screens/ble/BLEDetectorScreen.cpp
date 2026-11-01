@@ -8,6 +8,27 @@
 #include "core/ConfigManager.h"
 #include "screens/ble/BLEMenuScreen.h"
 
+namespace {
+// List geometry of Traffic Analyzer: 19 px rows from 2 px below the body top,
+// a 27 px two-line footer, and a 3 px scrollbar on the right when needed.
+constexpr int kRowH    = 19;
+constexpr int kTop     = 2;
+constexpr int kFooterH = 27;
+
+void drawListScrollBar(int x, int y, int height, int total, int visible, int offset) {
+  if (height <= 0) return;
+  auto& lcd = Uni.Lcd;
+  if (total <= visible || visible <= 0) {
+    lcd.fillRect(x, y, 3, height, TFT_BLACK);
+    return;
+  }
+  lcd.fillRect(x, y, 3, height, 0x2104);
+  const int thumb = min(height, max(4, height * visible / total));
+  const int top = y + (height - thumb) * offset / (total - visible);
+  lcd.fillRect(x, top, 3, thumb, Config.getThemeColor());
+}
+}  // namespace
+
 BLEDetectorScreen* BLEDetectorScreen::_instance = nullptr;
 
 // ── Spam patterns (manufacturer data hex matching) ──────────────────────────
@@ -118,7 +139,7 @@ void BLEDetectorScreen::onUpdate()
       if (dir == INavigation::DIR_UP && _scrollOffset > 0) --_scrollOffset;
       if (dir == INavigation::DIR_DOWN) {
         int total = _deviceCount + (_alertCount ? min(_alertCount, 5) + 1 : 0) + 1;
-        int visible = max(1, (bodyH() - 29) / 14);
+        int visible = max(1, (bodyH() - kTop - kFooterH) / kRowH);
         if (_scrollOffset + visible < total) ++_scrollOffset;
       }
       _chromeDrawn = false;
@@ -330,7 +351,7 @@ void BLEDetectorScreen::_resume()
 
 void BLEDetectorScreen::_ensureSelectedVisible()
 {
-  const int visible = max(1, (bodyH() - 29) / 14);
+  const int visible = max(1, (bodyH() - kTop - kFooterH) / kRowH);
   const int row = _selected + 1; // counts header is row zero
   if (row < _scrollOffset) _scrollOffset = row;
   if (row >= _scrollOffset + visible) _scrollOffset = row - visible + 1;
@@ -400,10 +421,14 @@ void BLEDetectorScreen::_draw()
 {
   auto& lcd = Uni.Lcd;
 
-  static constexpr int rowH = 14;
-  const int contentY = bodyY() + 2;
-  const int contentH = bodyH() - 29;
-  const int visibleRows = contentH / rowH;
+  const int rowH = kRowH;
+  const int contentY = bodyY();
+  const int visibleRows = max(1, (bodyH() - kTop - kFooterH) / rowH);
+  const int contentH = visibleRows * rowH;
+  const int totalRows = 1 + _deviceCount + (_alertCount ? min(_alertCount, 5) + 1 : 0);
+  const bool hasScrollbar = totalRows > visibleRows;
+  const int rightEdge = bodyW() - (hasScrollbar ? 7 : 3);  // sprite coordinates
+  const int ty = kTop;  // text offset inside a row, as in Traffic Analyzer
 
   if (!_chromeDrawn) {
     lcd.fillRect(bodyX(), bodyY(), bodyW(), bodyH(), TFT_BLACK);
@@ -456,7 +481,7 @@ void BLEDetectorScreen::_draw()
   // helper, and a single content sprite at bodyW × contentH stays well within
   // RAM budget for this screen's content area (~ a few KB).
   Sprite sp(&Uni.Lcd);
-  sp.createSprite(bodyW(), contentH);
+  sp.createSprite(bodyW() - 3, contentH);  // scrollbar column drawn separately
   sp.fillSprite(TFT_BLACK);
   sp.setTextSize(1);
 
@@ -480,7 +505,7 @@ void BLEDetectorScreen::_draw()
     snprintf(hdr, sizeof(hdr), "F:%d S:%d A:%d B:%d", flp, skim, atag, bchat);
     sp.setTextDatum(TL_DATUM);
     sp.setTextColor(TFT_CYAN, TFT_BLACK);
-    sp.drawString(hdr, 2, rowY);
+    sp.drawString(hdr, 3, rowY + ty);
     advance();
   }
   row++;
@@ -499,8 +524,8 @@ void BLEDetectorScreen::_draw()
     // Selection as in the other lists: theme-coloured rounded row.
     const bool selected = _paused && i == _selected;
     const uint16_t bg = selected ? Config.getThemeColor() : TFT_BLACK;
-    if (selected) sp.fillRoundRect(0, rowY, bodyW(), rowH, 3, bg);
-    sp.fillCircle(4, rowY + 3, 3, dotColor);
+    if (selected) sp.fillRoundRect(0, rowY, rightEdge, rowH, 3, bg);
+    sp.fillCircle(6, rowY + rowH / 2, 3, dotColor);
 
     char label[24];
     if (strcmp(d.type, "AirTag") == 0) {
@@ -519,15 +544,15 @@ void BLEDetectorScreen::_draw()
     snprintf(rssiStr, sizeof(rssiStr), "%ddBm", d.rssi);
     sp.setTextDatum(TR_DATUM);
     sp.setTextColor(selected ? TFT_WHITE : TFT_DARKGREY, bg);
-    sp.drawString(rssiStr, bodyW() - 2, rowY);
+    sp.drawString(rssiStr, rightEdge - 3, rowY + ty);
 
-    const int labelMax = bodyW() - 2 - sp.textWidth(rssiStr) - 6 - 12;
+    const int labelMax = rightEdge - 3 - sp.textWidth(rssiStr) - 6 - 14;
     size_t n = strlen(label);
     while (n > 1 && sp.textWidth(String(label).substring(0, n).c_str()) > labelMax) n--;
     label[n] = '\0';
     sp.setTextDatum(TL_DATUM);
     sp.setTextColor(TFT_WHITE, bg);
-    sp.drawString(label, 12, rowY);
+    sp.drawString(label, 14, rowY + ty);
 
     advance();
   }
@@ -537,7 +562,7 @@ void BLEDetectorScreen::_draw()
     if (rowVisible()) {
       sp.setTextDatum(TL_DATUM);
       sp.setTextColor(TFT_RED, TFT_BLACK);
-      sp.drawString("-- Spam Alerts --", 2, rowY);
+      sp.drawString("-- Spam Alerts --", 3, rowY + ty);
       advance();
     }
     row++;
@@ -548,14 +573,14 @@ void BLEDetectorScreen::_draw()
       int idx = (_alertHead - _alertCount + i + kMaxAlerts) % kMaxAlerts;
       sp.setTextDatum(TL_DATUM);
       sp.setTextColor(TFT_YELLOW, TFT_BLACK);
-      sp.drawString(_alerts[idx].type, 4, rowY);
+      sp.drawString(_alerts[idx].type, 14, rowY + ty);
 
       unsigned long ago = (millis() - _alerts[idx].timestamp) / 1000;
       char ageStr[8];
       snprintf(ageStr, sizeof(ageStr), "%lus", ago);
       sp.setTextDatum(TR_DATUM);
       sp.setTextColor(TFT_DARKGREY, TFT_BLACK);
-      sp.drawString(ageStr, bodyW() - 2, rowY);
+      sp.drawString(ageStr, rightEdge - 3, rowY + ty);
 
       advance();
     }
@@ -563,4 +588,5 @@ void BLEDetectorScreen::_draw()
 
   sp.pushSprite(bodyX(), contentY);
   sp.deleteSprite();
+  drawListScrollBar(bodyX() + bodyW() - 3, contentY, contentH, totalRows, visibleRows, _scrollOffset);
 }
