@@ -125,9 +125,12 @@ private:
   static constexpr int           MAX_RING        = 64;
   static constexpr int           MAX_BEACON_RING = 128;
   static constexpr int           FLOOD_THRESHOLD = 50;
-  // Locally administered BSSIDs heard exactly once in a second that make a
-  // beacon spam (a real AP beacons ~10 times per second from a stable address).
-  static constexpr int           SPAM_MIN_BSSIDS = 10;
+  // Beacon spam: at least SPAM_MIN_BSSIDS locally administered BSSIDs in one
+  // second, each heard at most SPAM_MAX_BEACONS times. Spam tools send a short
+  // burst per throwaway address (UniGeek: 1 frame in Flood mode, 3 in Spam
+  // mode); a real AP beacons ~10 times per second from a stable address.
+  static constexpr int           SPAM_MIN_BSSIDS  = 10;
+  static constexpr int           SPAM_MAX_BEACONS = 3;
   // Hard cap on distinct MACs/SSIDs tracked at once. Beacon/deauth spam
   // tools commonly randomize the source MAC per frame, which would otherwise
   // grow these maps without bound (and past WINDOW_MS pruning, since a live

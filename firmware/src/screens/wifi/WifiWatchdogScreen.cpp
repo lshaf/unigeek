@@ -483,10 +483,11 @@ void WifiWatchdogScreen::_updateRates()
 {
   const unsigned long now = millis();
 
-  // Beacon spam: many random BSSIDs heard exactly once this second.
+  // Beacon spam: many random BSSIDs, each heard only in a short burst.
   std::vector<MacAddr> singles;
   for (auto& kv : _beaconWindow)
-    if (isLocallyAdministered(kv.first.data()) && kv.second.count == 1) singles.push_back(kv.first);
+    if (isLocallyAdministered(kv.first.data()) && kv.second.count <= SPAM_MAX_BEACONS)
+      singles.push_back(kv.first);
   const bool spam = (int)singles.size() >= SPAM_MIN_BSSIDS;
 
   if (spam) {
@@ -523,7 +524,8 @@ void WifiWatchdogScreen::_updateRates()
 
   for (auto& kv : _beaconWindow) {
     // Spam BSSIDs are counted per network above, not as single-address floods.
-    if (spam && isLocallyAdministered(kv.first.data()) && kv.second.count == 1) continue;
+    if (spam && isLocallyAdministered(kv.first.data()) && kv.second.count <= SPAM_MAX_BEACONS)
+      continue;
     auto it = _beaconMap.find(kv.first);
     const bool wasFlood = it != _beaconMap.end() && it->second.ratePerSec >= FLOOD_THRESHOLD;
     if (it == _beaconMap.end()) {
