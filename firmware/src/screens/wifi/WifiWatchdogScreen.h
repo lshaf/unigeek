@@ -4,6 +4,7 @@
 #include <string>
 #include <unordered_map>
 #include <vector>
+#include <bitset>
 #include <WiFi.h>
 #include <esp_wifi.h>
 
@@ -83,8 +84,11 @@ public:
   // Beacon spam: a network announced from many throwaway BSSIDs (random,
   // locally administered addresses, each sending a single beacon), as the
   // Beacon Spam attack does. bssids counts how many were seen.
+  // Names that differ only by a " NN" suffix (the Flood mode's "Name 00".."Name
+  // 31") share one entry, keyed "Name ##"; variants marks the suffixes seen.
   struct SpamEntry {
     int           bssids   = 0;
+    std::bitset<100> variants;
     unsigned long lastSeen = 0;
     int8_t        rssi     = 0;
     uint8_t       channel  = 0;
@@ -96,6 +100,7 @@ public:
     MacAddr     bssid   = {};     // flood only
     std::string ssid;
     int         amount  = 0;      // flood: beacons/s; spam: BSSIDs seen
+    int         variants = 0;     // spam: name variants grouped (0 = one name)
     uint8_t     channel = 0;
     int8_t      rssi    = 0;
   };

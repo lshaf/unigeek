@@ -166,7 +166,9 @@ public:
 
   // Watchdog beacon spam: one network announced from many random BSSIDs.
   // There is no single address, so no vendor lookup.
-  void configureSpam(const char* ssid, int bssids, int rssi, uint8_t channel) {
+  // variants > 0: names differing only by a " NN" suffix, shown as "Name ##".
+  void configureSpam(const char* ssid, int bssids, int rssi, uint8_t channel,
+                     int variants = 0) {
     _title = "Beacon Spam";
     _client = false;
     _lookupVendor = false;
@@ -174,11 +176,14 @@ public:
     _packets = String(bssids);
     _rssi = rssi ? _formatRssi(rssi) : String("Unknown");
     _channel = String(channel);
-    _rows[0] = {"SSID", _ssid};
-    _rows[1] = {"Random BSSIDs", _packets};
-    _rows[2] = {"RSSI", _rssi};
-    _rows[3] = {"Channel", _channel};
-    _count = 4;
+    _apMac = String(variants);
+    uint8_t n = 0;
+    _rows[n++] = {"SSID", _ssid};
+    if (variants > 0) _rows[n++] = {"Variants", _apMac};
+    _rows[n++] = {"Random BSSIDs", _packets};
+    _rows[n++] = {"RSSI", _rssi};
+    _rows[n++] = {"Channel", _channel};
+    _count = n;
   }
 
   void onInit() override {

@@ -3,6 +3,7 @@
 #include "screens/wifi/WifiTargetActions.h"
 
 #include <algorithm>
+#include <cctype>
 #include "karma/WifiKarmaDetectorScreen.h"
 #include "core/Device.h"
 #include "core/ScreenManager.h"
@@ -27,6 +28,18 @@ unsigned long                                                                   
 namespace {
 // Random BSSIDs (beacon spam tools) are locally administered addresses.
 inline bool isLocallyAdministered(const uint8_t* mac) { return (mac[0] & 0x02) != 0; }
+
+// "Name 07" -> "Name ##" (suffix 7); other names unchanged (suffix -1).
+std::string spamKey(const std::string& ssid, int& suffix) {
+  suffix = -1;
+  const size_t n = ssid.size();
+  if (n >= 4 && ssid[n - 3] == ' ' && isdigit((unsigned char)ssid[n - 2]) &&
+      isdigit((unsigned char)ssid[n - 1])) {
+    suffix = (ssid[n - 2] - '0') * 10 + (ssid[n - 1] - '0');
+    return ssid.substr(0, n - 2) + "##";
+  }
+  return ssid;
+}
 }  // namespace
 
 WifiWatchdogScreen::DeauthEvent  WifiWatchdogScreen::_ring[MAX_RING]              = {};
@@ -436,10 +449,16 @@ void WifiWatchdogScreen::_drainRings()
         }
         if (!found && list.size() < 8) {
           list.push_back({bssid, ev.channel, ev.rssi});
-          // Counted once, when a network first shows a second AP (it used to
-          // be counted on every list refresh, writing storage every second).
-          if (list.size() == 2 && Achievement.inc("wifi_evil_twin_detected") == 1)
-            Achievement.unlock("wifi_evil_twin_detected");
+          // Counted once, when a network first shows a second AP with a
+          // factory (not random) address: a beacon spam reuses names from
+          // random addresses for a moment before it is recognised.
+          if (!laa) {
+            int factory = 0;
+            for (const auto& b : list)
+              if (!isLocallyAdministered(b.bssid.data())) factory++;
+            if (factory == 2 && Achievement.inc("wifi_evil_twin_detected") == 1)
+              Achievement.unlock("wifi_evil_twin_detected");
+          }
         }
       }
     }
@@ -494,7 +513,8 @@ void WifiWatchdogScreen::_updateRates()
     _lastSpamMs = now;
     for (const auto& mac : singles) {
       auto nameIt = _laaSsids.find(mac);
-      const std::string ssid = nameIt != _laaSsids.end() ? nameIt->second : std::string();
+      int suffix = -1;
+      const std::string ssid = spamKey(nameIt != _laaSsids.end() ? nameIt->second : std::string(), suffix);
       const auto& w = _beaconWindow[mac];
       auto it = _spamMap.find(ssid);
       if (it == _spamMap.end()) {
@@ -504,6 +524,7 @@ void WifiWatchdogScreen::_updateRates()
           Achievement.unlock("wifi_beacon_flood");
       }
       if (it->second.bssids < 9999) ++it->second.bssids;
+      if (suffix >= 0) it->second.variants.set(suffix);
       it->second.lastSeen = now;
       it->second.rssi     = w.rssi;
       it->second.channel  = w.channel;
@@ -919,9 +940,10 @@ void WifiWatchdogScreen::_collectFlood(std::vector<FloodItem>& out) const
   }
   for (const auto& kv : _spamMap) {
     FloodRow r;
-    r.spam    = true;
-    r.ssid    = kv.first;
-    r.amount  = kv.second.bssids;
+    r.spam     = true;
+    r.ssid     = kv.first;
+    r.amount   = kv.second.bssids;
+    r.variants = (int)kv.second.variants.count();
     r.channel = kv.second.channel;
     r.rssi    = kv.second.rssi;
     out.push_back(r);
@@ -1071,7 +1093,7 @@ void WifiWatchdogScreen::_openSelectedDetails()
   } else if (_view == VIEW_FLOOD && index < (int)_floodSnap.size()) {
     const auto& row = _floodSnap[index];
     if (row.spam)
-      details->configureSpam(row.ssid.c_str(), row.amount, row.rssi, row.channel);
+      details->configureSpam(row.ssid.c_str(), row.amount, row.rssi, row.channel, row.variants);
     else
       details->configureBssid(row.ssid.c_str(), row.bssid.data(), row.rssi, row.channel,
                               "Beacons", String(row.amount) + "/s");
