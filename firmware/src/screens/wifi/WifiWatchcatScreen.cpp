@@ -197,6 +197,7 @@ void WifiWatchcatScreen::onUpdate()
     }
 #endif
   } else {
+    _scroll.tickMarquee();  // scroll an overlong value on the selected row
     // Like Traffic Analyzer. Live: [Press] pauses, [Back] returns to the grid.
     // Paused: arrows select, [Press] opens Options (Details first; there is
     // no deeper level to select, unlike Traffic Analyzer's AP list),

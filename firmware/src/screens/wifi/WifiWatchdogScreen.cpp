@@ -282,6 +282,7 @@ void WifiWatchdogScreen::onUpdate()
 #endif
 
   } else {
+    _scroll.tickMarquee();  // scroll an overlong value on the selected row
     // Like Traffic Analyzer. Live: [Press] pauses, [Back] returns to the grid.
     // Paused: arrows select, [Press] opens Options (Details first), [Back]
     // resumes; [Hold] opens Options too. Evil Twin networks: [Press] lists

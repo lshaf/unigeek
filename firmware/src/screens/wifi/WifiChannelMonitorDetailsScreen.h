@@ -159,7 +159,8 @@ public:
     _rows[5] = {"Last seen", _lastSeen};
     _rows[6] = {"RSSI", _rssi};
     _rows[7] = {"Channel", _channel};
-    _rows[8] = {"Vendor", "Looking up..."};
+    // A forged address is the AP's: its vendor is the AP's, not the attacker's.
+    _rows[8] = {spoofed ? "AP vendor" : "Vendor", "Looking up..."};
     _vendorRow = 8;
     _count = 9;
   }
@@ -189,6 +190,12 @@ public:
   void onInit() override {
     _list.setRows(_rows, _count);
     _list.resetScroll();
+    // A locally administered (random) address belongs to no vendor: say so
+    // instead of looking it up.
+    if (_lookupVendor && (_stationMac[0] & 0x02)) {
+      _lookupVendor = false;
+      _rows[_vendorRow].value = "Random address";
+    }
     if (_lookupVendor) {
       if (!VendorResolver::instance().request(_stationMac))
         _rows[_vendorRow].value = "Unknown";
@@ -227,7 +234,7 @@ private:
     // Match ScrollListView: 3px scrollbar, 4px padding, 2px label inset.
     const int fullWidth = bodyW() - 3 - 4 - 2;
     Uni.Lcd.setTextSize(1);
-    const int labelWidth = Uni.Lcd.textWidth("Vendor") + 8;
+    const int labelWidth = Uni.Lcd.textWidth(_rows[_vendorRow].label) + 8;  // "Vendor" / "AP vendor"
     const int firstWidth = fullWidth - labelWidth;
     if (Uni.Lcd.textWidth(name.c_str()) <= firstWidth) {
       _list.setRows(_rows, _count);

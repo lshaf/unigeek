@@ -49,9 +49,28 @@ public:
   // a signal), the value in dark grey (cyan when selected). Off by default:
   // key/value screens such as Details keep grey labels and white values.
   void setResultStyle(bool on) { _resultStyle = on; }
+
+  // Result style: scrolls the selected row's value when it doesn't fit (the
+  // marquee of Scanner's ListScreen). Call from the screen's onUpdate();
+  // redraws only while that value overflows. No-op otherwise.
+  void tickMarquee() {
+    if (!_resultStyle || !_selectable || _count == 0 || _w == 0) return;
+    if (_selected < 0 || _selected >= (int)_count) return;
+    Uni.Lcd.setTextSize(1);
+    if (Uni.Lcd.textWidth(_rows[_selected].value.c_str()) <= _valueMaxW()) {
+      if (_marqueeOffset != 0) { _marqueeOffset = 0; _draw(); }
+      return;
+    }
+    if (millis() - _marqueeTimer < 180) return;
+    _marqueeTimer = millis();
+    _marqueeOffset++;
+    _draw();
+  }
   bool selectable() const { return _selectable; }
   int  selected() const { return _selected; }
   void setSelected(int index) {
+    _marqueeOffset = 0;
+    _marqueeTimer  = millis();
     _selected = (index < 0) ? 0 : index;
     if (_selected >= (int)_count) _selected = _count > 0 ? (int)_count - 1 : 0;
     _ensureVisible();
@@ -104,6 +123,31 @@ private:
   int     _offset = 0;
   bool    _selectable = false;
   bool    _resultStyle = false;
+  int16_t       _marqueeOffset = 0;
+  unsigned long _marqueeTimer  = 0;
+
+  // Result style: the value takes at most half the row.
+  int _valueMaxW() const { return (_w - SCROLL_W) / 2; }
+
+  // Visible slice of `text` for the marquee offset, looping ("text     text").
+  String _marqueeWindow(Sprite& sp, const char* text, int availW) const {
+    String base(text);
+    base += "     ";
+    const int loopLen = (int)base.length();
+    if (loopLen <= 0) return String(text);
+    String window = (base + base).substring(_marqueeOffset % loopLen);
+    int n = window.length();
+    while (n > 1 && sp.textWidth(window.substring(0, n).c_str()) > availW) n--;
+    return window.substring(0, n);
+  }
+
+  // Longest prefix of `text` that fits `availW`.
+  static String _fit(Sprite& sp, const char* text, int availW) {
+    String s(text ? text : "");
+    int n = s.length();
+    while (n > 0 && sp.textWidth(s.substring(0, n).c_str()) > availW) n--;
+    return s.substring(0, n);
+  }
 
   static uint16_t _rssiColor(int16_t rssi) {
     if (rssi >= -60) return TFT_GREEN;
@@ -138,6 +182,8 @@ private:
     if (next > last) next = last;
     if (next == _selected) return false;
     _selected = next;
+    _marqueeOffset = 0;
+    _marqueeTimer  = millis();
     _ensureVisible();
     _draw();
     return true;
@@ -176,19 +222,38 @@ private:
       const char* label = _rows[idx].label;
       const bool actionHint = label &&
           (strncmp(label, "[Press]", 7) == 0 || strncmp(label, "[Hold]", 6) == 0);
-      if (_resultStyle) {
-        const Row& r = _rows[idx];
-        sp.setTextColor(r.hasRssi ? _rssiColor(r.rssi) : (isSelected ? TFT_WHITE : TFT_LIGHTGREY));
-      } else {
-        sp.setTextColor(isSelected ? TFT_WHITE : (actionHint ? TFT_YELLOW : TFT_DARKGREY));
-      }
-      sp.setTextDatum(TL_DATUM);
-      sp.drawString(label ? label : "", 2, 3);
-
       if (_resultStyle && !_rows[idx].secondary) {
+        // Value on the right, at most half the row (scrolling when selected and
+        // too long, cut otherwise); the label is cut before it. No overlap.
+        const Row& r = _rows[idx];
+        const char* value = r.value.c_str();
+        const int   valueMax = _valueMaxW();
+        String valueText = sp.textWidth(value) <= valueMax ? String(value)
+                         : isSelected ? _marqueeWindow(sp, value, valueMax)
+                                      : _fit(sp, value, valueMax);
+        const int valueW = sp.textWidth(valueText.c_str());
         sp.setTextColor(isSelected ? TFT_CYAN : TFT_DARKGREY);
         sp.setTextDatum(TR_DATUM);
-        sp.drawString(_rows[idx].value.c_str(), textW, 3);
+        sp.drawString(valueText.c_str(), textW, 3);
+
+        sp.setTextColor(r.hasRssi ? _rssiColor(r.rssi) : (isSelected ? TFT_WHITE : TFT_LIGHTGREY));
+        sp.setTextDatum(TL_DATUM);
+        const int labelMax = textW - valueW - 6 - 2;
+        sp.drawString(_fit(sp, label, labelMax).c_str(), 2, 3);
+      } else if (_resultStyle) {
+        // (rows with a secondary value keep the default layout below)
+        sp.setTextColor(_rows[idx].hasRssi ? _rssiColor(_rows[idx].rssi)
+                                           : (isSelected ? TFT_WHITE : TFT_LIGHTGREY));
+        sp.setTextDatum(TL_DATUM);
+        sp.drawString(label ? label : "", 2, 3);
+      } else {
+        sp.setTextColor(isSelected ? TFT_WHITE : (actionHint ? TFT_YELLOW : TFT_DARKGREY));
+        sp.setTextDatum(TL_DATUM);
+        sp.drawString(label ? label : "", 2, 3);
+      }
+
+      if (_resultStyle && !_rows[idx].secondary) {
+        // drawn above
       } else if (_rows[idx].secondary) {
         // Preserve the MAC and add a short grey vendor on the right.
         sp.setTextColor(TFT_WHITE);
