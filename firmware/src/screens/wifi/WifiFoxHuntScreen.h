@@ -15,6 +15,10 @@ public:
   void onRender() override;
   void onItemSelected(uint8_t index) override;
   void onBack() override;
+  // Track a deauth/disassoc source: only those frames from the address count.
+  // When the address is a forged copy of a real AP's, the AP's own beacons and
+  // data then no longer mix into the reading, so it leads to the attacker.
+  void configureDeauthTarget(const uint8_t mac[6], uint8_t channel, const char* name = nullptr);
 
 private:
   static constexpr int MAX_SCAN = 20;
@@ -51,6 +55,7 @@ private:
   Sprite*         _pulseSprite = nullptr;
   int16_t         _pulseSpriteW = 0;
   int16_t         _pulseSpriteH = 0;
+  bool            _directDeauthTarget = false;
 
   void _showModes();
   void _doScan();

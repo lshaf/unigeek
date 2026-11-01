@@ -1,6 +1,7 @@
 #include "WifiWatchdogScreen.h"
 #include "screens/wifi/WifiChannelMonitorDetailsScreen.h"
 #include "screens/wifi/WifiTargetActions.h"
+#include "screens/wifi/WifiFoxHuntScreen.h"
 
 #include <algorithm>
 #include <cctype>
@@ -1124,10 +1125,10 @@ void WifiWatchdogScreen::_openSelectedDetails()
 }
 
 // Every Watchdog list offers Details, Packet Monitor, Packet Sniffer and Fox
-// Hunt (no Deauth: Watchdog defends). Fox Hunt follows every frame sent from
-// the selected address. For a deauth source that is a forged copy of a real
-// AP's address ("Spoofed AP: Likely" in Details), that includes the real
-// AP's beacons, so the reading mixes both transmitters.
+// Hunt (no Deauth: Watchdog defends). For a deauth source, Fox Hunt counts
+// only deauth/disassoc frames from the address: when it is a forged copy of a
+// real AP's ("Spoofed AP: Likely" in Details), the AP's own beacons stay out
+// of the reading, which then follows the attacker.
 void WifiWatchdogScreen::_openOptions()
 {
   // A spammed network has no single address: Details and channel-wide
@@ -1155,6 +1156,17 @@ void WifiWatchdogScreen::_openOptions()
   if (action == WifiTargetActions::DETAILS) { _openSelectedDetails(); return; }
   _actionOpen = true;
   _releaseRadio();
+  if (action == WifiTargetActions::FOX_HUNT && _view == VIEW_DEAUTH) {
+    char name[48];
+    if (target.ssid[0]) snprintf(name, sizeof(name), "Deauth: %s", target.ssid);
+    else snprintf(name, sizeof(name), "Deauth: %02X:%02X:%02X:%02X:%02X:%02X",
+                  target.mac[0], target.mac[1], target.mac[2],
+                  target.mac[3], target.mac[4], target.mac[5]);
+    auto* hunt = new WifiFoxHuntScreen();
+    hunt->configureDeauthTarget(target.mac, target.channel, name);
+    Screen.push(hunt);
+    return;
+  }
   WifiTargetActions::open(action, target);
 }
 

@@ -42,6 +42,8 @@ static bool _foxValidMac(const uint8_t* mac) {
 static volatile int _foxWifiRssi = 0;
 static volatile uint32_t _foxWifiSeenMs = 0;
 
+static volatile bool _foxDeauthOnly = false;  // count only deauth/disassoc frames
+
 static void _foxWifiSnifferCb(void* buf, wifi_promiscuous_pkt_type_t type)
 {
   if (type != WIFI_PKT_DATA && type != WIFI_PKT_MGMT) return;
@@ -72,6 +74,12 @@ static void _foxWifiSnifferCb(void* buf, wifi_promiscuous_pkt_type_t type)
   if (_foxTrackClient && !_foxStationAddress(pkt->payload, pkt->rx_ctrl.sig_len, false)) return;
   const uint8_t* a2 = pkt->payload + 10;
   if (memcmp(a2, _foxTargetBssid, 6) != 0) return;
+  if (_foxDeauthOnly) {
+    const uint8_t fc      = pkt->payload[0];
+    const uint8_t ftype   = (fc >> 2) & 3;
+    const uint8_t subtype = (fc >> 4) & 15;
+    if (ftype != 0 || (subtype != 12 && subtype != 10)) return;  // deauth / disassoc
+  }
 
   _foxWifiRssi = pkt->rx_ctrl.rssi;
   _foxWifiSeenMs = millis();
@@ -300,6 +308,7 @@ void WifiFoxHuntScreen::_startTracking(int index)
   _displayedLive = false;
   _continuousTone = false;
   _feedback.reset(_entries[index].rssi);
+  _foxDeauthOnly = _directDeauthTarget;
 
   WiFi.mode(WIFI_MODE_STA);
   esp_wifi_set_promiscuous(true);
@@ -317,6 +326,7 @@ void WifiFoxHuntScreen::_stopTracking()
   _foxTrackClient = false;
   delay(10);
   esp_wifi_set_promiscuous(false);
+  _foxDeauthOnly = false;
   if (Uni.Speaker) Uni.Speaker->noTone();
   _continuousTone = false;
   _destroyTrackingUi();
@@ -482,4 +492,11 @@ void WifiFoxHuntScreen::_destroyTrackingUi()
   _pulseSpriteW = 0;
   _pulseSpriteH = 0;
   _uiInitialized = false;
+}
+
+void WifiFoxHuntScreen::configureDeauthTarget(const uint8_t mac[6], uint8_t channel,
+                                              const char* name)
+{
+  configureTarget(false, mac, channel, name);
+  _directDeauthTarget = true;
 }
