@@ -80,6 +80,26 @@ public:
     uint8_t       channel    = 0;
   };
 
+  // Beacon spam: a network announced from many throwaway BSSIDs (random,
+  // locally administered addresses, each sending a single beacon), as the
+  // Beacon Spam attack does. bssids counts how many were seen.
+  struct SpamEntry {
+    int           bssids   = 0;
+    unsigned long lastSeen = 0;
+    int8_t        rssi     = 0;
+    uint8_t       channel  = 0;
+  };
+
+  // One Beacon Flood row: a BSSID above the flood rate, or a spammed network.
+  struct FloodRow {
+    bool        spam    = false;
+    MacAddr     bssid   = {};     // flood only
+    std::string ssid;
+    int         amount  = 0;      // flood: beacons/s; spam: BSSIDs seen
+    uint8_t     channel = 0;
+    int8_t      rssi    = 0;
+  };
+
   struct BssidInfo {
     MacAddr bssid;
     uint8_t channel;
@@ -91,6 +111,10 @@ public:
   static std::unordered_map<MacAddr, DeauthEntry,   MacHash, MacEqual> _deauthMap;
   static std::unordered_map<MacAddr, BeaconWindow,  MacHash, MacEqual> _beaconWindow;
   static std::unordered_map<MacAddr, BeaconEntry,   MacHash, MacEqual> _beaconMap;
+  static std::unordered_map<std::string, SpamEntry> _spamMap;
+  // Per second: network of each locally administered BSSID heard (for spam).
+  static std::unordered_map<MacAddr, std::string, MacHash, MacEqual> _laaSsids;
+  static unsigned long _lastSpamMs;
 
   static void _promiscuousCb(void* buf, wifi_promiscuous_pkt_type_t type);
 
@@ -101,6 +125,9 @@ private:
   static constexpr int           MAX_RING        = 64;
   static constexpr int           MAX_BEACON_RING = 128;
   static constexpr int           FLOOD_THRESHOLD = 50;
+  // Locally administered BSSIDs heard exactly once in a second that make a
+  // beacon spam (a real AP beacons ~10 times per second from a stable address).
+  static constexpr int           SPAM_MIN_BSSIDS = 10;
   // Hard cap on distinct MACs/SSIDs tracked at once. Beacon/deauth spam
   // tools commonly randomize the source MAC per frame, which would otherwise
   // grow these maps without bound (and past WINDOW_MS pruning, since a live
@@ -161,7 +188,7 @@ private:
   // Paused lists (Traffic Analyzer style): frozen snapshots, so the selection
   // can't move while the live maps change.
   using DeauthItem = std::pair<MacAddr, DeauthEntry>;
-  using FloodItem  = std::pair<MacAddr, BeaconEntry>;
+  using FloodItem  = FloodRow;
   using TwinItem   = std::pair<std::string, std::vector<BssidInfo>>;
   bool                    _paused      = false;
   bool                    _holdHandled = false;

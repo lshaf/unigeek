@@ -164,6 +164,23 @@ public:
     _count = 9;
   }
 
+  // Watchdog beacon spam: one network announced from many random BSSIDs.
+  // There is no single address, so no vendor lookup.
+  void configureSpam(const char* ssid, int bssids, int rssi, uint8_t channel) {
+    _title = "Beacon Spam";
+    _client = false;
+    _lookupVendor = false;
+    _ssid = ssid && ssid[0] ? ssid : "<hidden>";
+    _packets = String(bssids);
+    _rssi = rssi ? _formatRssi(rssi) : String("Unknown");
+    _channel = String(channel);
+    _rows[0] = {"SSID", _ssid};
+    _rows[1] = {"Random BSSIDs", _packets};
+    _rows[2] = {"RSSI", _rssi};
+    _rows[3] = {"Channel", _channel};
+    _count = 4;
+  }
+
   void onInit() override {
     _list.setRows(_rows, _count);
     _list.resetScroll();
