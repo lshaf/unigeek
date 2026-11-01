@@ -782,8 +782,18 @@ void BLEWatchScreenBase::_leaveList()
   render();
 }
 
-// Details and Fox Hunt, as in BLE Scanner / Detector. BLE Spam has no Fox
-// Hunt: its addresses are random and change with every advertisement.
+// Spam type followed by a BLE Spam Fox Hunt (outlives the Options call).
+static char s_huntSpamType[32] = {};
+
+bool BLEWatchScreenBase::_matchSpamType(NimBLEAdvertisedDevice* dev, const void* type)
+{
+  const char* t = _spamType(dev);
+  return t && strcmp(t, static_cast<const char*>(type)) == 0;
+}
+
+// Details and Fox Hunt, as in BLE Scanner / Detector. BLE Spam draws a new
+// random address per advertisement, so its Fox Hunt follows every
+// advertisement of that spam type (all sent by the one spamming device).
 void BLEWatchScreenBase::_openOptions()
 {
   const int index = _scroll.selected();
@@ -794,7 +804,7 @@ void BLEWatchScreenBase::_openOptions()
     {"Details", "details", nullptr, 0, false},
     {"Fox Hunt", "fox", nullptr, 0, false},
   };
-  const char* choice = InputSelectAction::popup("Options", kAll, spamList ? 1 : 2);
+  const char* choice = InputSelectAction::popup("Options", kAll, 2);
   if (!choice) { render(); return; }
 
   // Hand the scanner over; onRestore() starts ours again on the same list.
@@ -804,6 +814,13 @@ void BLEWatchScreenBase::_openOptions()
     auto* details = new BLEAnalyzerScreen();
     details->configureTarget(target);
     Screen.push(details);
+  } else if (spamList) {
+    snprintf(s_huntSpamType, sizeof(s_huntSpamType), "%s", _snap[index].label);
+    char label[48];
+    snprintf(label, sizeof(label), "Spam: %s", s_huntSpamType);
+    auto* fox = new BLEFoxHuntScreen();
+    fox->configureSignatureTarget(target, label, &BLEWatchScreenBase::_matchSpamType, s_huntSpamType);
+    Screen.push(fox);
   } else {
     auto* fox = new BLEFoxHuntScreen();
     fox->configureTarget(target);
