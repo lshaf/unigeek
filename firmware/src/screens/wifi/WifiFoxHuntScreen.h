@@ -19,6 +19,11 @@ public:
   // When the address is a forged copy of a real AP's, the AP's own beacons and
   // data then no longer mix into the reading, so it leads to the attacker.
   void configureDeauthTarget(const uint8_t mac[6], uint8_t channel, const char* name = nullptr);
+  // Track a beacon spam: every beacon / probe response from a random (locally
+  // administered) BSSID announcing ssid counts, since a spammer draws a new
+  // BSSID per beacon but sends them all from one device. "Name ##" matches
+  // any "Name NN" (two-digit suffix), as Watchdog groups them.
+  void configureSpamTarget(const char* ssid, uint8_t channel, const char* name = nullptr);
 
 private:
   static constexpr int MAX_SCAN = 20;
@@ -56,6 +61,8 @@ private:
   int16_t         _pulseSpriteW = 0;
   int16_t         _pulseSpriteH = 0;
   bool            _directDeauthTarget = false;
+  bool            _directSpamTarget = false;
+  String          _spamSsid;
 
   void _showModes();
   void _doScan();

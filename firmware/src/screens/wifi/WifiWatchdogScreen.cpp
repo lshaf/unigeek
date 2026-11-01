@@ -530,17 +530,30 @@ void WifiWatchdogScreen::_updateRates()
       it->second.lastSeen = now;
       it->second.rssi     = w.rssi;
       it->second.channel  = w.channel;
+    }
 
-      // Throwaway addresses: drop them from the name and Evil Twin maps.
-      _ssidMap.erase(mac);
-      for (auto t = _twinMap.begin(); t != _twinMap.end();) {
-        auto& list = t->second;
+    // Throwaway addresses: drop every random BSSID announcing a spammed
+    // network from the name and Evil Twin maps. Matching by network, not by
+    // this second's BSSIDs: at flood rates the beacon and name rings drop
+    // different frames, so some spam BSSIDs reach the maps without ever being
+    // counted here.
+    auto spammed = [&](const std::string& name) {
+      int suffix = -1;
+      return _spamMap.find(spamKey(name, suffix)) != _spamMap.end();
+    };
+    for (auto t = _twinMap.begin(); t != _twinMap.end();) {
+      auto& list = t->second;
+      if (spammed(t->first)) {
         list.erase(std::remove_if(list.begin(), list.end(),
-                                  [&](const BssidInfo& b) { return b.bssid == mac; }),
+                                  [](const BssidInfo& b) { return isLocallyAdministered(b.bssid.data()); }),
                    list.end());
-        if (list.empty()) t = _twinMap.erase(t);
-        else ++t;
       }
+      if (list.empty()) t = _twinMap.erase(t);
+      else ++t;
+    }
+    for (auto m = _ssidMap.begin(); m != _ssidMap.end();) {
+      if (isLocallyAdministered(m->first.data()) && spammed(m->second)) m = _ssidMap.erase(m);
+      else ++m;
     }
   }
   _laaSsids.clear();
@@ -1131,18 +1144,29 @@ void WifiWatchdogScreen::_openSelectedDetails()
 // of the reading, which then follows the attacker.
 void WifiWatchdogScreen::_openOptions()
 {
-  // A spammed network has no single address: Details and channel-wide
-  // Packet Monitor / Sniffer only (no Fox Hunt).
+  // A spammed network has no single address: Details, channel-wide Packet
+  // Monitor / Sniffer, and Fox Hunt on the network's beacons from random
+  // BSSIDs (all sent by the one spamming device).
   if (_view == VIEW_FLOOD) {
     const int index = _scroll.selected();
     if (index >= 0 && index < (int)_floodSnap.size() && _floodSnap[index].spam) {
+      const FloodRow& row = _floodSnap[index];
       const auto action = WifiTargetActions::choose(
-          WifiTargetActions::DETAILS | WifiTargetActions::MONITOR | WifiTargetActions::SNIFFER);
+          WifiTargetActions::DETAILS | WifiTargetActions::MONITOR | WifiTargetActions::SNIFFER |
+          WifiTargetActions::FOX_HUNT);
       if (action == WifiTargetActions::NONE) { render(); return; }
       if (action == WifiTargetActions::DETAILS) { _openSelectedDetails(); return; }
       _actionOpen = true;
       _releaseRadio();
-      WifiTargetActions::openChannel(action, _floodSnap[index].channel);
+      if (action == WifiTargetActions::FOX_HUNT) {
+        char name[48];
+        snprintf(name, sizeof(name), "Spam: %s", row.ssid.empty() ? "<hidden>" : row.ssid.c_str());
+        auto* hunt = new WifiFoxHuntScreen();
+        hunt->configureSpamTarget(row.ssid.c_str(), row.channel, name);
+        Screen.push(hunt);
+        return;
+      }
+      WifiTargetActions::openChannel(action, row.channel);
       return;
     }
   }

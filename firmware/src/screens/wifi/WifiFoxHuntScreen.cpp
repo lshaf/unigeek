@@ -7,6 +7,7 @@
 #include <WiFi.h>
 #include <esp_wifi.h>
 #include <string.h>
+#include <ctype.h>
 
 static uint8_t _foxTargetBssid[6];
 static volatile bool _foxDiscovering = false;
@@ -44,8 +45,41 @@ static volatile uint32_t _foxWifiSeenMs = 0;
 
 static volatile bool _foxDeauthOnly = false;  // count only deauth/disassoc frames
 
+// Beacon-spam target: SSID (or "base " + 2 digits when grouped) from random BSSIDs.
+static volatile bool _foxSpamMode    = false;
+static bool          _foxSpamGrouped = false;
+static char          _foxSpamSsid[33] = {};
+static uint8_t       _foxSpamLen     = 0;
+
+static bool _foxSpamMatch(const uint8_t* p, uint16_t len)
+{
+  if (((p[0] >> 2) & 3) != 0) return false;                 // management
+  const uint8_t subtype = (p[0] >> 4) & 15;
+  if (subtype != 8 && subtype != 5) return false;            // beacon / probe response
+  if (!(p[10] & 0x02)) return false;                         // random (locally administered)
+  if (len < 38 || p[36] != 0) return false;                  // SSID element first
+  const uint8_t l = p[37];
+  if (l > 32 || 38u + l > len) return false;
+  const uint8_t* ssid = p + 38;
+  if (!_foxSpamGrouped) return l == _foxSpamLen && memcmp(ssid, _foxSpamSsid, l) == 0;
+  return l == _foxSpamLen + 2 && memcmp(ssid, _foxSpamSsid, _foxSpamLen) == 0 &&
+         isdigit(ssid[_foxSpamLen]) && isdigit(ssid[_foxSpamLen + 1]);
+}
+
+// Separate sniffer for spam targets: no single address to match.
+static void _foxSpamSnifferCb(void* buf, wifi_promiscuous_pkt_type_t type)
+{
+  if (type != WIFI_PKT_MGMT) return;
+  const auto* pkt = (const wifi_promiscuous_pkt_t*)buf;
+  if (pkt->rx_ctrl.sig_len >= 24 && _foxSpamMatch(pkt->payload, pkt->rx_ctrl.sig_len)) {
+    _foxWifiSeenMs = millis();          // same reading as an address target
+    _foxWifiRssi   = pkt->rx_ctrl.rssi;
+  }
+}
+
 static void _foxWifiSnifferCb(void* buf, wifi_promiscuous_pkt_type_t type)
 {
+  if (_foxSpamMode) { _foxSpamSnifferCb(buf, type); return; }  // no single address
   if (type != WIFI_PKT_DATA && type != WIFI_PKT_MGMT) return;
 
   const auto* pkt = (const wifi_promiscuous_pkt_t*)buf;
@@ -309,6 +343,15 @@ void WifiFoxHuntScreen::_startTracking(int index)
   _continuousTone = false;
   _feedback.reset(_entries[index].rssi);
   _foxDeauthOnly = _directDeauthTarget;
+  if (_directSpamTarget) {
+    // "Name ##" -> base "Name " plus any two digits.
+    String base = _spamSsid;
+    _foxSpamGrouped = base.endsWith("##");
+    if (_foxSpamGrouped) base.remove(base.length() - 2);
+    _foxSpamLen = (uint8_t)min((int)base.length(), 32);
+    memcpy(_foxSpamSsid, base.c_str(), _foxSpamLen);
+  }
+  _foxSpamMode = _directSpamTarget;
 
   WiFi.mode(WIFI_MODE_STA);
   esp_wifi_set_promiscuous(true);
@@ -327,6 +370,7 @@ void WifiFoxHuntScreen::_stopTracking()
   delay(10);
   esp_wifi_set_promiscuous(false);
   _foxDeauthOnly = false;
+  _foxSpamMode = false;
   if (Uni.Speaker) Uni.Speaker->noTone();
   _continuousTone = false;
   _destroyTrackingUi();
@@ -493,6 +537,14 @@ void WifiFoxHuntScreen::_destroyTrackingUi()
   _pulseSpriteH = 0;
   _uiInitialized = false;
 }
+void WifiFoxHuntScreen::configureSpamTarget(const char* ssid, uint8_t channel, const char* name)
+{
+  static const uint8_t kNoAddress[6] = {};
+  configureTarget(false, kNoAddress, channel, name);
+  _spamSsid = ssid ? ssid : "";
+  _directSpamTarget = true;
+}
+
 
 void WifiFoxHuntScreen::configureDeauthTarget(const uint8_t mac[6], uint8_t channel,
                                               const char* name)
@@ -500,3 +552,4 @@ void WifiFoxHuntScreen::configureDeauthTarget(const uint8_t mac[6], uint8_t chan
   configureTarget(false, mac, channel, name);
   _directDeauthTarget = true;
 }
+
