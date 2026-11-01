@@ -136,6 +136,7 @@ private:
   static bool _containsNoCase(const std::string& text, const char* needle);
   static bool _isNamed(const std::string& text, const char* needle);
   static const char* _spamType(NimBLEAdvertisedDevice* dev);
+  static bool _matchSpamType(NimBLEAdvertisedDevice* dev, const void* type);
 
   class ScanCallbacks;
   friend class ScanCallbacks;
