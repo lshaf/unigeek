@@ -8,25 +8,17 @@
 
 class WifiChannelMonitorDetailsScreen : public BaseScreen {
 public:
-<<<<<<< HEAD
-  const char* title() override { return _client ? "Client Details" : "AP Details"; }
-=======
   const char* title() override {
     if (_title) return _title;
     return _client ? "Client Details" : "AP Details";
   }
->>>>>>> feature/wifi-watch_actions
 
   void configureAp(const char* ssid, const uint8_t* bssid, int rssi, uint8_t channel, uint8_t security, int8_t wps) {
     _client = false;
     _lookupVendor = true;
     memcpy(_stationMac, bssid, 6);
     _setMac(_mac, bssid);
-<<<<<<< HEAD
-    _ssid = ssid && ssid[0] ? ssid : "Hidden";
-=======
     _ssid = ssid && ssid[0] ? ssid : "<hidden>";
->>>>>>> feature/wifi-watch_actions
     _rssi = _formatRssi(rssi);
     _channel = String(channel);
     static const char* labels[] = {"Unknown", "Open", "WEP", "WPA", "WPA2", "WPA3", "WPA2/WPA3"};
@@ -41,38 +33,24 @@ public:
     _count = 7;
   }
 
-<<<<<<< HEAD
-  void configureClient(const uint8_t* mac, int rssi, uint8_t channel,
-                       uint32_t packets, const uint8_t* apBssid, const char* apSsid) {
-=======
   // apSsid: nullptr = not known (shown "Unknown"), "" = hidden network.
   // countLabel names what packets counts (Watchcat counts "Frames").
   void configureClient(const uint8_t* mac, int rssi, uint8_t channel,
                        uint32_t packets, const uint8_t* apBssid, const char* apSsid,
                        const char* countLabel = "Packets") {
->>>>>>> feature/wifi-watch_actions
     _client = true;
     _lookupVendor = true;
     memcpy(_stationMac, mac, 6);
     _setMac(_mac, mac);
     _setMac(_apMac, apBssid);
-<<<<<<< HEAD
-    _ssid = apSsid && apSsid[0] ? apSsid : "Hidden";
-    _rssi = String(rssi) + " dBm";
-=======
     _ssid = !apSsid ? "Unknown" : apSsid[0] ? apSsid : "<hidden>";
     _rssi = rssi ? String(rssi) + " dBm" : String("Unknown");
->>>>>>> feature/wifi-watch_actions
     _channel = String(channel);
     _packets = String(packets);
     _rows[0] = {"MAC", _mac};
     _rows[1] = {"RSSI", _rssi};
     _rows[2] = {"Channel", _channel};
-<<<<<<< HEAD
-    _rows[3] = {"Packets", _packets};
-=======
     _rows[3] = {countLabel, _packets};
->>>>>>> feature/wifi-watch_actions
     _rows[4] = {"AP BSSID", _apMac};
     _rows[5] = {"AP SSID", _ssid};
     _rows[6] = {"Vendor", "Looking up..."};
@@ -91,11 +69,7 @@ public:
     if (apBssid) _setMac(_apMac, apBssid);
     else _apMac = "Unknown";
     _ssid = apSsid && apSsid[0] ? apSsid : "Unknown";
-<<<<<<< HEAD
-    _rssi = String(rssi) + " dBm";
-=======
     _rssi = rssi ? String(rssi) + " dBm" : String("Unknown");
->>>>>>> feature/wifi-watch_actions
     _channel = String(channel);
     _rows[0] = {"MAC", _mac};
     _rows[1] = {"RSSI", _rssi};
@@ -107,8 +81,6 @@ public:
     _count = 6;
   }
 
-<<<<<<< HEAD
-=======
   // Watchcat probe-request station: what it searched for and how often. A
   // locally administered (randomized) MAC can change and has no vendor.
   void configureProbe(const uint8_t* mac, int rssi, uint8_t channel, int requests,
@@ -214,7 +186,6 @@ public:
     _count = n;
   }
 
->>>>>>> feature/wifi-watch_actions
   void onInit() override {
     _list.setRows(_rows, _count);
     _list.resetScroll();
@@ -303,21 +274,15 @@ private:
                            rssi >= -70 ? "Better" : rssi >= -80 ? "Low" : "Very Low";
     return "[" + String(rssi) + "] " + strength;
   }
-<<<<<<< HEAD
-=======
   const char* _title = nullptr;
->>>>>>> feature/wifi-watch_actions
   bool _client = false;
   bool _lookupVendor = false;
   uint8_t _vendorRow = 5;
   uint8_t _stationMac[6] = {};
   uint8_t _count = 0;
   String _mac, _apMac, _ssid, _rssi, _channel, _packets;
-<<<<<<< HEAD
-=======
   String _probed[3];
   String _lastSeen;
->>>>>>> feature/wifi-watch_actions
   static constexpr uint8_t MAX_ROWS = 16;
   ScrollListView::Row _rows[MAX_ROWS] = {};
   ScrollListView _list;

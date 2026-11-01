@@ -101,15 +101,8 @@ private:
   void _renderHints(int x, int y, int w, int h, bool paused);
   void _openOptions();
   void _openSelectedDetails();
-<<<<<<< HEAD
-  void _openFoxHunt();
-  void _openPacketMonitor();
-  void _openPacketSniffer();
-  void _openDeauth();
-=======
   bool _selectedTarget(WifiTarget& target);
   void _releaseRadio();
->>>>>>> feature/wifi-watch_actions
   void _freezeApOrder();
   void _hop();
   void _quit();
