@@ -1,4 +1,7 @@
 #include "BLEWatchScreenBase.h"
+#include "ui/actions/InputSelectAction.h"
+#include "screens/ble/BLEFoxHuntScreen.h"
+#include "screens/ble/BLEAnalyzerScreen.h"
 
 #include "core/ConfigManager.h"
 #include "core/Device.h"
@@ -76,7 +79,11 @@ void BLEWatchScreenBase::onInit()
   _activityCount = 0;
   _itemCount = 0;
   _lastUpdate = millis();
+  _paused = false;
+  _holdHandled = false;
+  _snap.clear();
   for (int i = 0; i < 4; ++i) _prevCounts[i] = -1;
+  _scroll.setResultStyle(true);  // Traffic Analyzer-like rows: white name, grey detail
   _scroll.resetScroll();
 
 #ifdef DEVICE_HAS_TOUCH_NAV
@@ -128,6 +135,9 @@ void BLEWatchScreenBase::_enterView(View view)
   _holdCell = -1;
   _view = view;
   _itemCount = 0;
+  _paused = false;
+  _snap.clear();
+  _scroll.setSelectable(false);
   _scroll.resetScroll();
   _renderView();
 }
@@ -222,29 +232,45 @@ void BLEWatchScreenBase::onUpdate()
       }
     }
 #endif
-  } else if (Uni.Nav->wasPressed()) {
-    const auto dir = Uni.Nav->readDirection();
-    if (dir == INavigation::DIR_BACK || dir == INavigation::DIR_PRESS) {
-      _view = VIEW_OVERALL;
-      _prevGridSel = -1;
-#ifdef DEVICE_HAS_TOUCH_NAV
-      Uni.Nav->drawOverlay();
-      Uni.Nav->setSuppressKeys(true);
-#endif
-      Uni.Lcd.fillRect(bodyX(), bodyY(), bodyW(), bodyH(), TFT_BLACK);
-      render();
+  } else {
+    // As in the Wi-Fi Watchdog / Watchcat. Live: [Press] pauses, [Back]
+    // returns to the grid. Paused: arrows select, [Press] (or [Hold]) opens
+    // Options, [Back] resumes.
+    _scroll.tickMarquee();  // scroll an overlong value on the selected row
+    if (_paused && Uni.Nav->isPressed() && Uni.Nav->currentDirection() == INavigation::DIR_PRESS &&
+        Uni.Nav->heldDuration() >= 700 && !_holdHandled) {
+      _holdHandled = true;
+      Uni.Nav->suppressCurrentPress();
+      _openOptions();
       return;
     }
-    if (dir == INavigation::DIR_UP || dir == INavigation::DIR_DOWN ||
-        dir == INavigation::DIR_LEFT || dir == INavigation::DIR_RIGHT) {
-      _scroll.onNav(dir);
+    if (_holdHandled && !Uni.Nav->isPressed()) _holdHandled = false;
+
+    if (Uni.Nav->wasPressed()) {
+      const auto     dir      = Uni.Nav->readDirection();
+      const uint32_t duration = Uni.Nav->pressDuration();
+      if (dir == INavigation::DIR_BACK) {
+        if (_paused) _resume();
+        else         _leaveList();
+        return;
+      }
+      if (dir == INavigation::DIR_PRESS && duration < 700) {
+        if (_paused) _openOptions();
+        else         _pause();
+        return;
+      }
+      if (dir == INavigation::DIR_UP || dir == INavigation::DIR_DOWN ||
+          dir == INavigation::DIR_LEFT || dir == INavigation::DIR_RIGHT) {
+        _scroll.onNav(dir);
+      }
     }
   }
 
   if (millis() - _lastUpdate >= 500) {
     _lastUpdate = millis();
     _prune();
-    _renderView();
+    // A paused list keeps its snapshot; scanning goes on in the background.
+    if (!_paused) _renderView();
   }
 }
 
@@ -255,14 +281,17 @@ void BLEWatchScreenBase::onRender()
     _renderOverall();
     return;
   }
+  const int listH = _listHeight();
   if (_itemCount > 0) {
-    _scroll.render(bodyX(), bodyY(), bodyW(), bodyH());
+    _scroll.render(bodyX(), bodyY(), bodyW(), listH);
   } else {
-    Uni.Lcd.fillRect(bodyX(), bodyY(), bodyW(), bodyH(), TFT_BLACK);
+    Uni.Lcd.fillRect(bodyX(), bodyY(), bodyW(), listH, TFT_BLACK);
     Uni.Lcd.setTextDatum(MC_DATUM);
     Uni.Lcd.setTextColor(TFT_DARKGREY, TFT_BLACK);
-    Uni.Lcd.drawString("Monitoring...", bodyX() + bodyW() / 2, bodyY() + bodyH() / 2);
+    Uni.Lcd.drawString(_paused ? "Nothing captured" : "Monitoring...",
+                       bodyX() + bodyW() / 2, bodyY() + listH / 2);
   }
+  _renderFooter();
 }
 
 void BLEWatchScreenBase::_onDevice(NimBLEAdvertisedDevice* dev)
@@ -272,8 +301,10 @@ void BLEWatchScreenBase::_onDevice(NimBLEAdvertisedDevice* dev)
   snprintf(mac, sizeof(mac), "%s", dev->getAddress().toString().c_str());
 
   if (_stateMutex) xSemaphoreTakeRecursive(_stateMutex, portMAX_DELAY);
+  _currentDev = dev;  // _addOrUpdate keeps a copy for Details / Fox Hunt
   if (_mode == Mode::Watchdog) _classifyWatchdog(dev, mac);
   else _classifyWatchcat(dev, mac);
+  _currentDev = nullptr;
   if (_stateMutex) xSemaphoreGiveRecursive(_stateMutex);
 }
 
@@ -406,6 +437,12 @@ void BLEWatchScreenBase::_addOrUpdate(uint8_t category, const char* key, const c
   }
 
   if (mac) strncpy(e->mac, mac, sizeof(e->mac) - 1);
+  // Keep a copy of the advertisement for Details / Fox Hunt, refreshed at most
+  // twice a second to spare the scan callback.
+  if (_currentDev && (!e->hasDevice || now - e->lastSeen >= 500)) {
+    e->device = *_currentDev;
+    e->hasDevice = true;
+  }
   e->rssi = rssi;
   e->lastSeen = now;
   if (e->count < 65535) ++e->count;
@@ -513,39 +550,41 @@ void BLEWatchScreenBase::_renderOverall()
 #endif
 }
 
+// Most active first, like Traffic Analyzer (ties: most recent first).
+void BLEWatchScreenBase::_collectCategory(uint8_t category, std::vector<Entry>& out)
+{
+  out.clear();
+  if (_stateMutex) xSemaphoreTakeRecursive(_stateMutex, portMAX_DELAY);
+  for (int i = 0; i < _entryCount; ++i)
+    if (_entries[i].visible && _entries[i].category == category) out.push_back(_entries[i]);
+  if (_stateMutex) xSemaphoreGiveRecursive(_stateMutex);
+  std::sort(out.begin(), out.end(), [](const Entry& a, const Entry& b) {
+    if (a.count != b.count) return a.count > b.count;
+    return a.lastSeen > b.lastSeen;
+  });
+  if ((int)out.size() > MAX_ROWS) out.resize(MAX_ROWS);
+}
+
+// One row per entry: the device / attack type, and its MAC (BLE Spam: how
+// many advertisements). Signal and the rest are in Details.
 void BLEWatchScreenBase::_renderCategory(uint8_t category)
 {
-  if (_stateMutex) xSemaphoreTakeRecursive(_stateMutex, portMAX_DELAY);
-  Entry* items[MAX_ENTRIES];
-  int itemN = 0;
-  for (int i = 0; i < _entryCount; ++i)
-    if (_entries[i].visible && _entries[i].category == category) items[itemN++] = &_entries[i];
-
-  std::sort(items, items + itemN, [](const Entry* a, const Entry* b) {
-    if (a->rssi != b->rssi) return a->rssi > b->rssi;
-    return a->lastSeen > b->lastSeen;
-  });
+  std::vector<Entry> live;
+  if (!_paused) _collectCategory(category, live);
+  const std::vector<Entry>& items = _paused ? _snap : live;
+  const bool spamList = _mode == Mode::Watchdog && category == 0;
 
   int n = 0;
-  for (int i = 0; i < itemN && n < MAX_ROWS; ++i) {
-    const Entry& e = *items[i];
+  for (const auto& e : items) {
+    if (n >= MAX_ROWS) break;
     snprintf(_labels[n], sizeof(_labels[n]), "%s", e.label);
-    if (_mode == Mode::Watchdog && category == 0)
-      snprintf(_values[n], sizeof(_values[n]), "%ddBm x%u", e.rssi, e.count);
-    else
-      snprintf(_values[n], sizeof(_values[n]), "%ddBm", e.rssi);
-    _rows[n].label = _labels[n];
-    _rows[n].value = _values[n];
+    if (spamList) snprintf(_values[n], sizeof(_values[n]), "x%u", e.count);
+    else          snprintf(_values[n], sizeof(_values[n]), "%s", e.mac);
+    _rows[n].label     = _labels[n];
+    _rows[n].value     = _values[n];
+    _rows[n].secondary = nullptr;
     ++n;
-
-    if (n < MAX_ROWS) {
-      snprintf(_labels[n], sizeof(_labels[n]), "  %s", e.mac);
-      _rows[n].label = _labels[n];
-      _rows[n].value = "";
-      ++n;
-    }
   }
-  if (_stateMutex) xSemaphoreGiveRecursive(_stateMutex);
   _setListState(n);
 }
 
@@ -678,4 +717,104 @@ bool BLEWatchScreenBase::_isNamed(const std::string& text, const char* needle)
   if (text.size() == needleLen) return true;
   const char next = text[needleLen];
   return next == '-' || next == '_' || isdigit(static_cast<unsigned char>(next));
+}
+
+// ── Pause / select / actions ──────────────────────────────────────────────────
+
+static constexpr int kFooterH = 27;
+
+int BLEWatchScreenBase::_listHeight()
+{
+  return bodyH() - kFooterH;
+}
+
+// Same footer as Traffic Analyzer and the Wi-Fi Watches: Options on the upper
+// line, Pause / Resume on the lower one.
+void BLEWatchScreenBase::_renderFooter()
+{
+  auto& lcd = Uni.Lcd;
+  const int x = bodyX(), y = bodyY(), w = bodyW(), h = bodyH();
+  const int footerTop = y + h - kFooterH;
+  lcd.fillRect(x, footerTop, w, kFooterH, TFT_BLACK);
+  lcd.drawFastHLine(x, footerTop, w, TFT_DARKGREY);
+  lcd.setTextColor(TFT_DARKGREY, TFT_BLACK);
+  lcd.setTextDatum(BC_DATUM);
+  if (_paused) {
+    const char* resume = "[Back] Resume Scan";
+    if (lcd.textWidth(resume) > w - 6) resume = "[Back] Resume";
+    lcd.drawString("[Press] Options", x + w / 2, y + h - 14);
+    lcd.drawString(resume, x + w / 2, y + h - 1);
+  } else {
+    lcd.drawString("[Press] Pause", x + w / 2, y + h - 1);
+  }
+  lcd.setTextDatum(TL_DATUM);
+}
+
+void BLEWatchScreenBase::_pause()
+{
+  _paused = true;
+  _collectCategory((uint8_t)(_view - VIEW_CAT0), _snap);
+  _scroll.setSelectable(true);
+  _scroll.setSelected(0);
+  _renderView();
+}
+
+void BLEWatchScreenBase::_resume()
+{
+  _paused = false;
+  _snap.clear();
+  _scroll.setSelectable(false);
+  _renderView();
+}
+
+void BLEWatchScreenBase::_leaveList()
+{
+  _paused = false;
+  _snap.clear();
+  _scroll.setSelectable(false);
+  _view = VIEW_OVERALL;
+  _prevGridSel = -1;
+#ifdef DEVICE_HAS_TOUCH_NAV
+  Uni.Nav->drawOverlay();
+  Uni.Nav->setSuppressKeys(true);
+#endif
+  Uni.Lcd.fillRect(bodyX(), bodyY(), bodyW(), bodyH(), TFT_BLACK);
+  render();
+}
+
+// Details and Fox Hunt, as in BLE Scanner / Detector. BLE Spam has no Fox
+// Hunt: its addresses are random and change with every advertisement.
+void BLEWatchScreenBase::_openOptions()
+{
+  const int index = _scroll.selected();
+  if (index < 0 || index >= (int)_snap.size() || !_snap[index].hasDevice) return;
+  const bool spamList = _mode == Mode::Watchdog && _view == VIEW_CAT0;
+
+  static const InputSelectAction::Option kAll[] = {
+    {"Details", "details", nullptr, 0, false},
+    {"Fox Hunt", "fox", nullptr, 0, false},
+  };
+  const char* choice = InputSelectAction::popup("Options", kAll, spamList ? 1 : 2);
+  if (!choice) { render(); return; }
+
+  // Hand the scanner over; onRestore() starts ours again on the same list.
+  NimBLEAdvertisedDevice target = _snap[index].device;
+  _stopScan();
+  if (strcmp(choice, "details") == 0) {
+    auto* details = new BLEAnalyzerScreen();
+    details->configureTarget(target);
+    Screen.push(details);
+  } else {
+    auto* fox = new BLEFoxHuntScreen();
+    fox->configureTarget(target);
+    Screen.push(fox);
+  }
+}
+
+void BLEWatchScreenBase::onRestore()
+{
+  _instance = this;
+  _startScan();
+  _lastUpdate = millis();
+  render();
 }

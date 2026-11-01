@@ -2,6 +2,7 @@
 
 #include <NimBLEDevice.h>
 #include <string>
+#include <vector>
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>
 
@@ -21,6 +22,7 @@ public:
   void onInit() override;
   void onUpdate() override;
   void onRender() override;
+  void onRestore() override;
 
 protected:
   Mode _mode;
@@ -61,6 +63,8 @@ private:
     unsigned long burstStart = 0;
     uint16_t burstCount = 0;
     bool visible = true;
+    bool hasDevice = false;
+    NimBLEAdvertisedDevice device;  // last advertisement, for Details / Fox Hunt
   };
 
   struct Activity {
@@ -87,9 +91,16 @@ private:
   int _activityCount = 0;
 
   ScrollListView _scroll;
+
+  // Paused list (as in the Wi-Fi Watchdog / Watchcat): a frozen snapshot of
+  // the category, one row per entry, so the selection can't move.
+  bool _paused = false;
+  bool _holdHandled = false;
+  std::vector<Entry> _snap;
+  NimBLEAdvertisedDevice* _currentDev = nullptr;  // set while classifying
   ScrollListView::Row _rows[MAX_ROWS] = {};
   char _labels[MAX_ROWS][32] = {};
-  char _values[MAX_ROWS][16] = {};
+  char _values[MAX_ROWS][20] = {};  // fits a MAC
   int _itemCount = 0;
 
   void _startScan();
@@ -113,6 +124,13 @@ private:
   void _drawGridCell(int idx, int count);
   void _drawBackButton();
   void _setListState(int count);
+  void _collectCategory(uint8_t category, std::vector<Entry>& out);
+  int  _listHeight();
+  void _renderFooter();
+  void _pause();
+  void _resume();
+  void _leaveList();
+  void _openOptions();
 
   static bool _matchPattern(const char* pattern, const uint8_t* data, size_t len);
   static bool _containsNoCase(const std::string& text, const char* needle);
