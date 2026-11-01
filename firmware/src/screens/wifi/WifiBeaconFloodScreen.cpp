@@ -179,14 +179,6 @@ void WifiBeaconFloodScreen::onUpdate()
 void WifiBeaconFloodScreen::onRender()
 {
   if (_state == STATE_ATTACKING) { _drawAttacking(); return; }
-  if (_state == STATE_SCAN) {
-    auto& lcd = Uni.Lcd;
-    lcd.fillRect(bodyX(), bodyY(), bodyW(), bodyH(), TFT_BLACK);
-    lcd.setTextDatum(MC_DATUM);
-    lcd.setTextColor(TFT_WHITE, TFT_BLACK);
-    lcd.drawString("Scanning...", bodyX() + bodyW() / 2, bodyY() + bodyH() / 2);
-    return;
-  }
   ListScreen::onRender();
 }
 
@@ -271,9 +263,11 @@ void WifiBeaconFloodScreen::_startScan(bool forceScan)
 
   WiFi.mode(WIFI_MODE_STA);
 
-  // Draw "Scanning..." before blocking
+  // "Scanning..." status over the current list before blocking, as in
+  // Network's scan.
   _state = STATE_SCAN;
   render();
+  ShowStatusAction::show("Scanning...", 0);
 
   // Synchronous scan — blocks ~3 s; display stays on "Scanning..." during this time
   WiFi.scanDelete();
@@ -435,7 +429,7 @@ void WifiBeaconFloodScreen::_drawAttacking()
     snprintf(rateBuf, sizeof(rateBuf), "Rate: %d / s", _ratePerSec);
     sp.setTextSize(2);
     sp.setTextColor(above ? TFT_GREEN : TFT_WHITE, TFT_BLACK);
-    sp.drawString(rateBuf, bodyX() / 2, 14);
+    sp.drawString(rateBuf, bodyW() / 2, 14);  // sprite coordinates: centre of its width
     sp.setTextSize(1);
     sp.setTextColor(above ? TFT_GREEN : TFT_DARKGREY, TFT_BLACK);
     sp.drawString(above ? "DETECTOR TRIPPED  (>= 50/s)" : "below threshold  (< 50/s)",
