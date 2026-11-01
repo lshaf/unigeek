@@ -17,6 +17,10 @@ public:
     // Optional grey text at right, used by WiFi Analyzer client MAC rows.
     const char* secondary;
 
+    // Optional signal of the row's device, used by the result style.
+    int16_t     rssi    = 0;
+    bool        hasRssi = false;
+
     Row() : label(nullptr), value(), secondary(nullptr) {}
     Row(const char* l, const String& v, const char* s = nullptr)
       : label(l), value(v), secondary(s) {}
@@ -39,6 +43,12 @@ public:
   // the selected row is highlighted and the arrows move the selection, keeping
   // it in view; Left/Right jump a page.
   void setSelectable(bool on) { _selectable = on; _ensureVisible(); }
+
+  // Optional result-list look, as in Scanner (ListScreen): the label in the
+  // signal colour (green >= -60, yellow >= -75, else red; light grey without
+  // a signal), the value in dark grey (cyan when selected). Off by default:
+  // key/value screens such as Details keep grey labels and white values.
+  void setResultStyle(bool on) { _resultStyle = on; }
   bool selectable() const { return _selectable; }
   int  selected() const { return _selected; }
   void setSelected(int index) {
@@ -93,6 +103,13 @@ private:
   uint16_t _count = 0;
   int     _offset = 0;
   bool    _selectable = false;
+  bool    _resultStyle = false;
+
+  static uint16_t _rssiColor(int16_t rssi) {
+    if (rssi >= -60) return TFT_GREEN;
+    if (rssi >= -75) return TFT_YELLOW;
+    return TFT_RED;
+  }
   int     _selected   = 0;
 
   int _fullyVisible() const {
@@ -159,11 +176,20 @@ private:
       const char* label = _rows[idx].label;
       const bool actionHint = label &&
           (strncmp(label, "[Press]", 7) == 0 || strncmp(label, "[Hold]", 6) == 0);
-      sp.setTextColor(isSelected ? TFT_WHITE : (actionHint ? TFT_YELLOW : TFT_DARKGREY));
+      if (_resultStyle) {
+        const Row& r = _rows[idx];
+        sp.setTextColor(r.hasRssi ? _rssiColor(r.rssi) : (isSelected ? TFT_WHITE : TFT_LIGHTGREY));
+      } else {
+        sp.setTextColor(isSelected ? TFT_WHITE : (actionHint ? TFT_YELLOW : TFT_DARKGREY));
+      }
       sp.setTextDatum(TL_DATUM);
       sp.drawString(label ? label : "", 2, 3);
 
-      if (_rows[idx].secondary) {
+      if (_resultStyle && !_rows[idx].secondary) {
+        sp.setTextColor(isSelected ? TFT_CYAN : TFT_DARKGREY);
+        sp.setTextDatum(TR_DATUM);
+        sp.drawString(_rows[idx].value.c_str(), textW, 3);
+      } else if (_rows[idx].secondary) {
         // Preserve the MAC and add a short grey vendor on the right.
         sp.setTextColor(TFT_WHITE);
         sp.setTextDatum(TL_DATUM);

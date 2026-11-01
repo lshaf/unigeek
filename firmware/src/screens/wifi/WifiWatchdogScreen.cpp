@@ -87,6 +87,7 @@ WifiWatchdogScreen::~WifiWatchdogScreen()
 
 void WifiWatchdogScreen::onInit()
 {
+  _scroll.setResultStyle(true);  // Scanner-like rows: signal colour, grey detail
   _view        = VIEW_OVERALL;
   _channel     = 1;
   _itemCount   = 0;
@@ -614,6 +615,7 @@ void WifiWatchdogScreen::_renderEviltwin()
     if (n >= MAX_ITEMS) break;
     snprintf(_labels[n], sizeof(_labels[n]), "%s", kv.first.c_str());
     snprintf(_sublabels[n], sizeof(_sublabels[n]), "%d APs", (int)kv.second.size());
+    _rows[n].hasRssi   = false;  // several APs, no single signal
     _rows[n].label     = _labels[n];
     _rows[n].value     = _sublabels[n];
     _rows[n].secondary = nullptr;
@@ -631,6 +633,8 @@ void WifiWatchdogScreen::_renderTwinAps()
     snprintf(_labels[n], sizeof(_labels[n]), "%02X:%02X:%02X:%02X:%02X:%02X",
              b.bssid[0], b.bssid[1], b.bssid[2], b.bssid[3], b.bssid[4], b.bssid[5]);
     snprintf(_sublabels[n], sizeof(_sublabels[n]), "CH%d", b.channel);
+    _rows[n].rssi      = b.rssi;
+    _rows[n].hasRssi   = b.rssi != 0;
     _rows[n].label     = _labels[n];
     _rows[n].value     = _sublabels[n];
     _rows[n].secondary = nullptr;
@@ -719,6 +723,8 @@ void WifiWatchdogScreen::_renderDeauth()
       snprintf(_labels[n], sizeof(_labels[n]), "%02X:%02X:%02X:%02X:%02X:%02X",
                mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
     snprintf(_sublabels[n], sizeof(_sublabels[n]), e.counter >= 1000 ? "x999+" : "x%d", e.counter);
+    _rows[n].rssi    = e.rssi;
+    _rows[n].hasRssi = e.rssi != 0;
     _rows[n].label     = _labels[n];
     _rows[n].value     = _sublabels[n];
     _rows[n].secondary = nullptr;
@@ -746,6 +752,8 @@ void WifiWatchdogScreen::_renderFlood()
     else
       snprintf(_sublabels[n], sizeof(_sublabels[n]), "%02X:%02X:%02X:%02X:%02X:%02X CH%d",
                r.bssid[0], r.bssid[1], r.bssid[2], r.bssid[3], r.bssid[4], r.bssid[5], r.channel);
+    _rows[n].rssi    = r.rssi;
+    _rows[n].hasRssi = r.rssi != 0;
     _rows[n].label     = _labels[n];
     _rows[n].value     = _sublabels[n];
     _rows[n].secondary = nullptr;

@@ -52,6 +52,7 @@ WifiWatchcatScreen::~WifiWatchcatScreen()
 
 void WifiWatchcatScreen::onInit()
 {
+  _scroll.setResultStyle(true);  // Scanner-like rows: signal colour, grey detail
   _view        = VIEW_OVERALL;
   _channel     = 1;
   _itemCount   = 0;
@@ -467,7 +468,9 @@ void WifiWatchcatScreen::_renderProbes()
     const ProbeEntry& e   = kv.second;
     snprintf(_labels[n], sizeof(_labels[n]), "%02X:%02X:%02X:%02X:%02X:%02X",
              mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
-    _rows[n].label = _labels[n];
+    _rows[n].label   = _labels[n];
+    _rows[n].rssi    = e.rssi;
+    _rows[n].hasRssi = e.rssi != 0;
     if (e.ssidCount == 0)     _rows[n].value = "(wildcard)";
     else if (e.ssidCount > 1) _rows[n].value = String(e.ssids[0]) + " +" + String(e.ssidCount - 1);
     else                      _rows[n].value = e.ssids[0];
@@ -494,7 +497,9 @@ void WifiWatchcatScreen::_renderActivity(
     const ActivityEntry& e   = kv.second;
     snprintf(_labels[n], sizeof(_labels[n]), "%02X:%02X:%02X:%02X:%02X:%02X",
              key.sta[0], key.sta[1], key.sta[2], key.sta[3], key.sta[4], key.sta[5]);
-    _rows[n].label = _labels[n];
+    _rows[n].label   = _labels[n];
+    _rows[n].rssi    = e.rssi;
+    _rows[n].hasRssi = e.rssi != 0;
     if (showSsid && e.ssid[0] != '\0') {
       _rows[n].value = e.ssid;
     } else {
