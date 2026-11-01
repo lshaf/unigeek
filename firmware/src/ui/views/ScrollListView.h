@@ -17,7 +17,7 @@ public:
     // Optional grey text at right, used by WiFi Analyzer client MAC rows.
     const char* secondary;
 
-    // Optional signal of the row's device, used by the result style.
+    // Optional signal of the row's device (kept with the row; not drawn).
     int16_t     rssi    = 0;
     bool        hasRssi = false;
 
@@ -44,10 +44,10 @@ public:
   // it in view; Left/Right jump a page.
   void setSelectable(bool on) { _selectable = on; _ensureVisible(); }
 
-  // Optional result-list look, as in Scanner (ListScreen): the label in the
-  // signal colour (green >= -60, yellow >= -75, else red; light grey without
-  // a signal), the value in dark grey (cyan when selected). Off by default:
-  // key/value screens such as Details keep grey labels and white values.
+  // Optional result-list look, as in Traffic Analyzer: the label in white, the
+  // value in dark grey (white when selected), the value at most half the row
+  // and the label cut before it. Off by default: key/value screens such as
+  // Details keep grey labels and white values.
   void setResultStyle(bool on) { _resultStyle = on; }
 
   // Result style: scrolls the selected row's value when it doesn't fit (the
@@ -149,11 +149,6 @@ private:
     return s.substring(0, n);
   }
 
-  static uint16_t _rssiColor(int16_t rssi) {
-    if (rssi >= -60) return TFT_GREEN;
-    if (rssi >= -75) return TFT_YELLOW;
-    return TFT_RED;
-  }
   int     _selected   = 0;
 
   int _fullyVisible() const {
@@ -232,18 +227,17 @@ private:
                          : isSelected ? _marqueeWindow(sp, value, valueMax)
                                       : _fit(sp, value, valueMax);
         const int valueW = sp.textWidth(valueText.c_str());
-        sp.setTextColor(isSelected ? TFT_CYAN : TFT_DARKGREY);
+        sp.setTextColor(isSelected ? TFT_WHITE : TFT_DARKGREY);
         sp.setTextDatum(TR_DATUM);
         sp.drawString(valueText.c_str(), textW, 3);
 
-        sp.setTextColor(r.hasRssi ? _rssiColor(r.rssi) : (isSelected ? TFT_WHITE : TFT_LIGHTGREY));
+        sp.setTextColor(TFT_WHITE);
         sp.setTextDatum(TL_DATUM);
         const int labelMax = textW - valueW - 6 - 2;
         sp.drawString(_fit(sp, label, labelMax).c_str(), 2, 3);
       } else if (_resultStyle) {
         // (rows with a secondary value keep the default layout below)
-        sp.setTextColor(_rows[idx].hasRssi ? _rssiColor(_rows[idx].rssi)
-                                           : (isSelected ? TFT_WHITE : TFT_LIGHTGREY));
+        sp.setTextColor(TFT_WHITE);
         sp.setTextDatum(TL_DATUM);
         sp.drawString(label ? label : "", 2, 3);
       } else {

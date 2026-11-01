@@ -88,7 +88,7 @@ WifiWatchdogScreen::~WifiWatchdogScreen()
 
 void WifiWatchdogScreen::onInit()
 {
-  _scroll.setResultStyle(true);  // Scanner-like rows: signal colour, grey detail
+  _scroll.setResultStyle(true);  // Traffic Analyzer-like rows: white name, grey detail
   _view        = VIEW_OVERALL;
   _channel     = 1;
   _itemCount   = 0;
