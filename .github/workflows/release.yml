@@ -62,6 +62,7 @@ jobs:
       - name: Build ${{ matrix.env }}
         env:
           PLATFORMIO_BUILD_SRC_FLAGS: -DFIRMWARE_VERSION='"${{ github.ref_name }}"'
+          UNIGEEK_PATCH_RMT: "1"
         run: pio run -e ${{ matrix.env }}
 
       - name: Upload to release
