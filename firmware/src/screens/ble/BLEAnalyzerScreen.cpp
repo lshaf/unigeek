@@ -559,6 +559,9 @@ void BLEAnalyzerScreen::_rebuildDevItems()
                                  _devSub[i].length() > 0 ? _devSub[i].c_str() : nullptr};
     _devItems[i + 1].rssi    = (int16_t)dev.getRSSI();
     _devItems[i + 1].hasRssi = true;
+    // Like Wi-Fi Scanner's "BSSID CHx": the MAC keeps half the row (scrolling on
+    // the selected row if it doesn't fit) and the name is cut before it.
+    _devItems[i + 1].sublabelMarquee = _devSub[i].length() > 0;
   }
 }
 
