@@ -218,7 +218,8 @@ static void _anStationCb(void* buf, wifi_promiscuous_pkt_type_t type) {
 void WifiAnalyzerScreen::onInit()
 {
   _entryCount = 0;
-  _showModes();
+  _menuIndex  = ROW_START;  // Start highlighted: one press scans as before
+  _showMenu();
 }
 
 void WifiAnalyzerScreen::onUpdate()
@@ -247,9 +248,34 @@ void WifiAnalyzerScreen::onUpdate()
 
 void WifiAnalyzerScreen::onItemSelected(uint8_t index)
 {
-  if (_state == STATE_MODE) {
-    _stationMode = index == 1;
-    _doScan();
+  if (_state == STATE_MENU) {
+    if (index >= sizeof(_menuRows)) return;
+    _menuIndex = index;
+    switch (_menuRows[index]) {
+      case ROW_MODE:
+        _stationMode = !_stationMode;
+        _showMenu();  // rows change (Filters only for Access Points)
+        break;
+      case ROW_FILTERS:  _showFilter();  break;
+      case ROW_CHANNELS: _showChannels(); break;
+      case ROW_MIN_SIGNAL:
+        _minSignal = _minSignal == 0 ? -60 : _minSignal == -60 ? -70 : _minSignal == -70 ? -80 : 0;
+        _showMenu(true);
+        break;
+      case ROW_START: _doScan(); break;
+    }
+    return;
+  }
+  if (_state == STATE_FILTER) {
+    if (index == 0) _filterMask = 0;
+    else if (index <= FILTER_COUNT) _filterMask ^= (uint8_t)(1u << (index - 1));
+    _showFilter(true);
+    return;
+  }
+  if (_state == STATE_CHANNEL) {
+    if (index == 0) _channelMask = 0;
+    else if (index <= 13) _channelMask ^= (uint16_t)(1u << (index - 1));
+    _showChannels(true);
     return;
   }
   if (_state == STATE_SCAN) {
@@ -280,7 +306,7 @@ void WifiAnalyzerScreen::onBack()
     _showScan();
   } else {
     WiFi.scanDelete();
-    if (_state == STATE_SCAN) _showModes();
+    if (_state == STATE_SCAN || _state == STATE_FILTER || _state == STATE_CHANNEL) _showMenu();
     else Screen.goBack();
   }
 }
@@ -304,13 +330,91 @@ static const char* _strengthLabel(int rssi)
   return "Very Low";
 }
 
-void WifiAnalyzerScreen::_showModes()
+// ── Setup menu (same model as Packet Sniffer) ───────────────────────────────
+
+void WifiAnalyzerScreen::_showMenu(bool preserveSelection)
 {
-  _state = STATE_MODE;
+  _state = STATE_MENU;
   strncpy(_title, "Scanner", sizeof(_title));
-  _modeItems[0] = {"Access Points"};
-  _modeItems[1] = {"Clients/Stations"};
-  setItems(_modeItems, 2, _stationMode ? 1 : 0);
+
+  snprintf(_modeSub, sizeof(_modeSub), "%s", _stationMode ? "Clients/Stations" : "Access Points");
+  snprintf(_filterSub, sizeof(_filterSub), "%s", _filterMask ? "Custom" : "All");
+  snprintf(_channelSub, sizeof(_channelSub), "%s", _channelMask ? "Custom" : "All");
+  if (_minSignal) snprintf(_signalSub, sizeof(_signalSub), "%d dBm", _minSignal);
+  else            snprintf(_signalSub, sizeof(_signalSub), "Any");
+
+  uint8_t n = 0;
+  _menuRows[n] = ROW_MODE;       _menuItems[n++] = {"Mode", _modeSub};
+  if (!_stationMode) {
+    _menuRows[n] = ROW_FILTERS;  _menuItems[n++] = {"Filters", _filterSub};
+  }
+  _menuRows[n] = ROW_CHANNELS;   _menuItems[n++] = {"Channels", _channelSub};
+  _menuRows[n] = ROW_MIN_SIGNAL; _menuItems[n++] = {"Min Signal", _signalSub};
+  _menuRows[n] = ROW_START;      _menuItems[n++] = {"Start"};
+
+  // Keep the highlight on the same row when the row set changes (Mode).
+  if (_menuIndex >= n) _menuIndex = n - 1;
+  if (preserveSelection) { setCount(n); render(); }
+  else setItems(_menuItems, n, _menuIndex);
+}
+
+void WifiAnalyzerScreen::_showFilter(bool preserveSelection)
+{
+  static constexpr const char* kNames[FILTER_COUNT] = {"WPS only", "Open", "WEP", "WPA/WPA2", "WPA3"};
+  _state = STATE_FILTER;
+  strncpy(_title, "Scanner", sizeof(_title));
+  snprintf(_selectLabels[0], sizeof(_selectLabels[0]), "[%c] All", _filterMask == 0 ? 'x' : ' ');
+  _selectItems[0] = {_selectLabels[0]};
+  for (uint8_t i = 0; i < FILTER_COUNT; ++i) {
+    snprintf(_selectLabels[i + 1], sizeof(_selectLabels[i + 1]), "[%c] %s",
+             (_filterMask & (1u << i)) ? 'x' : ' ', kNames[i]);
+    _selectItems[i + 1] = {_selectLabels[i + 1]};
+  }
+  if (preserveSelection) { setCount(FILTER_COUNT + 1); render(); }
+  else setItems(_selectItems, FILTER_COUNT + 1);
+}
+
+void WifiAnalyzerScreen::_showChannels(bool preserveSelection)
+{
+  _state = STATE_CHANNEL;
+  strncpy(_title, "Scanner", sizeof(_title));
+  snprintf(_selectLabels[0], sizeof(_selectLabels[0]), "[%c] All", _channelMask == 0 ? 'x' : ' ');
+  _selectItems[0] = {_selectLabels[0]};
+  for (uint8_t ch = 1; ch <= 13; ++ch) {
+    snprintf(_selectLabels[ch], sizeof(_selectLabels[ch]), "[%c] Channel %u",
+             (_channelMask & (1u << (ch - 1))) ? 'x' : ' ', ch);
+    _selectItems[ch] = {_selectLabels[ch]};
+  }
+  if (preserveSelection) { setCount(14); render(); }
+  else setItems(_selectItems, 14);
+}
+
+bool WifiAnalyzerScreen::_filtersActive() const
+{
+  return (!_stationMode && _filterMask) || _channelMask || _minSignal;
+}
+
+// authmode / wps only matter in Access Points mode.
+bool WifiAnalyzerScreen::_passesFilters(uint8_t authmode, bool wps, int rssi, uint8_t channel) const
+{
+  if (_minSignal && rssi < _minSignal) return false;
+  if (_channelMask && (channel < 1 || channel > 13 || !(_channelMask & (1u << (channel - 1)))))
+    return false;
+  if (_stationMode) return true;
+
+  if ((_filterMask & FILTER_WPS) && !wps) return false;
+  const uint8_t security = _filterMask & (FILTER_OPEN | FILTER_WEP | FILTER_WPA | FILTER_WPA3);
+  if (!security) return true;
+  switch (authmode) {
+    case WIFI_AUTH_OPEN:         return security & FILTER_OPEN;
+    case WIFI_AUTH_WEP:          return security & FILTER_WEP;
+    case WIFI_AUTH_WPA_PSK:
+    case WIFI_AUTH_WPA2_PSK:
+    case WIFI_AUTH_WPA_WPA2_PSK: return security & FILTER_WPA;
+    case WIFI_AUTH_WPA3_PSK:     return security & FILTER_WPA3;
+    case WIFI_AUTH_WPA2_WPA3_PSK:return security & (FILTER_WPA | FILTER_WPA3);
+    default:                     return false;  // Enterprise, WAPI: not in the list
+  }
 }
 
 void WifiAnalyzerScreen::_scanStations()
@@ -325,6 +429,7 @@ void WifiAnalyzerScreen::_scanStations()
   // Two complete sweeps; retain discoveries between passes.
   for (uint8_t pass = 0; pass < 2; ++pass) {
     for (uint8_t ch = 1; ch <= 13; ++ch) {
+    if (_channelMask && !(_channelMask & (1u << (ch - 1)))) continue;  // Channels filter
     _anChannel = ch;
     esp_wifi_set_channel(ch, WIFI_SECOND_CHAN_NONE);
       delay(500);
@@ -333,9 +438,10 @@ void WifiAnalyzerScreen::_scanStations()
   esp_wifi_set_promiscuous(false);
   esp_wifi_set_promiscuous_rx_cb(nullptr);
   const uint8_t count = _anCount;
-  for (uint8_t i = 0; i < count && i < MAX_STATIONS; ++i) {
-    auto& dst = _stations[_stationCount++];
+  for (uint8_t i = 0; i < count && _stationCount < MAX_STATIONS; ++i) {
     const auto& src = _anStations[i];
+    if (!_passesFilters(0, false, src.rssi, src.channel)) continue;
+    auto& dst = _stations[_stationCount++];
     memcpy(dst.mac, src.mac, 6);
     memcpy(dst.bssid, src.bssid, 6);
     dst.rssi = src.rssi;
@@ -355,7 +461,9 @@ void WifiAnalyzerScreen::_scanStations()
     }
     _stations[j] = station;
   }
-  if (!_stationCount) ShowStatusAction::show("No stations found");
+  if (!_stationCount)
+    ShowStatusAction::show(_filtersActive() && count ? "No stations match the filters"
+                                                     : "No stations found");
   _showScan();
 }
 
@@ -443,10 +551,15 @@ void WifiAnalyzerScreen::_doScan()
     return;
   }
 
-  if (total > MAX_SCAN) total = MAX_SCAN;
-  for (int i = 0; i < total; i++) {
-    const int   rssi = (int)WiFi.RSSI(i);
-    WifiEntry&  e    = _entries[_entryCount++];
+  // Filters apply to every result; the list keeps up to MAX_SCAN matches
+  // (the scan is sorted by signal).
+  for (int i = 0; i < total && _entryCount < MAX_SCAN; i++) {
+    const int rssi = (int)WiFi.RSSI(i);
+    const auto* rec = static_cast<const wifi_ap_record_t*>(WiFi.getScanInfoByIndex(i));
+    const bool wps = rec && rec->wps;
+    if (!_passesFilters((uint8_t)WiFi.encryptionType(i), wps, rssi, (uint8_t)WiFi.channel(i)))
+      continue;
+    WifiEntry& e = _entries[_entryCount++];
 
     snprintf(e.ssid,    sizeof(e.ssid),    "%s", WiFi.SSID(i).c_str());
     snprintf(e.bssid,   sizeof(e.bssid),   "%s", WiFi.BSSIDstr(i).c_str());
@@ -468,6 +581,7 @@ void WifiAnalyzerScreen::_doScan()
   }
 
   WiFi.scanDelete();
+  if (_entryCount == 0) ShowStatusAction::show("No networks match the filters");
 
   int na = Achievement.inc("wifi_analyzer_scan");
   if (na == 1) Achievement.unlock("wifi_analyzer_scan");
@@ -481,7 +595,8 @@ void WifiAnalyzerScreen::_doScan()
 
 void WifiAnalyzerScreen::_rebuildScanItems()
 {
-  _scanItems[0] = {"Rescan"};
+  // "Filtered" next to Rescan, so a short list isn't mistaken for an empty air.
+  _scanItems[0] = {"Rescan", _filtersActive() ? "Filtered" : nullptr};
   if (_stationMode) {
     for (int i = 0; i < _stationCount; ++i) {
       _scanItems[i + 1] = {_stations[i].macText, _stations[i].sublabel};
