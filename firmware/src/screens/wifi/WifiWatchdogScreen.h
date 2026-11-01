@@ -191,8 +191,9 @@ private:
   int                 _holdCell         = -1;
   int                 _prevCounts[4]    = {-1, -1, -1, -1};
   int                 _karmaBaseline    = 0;
-  // Karma detection is active and only runs inside Karma Detector: until it
-  // has been opened from this Watchdog, its tile is dimmed.
+  // Karma detection is active and only runs inside Karma Detector: its tile
+  // is always dimmed, and shows "-" until Karma Detector has been opened from
+  // this Watchdog.
   bool                _karmaRan         = false;
   ScrollListView      _scroll;
 

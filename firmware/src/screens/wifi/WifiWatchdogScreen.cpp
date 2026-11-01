@@ -797,11 +797,14 @@ void WifiWatchdogScreen::_drawGridCell(int idx, int count)
   sp.drawRoundRect(2, 2, cellW - 4, cellH - 4, 4, held ? Config.getThemeColor() : 0x2104);
   sp.setTextSize(1);
   sp.setTextDatum(TC_DATUM);
-  const bool dimmed = (idx == 3 && !_karmaRan);  // Karma: runs only on demand
+  // Karma never monitors from this grid (it only runs inside Karma Detector):
+  // its title is always dimmed, and its count reads "-" until it has run.
+  const bool dimmed = (idx == 3);
   sp.setTextColor(held ? TFT_WHITE : (dimmed ? TFT_DARKGREY : TFT_LIGHTGREY), TFT_BLACK);
   sp.drawString(kNames[idx], cellW / 2, 8);
   char buf[6];
-  snprintf(buf, sizeof(buf), "%d", count);
+  if (idx == 3 && !_karmaRan) snprintf(buf, sizeof(buf), "-");
+  else                        snprintf(buf, sizeof(buf), "%d", count);
   sp.setTextSize(2);
   sp.setTextDatum(MC_DATUM);
   sp.setTextColor(count > 0 ? TFT_RED : TFT_DARKGREY, TFT_BLACK);
@@ -822,11 +825,14 @@ void WifiWatchdogScreen::_drawGridCell(int idx, int count)
   sp.drawRoundRect(2, 2, cellW - 4, cellH - 4, 4, sel ? Config.getThemeColor() : 0x2104);
   sp.setTextSize(1);
   sp.setTextDatum(TC_DATUM);
-  const bool dimmed = (idx == 3 && !_karmaRan);  // Karma: runs only on demand
+  // Karma never monitors from this grid (it only runs inside Karma Detector):
+  // its title is always dimmed, and its count reads "-" until it has run.
+  const bool dimmed = (idx == 3);
   sp.setTextColor(sel ? TFT_WHITE : (dimmed ? TFT_DARKGREY : TFT_LIGHTGREY), TFT_BLACK);
   sp.drawString(kNames[idx], cellW / 2, 8);
   char buf[6];
-  snprintf(buf, sizeof(buf), "%d", count);
+  if (idx == 3 && !_karmaRan) snprintf(buf, sizeof(buf), "-");
+  else                        snprintf(buf, sizeof(buf), "%d", count);
   sp.setTextSize(2);
   sp.setTextDatum(MC_DATUM);
   sp.setTextColor(count > 0 ? TFT_RED : TFT_DARKGREY, TFT_BLACK);
