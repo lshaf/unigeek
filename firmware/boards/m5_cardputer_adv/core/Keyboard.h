@@ -90,6 +90,7 @@ public:
     if (n == '\0') return;
 
     _key       = _shift ? _ADV_KB_MAP[row][col].s : n;
+    _keyMods   = modifiers();
     _available = true;
     _keyHeld   = true;
   }
@@ -106,6 +107,8 @@ public:
     return m;
   }
 
+  uint8_t keyModifiers() override { return _injAvail() ? (uint8_t)MOD_NONE : _keyMods; }
+
   char getKey() override {
     if (_injAvail()) return _injTake();
     _available = false;
@@ -116,6 +119,7 @@ public:
 
 private:
   char _key       = 0;
+  uint8_t _keyMods = MOD_NONE;
   bool _available = false;
   bool _shift     = false;
   bool _fn        = false;

@@ -25,6 +25,11 @@ public:
   virtual char peekKey()   = 0;  // read without consuming
   virtual char getKey()    = 0;
   virtual uint8_t modifiers() { return MOD_NONE; }
+  // Modifiers that were held when the pending key (the one peekKey()/getKey()
+  // returns) was pressed. Call before getKey(). Unlike modifiers(), this does
+  // not depend on the modifier still being held when the key is consumed, so
+  // a quick Ctrl+C is not lost. Injected (web remote) keys carry no modifiers.
+  virtual uint8_t keyModifiers() { return _injAvail() ? (uint8_t)MOD_NONE : modifiers(); }
   virtual bool isKeyHeld() const { return false; }  // true while the last consumed key is still physically held
 
   // Inject a key from the web remote into a small FIFO that impls drain ahead

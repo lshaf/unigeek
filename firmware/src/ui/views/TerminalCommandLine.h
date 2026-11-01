@@ -25,7 +25,7 @@ public:
   Action consume(IKeyboard* keyboard) {
     if (!keyboard || !keyboard->available()) return ACTION_NONE;
 
-    uint8_t modifiers = keyboard->modifiers();
+    uint8_t modifiers = keyboard->keyModifiers();  // snapshot from key-down
     char c = keyboard->getKey();
 
     // The Cardputer family uses Fn + ; . , / as the four arrow keys.

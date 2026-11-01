@@ -135,6 +135,9 @@ private:
   bool        _cursorVisible  = true;
   uint32_t    _lastBlinkTime  = 0;
 
+  // Insertion point in _input for physical-keyboard mode (0.._input.length()).
+  unsigned int _kbCursor      = 0;
+
   static bool& _cancelledFlag() { static bool v = false; return v; }
 
   explicit InputTextAction(const char* title, const String& defaultValue, Mode mode, Profile profile,
@@ -1065,7 +1068,12 @@ private:
   // ── keyboard mode ────────────────────────────────────────────────────────────
 
   String _runKeyboard() {
+    // Restore the caller's state on exit instead of forcing it off: a popup
+    // opened from a screen that is already in text mode must not hand
+    // ; . , / Enter Backspace back to navigation when it closes.
+    const bool prevSuppress = Uni.Nav ? Uni.Nav->suppressKeys() : false;
     if (Uni.Nav) Uni.Nav->setSuppressKeys(true);
+    _kbCursor = _input.length();
     _drawChromeKeyboard();
     _drawInputKeyboard(true);
     uint32_t lastBlink = millis();
@@ -1083,16 +1091,38 @@ private:
       }
 
       if (Uni.Keyboard && Uni.Keyboard->available()) {
+        const uint8_t mods = Uni.Keyboard->keyModifiers();
         char c = Uni.Keyboard->getKey();
-        if (c == '\n') {
+        bool arrow = false;
+#if defined(DEVICE_M5_CARDPUTER) || defined(DEVICE_M5_CARDPUTER_ADV)
+        // Text mode: Fn + ; , . / are the arrow keys (same Fn layer as the HID
+        // relay and the terminal). Left/right move the cursor; up/down have no
+        // meaning in a single-line field, so they are only swallowed instead
+        // of typing the symbol. Both legends are matched so Shift doesn't leak.
+        if (mods & IKeyboard::MOD_FN) {
+          arrow = true;
+          if      (c == ',' || c == '<') { if (_kbCursor > 0) _kbCursor--; }
+          else if (c == '/' || c == '?') { if (_kbCursor < _input.length()) _kbCursor++; }
+          else if (c == ';' || c == ':' || c == '.' || c == '>') { /* up/down: no-op */ }
+          else arrow = false;
+        }
+#else
+        (void)mods;  // other boards use Fn for their own symbol layer
+#endif
+        if (arrow) {
+          cursorOn  = true;
+          lastBlink = millis();
+          _drawInputKeyboard(true);
+        } else if (c == '\n') {
           _done = true;
         } else if (c == '\b') {
-          if (_input.length() > 0) {
-            _input.remove(_input.length() - 1);
+          if (_kbCursor > 0) {
+            _input.remove(_kbCursor - 1, 1);
+            _kbCursor--;
             cursorOn  = true;
             lastBlink = millis();
             _drawInputKeyboard(true);
-          } else {
+          } else if (_input.length() == 0) {
             _cancelled = true;
           }
         } else if (c != '\0') {
@@ -1101,7 +1131,11 @@ private:
                      : true;
           if (allow) {
             if (_mode == INPUT_HEX && isalpha(c)) c = toupper(c);
-            _input += c;
+            String head = _input.substring(0, _kbCursor);
+            head += c;
+            head += _input.substring(_kbCursor);
+            _input = head;
+            _kbCursor++;
             cursorOn  = true;
             lastBlink = millis();
             _drawInputKeyboard(true);
@@ -1111,7 +1145,7 @@ private:
       delay(10);
     }
 
-    if (Uni.Nav) Uni.Nav->setSuppressKeys(false);
+    if (Uni.Nav) Uni.Nav->setSuppressKeys(prevSuppress);
     Uni.Lcd.fillRect(_overlayX(), _overlayYKb(), _overlayW(), KB_H, TFT_BLACK);
     return _cancelled ? "" : _input;
   }
@@ -1152,9 +1186,21 @@ private:
     sp.drawRoundRect(0, 0, innerW, INP_H, 3, TFT_DARKGREY);
     sp.setTextColor(TFT_WHITE);
     sp.setTextDatum(TL_DATUM);
-    String display = _input + _pendingChar;
-    if (cursorOn) display += '_';
-    sp.drawString(display.length() > 0 ? display.c_str() : (cursorOn ? "_" : " "), 3, 4);
+    if (_kbCursor >= _input.length()) {
+      // Cursor at the end: unchanged rendering (trailing '_').
+      String display = _input + _pendingChar;
+      if (cursorOn) display += '_';
+      sp.drawString(display.length() > 0 ? display.c_str() : (cursorOn ? "_" : " "), 3, 4);
+    } else {
+      // Cursor inside the text: draw the text and underline the character at
+      // the cursor, so the text doesn't shift while the cursor blinks.
+      sp.drawString(_input.c_str(), 3, 4);
+      if (cursorOn) {
+        const int cx = 3 + sp.textWidth(_input.substring(0, _kbCursor).c_str());
+        const int cw = sp.textWidth(_input.substring(_kbCursor, _kbCursor + 1).c_str());
+        sp.drawFastHLine(cx, 4 + sp.fontHeight(), cw > 0 ? cw : 6, TFT_WHITE);
+      }
+    }
     sp.pushSprite(x + PAD, y + inputY);
     sp.deleteSprite();
   }
