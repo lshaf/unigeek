@@ -747,7 +747,10 @@ bool ST25R3916Backend::startType2Emulation(const ScanResult& identity, uint8_t* 
   stopEmulation();
   _emuIdentity = identity;
   _emuIdentity.sak = 0x00;
-  if (_emuIdentity.atqa[0] == 0 && _emuIdentity.atqa[1] == 0) _emuIdentity.atqa[1] = 0x44;
+  if (_emuIdentity.atqa[0] == 0 && _emuIdentity.atqa[1] == 0) {
+    _emuIdentity.atqa[0] = 0x44;  // anticollisionInfo (first byte on air)
+    _emuIdentity.atqa[1] = 0x00;  // platformInfo
+  }
   _emuDump = dump;
   _emuDumpLen = dumpLen;
   _emuMfc = false;
