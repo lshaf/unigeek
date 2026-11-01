@@ -4,12 +4,17 @@
 #include "core/ConfigManager.h"
 #include "core/AchievementManager.h"
 #include "screens/wifi/WifiMenuScreen.h"
+<<<<<<< HEAD
 #include "screens/wifi/WifiPacketMonitorScreen.h"
 #include "screens/wifi/WifiPacketSnifferScreen.h"
 #include "screens/wifi/WifiFoxHuntScreen.h"
 #include "screens/wifi/WifiDeauthDisassocScreen.h"
 #include "screens/wifi/WifiChannelMonitorDetailsScreen.h"
 #include "ui/actions/InputSelectAction.h"
+=======
+#include "screens/wifi/WifiChannelMonitorDetailsScreen.h"
+#include "screens/wifi/WifiTargetActions.h"
+>>>>>>> feature/wifi-watch_actions
 #include "ui/actions/ShowStatusAction.h"
 
 // Security classification from complete Beacon/Probe Response information elements.
@@ -530,7 +535,13 @@ void WifiChannelMonitorScreen::_renderGraph()
       lcd.drawString(String(ch), x + (ch - 1) * stepX + stepX / 2, baseline + 3);
     lcd.setTextColor(TFT_DARKGREY, TFT_BLACK);
     lcd.setTextDatum(BC_DATUM);
+<<<<<<< HEAD
     lcd.drawString("[Press] Details", x + w / 2, y + h - 1);
+=======
+    // Press opens the channel list (then APs, clients, Options): the analysis
+    // behind this overview. "Details" now names the Options entry.
+    lcd.drawString("[Press] Analyze", x + w / 2, y + h - 1);
+>>>>>>> feature/wifi-watch_actions
     lcd.setTextDatum(TL_DATUM);
     _graphChromeDrawn = true;
     _lastPaintedView = GRAPH;
@@ -807,6 +818,7 @@ void WifiChannelMonitorScreen::_renderClients()
 
 void WifiChannelMonitorScreen::_openOptions()
 {
+<<<<<<< HEAD
   if (_view != PAUSED && _view != AP_PAUSED && _view != CLIENT_PAUSED) return;
   static const InputSelectAction::Option channelOptions[] = {
     {"Packet Monitor", "monitor", nullptr, 0, false},
@@ -828,6 +840,64 @@ void WifiChannelMonitorScreen::_openOptions()
   else if (strcmp(choice, "sniffer") == 0) _openPacketSniffer();
   else if (strcmp(choice, "foxhunt") == 0) _openFoxHunt();
   else if (strcmp(choice, "deauth") == 0) _openDeauth();
+=======
+  // Channel list: only the channel-wide tools.
+  if (_view == PAUSED) {
+    const auto action = WifiTargetActions::choose(WifiTargetActions::MONITOR |
+                                                  WifiTargetActions::SNIFFER);
+    if (action == WifiTargetActions::NONE) { render(); return; }
+    const uint8_t channel = _selected + 1;
+    _releaseRadio();
+    WifiTargetActions::openChannel(action, channel);
+    return;
+  }
+
+  WifiTarget target;
+  if (!_selectedTarget(target)) return;
+  const auto action = WifiTargetActions::choose(
+      WifiTargetActions::DETAILS | WifiTargetActions::MONITOR | WifiTargetActions::SNIFFER |
+      WifiTargetActions::FOX_HUNT | WifiTargetActions::DEAUTH);
+  if (action == WifiTargetActions::NONE) { render(); return; }
+  if (action == WifiTargetActions::DETAILS) { _openSelectedDetails(); return; }
+  _releaseRadio();
+  WifiTargetActions::open(action, target);
+}
+
+// The AP or client highlighted in a paused list, as a target for the shared
+// Options actions. False when nothing valid is selected.
+bool WifiChannelMonitorScreen::_selectedTarget(WifiTarget& target)
+{
+  target = WifiTarget{};
+  target.channel = _detailChannel;
+  if (_view == AP_PAUSED) {
+    if (_apSelected >= _frozenApCount) return false;
+    const auto& ap = _frozenAps[_apOrder[_apSelected]];
+    target.client = false;
+    memcpy(target.mac, ap.bssid, 6);
+    memcpy(target.bssid, ap.bssid, 6);
+    memcpy(target.ssid, ap.ssid, sizeof(target.ssid));
+    return true;
+  }
+  if (_view == CLIENT_PAUSED) {
+    if (_clientSelected >= _frozenClientCount) return false;
+    target.client = true;
+    target.hasAp  = true;
+    memcpy(target.mac, _frozenClients[_clientOrder[_clientSelected]].mac, 6);
+    memcpy(target.bssid, _selectedBssid, 6);
+    memcpy(target.ssid, _selectedSsid, sizeof(target.ssid));
+    return true;
+  }
+  return false;
+}
+
+// Hand the radio over to the screen being opened; onRestore() takes it back.
+void WifiChannelMonitorScreen::_releaseRadio()
+{
+  _active = nullptr;
+  esp_wifi_set_promiscuous_rx_cb(nullptr);
+  delay(10);
+  esp_wifi_set_promiscuous(false);
+>>>>>>> feature/wifi-watch_actions
 }
 
 void WifiChannelMonitorScreen::_openSelectedDetails()
@@ -851,6 +921,7 @@ void WifiChannelMonitorScreen::_openSelectedDetails()
   Screen.push(details);
 }
 
+<<<<<<< HEAD
 void WifiChannelMonitorScreen::_openPacketSniffer()
 {
   if (_view != PAUSED && _view != AP_PAUSED && _view != CLIENT_PAUSED) return;
@@ -971,6 +1042,8 @@ void WifiChannelMonitorScreen::_openPacketMonitor()
   Screen.push(monitor);
 }
 
+=======
+>>>>>>> feature/wifi-watch_actions
 void WifiChannelMonitorScreen::onRestore()
 {
   WiFi.mode(WIFI_STA);
@@ -1004,6 +1077,7 @@ void WifiChannelMonitorScreen::_renderHints(int x, int y, int w, int h, bool pau
   lcd.drawFastHLine(x, footerTop, w, TFT_DARKGREY);
   lcd.setTextColor(TFT_DARKGREY, TFT_BLACK);
   lcd.setTextDatum(BC_DATUM);
+<<<<<<< HEAD
   if (paused) {
     const char* resumeHint = _view == CLIENT_PAUSED
         ? "[Back] Resume Scan" : "[Press] Select [Back] Resume Scan";
@@ -1014,6 +1088,18 @@ void WifiChannelMonitorScreen::_renderHints(int x, int y, int w, int h, bool pau
     }
     lcd.drawString(resumeHint, x + w / 2, y + h - 14);
     lcd.drawString("[Hold] Options", x + w / 2, y + h - 1);
+=======
+  // Footer layout shared with Watchcat / Watchdog: [Press] / [Hold] actions on
+  // the upper line, Pause / Resume on the lower one. "[Press] Select" where
+  // Press opens a deeper list (channels -> APs -> clients).
+  if (paused) {
+    const char* resumeHint = "[Back] Resume Scan";
+    if (lcd.textWidth(resumeHint) > w - 6) resumeHint = "[Back] Resume";
+    const char* actions = _view == CLIENT_PAUSED ? "[Hold] Options"
+                                                 : "[Press] Select [Hold] Options";
+    lcd.drawString(actions, x + w / 2, y + h - 14);
+    lcd.drawString(resumeHint, x + w / 2, y + h - 1);
+>>>>>>> feature/wifi-watch_actions
   } else {
     // Reserve the upper hint line to prevent vertical jumps on pause.
     if (_view == LIVE) {

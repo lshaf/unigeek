@@ -5,11 +5,15 @@
 #include "core/AchievementManager.h"
 #include "screens/wifi/WifiMenuScreen.h"
 #include "screens/wifi/WifiChannelMonitorDetailsScreen.h"
+<<<<<<< HEAD
 #include "screens/wifi/WifiPacketMonitorScreen.h"
 #include "screens/wifi/WifiPacketSnifferScreen.h"
 #include "screens/wifi/WifiFoxHuntScreen.h"
 #include "screens/wifi/WifiDeauthDisassocScreen.h"
 #include "ui/actions/InputSelectAction.h"
+=======
+#include "screens/wifi/WifiTargetActions.h"
+>>>>>>> feature/wifi-watch_actions
 #include "ui/actions/ShowStatusAction.h"
 #include "services/VendorResolver.h"
 
@@ -385,6 +389,7 @@ void WifiAnalyzerScreen::_showStationDetails(int index)
 // A short press on a result opens the same target actions without a pause step.
 void WifiAnalyzerScreen::_openOptions(int index)
 {
+<<<<<<< HEAD
   static const InputSelectAction::Option options[] = {
     {"Details", "details", nullptr, 0, false},
     {"Packet Monitor", "monitor", nullptr, 0, false},
@@ -397,11 +402,21 @@ void WifiAnalyzerScreen::_openOptions(int index)
 
   // Keep the scanner's existing Details screens and their navigation intact.
   if (strcmp(choice, "details") == 0) {
+=======
+  const auto action = WifiTargetActions::choose(
+      WifiTargetActions::DETAILS | WifiTargetActions::MONITOR | WifiTargetActions::SNIFFER |
+      WifiTargetActions::FOX_HUNT | WifiTargetActions::DEAUTH);
+  if (action == WifiTargetActions::NONE) { render(); return; }
+
+  // Keep the scanner's existing Details screens and their navigation intact.
+  if (action == WifiTargetActions::DETAILS) {
+>>>>>>> feature/wifi-watch_actions
     if (_stationMode) _showStationDetails(index);
     else _showClients(index);
     return;
   }
 
+<<<<<<< HEAD
   uint8_t mac[6] = {};
   uint8_t bssid[6] = {};
   const uint8_t* apFilter = nullptr;
@@ -420,6 +435,20 @@ void WifiAnalyzerScreen::_openOptions(int index)
       for (uint8_t i = 0; i < _anApNameCount; ++i) {
         if (memcmp(_anApNames[i].bssid, bssid, 6) == 0) {
           ssid = _anApNames[i].ssid;
+=======
+  WifiTarget target;
+  if (_stationMode) {
+    const auto& station = _stations[index];
+    target.client  = true;
+    target.channel = station.channel;
+    memcpy(target.mac, station.mac, 6);
+    if (station.hasAp) {
+      target.hasAp = true;
+      memcpy(target.bssid, station.bssid, 6);
+      for (uint8_t i = 0; i < _anApNameCount; ++i) {
+        if (memcmp(_anApNames[i].bssid, station.bssid, 6) == 0) {
+          strncpy(target.ssid, _anApNames[i].ssid, sizeof(target.ssid) - 1);
+>>>>>>> feature/wifi-watch_actions
           break;
         }
       }
@@ -430,6 +459,7 @@ void WifiAnalyzerScreen::_openOptions(int index)
     if (sscanf(ap.bssid, "%02x:%02x:%02x:%02x:%02x:%02x",
                &bytes[0], &bytes[1], &bytes[2], &bytes[3], &bytes[4], &bytes[5]) != 6)
       return;
+<<<<<<< HEAD
     for (int i = 0; i < 6; ++i) bssid[i] = (uint8_t)bytes[i];
     apFilter = bssid;
     ssid = ap.ssid;
@@ -454,6 +484,15 @@ void WifiAnalyzerScreen::_openOptions(int index)
     deauth->configureFromChannel(channel, apFilter, clientFilter, ssid);
     Screen.push(deauth);
   }
+=======
+    target.client = false;
+    for (int i = 0; i < 6; ++i) target.mac[i] = target.bssid[i] = (uint8_t)bytes[i];
+    strncpy(target.ssid, ap.ssid, sizeof(target.ssid) - 1);
+    target.channel = (uint8_t)atoi(ap.channel);
+  }
+
+  WifiTargetActions::open(action, target);
+>>>>>>> feature/wifi-watch_actions
 }
 
 void WifiAnalyzerScreen::_doScan()

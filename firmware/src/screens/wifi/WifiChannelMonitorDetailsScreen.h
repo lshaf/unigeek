@@ -8,14 +8,25 @@
 
 class WifiChannelMonitorDetailsScreen : public BaseScreen {
 public:
+<<<<<<< HEAD
   const char* title() override { return _client ? "Client Details" : "AP Details"; }
+=======
+  const char* title() override {
+    if (_title) return _title;
+    return _client ? "Client Details" : "AP Details";
+  }
+>>>>>>> feature/wifi-watch_actions
 
   void configureAp(const char* ssid, const uint8_t* bssid, int rssi, uint8_t channel, uint8_t security, int8_t wps) {
     _client = false;
     _lookupVendor = true;
     memcpy(_stationMac, bssid, 6);
     _setMac(_mac, bssid);
+<<<<<<< HEAD
     _ssid = ssid && ssid[0] ? ssid : "Hidden";
+=======
+    _ssid = ssid && ssid[0] ? ssid : "<hidden>";
+>>>>>>> feature/wifi-watch_actions
     _rssi = _formatRssi(rssi);
     _channel = String(channel);
     static const char* labels[] = {"Unknown", "Open", "WEP", "WPA", "WPA2", "WPA3", "WPA2/WPA3"};
@@ -30,21 +41,38 @@ public:
     _count = 7;
   }
 
+<<<<<<< HEAD
   void configureClient(const uint8_t* mac, int rssi, uint8_t channel,
                        uint32_t packets, const uint8_t* apBssid, const char* apSsid) {
+=======
+  // apSsid: nullptr = not known (shown "Unknown"), "" = hidden network.
+  // countLabel names what packets counts (Watchcat counts "Frames").
+  void configureClient(const uint8_t* mac, int rssi, uint8_t channel,
+                       uint32_t packets, const uint8_t* apBssid, const char* apSsid,
+                       const char* countLabel = "Packets") {
+>>>>>>> feature/wifi-watch_actions
     _client = true;
     _lookupVendor = true;
     memcpy(_stationMac, mac, 6);
     _setMac(_mac, mac);
     _setMac(_apMac, apBssid);
+<<<<<<< HEAD
     _ssid = apSsid && apSsid[0] ? apSsid : "Hidden";
     _rssi = String(rssi) + " dBm";
+=======
+    _ssid = !apSsid ? "Unknown" : apSsid[0] ? apSsid : "<hidden>";
+    _rssi = rssi ? String(rssi) + " dBm" : String("Unknown");
+>>>>>>> feature/wifi-watch_actions
     _channel = String(channel);
     _packets = String(packets);
     _rows[0] = {"MAC", _mac};
     _rows[1] = {"RSSI", _rssi};
     _rows[2] = {"Channel", _channel};
+<<<<<<< HEAD
     _rows[3] = {"Packets", _packets};
+=======
+    _rows[3] = {countLabel, _packets};
+>>>>>>> feature/wifi-watch_actions
     _rows[4] = {"AP BSSID", _apMac};
     _rows[5] = {"AP SSID", _ssid};
     _rows[6] = {"Vendor", "Looking up..."};
@@ -63,7 +91,11 @@ public:
     if (apBssid) _setMac(_apMac, apBssid);
     else _apMac = "Unknown";
     _ssid = apSsid && apSsid[0] ? apSsid : "Unknown";
+<<<<<<< HEAD
     _rssi = String(rssi) + " dBm";
+=======
+    _rssi = rssi ? String(rssi) + " dBm" : String("Unknown");
+>>>>>>> feature/wifi-watch_actions
     _channel = String(channel);
     _rows[0] = {"MAC", _mac};
     _rows[1] = {"RSSI", _rssi};
@@ -75,6 +107,114 @@ public:
     _count = 6;
   }
 
+<<<<<<< HEAD
+=======
+  // Watchcat probe-request station: what it searched for and how often. A
+  // locally administered (randomized) MAC can change and has no vendor.
+  void configureProbe(const uint8_t* mac, int rssi, uint8_t channel, int requests,
+                      const char (*ssids)[33], uint8_t ssidCount) {
+    _client = true;
+    _lookupVendor = true;
+    memcpy(_stationMac, mac, 6);
+    _setMac(_mac, mac);
+    _rssi = rssi ? String(rssi) + " dBm" : String("Unknown");
+    _channel = String(channel);
+    _packets = String(requests);
+    uint8_t n = 0;
+    _rows[n++] = {"MAC", _mac};
+    _rows[n++] = {"Random MAC", (mac[0] & 0x02) ? "Yes" : "No"};
+    _rows[n++] = {"RSSI", _rssi};
+    _rows[n++] = {"Channel", _channel};
+    _rows[n++] = {"Requests", _packets};
+    if (ssidCount == 0) _rows[n++] = {"Probed", "(wildcard)"};
+    for (uint8_t i = 0; i < ssidCount && i < 3; ++i) {
+      _probed[i] = ssids[i];
+      _rows[n++] = {i == 0 ? "Probed" : "", _probed[i]};
+    }
+    _rows[n] = {"Vendor", "Looking up..."};
+    _vendorRow = n;
+    _count = n + 1;
+  }
+
+  // Watchdog AP-like source (Beacon Flood, Evil Twin): no security / WPS data,
+  // optionally one extra row (e.g. the beacon rate).
+  void configureBssid(const char* ssid, const uint8_t* bssid, int rssi, uint8_t channel,
+                      const char* extraLabel = nullptr, const String& extraValue = String()) {
+    _client = false;
+    _lookupVendor = true;
+    memcpy(_stationMac, bssid, 6);
+    _setMac(_mac, bssid);
+    _ssid = ssid && ssid[0] ? ssid : "<hidden>";
+    _rssi = rssi ? _formatRssi(rssi) : String("Unknown");
+    _channel = String(channel);
+    _packets = extraValue;
+    uint8_t n = 0;
+    _rows[n++] = {"SSID", _ssid};
+    _rows[n++] = {"BSSID", _mac};
+    if (extraLabel) _rows[n++] = {extraLabel, _packets};
+    _rows[n++] = {"RSSI", _rssi};
+    _rows[n++] = {"Channel", _channel};
+    _rows[n] = {"Vendor", "Looking up..."};
+    _vendorRow = n;
+    _count = n + 1;
+  }
+
+  // Watchdog deauth/disassoc source. The source address is easily forged:
+  // when it matches a beaconing AP (ssid known), it is most likely spoofed,
+  // and the vendor is the AP's, not the attacker's.
+  void configureDeauth(const uint8_t* source, const char* ssid, bool disassoc, int frames,
+                       const uint8_t* target, int rssi, uint8_t channel,
+                       unsigned long secondsAgo) {
+    _title = disassoc ? "Disassoc Source" : "Deauth Source";
+    _client = false;
+    _lookupVendor = true;
+    memcpy(_stationMac, source, 6);
+    _setMac(_mac, source);
+    static const uint8_t kBroadcast[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+    if (memcmp(target, kBroadcast, 6) == 0) _apMac = "All clients";
+    else _setMac(_apMac, target);
+    const bool spoofed = ssid && ssid[0];
+    _ssid = spoofed ? ssid : "Unknown";
+    _rssi = rssi ? _formatRssi(rssi) : String("Unknown");
+    _channel = String(channel);
+    _packets = String(frames);
+    _rows[0] = {"Source", _mac};
+    _rows[1] = {"Spoofed AP", spoofed ? "Likely" : "No"};
+    _rows[2] = {"Network", _ssid};
+    _rows[3] = {"Target", _apMac};
+    _lastSeen = secondsAgo == 0 ? String("just now") : String(secondsAgo) + "s ago";
+    _rows[4] = {"Frames", _packets};
+    _rows[5] = {"Last seen", _lastSeen};
+    _rows[6] = {"RSSI", _rssi};
+    _rows[7] = {"Channel", _channel};
+    _rows[8] = {"Vendor", "Looking up..."};
+    _vendorRow = 8;
+    _count = 9;
+  }
+
+  // Watchdog beacon spam: one network announced from many random BSSIDs.
+  // There is no single address, so no vendor lookup.
+  // variants > 0: names differing only by a " NN" suffix, shown as "Name ##".
+  void configureSpam(const char* ssid, int bssids, int rssi, uint8_t channel,
+                     int variants = 0) {
+    _title = "Beacon Spam";
+    _client = false;
+    _lookupVendor = false;
+    _ssid = ssid && ssid[0] ? ssid : "<hidden>";
+    _packets = String(bssids);
+    _rssi = rssi ? _formatRssi(rssi) : String("Unknown");
+    _channel = String(channel);
+    _apMac = String(variants);
+    uint8_t n = 0;
+    _rows[n++] = {"SSID", _ssid};
+    if (variants > 0) _rows[n++] = {"Variants", _apMac};
+    _rows[n++] = {"Random BSSIDs", _packets};
+    _rows[n++] = {"RSSI", _rssi};
+    _rows[n++] = {"Channel", _channel};
+    _count = n;
+  }
+
+>>>>>>> feature/wifi-watch_actions
   void onInit() override {
     _list.setRows(_rows, _count);
     _list.resetScroll();
@@ -163,12 +303,21 @@ private:
                            rssi >= -70 ? "Better" : rssi >= -80 ? "Low" : "Very Low";
     return "[" + String(rssi) + "] " + strength;
   }
+<<<<<<< HEAD
+=======
+  const char* _title = nullptr;
+>>>>>>> feature/wifi-watch_actions
   bool _client = false;
   bool _lookupVendor = false;
   uint8_t _vendorRow = 5;
   uint8_t _stationMac[6] = {};
   uint8_t _count = 0;
   String _mac, _apMac, _ssid, _rssi, _channel, _packets;
+<<<<<<< HEAD
+=======
+  String _probed[3];
+  String _lastSeen;
+>>>>>>> feature/wifi-watch_actions
   static constexpr uint8_t MAX_ROWS = 16;
   ScrollListView::Row _rows[MAX_ROWS] = {};
   ScrollListView _list;

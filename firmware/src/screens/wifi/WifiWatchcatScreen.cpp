@@ -3,6 +3,8 @@
 #include "core/ScreenManager.h"
 #include "core/AchievementManager.h"
 #include "core/ConfigManager.h"
+#include "screens/wifi/WifiChannelMonitorDetailsScreen.h"
+#include "screens/wifi/WifiTargetActions.h"
 
 #include <algorithm>
 #include <cstring>
@@ -58,6 +60,10 @@ void WifiWatchcatScreen::onInit()
   _holdCell    = -1;
   for (int i = 0; i < 4; i++) _prevCounts[i] = -1;
   _lastUpdate = millis();
+  _paused      = false;
+  _holdHandled = false;
+  _probeSnap.clear();
+  _pairSnap.clear();
 
   _ringHead = _ringTail = 0;
   _probeMap.clear();
@@ -85,6 +91,10 @@ void WifiWatchcatScreen::_enterView(View view)
   _holdCell  = -1;
   _view      = view;
   _itemCount = 0;
+  _paused    = false;
+  _probeSnap.clear();
+  _pairSnap.clear();
+  _scroll.setSelectable(false);
   _scroll.resetScroll();
   _renderView();
 }
@@ -186,17 +196,32 @@ void WifiWatchcatScreen::onUpdate()
     }
 #endif
   } else {
+    // Like Traffic Analyzer. Live: [Press] pauses, [Back] returns to the grid.
+    // Paused: arrows select, [Press] opens Options (Details first; there is
+    // no deeper level to select, unlike Traffic Analyzer's AP list),
+    // [Back] resumes. [Hold] opens Options too.
+    if (_paused && Uni.Nav->isPressed() && Uni.Nav->currentDirection() == INavigation::DIR_PRESS &&
+        Uni.Nav->heldDuration() >= 700 && !_holdHandled) {
+      _holdHandled = true;
+      // Fire at the hold threshold and swallow the release, so the popup
+      // can't take it as a selection.
+      Uni.Nav->suppressCurrentPress();
+      _openOptions();
+      return;
+    }
+    if (_holdHandled && !Uni.Nav->isPressed()) _holdHandled = false;
+
     if (Uni.Nav->wasPressed()) {
-      const auto dir = Uni.Nav->readDirection();
-      if (dir == INavigation::DIR_BACK || dir == INavigation::DIR_PRESS) {
-        _view        = VIEW_OVERALL;
-        _prevGridSel = -1;
-#ifdef DEVICE_HAS_TOUCH_NAV
-        Uni.Nav->drawOverlay();
-        Uni.Nav->setSuppressKeys(true);
-#endif
-        Uni.Lcd.fillRect(bodyX(), bodyY(), bodyW(), bodyH(), TFT_BLACK);
-        render();
+      const auto     dir      = Uni.Nav->readDirection();
+      const uint32_t duration = Uni.Nav->pressDuration();
+      if (dir == INavigation::DIR_BACK) {
+        if (_paused) _resume();
+        else         _leaveList();
+        return;
+      }
+      if (dir == INavigation::DIR_PRESS && duration < 700) {
+        if (_paused) _openOptions();
+        else         _pause();
         return;
       }
       if (dir == INavigation::DIR_UP   || dir == INavigation::DIR_DOWN ||
@@ -213,7 +238,8 @@ void WifiWatchcatScreen::onUpdate()
     _channel = (_channel % 13) + 1;
     esp_wifi_set_channel(_channel, WIFI_SECOND_CHAN_NONE);
     _prune();
-    _renderView();
+    // A paused list keeps its snapshot; capture goes on in the background.
+    if (!_paused) _renderView();
   }
 }
 
@@ -225,14 +251,17 @@ void WifiWatchcatScreen::onRender()
     return;
   }
 
+  const int listH = _listHeight();
   if (_itemCount > 0) {
-    _scroll.render(bodyX(), bodyY(), bodyW(), bodyH());
+    _scroll.render(bodyX(), bodyY(), bodyW(), listH);
   } else {
-    Uni.Lcd.fillRect(bodyX(), bodyY(), bodyW(), bodyH(), TFT_BLACK);
+    Uni.Lcd.fillRect(bodyX(), bodyY(), bodyW(), listH, TFT_BLACK);
     Uni.Lcd.setTextDatum(MC_DATUM);
     Uni.Lcd.setTextColor(TFT_DARKGREY, TFT_BLACK);
-    Uni.Lcd.drawString("Monitoring...", bodyX() + bodyW() / 2, bodyY() + bodyH() / 2);
+    Uni.Lcd.drawString(_paused ? "Nothing captured" : "Monitoring...",
+                       bodyX() + bodyW() / 2, bodyY() + listH / 2);
   }
+  _renderFooter();
 }
 
 void WifiWatchcatScreen::onBack()
@@ -258,6 +287,8 @@ void WifiWatchcatScreen::_drainRing()
           ProbeEntry e{};
           e.timestamp = ev.timestamp;
           e.count     = 1;
+          e.rssi      = ev.rssi;
+          e.channel   = ev.channel;
           if (ev.ssid[0] != '\0') {
             memcpy(e.ssids[0], ev.ssid, 33);
             e.ssidCount = 1;
@@ -269,6 +300,8 @@ void WifiWatchcatScreen::_drainRing()
       } else {
         if (it->second.count < 9999) ++it->second.count;
         it->second.timestamp = ev.timestamp;
+        if (ev.rssi) it->second.rssi = ev.rssi;
+        it->second.channel = ev.channel;
         if (ev.ssid[0] != '\0' && it->second.ssidCount < 3) {
           bool found = false;
           for (int j = 0; j < it->second.ssidCount; j++) {
@@ -295,12 +328,16 @@ void WifiWatchcatScreen::_drainRing()
         ActivityEntry e{};
         e.timestamp = ev.timestamp;
         e.count     = 1;
+        e.rssi      = ev.rssi;
+        e.channel   = ev.channel;
         if (ev.ssid[0] != '\0') memcpy(e.ssid, ev.ssid, 33);
         map->emplace(key, e);
       }
     } else {
       if (it->second.count < 9999) ++it->second.count;
       it->second.timestamp = ev.timestamp;
+      if (ev.rssi) it->second.rssi = ev.rssi;
+      it->second.channel = ev.channel;
       if (it->second.ssid[0] == '\0' && ev.ssid[0] != '\0')
         memcpy(it->second.ssid, ev.ssid, 33);
     }
@@ -376,98 +413,98 @@ void WifiWatchcatScreen::_renderOverall()
 #endif
 }
 
-void WifiWatchcatScreen::_renderProbes()
+// ── Lists: one row per item ───────────────────────────────────────────────────
+
+const std::unordered_map<WifiWatchcatScreen::PairKey, WifiWatchcatScreen::ActivityEntry,
+                         WifiWatchcatScreen::PairHash, WifiWatchcatScreen::PairEqual>*
+WifiWatchcatScreen::_pairMap() const
 {
-  using ProbeItem = std::pair<MacAddr, ProbeEntry>;
-  std::vector<ProbeItem> items;
-  items.reserve(_probeMap.size());
-  for (const auto& kv : _probeMap) items.push_back(kv);
-  std::sort(items.begin(), items.end(), [](const ProbeItem& a, const ProbeItem& b) {
+  if (_view == VIEW_AUTH)  return &_authMap;
+  if (_view == VIEW_ASSOC) return &_assocMap;
+  if (_view == VIEW_EAPOL) return &_eapolMap;
+  return nullptr;
+}
+
+// Most active first, like Traffic Analyzer (ties: most recent first).
+void WifiWatchcatScreen::_collectProbes(std::vector<ProbeItem>& out) const
+{
+  out.clear();
+  out.reserve(_probeMap.size());
+  for (const auto& kv : _probeMap) out.push_back(kv);
+  std::sort(out.begin(), out.end(), [](const ProbeItem& a, const ProbeItem& b) {
+    if (a.second.count != b.second.count) return a.second.count > b.second.count;
     return a.second.timestamp > b.second.timestamp;
   });
+  if (out.size() > (size_t)MAX_ROWS) out.resize(MAX_ROWS);
+}
+
+void WifiWatchcatScreen::_collectPairs(std::vector<PairItem>& out) const
+{
+  out.clear();
+  const auto* map = _pairMap();
+  if (!map) return;
+  out.reserve(map->size());
+  for (const auto& kv : *map) out.push_back(kv);
+  std::sort(out.begin(), out.end(), [](const PairItem& a, const PairItem& b) {
+    if (a.second.count != b.second.count) return a.second.count > b.second.count;
+    return a.second.timestamp > b.second.timestamp;
+  });
+  if (out.size() > (size_t)MAX_ROWS) out.resize(MAX_ROWS);
+}
+
+// Station MAC on the left; the first probed network (+N more) on the right.
+// Everything else is in Details.
+void WifiWatchcatScreen::_renderProbes()
+{
+  std::vector<ProbeItem> live;
+  if (!_paused) _collectProbes(live);
+  const std::vector<ProbeItem>& items = _paused ? _probeSnap : live;
 
   int n = 0;
-  int macCount = 0;
   for (const auto& kv : items) {
-    if (macCount >= MAX_ITEMS || n >= MAX_ROWS) break;
-
+    if (n >= MAX_ROWS) break;
     const MacAddr&    mac = kv.first;
     const ProbeEntry& e   = kv.second;
-
-    snprintf(_labels[n], sizeof(_labels[n]),
-             "STA %02X:%02X:%02X:%02X:%02X:%02X (x%d)",
-             mac[0], mac[1], mac[2], mac[3], mac[4], mac[5], e.count);
+    snprintf(_labels[n], sizeof(_labels[n]), "%02X:%02X:%02X:%02X:%02X:%02X",
+             mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
     _rows[n].label = _labels[n];
-    _rows[n].value = "";
+    if (e.ssidCount == 0)     _rows[n].value = "(wildcard)";
+    else if (e.ssidCount > 1) _rows[n].value = String(e.ssids[0]) + " +" + String(e.ssidCount - 1);
+    else                      _rows[n].value = e.ssids[0];
+    _rows[n].secondary = nullptr;
     n++;
-
-    if (e.ssidCount == 0) {
-      if (n < MAX_ROWS) {
-        snprintf(_labels[n], sizeof(_labels[n]), "  - (wildcard)");
-        _rows[n].label = _labels[n];
-        _rows[n].value = "";
-        n++;
-      }
-    } else {
-      for (int i = 0; i < e.ssidCount && n < MAX_ROWS; i++) {
-        snprintf(_labels[n], sizeof(_labels[n]), "  - %s", e.ssids[i]);
-        _rows[n].label = _labels[n];
-        _rows[n].value = "";
-        n++;
-      }
-    }
-    macCount++;
   }
-
   _setListState(n);
 }
 
+// Station MAC on the left; the network (or the AP's short BSSID) on the right.
 void WifiWatchcatScreen::_renderActivity(
   const std::unordered_map<PairKey, ActivityEntry, PairHash, PairEqual>& map,
   bool showSsid)
 {
-  using ActivityItem = std::pair<PairKey, ActivityEntry>;
-  std::vector<ActivityItem> items;
-  items.reserve(map.size());
-  for (const auto& kv : map) items.push_back(kv);
-  std::sort(items.begin(), items.end(), [](const ActivityItem& a, const ActivityItem& b) {
-    return a.second.timestamp > b.second.timestamp;
-  });
+  (void)map;
+  std::vector<PairItem> live;
+  if (!_paused) _collectPairs(live);
+  const std::vector<PairItem>& items = _paused ? _pairSnap : live;
 
   int n = 0;
-  int pairCount = 0;
   for (const auto& kv : items) {
-    if (pairCount >= MAX_ITEMS || n >= MAX_ROWS) break;
-
+    if (n >= MAX_ROWS) break;
     const PairKey&       key = kv.first;
     const ActivityEntry& e   = kv.second;
-
-    snprintf(_labels[n], sizeof(_labels[n]),
-             "STA %02X:%02X:%02X:%02X:%02X:%02X (x%d)",
-             key.sta[0], key.sta[1], key.sta[2], key.sta[3], key.sta[4], key.sta[5], e.count);
+    snprintf(_labels[n], sizeof(_labels[n]), "%02X:%02X:%02X:%02X:%02X:%02X",
+             key.sta[0], key.sta[1], key.sta[2], key.sta[3], key.sta[4], key.sta[5]);
     _rows[n].label = _labels[n];
-    _rows[n].value = "";
+    if (showSsid && e.ssid[0] != '\0') {
+      _rows[n].value = e.ssid;
+    } else {
+      char ap[16];
+      snprintf(ap, sizeof(ap), "AP ..%02X:%02X:%02X", key.ap[3], key.ap[4], key.ap[5]);
+      _rows[n].value = ap;
+    }
+    _rows[n].secondary = nullptr;
     n++;
-
-    if (n < MAX_ROWS) {
-      snprintf(_labels[n], sizeof(_labels[n]),
-               "  BSSID %02X:%02X:%02X:%02X:%02X:%02X",
-               key.ap[0], key.ap[1], key.ap[2], key.ap[3], key.ap[4], key.ap[5]);
-      _rows[n].label = _labels[n];
-      _rows[n].value = "";
-      n++;
-    }
-
-    if (showSsid && e.ssid[0] != '\0' && n < MAX_ROWS) {
-      snprintf(_labels[n], sizeof(_labels[n]), "  - %s", e.ssid);
-      _rows[n].label = _labels[n];
-      _rows[n].value = "";
-      n++;
-    }
-
-    pairCount++;
   }
-
   _setListState(n);
 }
 
@@ -560,7 +597,8 @@ void WifiWatchcatScreen::_drawGridCell(int idx, int count)
 // ── Promiscuous callback ──────────────────────────────────────────────────────
 
 void WifiWatchcatScreen::_pushEvent(EventKind kind, const uint8_t* sta,
-                                    const uint8_t* ap, const char* ssid)
+                                    const uint8_t* ap, const char* ssid,
+                                    int8_t rssi, uint8_t channel)
 {
   portENTER_CRITICAL_ISR(&_ringLock);
   const int next = (_ringHead + 1) % MAX_RING;
@@ -573,6 +611,8 @@ void WifiWatchcatScreen::_pushEvent(EventKind kind, const uint8_t* sta,
     memset(ev.ssid, 0, sizeof(ev.ssid));
     if (ssid) strncpy(ev.ssid, ssid, sizeof(ev.ssid) - 1);
     ev.timestamp = millis();
+    ev.rssi      = rssi;
+    ev.channel   = channel;
     _ringHead = next;
   }
   portEXIT_CRITICAL_ISR(&_ringLock);
@@ -586,6 +626,13 @@ void WifiWatchcatScreen::_promiscuousCb(void* buf, wifi_promiscuous_pkt_type_t t
   const uint8_t* pay = pkt->payload;
   const size_t   len = pkt->rx_ctrl.sig_len;
   if (len < 24) return;
+
+  const int8_t  rssi    = pkt->rx_ctrl.rssi;
+  const uint8_t channel = pkt->rx_ctrl.channel;
+  // The signal only describes the station when it sent the frame (address 2).
+  auto staRssi = [&](const uint8_t* sta) -> int8_t {
+    return memcmp(pay + 10, sta, 6) == 0 ? rssi : 0;
+  };
 
   const uint8_t fcSub  = (pay[0] >> 4) & 0x0F;
   const uint8_t fcType = (pay[0] >> 2) & 0x03;
@@ -608,7 +655,7 @@ void WifiWatchcatScreen::_promiscuousCb(void* buf, wifi_promiscuous_pkt_type_t t
         }
         pos += 2 + elen;
       }
-      _pushEvent(EVENT_PROBE, pay + 10, nullptr, ssid);
+      _pushEvent(EVENT_PROBE, pay + 10, nullptr, ssid, rssi, channel);
       return;
     }
 
@@ -617,7 +664,7 @@ void WifiWatchcatScreen::_promiscuousCb(void* buf, wifi_promiscuous_pkt_type_t t
     if (fcSub == 0xB) {
       const uint8_t* bssid = pay + 16;
       const uint8_t* sta   = memcmp(pay + 10, bssid, 6) == 0 ? pay + 4 : pay + 10;
-      _pushEvent(EVENT_AUTH, sta, bssid);
+      _pushEvent(EVENT_AUTH, sta, bssid, nullptr, staRssi(sta), channel);
       return;
     }
 
@@ -645,7 +692,7 @@ void WifiWatchcatScreen::_promiscuousCb(void* buf, wifi_promiscuous_pkt_type_t t
         }
       }
 
-      _pushEvent(EVENT_ASSOC, sta, bssid, ssid);
+      _pushEvent(EVENT_ASSOC, sta, bssid, ssid, staRssi(sta), channel);
       return;
     }
 
@@ -683,5 +730,154 @@ void WifiWatchcatScreen::_promiscuousCb(void* buf, wifi_promiscuous_pkt_type_t t
     return; // WDS: no single infrastructure STA/AP pair to report.
   }
 
-  _pushEvent(EVENT_EAPOL, sta, ap);
+  _pushEvent(EVENT_EAPOL, sta, ap, nullptr, staRssi(sta), channel);
+}
+
+// ── Pause / select / actions ──────────────────────────────────────────────────
+
+static constexpr int kFooterH = 27;
+
+int WifiWatchcatScreen::_listHeight()
+{
+  return bodyH() - kFooterH;
+}
+
+// Hints follow Traffic Analyzer, with [Press] for Options.
+void WifiWatchcatScreen::_renderFooter()
+{
+  auto& lcd = Uni.Lcd;
+  const int x = bodyX(), y = bodyY(), w = bodyW(), h = bodyH();
+  const int footerTop = y + h - kFooterH;
+  lcd.fillRect(x, footerTop, w, kFooterH, TFT_BLACK);
+  lcd.drawFastHLine(x, footerTop, w, TFT_DARKGREY);
+  lcd.setTextColor(TFT_DARKGREY, TFT_BLACK);
+  lcd.setTextDatum(BC_DATUM);
+  // Shared layout: Options on the upper line, Pause / Resume on the lower.
+  if (_paused) {
+    const char* hint = "[Back] Resume Scan";
+    if (lcd.textWidth(hint) > w - 6) hint = "[Back] Resume";
+    lcd.drawString("[Press] Options", x + w / 2, y + h - 14);
+    lcd.drawString(hint, x + w / 2, y + h - 1);
+  } else {
+    lcd.drawString("[Press] Pause", x + w / 2, y + h - 1);
+  }
+  lcd.setTextDatum(TL_DATUM);
+}
+
+void WifiWatchcatScreen::_pause()
+{
+  _paused = true;
+  if (_view == VIEW_PROBES) _collectProbes(_probeSnap);
+  else                      _collectPairs(_pairSnap);
+  _scroll.setSelectable(true);
+  _scroll.setSelected(0);
+  _renderView();
+}
+
+void WifiWatchcatScreen::_resume()
+{
+  _paused = false;
+  _probeSnap.clear();
+  _pairSnap.clear();
+  _scroll.setSelectable(false);
+  _renderView();
+}
+
+void WifiWatchcatScreen::_leaveList()
+{
+  _paused = false;
+  _probeSnap.clear();
+  _pairSnap.clear();
+  _scroll.setSelectable(false);
+  _view        = VIEW_OVERALL;
+  _prevGridSel = -1;
+#ifdef DEVICE_HAS_TOUCH_NAV
+  Uni.Nav->drawOverlay();
+  Uni.Nav->setSuppressKeys(true);
+#endif
+  Uni.Lcd.fillRect(bodyX(), bodyY(), bodyW(), bodyH(), TFT_BLACK);
+  render();
+}
+
+bool WifiWatchcatScreen::_selectedTarget(WifiTarget& target) const
+{
+  target = WifiTarget{};
+  const int index = _scroll.selected();
+  if (_view == VIEW_PROBES) {
+    if (index < 0 || index >= (int)_probeSnap.size()) return false;
+    const auto& item = _probeSnap[index];
+    target.client  = true;
+    target.channel = item.second.channel;
+    memcpy(target.mac, item.first.data(), 6);
+    return true;
+  }
+  if (index < 0 || index >= (int)_pairSnap.size()) return false;
+  const auto& item = _pairSnap[index];
+  target.client  = true;
+  target.hasAp   = true;
+  target.channel = item.second.channel;
+  memcpy(target.mac, item.first.sta.data(), 6);
+  memcpy(target.bssid, item.first.ap.data(), 6);
+  memcpy(target.ssid, item.second.ssid, sizeof(target.ssid));
+  return true;
+}
+
+void WifiWatchcatScreen::_openSelectedDetails()
+{
+  const int index = _scroll.selected();
+  auto* details = new WifiChannelMonitorDetailsScreen();
+  if (_view == VIEW_PROBES) {
+    if (index < 0 || index >= (int)_probeSnap.size()) { delete details; return; }
+    const auto& item = _probeSnap[index];
+    const ProbeEntry& e = item.second;
+    details->configureProbe(item.first.data(), e.rssi, e.channel, e.count, e.ssids, e.ssidCount);
+  } else {
+    if (index < 0 || index >= (int)_pairSnap.size()) { delete details; return; }
+    const auto& item = _pairSnap[index];
+    const ActivityEntry& e = item.second;
+    details->configureClient(item.first.sta.data(), e.rssi, e.channel, e.count,
+                             item.first.ap.data(), e.ssid[0] ? e.ssid : nullptr, "Frames");
+  }
+  _releaseRadio();
+  Screen.push(details);
+}
+
+// Actions per list (no Deauth: Watchcat observes):
+// - Probe Requests: Details, Fox Hunt. The station is not associated and hops
+//   channels, so a single-channel Packet Monitor / Sniffer would see little.
+// - Authentication / Association / EAPOL: Details, Packet Monitor, Packet
+//   Sniffer, and Fox Hunt on either side of the station/AP pair.
+void WifiWatchcatScreen::_openOptions()
+{
+  WifiTarget target;
+  if (!_selectedTarget(target)) return;
+  uint8_t allowed = WifiTargetActions::DETAILS | WifiTargetActions::FOX_HUNT;
+  if (_view != VIEW_PROBES)
+    allowed |= WifiTargetActions::MONITOR | WifiTargetActions::SNIFFER |
+               WifiTargetActions::FOX_HUNT_AP;
+
+  const auto action = WifiTargetActions::choose(allowed);
+  if (action == WifiTargetActions::NONE) { render(); return; }
+  if (action == WifiTargetActions::DETAILS) { _openSelectedDetails(); return; }
+  _releaseRadio();
+  WifiTargetActions::open(action, target);
+}
+
+// Hand the radio over to the screen being opened; onRestore() takes it back.
+void WifiWatchcatScreen::_releaseRadio()
+{
+  esp_wifi_set_promiscuous_rx_cb(nullptr);
+  delay(10);
+  esp_wifi_set_promiscuous(false);
+}
+
+void WifiWatchcatScreen::onRestore()
+{
+  WiFi.mode(WIFI_MODE_STA);
+  esp_wifi_set_promiscuous(false);
+  esp_wifi_set_promiscuous_rx_cb(&WifiWatchcatScreen::_promiscuousCb);
+  esp_wifi_set_channel(_channel, WIFI_SECOND_CHAN_NONE);
+  esp_wifi_set_promiscuous(true);
+  _lastUpdate = millis();
+  render();
 }

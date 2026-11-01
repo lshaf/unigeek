@@ -30,17 +30,31 @@ public:
     if (fullyVisible < 1) fullyVisible = 1;
     int maxOffset = (_count > fullyVisible) ? _count - fullyVisible : 0;
     if (_offset > maxOffset) _offset = maxOffset;
+    if (_selected >= (int)_count) _selected = _count > 0 ? (int)_count - 1 : 0;
   }
 
-  void resetScroll() { _offset = 0; }
+  void resetScroll() { _offset = 0; _selected = 0; }
+
+  // Optional row selection (off by default: a plain scrolling list). When on,
+  // the selected row is highlighted and the arrows move the selection, keeping
+  // it in view; Left/Right jump a page.
+  void setSelectable(bool on) { _selectable = on; _ensureVisible(); }
+  bool selectable() const { return _selectable; }
+  int  selected() const { return _selected; }
+  void setSelected(int index) {
+    _selected = (index < 0) ? 0 : index;
+    if (_selected >= (int)_count) _selected = _count > 0 ? (int)_count - 1 : 0;
+    _ensureVisible();
+  }
 
   void render(int x, int y, int w, int h) {
     _x = x; _y = y; _w = w; _h = h;
     _draw();
   }
 
-  // returns true if direction was consumed (scrolled)
+  // returns true if direction was consumed (scrolled or moved the selection)
   bool onNav(INavigation::Direction dir) {
+    if (_selectable) return _navSelection(dir);
     // Boundary uses fully-visible rows only: if the last row is partial,
     // the user can still scroll one more step to bring it fully into view.
     int fullyVisible = _h / ROW_H;
@@ -78,6 +92,39 @@ private:
   Row*    _rows   = nullptr;
   uint16_t _count = 0;
   int     _offset = 0;
+  bool    _selectable = false;
+  int     _selected   = 0;
+
+  int _fullyVisible() const {
+    int fullyVisible = _h / ROW_H;
+    return fullyVisible < 1 ? 1 : fullyVisible;
+  }
+
+  void _ensureVisible() {
+    if (!_selectable) return;
+    const int fullyVisible = _fullyVisible();
+    if (_selected < _offset) _offset = _selected;
+    if (_selected >= _offset + fullyVisible) _offset = _selected - fullyVisible + 1;
+    if (_offset < 0) _offset = 0;
+  }
+
+  bool _navSelection(INavigation::Direction dir) {
+    if (_count == 0) return false;
+    const int last = (int)_count - 1;
+    int next = _selected;
+    if (dir == INavigation::DIR_UP)         next = _selected - 1;
+    else if (dir == INavigation::DIR_DOWN)  next = _selected + 1;
+    else if (dir == INavigation::DIR_LEFT)  next = _selected - _fullyVisible();
+    else if (dir == INavigation::DIR_RIGHT) next = _selected + _fullyVisible();
+    else return false;
+    if (next < 0) next = 0;
+    if (next > last) next = last;
+    if (next == _selected) return false;
+    _selected = next;
+    _ensureVisible();
+    _draw();
+    return true;
+  }
   int     _x = 0, _y = 0, _w = 0, _h = 0;
 
   void _draw() {
@@ -106,10 +153,13 @@ private:
       sp.fillSprite(TFT_BLACK);
       sp.setTextSize(1);
 
+      const bool isSelected = _selectable && idx == _selected;
+      if (isSelected) sp.fillRoundRect(0, 0, _w - SCROLL_W - 1, rowH, 3, Config.getThemeColor());
+
       const char* label = _rows[idx].label;
       const bool actionHint = label &&
           (strncmp(label, "[Press]", 7) == 0 || strncmp(label, "[Hold]", 6) == 0);
-      sp.setTextColor(actionHint ? TFT_YELLOW : TFT_DARKGREY);
+      sp.setTextColor(isSelected ? TFT_WHITE : (actionHint ? TFT_YELLOW : TFT_DARKGREY));
       sp.setTextDatum(TL_DATUM);
       sp.drawString(label ? label : "", 2, 3);
 
@@ -118,7 +168,7 @@ private:
         sp.setTextColor(TFT_WHITE);
         sp.setTextDatum(TL_DATUM);
         sp.drawString(_rows[idx].value.c_str(), 2, 3);
-        sp.setTextColor(TFT_DARKGREY);
+        sp.setTextColor(isSelected ? TFT_LIGHTGREY : TFT_DARKGREY);
         sp.setTextDatum(TR_DATUM);
         sp.drawString(_rows[idx].secondary, textW, 3);
       } else {
