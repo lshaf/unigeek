@@ -1,3 +1,4 @@
+#include "ui/actions/ConfirmAction.h"
 #include <new>
 #include "ui/components/TagPrompt.h"
 #include "PN532I2cScreen.h"
@@ -327,12 +328,8 @@ static bool _confirmUltralightSensitiveWrite(const char* typeName, uint16_t page
   const char* label = _ultralightSensitivePageLabel(typeName, page);
   if (!label) return true;
 
-  static const InputSelectAction::Option opts[] = {
-    {"Write anyway", "write"},
-  };
-  String title = String("Warning: ") + label;
-  const char* choice = InputSelectAction::popup(title.c_str(), opts, 1, nullptr);
-  return choice && strcmp(choice, "write") == 0;
+  String title = String("Write ") + label + "?";
+  return ConfirmAction::popup(title.c_str(), "Sensitive tag memory");
 }
 
 static uint16_t _ultralightConfig0(const char* typeName) {
@@ -975,6 +972,10 @@ void PN532I2cScreen::onItemSelected(uint8_t index) {
           break;
         case 2:
           _ndefTarget = NDEF_TARGET_MIFARE_CLASSIC;
+          if (!ConfirmAction::popup("Format tag as NDEF?", "This action cannot be undone")) {
+            _goMifareNdef();
+            break;
+          }
           // Standalone Format NDEF must establish the same card context as
           // Read/Write NDEF before checking Classic dimensions.
           renderOperationTitle("Format NDEF");
@@ -4357,6 +4358,10 @@ void PN532I2cScreen::_doUltralightWriteTag() {
 }
 
 void PN532I2cScreen::_doUltralightEraseTag() {
+  if (!ConfirmAction::popup("Erase tag?", "This action cannot be undone")) {
+    _goUltralightTag();
+    return;
+  }
   renderOperationTitle("Erase Tag");
   renderTagPrompt("Waiting for tag...", bodyX(), bodyY(), bodyW(), bodyH());
   uint16_t pages = 0; const char* typeName = nullptr;
@@ -4520,6 +4525,8 @@ void PN532I2cScreen::_doUltralightWritePage() {
     return;
   }
 
+  // Restore the operation screen before opening the next input popup.
+  if (_ultralightSensitivePageLabel(typeName, (uint16_t)page)) renderOperationTitle("Edit Memory");
   String hex = InputTextAction::popup("Page data (8 hex)", "", InputTextAction::INPUT_HEX);
   if (InputTextAction::wasCancelled()) { _goUltralightAdvanced(); return; }
   hex.replace(" ", ""); hex.replace(":", "");
@@ -4556,11 +4563,12 @@ void PN532I2cScreen::_doUltralightLockTag() {
   if (lastUser != 0xFFFF) --lastUser; else lastUser = 15;
   if (lastUser < 4) { ShowStatusAction::show("No lockable memory", 1600); _goUltralightAdvanced(); return; }
 
-  static const InputSelectAction::Option warn[] = {{"Lock permanently", "lock"}};
-  if (!InputSelectAction::popup("Make tag read-only?", warn, 1, nullptr)) {
+  if (!ConfirmAction::popup("Make tag read-only?", "This action cannot be undone")) {
     _goUltralightAdvanced(); return;
   }
 
+  // Dismiss the confirmation visually before any NFC work or status dialog.
+  renderOperationTitle("Lock Tag");
   uint8_t sm[2] = {}, dm[3] = {};
   if (!_pn532BuildUltralightLockMasks(typeName, 4, lastUser, sm, dm)) {
     ShowStatusAction::show("Lock not supported", 1600); _goUltralightAdvanced(); return;
@@ -5519,6 +5527,10 @@ bool PN532I2cScreen::_writeClassicNdefRecord(const uint8_t* ndef, size_t ndefLen
 }
 
 void PN532I2cScreen::_doEraseClassicNdef() {
+  if (!ConfirmAction::popup("Erase NDEF record?", "This action cannot be undone")) {
+    _goMifareNdef();
+    return;
+  }
   renderOperationTitle("Erase NDEF");
   _ndefTarget = NDEF_TARGET_MIFARE_CLASSIC;
 
@@ -6135,6 +6147,10 @@ void PN532I2cScreen::_doWriteNdefFileSelected(uint8_t fileIndex) {
 }
 
 void PN532I2cScreen::_doEraseNdef() {
+  if (!ConfirmAction::popup("Erase NDEF record?", "This action cannot be undone")) {
+    _goUltralightNdef();
+    return;
+  }
   renderOperationTitle("Erase NDEF");
   _ndefTarget = NDEF_TARGET_ULTRALIGHT;
   renderTagPrompt("Waiting for tag...", bodyX(), bodyY(), bodyW(), bodyH());
@@ -6172,6 +6188,10 @@ void PN532I2cScreen::_doEraseNdef() {
 }
 
 void PN532I2cScreen::_doFormatNdef() {
+  if (!ConfirmAction::popup("Format tag as NDEF?", "This action cannot be undone")) {
+    _goUltralightNdef();
+    return;
+  }
   renderOperationTitle("Format NDEF");
   _ndefTarget = NDEF_TARGET_ULTRALIGHT;
   renderTagPrompt("Waiting for tag...", bodyX(), bodyY(), bodyW(), bodyH());
@@ -6484,12 +6504,9 @@ void PN532I2cScreen::_doGen3LockUid() {
     return;
   }
 
-  static const InputSelectAction::Option opts[] = {
-    {"Lock UID permanently", "lock"},
-  };
-  const char* choice = InputSelectAction::popup("Permanent UID lock", opts, 1, nullptr);
+  const bool confirmed = ConfirmAction::popup("Lock UID permanently?", "This action cannot be undone");
   render();
-  if (!choice || strcmp(choice, "lock") != 0) { _goMifareAdvanced(); return; }
+  if (!confirmed) { _goMifareAdvanced(); return; }
 
   // The confirmation overlay may leave the card idle; use a fresh activation
   // before issuing the irreversible Gen3 lock command.
@@ -6862,6 +6879,10 @@ bool PN532I2cScreen::_doWriteDumpToTag(const uint8_t* dump, size_t len,
 }
 
 void PN532I2cScreen::_doEraseTag() {
+  if (!ConfirmAction::popup("Erase tag?", "This action cannot be undone")) {
+    _goMifareTag();
+    return;
+  }
   renderOperationTitle("Erase Tag");
   if (!_scanCardOrShow(5000)) { _goMifareTag(); return; }
   auto dims = _mfDims(_sak);

@@ -1,3 +1,4 @@
+#include "ui/actions/ConfirmAction.h"
 #include "SshClientScreen.h"
 
 #include "core/Device.h"
@@ -156,7 +157,7 @@ void SshClientScreen::onUpdate() {
   auto dir = Uni.Nav->readDirection();
 
   if (dir == INavigation::DIR_BACK) {
-    _closeConnection(true);
+    _requestDisconnect();
     return;
   }
 
@@ -234,8 +235,25 @@ void SshClientScreen::onBack() {
     return;
   }
 
-  if (_state == STATE_OUTPUT) _closeConnection(true);
-  else Screen.goBack();
+  if (_state == STATE_OUTPUT) _requestDisconnect();
+  else                        Screen.goBack();
+}
+
+// Every way out of a running session asks first (ConfirmAction honours the
+// global confirmation setting). The answer is read through navigation, which
+// is suppressed while a keyboard board types into the terminal.
+void SshClientScreen::_requestDisconnect() {
+#ifdef DEVICE_HAS_KEYBOARD
+  if (Uni.Nav) Uni.Nav->setSuppressKeys(false);
+#endif
+  if (!ConfirmAction::popup("Disconnect from server?")) {
+#ifdef DEVICE_HAS_KEYBOARD
+    if (Uni.Nav) Uni.Nav->setSuppressKeys(true);
+#endif
+    render();
+    return;
+  }
+  _closeConnection(true);
 }
 
 void SshClientScreen::_updateLabels() {
@@ -838,7 +856,7 @@ void SshClientScreen::_handleTerminalInput() {
   auto action = _inputLine.consume(Uni.Keyboard);
   switch (action) {
     case TerminalCommandLine::ACTION_EXIT:
-      _closeConnection(true);
+      _requestDisconnect();
       return;
     case TerminalCommandLine::ACTION_SUBMIT:
       if (!_remoteClosed) {
@@ -860,6 +878,15 @@ void SshClientScreen::_handleTerminalInput() {
       return;
     case TerminalCommandLine::ACTION_SCROLL_RIGHT:
       if (_outputView.onNav(INavigation::DIR_RIGHT)) _followOutput = _outputView.isAtBottom();
+      return;
+    case TerminalCommandLine::ACTION_CONTROL:
+      // Ctrl combos go out immediately; the server echoes them.
+      if (!_remoteClosed) {
+        const uint8_t byte = _inputLine.controlByte();
+        _sendTerminalBytes(&byte, 1);
+        _followOutput = true;
+      }
+      render();
       return;
     case TerminalCommandLine::ACTION_CHANGED:
       render();
@@ -1230,7 +1257,6 @@ void SshClientScreen::_renderOutput() {
 
   String display = _transcript;
   if (_partialLine.length() > 0) display += _partialLine;
-  if (display.length() == 0 && !_remoteClosed) display = "Waiting for data...";
 
   _outputView.updateContent(display, _followOutput);
   _outputView.render(x, cy, w, max(1, outputBottom - cy));
