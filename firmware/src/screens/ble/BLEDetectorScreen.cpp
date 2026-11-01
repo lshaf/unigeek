@@ -5,6 +5,7 @@
 #include "core/Device.h"
 #include "core/ScreenManager.h"
 #include "core/AchievementManager.h"
+#include "core/ConfigManager.h"
 #include "screens/ble/BLEMenuScreen.h"
 
 BLEDetectorScreen* BLEDetectorScreen::_instance = nullptr;
@@ -409,17 +410,20 @@ void BLEDetectorScreen::_draw()
     _chromeDrawn = true;
   }
 
-  // Match Traffic Monitor: a separated, two-line footer with compact hints.
-  // Keep the upper line reserved in LIVE to avoid content jumping on pause.
+  // Same footer as Traffic Analyzer and the Wi-Fi Watchdog / Watchcat: two
+  // lines, the Options hint on the upper one, Pause / Resume on the lower.
+  // The upper line stays reserved while live, so content doesn't jump.
   const int footerTop = bodyY() + bodyH() - 27;
   lcd.fillRect(bodyX(), footerTop, bodyW(), 27, TFT_BLACK);
   lcd.drawFastHLine(bodyX(), footerTop, bodyW(), TFT_DARKGREY);
   lcd.setTextDatum(BC_DATUM);
   lcd.setTextColor(TFT_DARKGREY, TFT_BLACK);
   if (_paused) {
-    lcd.drawString("[Back] Resume Scan", bodyX() + bodyW() / 2,
-                   bodyY() + bodyH() - 14);
+    const char* resume = "[Back] Resume Scan";
+    if (lcd.textWidth(resume) > bodyW() - 6) resume = "[Back] Resume";
     lcd.drawString("[Press] Options", bodyX() + bodyW() / 2,
+                   bodyY() + bodyH() - 14);
+    lcd.drawString(resume, bodyX() + bodyW() / 2,
                    bodyY() + bodyH() - 1);
   } else {
     lcd.drawString("[Press] Pause", bodyX() + bodyW() / 2,
@@ -436,7 +440,7 @@ void BLEDetectorScreen::_draw()
     sp.fillSprite(TFT_BLACK);
     sp.setTextDatum(MC_DATUM);
     sp.setTextColor(TFT_DARKGREY, TFT_BLACK);
-    sp.drawString("Scanning...", bodyW() / 2, spH / 2);
+    sp.drawString(_paused ? "Nothing captured" : "Monitoring...", bodyW() / 2, spH / 2);
     sp.pushSprite(bodyX(), spY);
     sp.deleteSprite();
     if (spY > contentY)
@@ -492,9 +496,10 @@ void BLEDetectorScreen::_draw()
     else if (strcmp(d.type, "Skimmer") == 0) dotColor = TFT_RED;
     else if (strcmp(d.type, "AirTag")  == 0) dotColor = TFT_BLUE;
     else if (strncmp(d.type, "BitChat", 7) == 0) dotColor = TFT_MAGENTA;
-    if (_paused && i == _selected) {
-      sp.fillRect(0, rowY, bodyW(), rowH, TFT_DARKGREY);
-    }
+    // Selection as in the other lists: theme-coloured rounded row.
+    const bool selected = _paused && i == _selected;
+    const uint16_t bg = selected ? Config.getThemeColor() : TFT_BLACK;
+    if (selected) sp.fillRoundRect(0, rowY, bodyW(), rowH, 3, bg);
     sp.fillCircle(4, rowY + 3, 3, dotColor);
 
     char label[24];
@@ -505,17 +510,24 @@ void BLEDetectorScreen::_draw()
       else if (delta < -3) trend = '-';
       snprintf(label, sizeof(label), "AT %.1fm %c", d.distance, trend);
     } else {
-      snprintf(label, sizeof(label), "%.12s", d.name);
+      snprintf(label, sizeof(label), "%s", d.name);
     }
-    sp.setTextDatum(TL_DATUM);
-    sp.setTextColor(TFT_WHITE, TFT_BLACK);
-    sp.drawString(label, 12, rowY);
 
+    // Name in white, signal in dark grey (white on the selected row), as in
+    // Traffic Analyzer; the name uses the width left by the signal.
     char rssiStr[8];
     snprintf(rssiStr, sizeof(rssiStr), "%ddBm", d.rssi);
     sp.setTextDatum(TR_DATUM);
-    sp.setTextColor(TFT_DARKGREY, TFT_BLACK);
+    sp.setTextColor(selected ? TFT_WHITE : TFT_DARKGREY, bg);
     sp.drawString(rssiStr, bodyW() - 2, rowY);
+
+    const int labelMax = bodyW() - 2 - sp.textWidth(rssiStr) - 6 - 12;
+    size_t n = strlen(label);
+    while (n > 1 && sp.textWidth(String(label).substring(0, n).c_str()) > labelMax) n--;
+    label[n] = '\0';
+    sp.setTextDatum(TL_DATUM);
+    sp.setTextColor(TFT_WHITE, bg);
+    sp.drawString(label, 12, rowY);
 
     advance();
   }
