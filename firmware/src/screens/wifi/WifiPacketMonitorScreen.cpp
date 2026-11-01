@@ -1,3 +1,4 @@
+#include "ui/views/ScrollbarRenderer.h"
 #include "WifiPacketMonitorScreen.h"
 
 #include <cstdlib>
@@ -586,12 +587,8 @@ void WifiPacketMonitorScreen::_renderMonitor()
   if (ROW_COUNT > visible) {
     const int barX = bodyX() + bodyW() - 3;
     const int trackH = bodyH();
-    int thumbH = (trackH * visible) / ROW_COUNT;
-    if (thumbH < 8) thumbH = 8;
-    const int travel = trackH - thumbH;
-    const int thumbY = bodyY() + (maxScroll ? (travel * _scroll) / maxScroll : 0);
-    lcd.fillRect(barX, bodyY(), 2, trackH, TFT_DARKGREY);
-    lcd.fillRect(barX, thumbY, 2, thumbH, Config.getThemeColor());
+    ScrollbarRenderer::draw(barX, bodyY(), 2, trackH,
+                            ROW_COUNT, visible, _scroll, 8, TFT_DARKGREY, Config.getThemeColor());
   }
   lcd.setTextDatum(TL_DATUM);
 }

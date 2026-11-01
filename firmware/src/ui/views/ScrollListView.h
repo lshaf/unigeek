@@ -80,7 +80,10 @@ private:
     int full    = _h / ROW_H;
     int extra   = (_h % ROW_H >= 5) ? 1 : 0;
     int visible = full + extra;
-    int textW   = _w - SCROLL_W - 4;
+    int fullyVisible = max(1, _h / ROW_H);
+    bool hasScrollbar = _count > fullyVisible;
+    int contentW = _w - (hasScrollbar ? SCROLL_W : 0);
+    int textW = contentW - 4;
 
     lcd.setTextSize(1);
 
@@ -96,7 +99,7 @@ private:
       if (rowH > remaining) rowH = remaining;
 
       Sprite sp(&lcd);
-      sp.createSprite(_w - SCROLL_W, rowH);
+      sp.createSprite(contentW, rowH);
       sp.fillSprite(TFT_BLACK);
       sp.setTextSize(1);
 
@@ -118,13 +121,11 @@ private:
 
     // Clear unused rows below last rendered row.
     if (usedH < _h)
-      lcd.fillRect(_x, _y + usedH, _w - SCROLL_W, _h - usedH, TFT_BLACK);
+      lcd.fillRect(_x, _y + usedH, _w, _h - usedH, TFT_BLACK);
 
     // Scrollbar — drawn directly; only if content overflows.
-    lcd.fillRect(_x + _w - SCROLL_W, _y, SCROLL_W, _h, 0x2104);
-    int fullyVisible = _h / ROW_H;
-    if (fullyVisible < 1) fullyVisible = 1;
-    if (_count > fullyVisible) {
+    if (hasScrollbar) {
+      lcd.fillRect(_x + _w - SCROLL_W, _y, SCROLL_W, _h, 0x2104);
       int sbH = max(4, _h * fullyVisible / _count);
       if (sbH > _h) sbH = _h;
       int maxOffset = _count - fullyVisible;

@@ -1,3 +1,4 @@
+#include "ui/views/ScrollbarRenderer.h"
 #include "ui/components/TagPrompt.h"
 #include "ST25R3916Screen.h"
 
@@ -2359,7 +2360,9 @@ void ST25R3916Screen::_renderMfcDump() {
   const int fullyVisible = max(1, bh / kRowH);
   const int visible = fullyVisible + ((bh % kRowH >= 5) ? 1 : 0);
   const uint16_t totalRows = _mfcDumpBlocks * 2U;
-  const int textW = bw - kScrollW - 4;
+  const bool hasScrollbar = totalRows > (uint16_t)fullyVisible;
+  const int contentW = bw - (hasScrollbar ? kScrollW : 0);
+  const int textW = contentW - 4;
 
   lcd.fillRect(bx, by, bw, bh, TFT_BLACK);
   for (int i = 0; i < visible; ++i) {
@@ -2382,7 +2385,7 @@ void ST25R3916Screen::_renderMfcDump() {
     const int rowH = min(kRowH, by + bh - rowY);
     if (rowH <= 0) break;
     Sprite sp(&lcd);
-    sp.createSprite(bw - kScrollW, rowH);
+    sp.createSprite(contentW, rowH);
     sp.fillSprite(TFT_BLACK);
     sp.setTextSize(1);
     sp.setTextDatum(TL_DATUM);
@@ -2396,12 +2399,10 @@ void ST25R3916Screen::_renderMfcDump() {
   }
 
   const int sbX = bx + bw - kScrollW;
-  lcd.fillRect(sbX, by, kScrollW, bh, 0x2104);
-  if (totalRows > (uint16_t)fullyVisible) {
-    const int sbH = max(4, bh * fullyVisible / (int)totalRows);
-    const uint16_t maxOffset = totalRows - fullyVisible;
-    const int sbY = (bh - sbH) * _mfcDumpOffset / max(1, (int)maxOffset);
-    lcd.fillRect(sbX, by + sbY, kScrollW, sbH, Config.getThemeColor());
+  if (hasScrollbar) {
+    ScrollbarRenderer::draw(sbX, by, kScrollW, bh,
+                            totalRows, fullyVisible, _mfcDumpOffset,
+                            4, 0x2104, Config.getThemeColor());
   }
 }
 
@@ -3336,12 +3337,9 @@ void ST25R3916Screen::_renderMfuDump() {
   }
 
   if (totalRows > (uint16_t)fullyVisible) {
-    const int trackH = bh;
-    const int thumbH = max(6, (trackH * fullyVisible) / (int)totalRows);
-    const int maxOff = max(1, (int)totalRows - fullyVisible);
-    const int thumbY = by + ((trackH - thumbH) * min((int)_mfuDumpOffset, maxOff)) / maxOff;
-    lcd.fillRect(bx + bw - kScrollW, by, kScrollW, bh, TFT_DARKGREY);
-    lcd.fillRect(bx + bw - kScrollW, thumbY, kScrollW, thumbH, TFT_WHITE);
+    ScrollbarRenderer::draw(bx + bw - kScrollW, by, kScrollW, bh,
+                            totalRows, fullyVisible, _mfuDumpOffset,
+                            6, TFT_DARKGREY, TFT_WHITE);
   }
 }
 

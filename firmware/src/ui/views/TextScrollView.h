@@ -222,7 +222,8 @@ private:
   {
     auto& lcd = Uni.Lcd;
     int visible = _visibleLines();
-    int textColW = _w - kScrollW;
+    bool hasScrollbar = _lineCount > visible;
+    int textColW = _w - (hasScrollbar ? kScrollW : 0);
 
     int rendered = 0;
     for (int i = 0; i < visible; i++) {
@@ -243,12 +244,12 @@ private:
 
     int usedH = rendered * kLineH;
     if (usedH < _h) {
-      lcd.fillRect(_x, _y + usedH, textColW, _h - usedH, TFT_BLACK);
+      lcd.fillRect(_x, _y + usedH, _w, _h - usedH, TFT_BLACK);
     }
 
     int sbX = _x + _w - kScrollW;
-    lcd.fillRect(sbX, _y, kScrollW, _h, 0x2104);
-    if (_lineCount > visible) {
+    if (hasScrollbar) {
+      lcd.fillRect(sbX, _y, kScrollW, _h, 0x2104);
       int sbH = max(4, _h * visible / _lineCount);
       if (sbH > _h) sbH = _h;
       int maxOffset = _lineCount - visible;
