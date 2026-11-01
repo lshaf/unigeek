@@ -218,7 +218,7 @@ static void _anStationCb(void* buf, wifi_promiscuous_pkt_type_t type) {
 void WifiAnalyzerScreen::onInit()
 {
   _entryCount = 0;
-  _menuIndex  = ROW_START;  // Start highlighted: one press scans as before
+  _menuIndex  = 0;  // Mode, the first row
   _showMenu();
 }
 
