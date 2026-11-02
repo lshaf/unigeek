@@ -31,22 +31,6 @@ void drawListScrollBar(int x, int y, int height, int total, int visible, int off
 
 BLEDetectorScreen* BLEDetectorScreen::_instance = nullptr;
 
-// ── Spam patterns (manufacturer data hex matching) ──────────────────────────
-
-const BLEDetectorScreen::SpamPattern BLEDetectorScreen::_patterns[] = {
-  {"4c0007190_______________00_____", "Apple Popup"},
-  {"4c000f05c0_____________________", "Apple Action"},
-  {"4c00071907_____________________", "Apple Connect"},
-  {"4c0004042a0000000f05c1__604c950", "Apple Setup"},
-  {"2cfe___________________________", "Android Connect"},
-  {"750000000000000000000000000000_", "Samsung Buds"},
-  {"7500010002000101ff000043_______", "Samsung Watch"},
-  {"0600030080_____________________", "Windows Swift"},
-  {"ff006db643ce97fe427c___________", "Love Toys"},
-};
-const int BLEDetectorScreen::_patternCount =
-  sizeof(_patterns) / sizeof(_patterns[0]);
-
 // ── Skimmer detection ────────────────────────────────────────────────────────
 
 static const char* const kSkimmerNames[] = {
@@ -225,19 +209,28 @@ void BLEDetectorScreen::_onDevice(NimBLEAdvertisedDevice* dev)
     else if (dev->isAdvertisingService(kBitChatTest)) devType = "BitChat Test";
   }
 
-  // Check manufacturer data against spam patterns + AirTag
+  // BLE spam (shared with Watchdog): alert once a type comes from several
+  // random addresses, then at most every 30 s while the attack goes on.
+  if (const char* spam = BleSpam::signatureType(dev)) {
+    const unsigned long now = millis();
+    const std::string addr = dev->getAddress().toString();
+    if (_spamTracker.observe(spam, addr.c_str(), now)) {
+      AlertCooldown* slot = nullptr;
+      for (auto& c : _cooldown)
+        if (c.type == spam || !c.type) { slot = &c; break; }
+      if (slot && (!slot->type || now - slot->at >= 30000UL)) {
+        slot->type = spam;
+        slot->at = now;
+        _pushAlert(spam);
+      }
+    }
+  }
+
+  // AirTag / Find My
   if (dev->getManufacturerDataCount() > 0) {
     std::string mfr = dev->getManufacturerData(0);
     const uint8_t* payload = reinterpret_cast<const uint8_t*>(mfr.data());
     size_t len = mfr.size();
-
-    // Spam pattern matching
-    for (int i = 0; i < _patternCount; i++) {
-      if (_matchPattern(_patterns[i].pattern, payload, len)) {
-        _pushAlert(_patterns[i].type);
-        break;
-      }
-    }
 
     // AirTag / FindMy detection: 4C 00 12 19
     if (len >= 4 && payload[0] == 0x4C && payload[1] == 0x00 &&
@@ -388,18 +381,6 @@ int BLEDetectorScreen::_findByMac(const char* mac)
     if (strcmp(_devices[i].mac, mac) == 0) return i;
   }
   return -1;
-}
-
-bool BLEDetectorScreen::_matchPattern(const char* pattern, const uint8_t* data, size_t len)
-{
-  size_t patLen = strlen(pattern);
-  for (size_t i = 0, j = 0; i < patLen && j < len; i += 2, j++) {
-    if (pattern[i] == '_' && pattern[i + 1] == '_') continue;
-    char hex[3] = {pattern[i], pattern[i + 1], 0};
-    uint8_t val = (uint8_t)strtoul(hex, nullptr, 16);
-    if (data[j] != val) return false;
-  }
-  return true;
 }
 
 void BLEDetectorScreen::_pushAlert(const char* type)

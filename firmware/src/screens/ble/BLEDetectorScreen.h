@@ -3,6 +3,7 @@
 #include "ui/templates/BaseScreen.h"
 #include <NimBLEDevice.h>
 #include <vector>
+#include "utils/ble/BleSpamSignature.h"
 
 class BLEDetectorScreen : public BaseScreen {
 public:
@@ -15,11 +16,6 @@ public:
   void onRender() override;
 
 private:
-  struct SpamPattern {
-    const char* pattern;
-    const char* type;
-  };
-
   struct DetectedDevice {
     char name[20];
     char mac[18];
@@ -52,6 +48,10 @@ private:
   SpamAlert _alerts[kMaxAlerts];
   int _alertCount = 0;
   int _alertHead  = 0;
+  BleSpam::SpamTracker _spamTracker;  // spam = one type from several addresses
+  // Last alert per spam type: a running attack alerts at most every 30 s.
+  struct AlertCooldown { const char* type; unsigned long at; };
+  AlertCooldown _cooldown[12] = {};
 
   int _scrollOffset = 0;
   uint32_t _lastDrawMs = 0;
@@ -68,13 +68,10 @@ private:
 
   void _onDevice(NimBLEAdvertisedDevice* dev);
   int  _findByMac(const char* mac);
-  bool _matchPattern(const char* pattern, const uint8_t* data, size_t len);
   void _pushAlert(const char* type);
 
   class ScanCallbacks;
   friend class ScanCallbacks;
 
   static BLEDetectorScreen* _instance;
-  static const SpamPattern _patterns[];
-  static const int _patternCount;
 };
