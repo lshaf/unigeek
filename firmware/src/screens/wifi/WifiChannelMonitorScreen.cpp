@@ -423,6 +423,7 @@ void WifiChannelMonitorScreen::onUpdate()
     } else if (dir == INavigation::DIR_DOWN || dir == INavigation::DIR_RIGHT) {
       if (_view == PAUSED) {
         _selected = (_selected + 1) % _NUM_CH;
+        if (_selected < _scroll) _scroll = _selected;
         if (_selected >= _scroll + _VISIBLE) _scroll = _selected - _VISIBLE + 1;
         render();
       } else if (_view == LIVE && _scroll < _NUM_CH - _VISIBLE) { ++_scroll; render(); }
