@@ -40,7 +40,11 @@ private:
 #endif
   static constexpr unsigned long WINDOW_MS = 30000UL;
   static constexpr unsigned long RATE_WINDOW_MS = 2000UL;
-  static constexpr uint16_t SUSPICIOUS_RATE_THRESHOLD = 25;
+  static constexpr uint16_t SUSPICIOUS_RATE_THRESHOLD = 25;  // per RATE_WINDOW_MS
+  // The rate must hold this long: devices may advertise every 20 ms for the
+  // first 30 s after powering up or disconnecting (Apple's guideline), then
+  // slow down; a beacon flood or a tool keeps it up.
+  static constexpr unsigned long SUSPICIOUS_SUSTAIN_MS = 32000UL;
 
   enum View : uint8_t {
     VIEW_OVERALL,
@@ -70,6 +74,7 @@ private:
     unsigned long lastSeen = 0;
     uint16_t packets = 0;
     int8_t rssi = -127;
+    uint8_t highWindows = 0;  // consecutive windows at or above the rate
   };
 
   bool _scanning = false;

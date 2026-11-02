@@ -323,13 +323,13 @@ void BLEWatchScreenBase::_classifyWatchdog(NimBLEAdvertisedDevice* dev, const ch
     }
   }
 
-  // A spam shows once its type comes from several random addresses: real
-  // AirPods / iPhones / Fast Pair headphones send the same advertisements
-  // from one stable address.
+  // A spam shows once its type comes from several addresses or with several
+  // payloads: real AirPods / iPhones / Fast Pair headphones send the same
+  // advertisements from one stable address with a steady payload.
   if (const char* spam = _spamType(dev)) {
     char key[32];
     snprintf(key, sizeof(key), "spam:%s", spam);
-    const bool isSpam = _spamTracker.observe(spam, mac, millis());
+    const bool isSpam = _spamTracker.observe(spam, mac, BleSpam::payloadHash(dev), millis());
     _addOrUpdate(0, key, spam, mac, rssi, false, isSpam);
     known = true;
   }
@@ -460,12 +460,22 @@ void BLEWatchScreenBase::_observeActivity(const char* mac, int8_t rssi, bool kno
   a->lastSeen = now;
   a->rssi = rssi;
   if (now - a->windowStart > RATE_WINDOW_MS) {
+    // Count consecutive windows that reached the rate; a quiet window resets.
+    if (a->packets >= SUSPICIOUS_RATE_THRESHOLD) {
+      if (a->highWindows < 255) ++a->highWindows;
+    } else {
+      a->highWindows = 0;
+    }
     a->windowStart = now;
     a->packets = 1;
     return;
   }
   if (a->packets < 65535) ++a->packets;
-  if (!known && a->packets >= SUSPICIOUS_RATE_THRESHOLD) {
+
+  // Reported once the rate has held for SUSPICIOUS_SUSTAIN_MS, so briefly fast
+  // advertisers (a device just powered on or disconnected) are left out.
+  constexpr uint8_t kSustainWindows = SUSPICIOUS_SUSTAIN_MS / RATE_WINDOW_MS;
+  if (!known && a->packets >= SUSPICIOUS_RATE_THRESHOLD && a->highWindows >= kSustainWindows) {
     _addOrUpdate(1, mac, "High-rate advertiser", mac, rssi);
   }
 }
