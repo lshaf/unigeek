@@ -57,13 +57,26 @@ const char* signatureType(NimBLEAdvertisedDevice* dev)
       if (matchPattern(sig.pattern, p, data.size())) return sig.type;
   }
   // Android Fast Pair announces itself in service data (UUID 0xFE2C), not in
-  // manufacturer data; the pairing advertisement carries a 3-byte model ID.
-  if (dev->getServiceDataCount() > 0 && dev->getServiceData(kFastPairService).size() == 3)
+  // manufacturer data: a 3-byte model ID, or longer formats from other tools.
+  if (dev->getServiceDataCount() > 0 && dev->getServiceData(kFastPairService).size() >= 3)
     return "Android Fast Pair";
   return nullptr;
 }
 
-bool SpamTracker::observe(const char* type, const char* address, unsigned long now)
+uint32_t payloadHash(NimBLEAdvertisedDevice* dev)
+{
+  uint32_t h = 2166136261u;
+  auto mix = [&h](const std::string& s) {
+    for (unsigned char c : s) { h ^= c; h *= 16777619u; }
+    h ^= 0xFF; h *= 16777619u;  // record separator
+  };
+  if (!dev) return h;
+  for (size_t m = 0; m < dev->getManufacturerDataCount(); ++m) mix(dev->getManufacturerData(m));
+  if (dev->getServiceDataCount() > 0) mix(dev->getServiceData(kFastPairService));
+  return h;
+}
+
+bool SpamTracker::observe(const char* type, const char* address, uint32_t payload, unsigned long now)
 {
   _justDetected = false;
   if (!type || !address) return false;
@@ -89,17 +102,28 @@ bool SpamTracker::observe(const char* type, const char* address, unsigned long n
   if (now - slot->windowStart > WINDOW_MS) {
     // A new window keeps a running spam alive: start from this address.
     slot->windowStart = now;
-    const bool wasSpam = slot->count >= MIN_ADDRESSES;
+    const bool wasSpam = slot->count >= MIN_ADDRESSES || slot->payloadCount >= MIN_PAYLOADS;
     slot->count = 0;
+    slot->payloadCount = 0;
     strncpy(slot->addresses[slot->count++], address, sizeof(slot->addresses[0]) - 1);
+    slot->payloads[slot->payloadCount++] = payload;
     return wasSpam;
   }
 
-  if (slot->count >= MIN_ADDRESSES) return true;
+  if (slot->count >= MIN_ADDRESSES || slot->payloadCount >= MIN_PAYLOADS) return true;
+
+  bool knownAddress = false;
   for (uint8_t i = 0; i < slot->count; ++i)
-    if (strcmp(slot->addresses[i], address) == 0) return false;  // same device again
-  strncpy(slot->addresses[slot->count++], address, sizeof(slot->addresses[0]) - 1);
-  if (slot->count >= MIN_ADDRESSES) {
+    if (strcmp(slot->addresses[i], address) == 0) { knownAddress = true; break; }
+  if (!knownAddress)
+    strncpy(slot->addresses[slot->count++], address, sizeof(slot->addresses[0]) - 1);
+
+  bool knownPayload = false;
+  for (uint8_t i = 0; i < slot->payloadCount; ++i)
+    if (slot->payloads[i] == payload) { knownPayload = true; break; }
+  if (!knownPayload) slot->payloads[slot->payloadCount++] = payload;
+
+  if (slot->count >= MIN_ADDRESSES || slot->payloadCount >= MIN_PAYLOADS) {
     _justDetected = true;
     return true;
   }

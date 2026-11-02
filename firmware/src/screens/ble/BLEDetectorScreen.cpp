@@ -214,7 +214,7 @@ void BLEDetectorScreen::_onDevice(NimBLEAdvertisedDevice* dev)
   if (const char* spam = BleSpam::signatureType(dev)) {
     const unsigned long now = millis();
     const std::string addr = dev->getAddress().toString();
-    if (_spamTracker.observe(spam, addr.c_str(), now)) {
+    if (_spamTracker.observe(spam, addr.c_str(), BleSpam::payloadHash(dev), now)) {
       AlertCooldown* slot = nullptr;
       for (auto& c : _cooldown)
         if (c.type == spam || !c.type) { slot = &c; break; }
