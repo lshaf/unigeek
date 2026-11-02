@@ -172,7 +172,7 @@ void PortScannerScreen::_showInput(uint8_t selectedIndex) {
     add("Custom Ports", _customPortsSub.c_str(), CFG_CUSTOM_PORTS);
   }
 
-  add("Start Scan", nullptr, CFG_START_SCAN);
+  add("Start", nullptr, CFG_START_SCAN);
   setItems(_configItems, _configCount, selectedIndex);
 }
 

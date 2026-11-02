@@ -161,7 +161,7 @@ void RemoteShellScannerScreen::_showConfig(uint8_t selectedIndex)
     add("End IP", _endIpSub.c_str(), CFG_END_IP);
   }
 
-  add("Start Scan", nullptr, CFG_START_SCAN);
+  add("Start", nullptr, CFG_START_SCAN);
   setItems(_configItems, _configCount, selectedIndex);
 }
 

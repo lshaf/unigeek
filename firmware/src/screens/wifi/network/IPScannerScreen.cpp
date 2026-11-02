@@ -189,7 +189,7 @@ void IPScannerScreen::_showConfiguration(uint8_t selectedIndex) {
   _configItems[0] = {"Start IP", _startIpSub.c_str()};
   _configItems[1] = {"End IP", _endIpSub.c_str()};
   _configItems[2] = {"Resolve Name", _resolveName ? "On" : "Off"};
-  _configItems[3] = {"Start Scan"};
+  _configItems[3] = {"Start"};
   setItems(_configItems, 4, selectedIndex);
 }
 
