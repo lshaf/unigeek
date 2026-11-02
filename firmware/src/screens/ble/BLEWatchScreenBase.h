@@ -8,6 +8,7 @@
 
 #include "ui/templates/BaseScreen.h"
 #include "ui/views/ScrollListView.h"
+#include "utils/ble/BleSpamSignature.h"
 
 class BLEWatchScreenBase : public BaseScreen {
 public:
@@ -38,9 +39,7 @@ private:
   static constexpr int MAX_ACTIVITY = 32;
 #endif
   static constexpr unsigned long WINDOW_MS = 30000UL;
-  static constexpr unsigned long SPAM_WINDOW_MS = 3000UL;
   static constexpr unsigned long RATE_WINDOW_MS = 2000UL;
-  static constexpr uint16_t SPAM_THRESHOLD = 4;
   static constexpr uint16_t SUSPICIOUS_RATE_THRESHOLD = 25;
 
   enum View : uint8_t {
@@ -60,8 +59,6 @@ private:
     uint16_t count = 0;
     unsigned long firstSeen = 0;
     unsigned long lastSeen = 0;
-    unsigned long burstStart = 0;
-    uint16_t burstCount = 0;
     bool visible = true;
     bool hasDevice = false;
     NimBLEAdvertisedDevice device;  // last advertisement, for Details / Fox Hunt
@@ -91,6 +88,7 @@ private:
   int _activityCount = 0;
 
   ScrollListView _scroll;
+  BleSpam::SpamTracker _spamTracker;  // spam = one type from several addresses
 
   // Paused list (as in the Wi-Fi Watchdog / Watchcat): a frozen snapshot of
   // the category, one row per entry, so the selection can't move.
@@ -132,7 +130,6 @@ private:
   void _leaveList();
   void _openOptions();
 
-  static bool _matchPattern(const char* pattern, const uint8_t* data, size_t len);
   static bool _containsNoCase(const std::string& text, const char* needle);
   static bool _isNamed(const std::string& text, const char* needle);
   static const char* _spamType(NimBLEAdvertisedDevice* dev);
