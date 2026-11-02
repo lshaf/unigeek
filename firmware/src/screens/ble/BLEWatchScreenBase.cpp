@@ -272,7 +272,7 @@ void BLEWatchScreenBase::onRender()
     Uni.Lcd.fillRect(bodyX(), bodyY(), bodyW(), listH, TFT_BLACK);
     Uni.Lcd.setTextDatum(MC_DATUM);
     Uni.Lcd.setTextColor(TFT_DARKGREY, TFT_BLACK);
-    Uni.Lcd.drawString(_paused ? "Nothing captured" : "Monitoring...",
+    Uni.Lcd.drawString(_paused ? "Paused - No results" : "Scanning...",
                        bodyX() + bodyW() / 2, bodyY() + listH / 2);
   }
   _renderFooter();
