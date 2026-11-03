@@ -143,7 +143,8 @@ void NetworkMenuScreen::_showWifiQR() {
   ShowQRCodeAction::show(ssid.c_str(), content.c_str());
   int nq = Achievement.inc("wifi_qr_shown");
   if (nq == 1) Achievement.unlock("wifi_qr_shown");
-  _showMenu();
+  // Não chamar _showMenu(): estado já é STATE_MENU.
+  // setItems() reinicia a seleção no primeiro item.
 }
 
 void NetworkMenuScreen::_showInformation() {
