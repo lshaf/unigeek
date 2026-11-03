@@ -2,8 +2,10 @@
 #include <cstdint>
 #include <cstddef>
 
-// ICMP-ping-based host discovery on the current WiFi /24 subnet.
-// Uses lwip raw sockets — works on ESP32 WiFi (ARP is unreliable there).
+// Host discovery on the current WiFi /24 subnet: ICMP echo sent in batches,
+// a host counting as present if it answers the echo or ARP, with one retry
+// for silent addresses (see IpScanUtil.cpp). Uses lwIP raw / etharp APIs
+// through tcpip_api_call().
 class IpScanUtil {
 public:
   struct Host {
@@ -19,7 +21,8 @@ public:
   // Resolves a host name using reverse DNS.
   static bool resolveName(const char* ip, char* out, size_t outLen);
 
-  // Scans startOctet..endOctet on the local subnet via ICMP ping (100 ms timeout/host).
+  // Scans startOctet..endOctet on the local subnet (batched ICMP + ARP, two
+  // attempts; results in address order).
   // resolveHostnames: attempt reverse DNS.
   // progressCb: optional, called with 0–100 during scan.
   // Returns number of live hosts found, written to out[].
