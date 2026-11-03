@@ -25,6 +25,7 @@ private:
 
   State _state       = STATE_CONFIGURATION;
   bool  _resolveName = true;
+  bool  _aggressive  = false;  // Profile: Fast / Aggressive
 
   int     _startIp = 1;
   int     _endIp   = 254;
@@ -41,7 +42,7 @@ private:
   uint8_t              _openCount = 0;
   ListItem             _openItems[PortScanUtil::MAX_RESULTS];
 
-  ListItem _configItems[4];
+  ListItem _configItems[5];
   uint8_t _selectedHost = 0;
 
   void _showDetails(uint8_t index);

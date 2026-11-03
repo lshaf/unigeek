@@ -108,6 +108,10 @@ void IPScannerScreen::onItemSelected(uint8_t index) {
         _showConfiguration(index);
         break;
       case 3:
+        _aggressive = !_aggressive;
+        _showConfiguration(index);
+        break;
+      case 4:
         _scanIP();
         break;
     }
@@ -189,8 +193,9 @@ void IPScannerScreen::_showConfiguration(uint8_t selectedIndex) {
   _configItems[0] = {"Start IP", _startIpSub.c_str()};
   _configItems[1] = {"End IP", _endIpSub.c_str()};
   _configItems[2] = {"Resolve Name", _resolveName ? "On" : "Off"};
-  _configItems[3] = {"Start"};
-  setItems(_configItems, 4, selectedIndex);
+  _configItems[3] = {"Profile", _aggressive ? "Aggressive" : "Fast"};
+  _configItems[4] = {"Start"};
+  setItems(_configItems, 5, selectedIndex);
 }
 
 void IPScannerScreen::_scanIP() {
@@ -214,7 +219,8 @@ void IPScannerScreen::_scanIP() {
     (uint8_t)_startIp, (uint8_t)_endIp,
     _foundIPs, MAX_FOUND, _resolveName,
     [](uint8_t pct) { ProgressView::progress("Scanning...", pct); },
-    []() { return ScanCancelUtil::poll(); }
+    []() { return ScanCancelUtil::poll(); },
+    _aggressive ? IpScanUtil::Profile::Aggressive : IpScanUtil::Profile::Fast
   );
 
   ProgressView::finish();

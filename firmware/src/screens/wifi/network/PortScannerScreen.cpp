@@ -121,6 +121,11 @@ void PortScannerScreen::onItemSelected(uint8_t index) {
     }
 
 
+    case CFG_DEPTH:
+      _aggressive = !_aggressive;
+      _showInput(index);
+      break;
+
     case CFG_START_SCAN:
       _scan();
       break;
@@ -172,6 +177,7 @@ void PortScannerScreen::_showInput(uint8_t selectedIndex) {
     add("Custom Ports", _customPortsSub.c_str(), CFG_CUSTOM_PORTS);
   }
 
+  add("Profile", _aggressive ? "Aggressive" : "Fast", CFG_DEPTH);
   add("Start", nullptr, CFG_START_SCAN);
   setItems(_configItems, _configCount, selectedIndex);
 }
@@ -258,7 +264,8 @@ void PortScannerScreen::_scan() {
       (uint8_t)_startIp, (uint8_t)_endIp,
       _hosts, MAX_FOUND_HOSTS, false,
       [](uint8_t pct) { ProgressView::progress("Scanning hosts...", pct); },
-    []() { return ScanCancelUtil::poll(); }
+    []() { return ScanCancelUtil::poll(); },
+      _aggressive ? IpScanUtil::Profile::Aggressive : IpScanUtil::Profile::Fast
   );
 
     for (uint8_t i = 0; i < hostCount && _resultCount < PortScanUtil::MAX_RESULTS; i++) {
@@ -350,7 +357,7 @@ bool PortScannerScreen::_scanTarget(const char* ip, uint8_t& count, const char* 
 
   uint8_t remaining = PortScanUtil::MAX_RESULTS - count;
   uint8_t found = 0;
-  const bool patient = _scanMode == MODE_TARGETS;
+  const bool patient = _scanMode == MODE_TARGETS || _aggressive;
 
   if (_portMode == PORTS_COMMON) {
     found = PortScanUtil::scan(ip, &_results[count], remaining, progressLabel, false, patient);

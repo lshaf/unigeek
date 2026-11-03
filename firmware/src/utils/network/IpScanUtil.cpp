@@ -8,11 +8,13 @@
 #include <lwip/netif.h>
 #include <lwip/priv/tcpip_priv.h>
 #include "DnsUtil.h"
+#include "MdnsScanUtil.h"
 
 // ── Discovery internals ──────────────────────────────────────────────────────
 //
 // Hosts are probed in batches: an ICMP echo goes to every address of the
-// batch at once, then replies are collected for up to BATCH_WAIT_MS. That
+// batch at once, then replies are collected for up to the profile's wait (350 ms
+// Fast, 800 ms Aggressive). That
 // gives each host far more time to answer than one-at-a-time probing (Wi-Fi
 // devices in power save wake up only every 100-300 ms, and the first packet
 // waits for ARP) while the whole scan takes no longer.
@@ -25,10 +27,13 @@
 //
 // lwIP raw / etharp calls run in the tcpip thread through tcpip_api_call().
 
-static constexpr uint16_t PING_ID       = 0x1A2B;
-static constexpr uint8_t  BATCH         = 8;     // lwIP's ARP table holds 10
-static constexpr uint32_t BATCH_WAIT_MS = 350;
-static constexpr uint8_t  ATTEMPTS      = 2;
+static constexpr uint16_t PING_ID = 0x1A2B;
+static constexpr uint8_t  BATCH   = 8;  // lwIP's ARP table holds 10
+
+struct ProfileParams { uint8_t attempts; uint32_t waitMs; };
+static ProfileParams paramsFor(IpScanUtil::Profile profile) {
+  return profile == IpScanUtil::Profile::Aggressive ? ProfileParams{3, 800} : ProfileParams{2, 350};
+}
 
 static struct raw_pcb*   s_pcb = nullptr;
 static uint8_t           s_subnet[3] = {};        // first three octets of the /24
@@ -132,7 +137,8 @@ static void closeProbe() {
 
 // Probes `octets` (n <= BATCH) on the subnet; sets found[i] for each host that
 // answered the echo or ARP. Returns early once every host of the batch replied.
-static void probeBatch(const uint8_t* octets, uint8_t n, bool* found, uint16_t seq) {
+static void probeBatch(const uint8_t* octets, uint8_t n, bool* found, uint16_t seq,
+                       uint32_t waitMs) {
   BatchCall call{};
   call.n = n;
   call.seq = seq;
@@ -141,7 +147,7 @@ static void probeBatch(const uint8_t* octets, uint8_t n, bool* found, uint16_t s
   tcpip_api_call(doSend, &call.base);
 
   const uint32_t start = millis();
-  while (millis() - start < BATCH_WAIT_MS) {
+  while (millis() - start < waitMs) {
     bool all = true;
     for (uint8_t i = 0; i < n; ++i) if (!hasReplied(octets[i])) { all = false; break; }
     if (all) break;
@@ -163,16 +169,18 @@ bool IpScanUtil::resolveName(const char* ip, char* out, size_t outLen) {
   return out[0] != '\0';
 }
 
-bool IpScanUtil::scanTarget(const char* targetIp, Host& out, bool resolveHostnames) {
+bool IpScanUtil::scanTarget(const char* targetIp, Host& out, bool resolveHostnames,
+                            Profile profile) {
   memset(&out, 0, sizeof(out));
   IPAddress target;
   if (!targetIp || !target.fromString(targetIp)) return false;
   if (!openProbe(target)) return false;
 
+  const ProfileParams params = paramsFor(profile);
   const uint8_t octet = target[3];
   bool found = false;
-  for (uint8_t attempt = 0; attempt < ATTEMPTS && !found; ++attempt)
-    probeBatch(&octet, 1, &found, (uint16_t)(attempt + 1));
+  for (uint8_t attempt = 0; attempt < params.attempts && !found; ++attempt)
+    probeBatch(&octet, 1, &found, (uint16_t)(attempt + 1), params.waitMs);
   closeProbe();
   if (!found) return false;
 
@@ -186,7 +194,8 @@ uint8_t IpScanUtil::scan(uint8_t startOctet, uint8_t endOctet,
                          Host* out, uint8_t maxHosts,
                          bool resolveHostnames,
                          void (*progressCb)(uint8_t),
-                         bool (*cancelCb)()) {
+                         bool (*cancelCb)(),
+                         Profile profile) {
   if (!out || maxHosts == 0 || startOctet > endOctet) return 0;
 
   IPAddress localIP = WiFi.localIP();
@@ -199,14 +208,17 @@ uint8_t IpScanUtil::scan(uint8_t startOctet, uint8_t endOctet,
   auto isPresent = [](uint8_t o) { return present[o >> 3] & (1u << (o & 7)); };
 
   // Every attempt walks the range in batches; later attempts only retry the
-  // addresses that answered nothing. Progress covers all attempts.
+  // addresses that answered nothing. Progress covers all attempts (and, when
+  // Aggressive, leaves the last 10 % to the mDNS queries).
+  const ProfileParams params = paramsFor(profile);
+  const bool aggressive = profile == Profile::Aggressive;
   const int total = endOctet - startOctet + 1;
   int done = 0;
-  const int work = total * ATTEMPTS;
+  const int work = total * params.attempts * (aggressive ? 10 : 9) / 9;
   bool cancelled = false;
   uint16_t seq = 1;
 
-  for (uint8_t attempt = 0; attempt < ATTEMPTS && !cancelled; ++attempt) {
+  for (uint8_t attempt = 0; attempt < params.attempts && !cancelled; ++attempt) {
     uint8_t batch[BATCH];
     uint8_t n = 0;
     for (int i = startOctet; i <= endOctet + 1; ++i) {
@@ -214,7 +226,7 @@ uint8_t IpScanUtil::scan(uint8_t startOctet, uint8_t endOctet,
       if (flush && n > 0) {
         if (cancelCb && cancelCb()) { cancelled = true; break; }
         bool found[BATCH] = {};
-        probeBatch(batch, n, found, seq);
+        probeBatch(batch, n, found, seq, params.waitMs);
         seq += n;
         for (uint8_t k = 0; k < n; ++k)
           if (found[k]) present[batch[k] >> 3] |= (uint8_t)(1u << (batch[k] & 7));
@@ -229,6 +241,28 @@ uint8_t IpScanUtil::scan(uint8_t startOctet, uint8_t endOctet,
     }
   }
   closeProbe();
+
+  // Aggressive: ask over mDNS for device types that sleep deeply. A sleeping
+  // iPhone or Mac is answered for by its Bonjour sleep proxy, whose reply
+  // carries the device's own address; Cast devices answer for themselves.
+  if (aggressive && !cancelled) {
+    static const char* kTypes[] = {"_companion-link._tcp.local", "_googlecast._tcp.local",
+                                   "_device-info._tcp.local"};
+    static MdnsScanUtil::Service services[MdnsScanUtil::MAX_RESULTS];
+    for (uint8_t t = 0; t < sizeof(kTypes) / sizeof(kTypes[0]); ++t) {
+      if (cancelCb && cancelCb()) break;
+      if (progressCb) progressCb((uint8_t)(90 + t * 3));
+      const uint8_t n = MdnsScanUtil::discover(kTypes[t], services, MdnsScanUtil::MAX_RESULTS);
+      for (uint8_t k = 0; k < n; ++k) {
+        IPAddress ip;
+        if (!ip.fromString(services[k].ip)) continue;
+        if (ip[0] != localIP[0] || ip[1] != localIP[1] || ip[2] != localIP[2]) continue;
+        const uint8_t o = ip[3];
+        if (o < startOctet || o > endOctet || o == localIP[3]) continue;
+        present[o >> 3] |= (uint8_t)(1u << (o & 7));
+      }
+    }
+  }
 
   char baseIp[16];
   snprintf(baseIp, sizeof(baseIp), "%d.%d.%d.", localIP[0], localIP[1], localIP[2]);

@@ -29,11 +29,13 @@ private:
     CFG_END_IP,
     CFG_PORTS,
     CFG_CUSTOM_PORTS,
+    CFG_DEPTH,
     CFG_START_SCAN
   };
 
   State    _state       = STATE_INPUT;
   ScanMode _scanMode    = MODE_RANGE;
+  bool _aggressive = false;  // Profile: Fast / Aggressive
   PortMode _portMode    = PORTS_COMMON;
   bool     _singleTargetView = false;
 
@@ -48,7 +50,7 @@ private:
   String _endIpSub;
   String _customPortsSub;
 
-  static constexpr uint8_t MAX_CONFIG_ITEMS = 12;
+  static constexpr uint8_t MAX_CONFIG_ITEMS = 13;
   static constexpr uint8_t MAX_FOUND_HOSTS  = 64;
 
   ListItem     _configItems[MAX_CONFIG_ITEMS];

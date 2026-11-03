@@ -100,6 +100,11 @@ void CctvSnifferScreen::onItemSelected(uint8_t index)
         break;
       }
 
+      case CFG_DEPTH:
+        _aggressive = !_aggressive;
+        _showConfig(index);
+        break;
+
       case CFG_START_SCAN:
         _startScan();
         break;
@@ -216,6 +221,7 @@ void CctvSnifferScreen::_showConfig(uint8_t selectedIndex)
     add("End IP",   _endIpSub.c_str(),   CFG_END_IP);
   }
 
+  add("Profile", _aggressive ? "Aggressive" : "Fast", CFG_DEPTH);
   add("Start", nullptr, CFG_START_SCAN);
   setItems(_configItems, _configCount, selectedIndex);
 }
@@ -361,7 +367,8 @@ void CctvSnifferScreen::_scanRange()
     [](uint8_t pct) {
       ProgressView::progress("Scanning hosts...", pct);
     },
-    []() { return ScanCancelUtil::poll(); }
+    []() { return ScanCancelUtil::poll(); },
+    _aggressive ? IpScanUtil::Profile::Aggressive : IpScanUtil::Profile::Fast
   );
 
   for (uint8_t i = 0; i < hostCount && _cameraCount < MAX_FOUND; i++) {
@@ -382,7 +389,7 @@ void CctvSnifferScreen::_scanRange()
 void CctvSnifferScreen::_scanHost(const char* ip, const char* label)
 {
   CctvScanUtil::Camera tempCams[8];
-  const bool patient = _scanMode == MODE_TARGETS;
+  const bool patient = _scanMode == MODE_TARGETS || _aggressive;
   uint8_t found = CctvScanUtil::scanPorts(
     ip,
     tempCams,

@@ -100,6 +100,11 @@ void FileServiceScannerScreen::onItemSelected(uint8_t index)
         break;
       }
 
+      case CFG_DEPTH:
+        _aggressive = !_aggressive;
+        _showConfig(index);
+        break;
+
       case CFG_START_SCAN:
         _scan();
         break;
@@ -198,6 +203,7 @@ void FileServiceScannerScreen::_showConfig(uint8_t selectedIndex)
     add("End IP", _endIpSub.c_str(), CFG_END_IP);
   }
 
+  add("Profile", _aggressive ? "Aggressive" : "Fast", CFG_DEPTH);
   add("Start", nullptr, CFG_START_SCAN);
   setItems(_configItems, _configCount, selectedIndex);
 }
@@ -291,7 +297,8 @@ void FileServiceScannerScreen::_scanRange()
     [](uint8_t pct) {
       ProgressView::progress("Scanning hosts...", pct);
     },
-    []() { return ScanCancelUtil::poll(); }
+    []() { return ScanCancelUtil::poll(); },
+    _aggressive ? IpScanUtil::Profile::Aggressive : IpScanUtil::Profile::Fast
   );
 
   if (hostCount == 0) return;
@@ -328,7 +335,7 @@ void FileServiceScannerScreen::_append(
 void FileServiceScannerScreen::_scanTarget(const char* ip, const char* label)
 {
   FileServiceScanUtil::Result result;
-  const bool patient = _scanMode == MODE_TARGETS;
+  const bool patient = _scanMode == MODE_TARGETS || _aggressive;
   const uint32_t quickTimeout = patient ? 450 : 300;
   uint8_t step = 0;
   static constexpr uint8_t TOTAL_STEPS = 8;
