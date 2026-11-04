@@ -51,14 +51,14 @@ void NetworkMenuScreen::onItemSelected(uint8_t index) {
     _connectToSelected(wifiIndex);
   } else if (_state == STATE_MENU) {
     switch (index) {
-      case 0: Screen.push(new NetworkInformationScreen()); break;
-      case 1: Screen.push(new NetworkScannersScreen()); break;
-      case 2: Screen.push(new NetworkToolboxScreen());  break;
-      case 3: Screen.push(new NetworkAttacksScreen());  break;
-      case 4: Screen.push(new NetworkPranksScreen());   break;
-      case 5: Screen.push(new RemoteAccessScreen());    break;
-      case 6: Screen.push(new NetworkServicesScreen()); break;
-      case 7: Screen.push(new NetworkInternetScreen()); break;
+      case 0: Screen.push(new NetworkScannersScreen()); break;
+      case 1: Screen.push(new NetworkToolboxScreen());  break;
+      case 2: Screen.push(new NetworkAttacksScreen());  break;
+      case 3: Screen.push(new NetworkPranksScreen());   break;
+      case 4: Screen.push(new RemoteAccessScreen());    break;
+      case 5: Screen.push(new NetworkServicesScreen()); break;
+      case 6: Screen.push(new NetworkInternetScreen()); break;
+      case 7: Screen.push(new NetworkInformationScreen()); break;
     }
   }
 }

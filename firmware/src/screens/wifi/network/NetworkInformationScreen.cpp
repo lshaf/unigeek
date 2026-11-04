@@ -6,7 +6,7 @@
 #include "core/ScreenManager.h"
 #include "ui/actions/InputSelectAction.h"
 #include "ui/actions/ShowQRCodeAction.h"
-#include "screens/wifi/network/ConnectivityCheckScreen.h"
+#include "screens/wifi/network/ConnectivityCheckScreen.h"  // Network Info Options
 #include "screens/wifi/network/NetworkSettingsScreen.h"
 
 void NetworkInformationScreen::onInit() {

@@ -3,13 +3,13 @@
 #include "ui/templates/BaseScreen.h"
 #include "ui/views/ScrollListView.h"
 
-// Network > Information: this connection's details (IP, DNS, gateway, SSID,
+// Network > Network Info: this connection's details (IP, DNS, gateway, SSID,
 // password, signal, MAC...). [Press] Options offers Connectivity Check, the
 // network's QR Code and its IP Settings; arrows scroll; [Back] returns to
 // the Network menu.
 class NetworkInformationScreen : public BaseScreen {
 public:
-  const char* title() override { return "Information"; }
+  const char* title() override { return "Network Info"; }
 
   void onInit() override;
   void onUpdate() override;
