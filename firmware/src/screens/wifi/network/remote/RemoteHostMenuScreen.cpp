@@ -69,7 +69,7 @@ void RemoteHostMenuScreen::onItemSelected(uint8_t index) {
     if (index == 0) { _open(nullptr); return; }
     _showSaved();
     if (_hosts.empty()) {
-      ShowStatusAction::show("No saved hosts");
+      ShowStatusAction::show("No saved hosts", 1500);
       _showMenu(1);
     }
     return;
