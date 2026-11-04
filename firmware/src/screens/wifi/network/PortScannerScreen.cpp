@@ -1,5 +1,7 @@
 #include "PortScannerScreen.h"
 #include "PortServiceDetailsScreen.h"
+#include "PortAuditScreen.h"
+#include "ui/actions/InputSelectAction.h"
 #include "utils/network/ServiceProbeUtil.h"
 #include "utils/network/TargetResolveUtil.h"
 #include <WiFi.h>
@@ -50,10 +52,23 @@ void PortScannerScreen::onItemSelected(uint8_t index) {
       const String host = endpoint.substring(0, colon);
       const uint16_t port = (uint16_t)endpoint.substring(colon + 1).toInt();
 
+      static const InputSelectAction::Option kOptions[] = {
+        {"Details", "details", nullptr, 0, false},
+        {"Audit", "audit", nullptr, 0, false},
+      };
+      const char* choice = InputSelectAction::popup("Options", kOptions, 2);
+      if (!choice) { render(); return; }
+
+      if (strcmp(choice, "audit") == 0) {
+        auto* audit = new PortAuditScreen();
+        audit->configure(host, port);
+        Screen.push(audit);
+        return;
+      }
+
       render();
       ShowStatusAction::show("Probing...", 0);
       const ServiceProbeUtil::Result probe = ServiceProbeUtil::probe(host.c_str(), port);
-
       auto* details = new PortServiceDetailsScreen();
       details->configure(selected, probe);
       Screen.push(details);
