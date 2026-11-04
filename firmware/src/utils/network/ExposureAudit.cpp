@@ -22,24 +22,24 @@ struct Rule {
 // Deliberately short: common misconfiguration exposures, not a CVE list.
 constexpr Rule kRules[] = {
   // Clear-text services: traffic (and often credentials) on the wire.
-  { 23,    PASSIVE, ExposureAudit::MEDIUM, "Telnet: traffic and credentials in clear text" },
-  { 21,    PASSIVE, ExposureAudit::LOW,    "FTP: control channel in clear text" },
-  { 80,    PASSIVE, ExposureAudit::LOW,    "HTTP: traffic in clear text (no HTTPS)" },
-  { 110,   PASSIVE, ExposureAudit::LOW,    "POP3: traffic in clear text" },
-  { 143,   PASSIVE, ExposureAudit::LOW,    "IMAP: traffic in clear text" },
-  { 513,   PASSIVE, ExposureAudit::MEDIUM, "rlogin: traffic and credentials in clear text" },
+  { 23,    PASSIVE, ExposureAudit::SEV_MEDIUM, "Telnet: traffic and credentials in clear text" },
+  { 21,    PASSIVE, ExposureAudit::SEV_LOW,    "FTP: control channel in clear text" },
+  { 80,    PASSIVE, ExposureAudit::SEV_LOW,    "HTTP: traffic in clear text (no HTTPS)" },
+  { 110,   PASSIVE, ExposureAudit::SEV_LOW,    "POP3: traffic in clear text" },
+  { 143,   PASSIVE, ExposureAudit::SEV_LOW,    "IMAP: traffic in clear text" },
+  { 513,   PASSIVE, ExposureAudit::SEV_MEDIUM, "rlogin: traffic and credentials in clear text" },
   // Admin / data services that should not be reachable on the network.
-  { 3306,  PASSIVE, ExposureAudit::MEDIUM, "MySQL exposed to the network" },
-  { 5432,  PASSIVE, ExposureAudit::MEDIUM, "PostgreSQL exposed to the network" },
-  { 3389,  PASSIVE, ExposureAudit::MEDIUM, "RDP exposed to the network" },
-  { 445,   PASSIVE, ExposureAudit::MEDIUM, "SMB exposed to the network" },
-  { 5900,  PASSIVE, ExposureAudit::LOW,    "VNC exposed to the network" },
+  { 3306,  PASSIVE, ExposureAudit::SEV_MEDIUM, "MySQL exposed to the network" },
+  { 5432,  PASSIVE, ExposureAudit::SEV_MEDIUM, "PostgreSQL exposed to the network" },
+  { 3389,  PASSIVE, ExposureAudit::SEV_MEDIUM, "RDP exposed to the network" },
+  { 445,   PASSIVE, ExposureAudit::SEV_MEDIUM, "SMB exposed to the network" },
+  { 5900,  PASSIVE, ExposureAudit::SEV_LOW,    "VNC exposed to the network" },
   // Services answering without authentication (active, lightweight probes).
-  { 6379,  PROBE_REDIS,     ExposureAudit::HIGH, "Redis open without authentication" },
-  { 27017, PROBE_MONGO,     ExposureAudit::HIGH, "MongoDB open without authentication" },
-  { 11211, PROBE_MEMCACHED, ExposureAudit::HIGH, "Memcached open without authentication" },
-  { 21,    PROBE_FTP_ANON,  ExposureAudit::HIGH, "FTP allows anonymous login" },
-  { 5900,  PROBE_VNC,       ExposureAudit::HIGH, "VNC without authentication" },
+  { 6379,  PROBE_REDIS,     ExposureAudit::SEV_HIGH, "Redis open without authentication" },
+  { 27017, PROBE_MONGO,     ExposureAudit::SEV_HIGH, "MongoDB open without authentication" },
+  { 11211, PROBE_MEMCACHED, ExposureAudit::SEV_HIGH, "Memcached open without authentication" },
+  { 21,    PROBE_FTP_ANON,  ExposureAudit::SEV_HIGH, "FTP allows anonymous login" },
+  { 5900,  PROBE_VNC,       ExposureAudit::SEV_HIGH, "VNC without authentication" },
 };
 constexpr uint8_t kRuleCount = sizeof(kRules) / sizeof(kRules[0]);
 

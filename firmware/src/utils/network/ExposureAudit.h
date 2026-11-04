@@ -8,7 +8,8 @@
 // service, in its own protocol, whether it answers without authenticating.
 class ExposureAudit {
 public:
-  enum Severity : uint8_t { INFO, LOW, MEDIUM, HIGH };
+  // Prefixed to avoid the Arduino LOW/HIGH GPIO macros.
+  enum Severity : uint8_t { SEV_INFO, SEV_LOW, SEV_MEDIUM, SEV_HIGH };
 
   struct Finding {
     Severity    severity;
@@ -23,10 +24,10 @@ public:
 
   static const char* severityLabel(Severity s) {
     switch (s) {
-      case HIGH:   return "HIGH";
-      case MEDIUM: return "MED";
-      case LOW:    return "LOW";
-      default:     return "INFO";
+      case SEV_HIGH:   return "HIGH";
+      case SEV_MEDIUM: return "MED";
+      case SEV_LOW:    return "LOW";
+      default:         return "INFO";
     }
   }
 };
