@@ -7,6 +7,7 @@
 #include "ui/actions/InputSelectAction.h"
 #include "ui/actions/ShowQRCodeAction.h"
 #include "screens/wifi/network/ConnectivityCheckScreen.h"
+#include "screens/wifi/network/NetworkSettingsScreen.h"
 
 void NetworkInformationScreen::onInit() {
   _load();
@@ -59,11 +60,16 @@ void NetworkInformationScreen::_openOptions() {
   static const InputSelectAction::Option kOptions[] = {
     {"Connectivity Check", "check", nullptr, 0, false},
     {"QR Code", "qr", nullptr, 0, false},
+    {"Settings", "settings", nullptr, 0, false},
   };
-  const char* choice = InputSelectAction::popup("Options", kOptions, 2);
+  const char* choice = InputSelectAction::popup("Options", kOptions, 3);
   if (!choice) { render(); return; }
   if (strcmp(choice, "check") == 0) {
     Screen.push(new ConnectivityCheckScreen());
+    return;
+  }
+  if (strcmp(choice, "settings") == 0) {
+    Screen.push(new NetworkSettingsScreen());
     return;
   }
   _showQRCode();

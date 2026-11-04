@@ -4,8 +4,9 @@
 #include "ui/views/ScrollListView.h"
 
 // Network > Information: this connection's details (IP, DNS, gateway, SSID,
-// password, signal, MAC...). [Press] Options offers Connectivity Check and the
-// network's QR Code; arrows scroll; [Back] returns to the Network menu.
+// password, signal, MAC...). [Press] Options offers Connectivity Check, the
+// network's QR Code and its IP Settings; arrows scroll; [Back] returns to
+// the Network menu.
 class NetworkInformationScreen : public BaseScreen {
 public:
   const char* title() override { return "Information"; }
@@ -13,6 +14,7 @@ public:
   void onInit() override;
   void onUpdate() override;
   void onRender() override;
+  void onRestore() override { _load(); }  // Settings may have changed the address
 
 private:
   static constexpr int kFooterH = 14;  // one hint line
