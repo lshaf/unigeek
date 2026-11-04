@@ -11,12 +11,11 @@ class TcpClientScreen : public TerminalScreen {
 public:
   TcpClientScreen() : TerminalScreen(LINE_END_CRLF) {}
 
-  // Opened from Saved Hosts: fields filled in, Connect highlighted.
+  // Opened from Saved Hosts: fields filled in.
   void loadSaved(const SavedHost& host) {
     _host = host.get("host");
     _port = host.getInt("port", 0);
     _saved.loadFrom(host);
-    _highlightStart();
   }
 
 protected:

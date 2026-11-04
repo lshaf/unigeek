@@ -21,7 +21,7 @@ public:
   void onItemSelected(uint8_t index) override;
   void onBack() override;
 
-  // Opened from Saved Hosts: fields filled in, Connect highlighted.
+  // Opened from Saved Hosts: fields filled in.
   void loadSaved(const SavedHost& host);
 
 private:
@@ -105,7 +105,6 @@ private:
   ListItem _configItems[MAX_CONFIG_ROWS];
   SavedHostRows::Kind _kinds[MAX_CONFIG_ROWS] = {};
   uint8_t  _fieldCount = 0;           // service fields before Save host
-  bool     _selectConnect = false;    // initial highlight on Connect
   SavedHostRows _saved{"/unigeek/wifi/remote/ssh", true};  // shared with SSH
   ListItem _authItems[2] = {
     {"Password", nullptr},

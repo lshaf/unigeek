@@ -331,7 +331,6 @@ void SftpClientScreen::loadSaved(const SavedHost& host) {
   _keyPath  = host.get("key");
   _password = host.get("password");
   _saved.loadFrom(host);
-  _selectConnect = true;
 }
 
 void SftpClientScreen::onBack() {
@@ -491,11 +490,6 @@ void SftpClientScreen::_rebuildConfig() {
   for (uint8_t i = 0; i < n; ++i) _kinds[i] = SavedHostRows::NONE;
   _fieldCount = n;
   n = _saved.tail(_configItems, _kinds, n, MAX_CONFIG_ROWS, "Connect");
-
-  if (_selectConnect) {
-    sel = SavedHostRows::connectIndex(_kinds, n);
-    _selectConnect = false;
-  }
   if (sel > n - 1) sel = n - 1;
   setItems(_configItems, n, sel);
 }
