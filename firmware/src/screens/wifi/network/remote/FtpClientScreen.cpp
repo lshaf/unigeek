@@ -385,13 +385,11 @@ void FtpClientScreen::_connect() {
   if (!_saved.prepare()) {  // a host being saved needs a name
     _rebuildConfig(); render(); return;
   }
-  // A saved host without its password asks for it (anonymous logins excepted).
+  // A saved host without its password needs it filled in (anonymous logins
+  // excepted), like any other unset field.
   if (_askPassword && !_password.length() && !_username.equalsIgnoreCase("anonymous")) {
-    String value = InputTextAction::popup("Password", "", InputTextAction::INPUT_TEXT);
-    if (InputTextAction::wasCancelled()) { render(); return; }
-    _password = value;
+    ShowStatusAction::show("Password not set", 1200); render(); return;
   }
-  _askPassword = false;
 
   // Saved when connecting, whether or not the server answers.
   if (_saved.saving()) {
