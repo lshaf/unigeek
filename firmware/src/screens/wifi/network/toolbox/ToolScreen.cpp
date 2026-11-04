@@ -8,7 +8,8 @@
 
 void ToolScreen::onInit() {
   _view.setWrapMode(TextScrollView::WRAP_CHARACTER);
-  _showSetup();
+  if (_startsImmediately()) _start();
+  else                      _showSetup();
 }
 
 // ── Setup ────────────────────────────────────────────────────────────────────
@@ -58,6 +59,7 @@ void ToolScreen::_start() {
   render();
   if (!_begin()) {
     _end();
+    if (_startsImmediately()) { Screen.goBack(); return; }
     _showSetup();
     return;
   }
@@ -92,6 +94,7 @@ void ToolScreen::onUpdate() {
     const auto dir = Uni.Nav->readDirection();
     if (dir == INavigation::DIR_BACK) {
       if (_state == STATE_RUNNING) _end();
+      if (_startsImmediately()) { Screen.goBack(); return; }
       _showSetup();
       return;
     }

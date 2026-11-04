@@ -10,8 +10,8 @@
 //
 // Output: [Press] Stop while running, [Press] Restart once finished or
 // stopped (same setup), [Back] returns to the setup (no hint), arrows
-// scroll. The two-line footer matches the other live screens: the hint
-// sits on the lower line.
+// scroll. One footer line holds the hint. A tool without settings can start
+// straight away (_startsImmediately()); Back then leaves it.
 class ToolScreen : public ListScreen {
 public:
   ~ToolScreen() override = default;
@@ -36,6 +36,8 @@ protected:
   virtual bool _step() = 0;
   // Releases resources after finishing or stopping.
   virtual void _end() {}
+  // No setup list: run as soon as the tool opens (Connectivity Check).
+  virtual bool _startsImmediately() const { return false; }
 
   void _addRow(const char* label, const String& value, uint8_t id);
   void _print(const String& line);
@@ -49,7 +51,7 @@ protected:
 private:
   enum State { STATE_SETUP, STATE_RUNNING, STATE_DONE };
   static constexpr uint8_t ID_START = 0xFF;
-  static constexpr int     kFooterH = 27;
+  static constexpr int     kFooterH = 14;  // one hint line
   static constexpr size_t  kMaxLog  = 6000;
 
   State          _state = STATE_SETUP;

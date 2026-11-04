@@ -2,6 +2,7 @@
 #include "ToolScreen.h"
 #include "utils/network/IcmpProbe.h"
 
+// Runs as soon as it opens (no settings).
 // "Why doesn't the internet work here?" in one screen: Wi-Fi link, gateway,
 // a public IP (bypassing DNS), DNS, then an HTTP probe that also reveals a
 // captive portal. Each step runs on its own, so Stop answers between them.
@@ -15,6 +16,7 @@ protected:
   bool _begin() override;
   bool _step() override;
   void _end() override;
+  bool _startsImmediately() const override { return true; }
 
 private:
   enum Step : uint8_t { STEP_GATEWAY, STEP_PUBLIC_IP, STEP_DNS, STEP_HTTP, STEP_SUMMARY };
