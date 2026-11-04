@@ -23,20 +23,23 @@ public:
     } else _mac = "Unavailable";
     _rows[0] = {"IP Address", _ip};
     _rows[1] = {"Hostname", _hostname};
+    // A locally administered (random) MAC belongs to no vendor, as in the
+    // WiFi Details screen: say so instead of looking it up.
+    _random = _hasMac && (_macBytes[0] & 0x02);
     _rows[2] = {"MAC Address", _mac};
-    _rows[3] = {"Vendor", _hasMac ? "Looking up..." : "Unknown"};
+    _rows[3] = {"Vendor", !_hasMac ? "Unknown" : _random ? "Random address" : "Looking up..."};
     _count = 4;
   }
 
   void onInit() override {
     _list.setRows(_rows, _count);
     _list.resetScroll();
-    if (_hasMac && !VendorResolver::instance().request(_macBytes))
+    if (_hasMac && !_random && !VendorResolver::instance().request(_macBytes))
       _rows[3].value = "Unknown";
   }
   void onRender() override { _list.render(bodyX(), bodyY(), bodyW(), bodyH()); }
   void onUpdate() override {
-    if (_hasMac) {
+    if (_hasMac && !_random) {
       VendorResolver::Result result;
       if (VendorResolver::instance().poll(_macBytes, result)) {
         _setVendorName(result.found ? String(result.name) : "Unknown");
@@ -100,6 +103,7 @@ private:
   }
 
   bool _hasMac = false;
+  bool _random = false;
   uint8_t _macBytes[6] = {};
   String _ip, _hostname, _mac;
   static constexpr uint8_t MAX_ROWS = 16;
