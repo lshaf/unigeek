@@ -8,7 +8,7 @@
 
 // The saved-host rows shared by the Remote Access clients' setup lists:
 //   ... service fields ...
-//   Save Host        No | Yes
+//   Save Host        No | Yes   ("Save Changes" when editing a saved host)
 //   Name             "-" until set (when saving)
 //   Save Password    No | Yes   (when saving, with password authentication)
 //   Connect / Start
@@ -37,7 +37,8 @@ public:
   // Password while saving): lets a client find its Connect row.
   uint8_t rowsBeforeConnect() const { return 1 + (_save ? 1 + (_passwordRow() ? 1 : 0) : 0); }
 
-  // Opened from Saved Hosts: Save Host stays No (Yes overwrites it).
+  // Opened from Saved Hosts: the row reads "Save Changes" and stays No (Yes
+  // overwrites the entry); connecting without saving is the common case.
   void loadFrom(const SavedHost& h) {
     _origName = h.name;
     _name = h.name;
@@ -54,7 +55,7 @@ public:
       kinds[n] = k;
       ++n;
     };
-    add("Save Host", _save ? "Yes" : "No", SAVE);
+    add(fromSaved() ? "Save Changes" : "Save Host", _save ? "Yes" : "No", SAVE);
     if (_save) {
       _nameLabel = _name.length() ? _name : String("-");
       add("Name", _nameLabel.c_str(), NAME);
