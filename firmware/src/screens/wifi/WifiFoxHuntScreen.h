@@ -5,20 +5,33 @@
 
 class WifiFoxHuntScreen : public ListScreen {
 public:
-  const char* title() override { return "WiFi Fox Hunt"; }
+  const char* title() override { return "Fox Hunt"; }
   bool inhibitPowerSave() override { return _state == STATE_TRACK; }
 
   ~WifiFoxHuntScreen() override;
+  void configureTarget(bool client, const uint8_t mac[6], uint8_t channel, const char* ssid = nullptr);
   void onInit() override;
   void onUpdate() override;
   void onRender() override;
   void onItemSelected(uint8_t index) override;
   void onBack() override;
+  // Track a deauth/disassoc source: only those frames from the address count.
+  // When the address is a forged copy of a real AP's, the AP's own beacons and
+  // data then no longer mix into the reading, so it leads to the attacker.
+  void configureDeauthTarget(const uint8_t mac[6], uint8_t channel, const char* name = nullptr);
+  // Track a beacon spam: every beacon / probe response from a random (locally
+  // administered) BSSID announcing ssid counts, since a spammer draws a new
+  // BSSID per beacon but sends them all from one device. "Name ##" matches
+  // any "Name NN" (two-digit suffix), as Watchdog groups them.
+  void configureSpamTarget(const char* ssid, uint8_t channel, const char* name = nullptr);
 
 private:
   static constexpr int MAX_SCAN = 20;
 
-  enum State { STATE_SCAN, STATE_TRACK };
+  enum State { STATE_MODE, STATE_SCAN, STATE_TRACK };
+  enum TargetMode { MODE_AP, MODE_CLIENT };
+  TargetMode _mode = MODE_AP;
+  bool _directTarget = false;
   State _state = STATE_SCAN;
 
   struct WifiEntry {
@@ -47,8 +60,13 @@ private:
   Sprite*         _pulseSprite = nullptr;
   int16_t         _pulseSpriteW = 0;
   int16_t         _pulseSpriteH = 0;
+  bool            _directDeauthTarget = false;
+  bool            _directSpamTarget = false;
+  String          _spamSsid;
 
+  void _showModes();
   void _doScan();
+  void _scanClients();
   void _showScan();
   void _startTracking(int index);
   void _stopTracking();

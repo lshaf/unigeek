@@ -109,7 +109,7 @@ void WifiBeaconSpamScreen::_refreshMenu()
   _modeSub      = (_mode == MODE_DICTIONARY) ? "Dictionary" : "Random";
   _menuItems[0] = {"Mode", _modeSub.c_str()};
   _menuItems[1] = {"Start Spam"};
-  setItems(_menuItems, 2);
+  setItems(_menuItems, 2, 0);
 }
 
 void WifiBeaconSpamScreen::_start()

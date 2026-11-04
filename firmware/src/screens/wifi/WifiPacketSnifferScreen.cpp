@@ -41,7 +41,19 @@ struct SnifferPcapPktHdr {
 
 WifiPacketSnifferScreen::~WifiPacketSnifferScreen() { _stop(); }
 
-void WifiPacketSnifferScreen::onInit() { _showMenu(); }
+void WifiPacketSnifferScreen::configureFromChannel(uint8_t channel, const uint8_t bssid[6], const uint8_t* client) {
+  _integrated = true;
+  _channelMask = (channel >= 1 && channel <= 13) ? (1u << (channel - 1)) : 0;
+  _bssidCount = bssid ? 1 : 0;
+  if (bssid) memcpy(_bssids[0], bssid, 6);
+  _macCount = client ? 1 : 0;
+  if (client) { memcpy(_macs[0], client, 6); _clientChannel = channel; }
+}
+
+void WifiPacketSnifferScreen::onInit() {
+  // Contextual entry preselects filters but leaves capture settings editable.
+  _showMenu();
+}
 
 void WifiPacketSnifferScreen::_updateSummaries() {
   snprintf(_filterSub, sizeof(_filterSub), "%s", _filterMask ? "Custom" : "All");
@@ -66,11 +78,12 @@ void WifiPacketSnifferScreen::_showMenu(bool preserveSelection) {
   }
   _menuItems[count++] = {"Start"};
   if (preserveSelection) { setCount(count); render(); }
-  else setItems(_menuItems, count);
+  else setItems(_menuItems, count, _menuIndex);
 }
 
 void WifiPacketSnifferScreen::onItemSelected(uint8_t index) {
   if (_state == STATE_MENU) {
+    _menuIndex = index;
     if (index == 0) _showFilter();
     else if (index == 1) _showChannels();
     else if (index == 2) _showBssids(false);
@@ -98,6 +111,14 @@ void WifiPacketSnifferScreen::onItemSelected(uint8_t index) {
   if (_state == STATE_CHANNEL) {
     if (index == 0) _channelMask = 0;
     else if (index <= 13) _channelMask ^= (1u << (index - 1));
+    // A channel change invalidates an individual client selection observed
+    // outside the new channel set. Do not silently fall back to hopping.
+    if (_bssidCount == 0 && _macCount == 1 && _clientChannel >= 1 &&
+        _clientChannel <= 13 && _channelMask &&
+        !(_channelMask & (1u << (_clientChannel - 1)))) {
+      _macCount = 0;
+      _clientChannel = 0;
+    }
     _showChannels(true);
     return;
   }
@@ -115,23 +136,37 @@ void WifiPacketSnifferScreen::onItemSelected(uint8_t index) {
     } else if (_bssidCount < MAX_BSSID) {
       memcpy(_bssids[_bssidCount++], _scan[si].bssid, 6);
     } else ShowStatusAction::show("Access point limit: 4", 1000);
+    if (_bssidCount) _clientChannel = 0;
+    else if (_macCount == 1) {
+      _clientChannel = 0;
+      for (uint8_t i = 0; i < _seenClientCount; ++i)
+        if (macEq(_seenClients[i].mac, _macs[0])) { _clientChannel = _seenClients[i].channel; break; }
+    }
     _showBssids(false, true);
     return;
   }
 
   if (_state == STATE_MAC) {
-    if (index == 0) { _macCount = 0; _showMacs(true); return; }
-    const uint8_t ci = index - 1;
+    if (index == 0) { _scanClients(); return; }
+    if (index == 1) { _macCount = 0; _clientChannel = 0; _showMacs(true); return; }
+    const uint8_t ci = index - 2;
     if (ci >= _clientMenuCount) return;
     const uint8_t* mac = _clientMenuMacs[ci];
     int found = -1;
     for (uint8_t i = 0; i < _macCount; ++i) if (macEq(_macs[i], mac)) { found = i; break; }
-    if (found >= 0) {
-      for (uint8_t i = found; i + 1 < _macCount; ++i) memcpy(_macs[i], _macs[i + 1], 6);
-      --_macCount;
-    } else if (_macCount < MAX_MAC) {
-      memcpy(_macs[_macCount++], mac, 6);
-    } else ShowStatusAction::show("Client limit: 4", 1000);
+    {
+      _clientChannel = 0;
+      if (found >= 0) {
+        for (uint8_t i = found; i + 1 < _macCount; ++i) memcpy(_macs[i], _macs[i + 1], 6);
+        --_macCount;
+      } else if (_macCount < MAX_MAC) memcpy(_macs[_macCount++], mac, 6);
+      else ShowStatusAction::show("Client limit: 4", 1000);
+    }
+    if (_bssidCount == 0 && _macCount == 1) {
+      for (uint8_t i = 0; i < _seenClientCount; ++i)
+        if (macEq(_seenClients[i].mac, _macs[0])) { _clientChannel = _seenClients[i].channel; break; }
+      if (_clientChannel && _channelMask && !(_channelMask & (1u << (_clientChannel - 1)))) _clientChannel = 0;
+    }
     _showMacs(true);
     return;
   }
@@ -139,7 +174,7 @@ void WifiPacketSnifferScreen::onItemSelected(uint8_t index) {
 
 void WifiPacketSnifferScreen::_showFilter(bool preserveSelection) {
   _state = STATE_FILTER;
-  strncpy(_title, "Packet Filter", sizeof(_title));
+  strncpy(_title, "Packet Sniffer", sizeof(_title));
   snprintf(_selectLabels[0], sizeof(_selectLabels[0]), "[%c] All", _filterMask == 0 ? 'x' : ' ');
   _selectItems[0] = {_selectLabels[0]};
   for (uint8_t i = 0; i < kFilterCount; ++i) {
@@ -152,7 +187,7 @@ void WifiPacketSnifferScreen::_showFilter(bool preserveSelection) {
 
 void WifiPacketSnifferScreen::_showChannels(bool preserveSelection) {
   _state = STATE_CHANNEL;
-  strncpy(_title, "Channels", sizeof(_title));
+  strncpy(_title, "Packet Sniffer", sizeof(_title));
   snprintf(_selectLabels[0], sizeof(_selectLabels[0]), "[%c] All", _channelMask == 0 ? 'x' : ' ');
   _selectItems[0] = {_selectLabels[0]};
   for (uint8_t ch = 1; ch <= 13; ++ch) {
@@ -165,7 +200,7 @@ void WifiPacketSnifferScreen::_showChannels(bool preserveSelection) {
 
 void WifiPacketSnifferScreen::_scanBssids() {
   _state = STATE_BSSID;
-  strncpy(_title, "Select Access Points", sizeof(_title));
+  strncpy(_title, "Packet Sniffer", sizeof(_title));
   render();
   ShowStatusAction::show("Scanning...", 0);
   WiFi.mode(WIFI_STA);
@@ -179,8 +214,10 @@ void WifiPacketSnifferScreen::_scanBssids() {
     snprintf(e.ssid, sizeof(e.ssid), "%s", ssid.length() ? ssid.c_str() : "<hidden>");
     const uint8_t* b = WiFi.BSSID(i);
     if (b) memcpy(e.bssid, b, 6); else memset(e.bssid, 0, 6);
-    _formatMac(e.bssid, e.bssidText, sizeof(e.bssidText));
+    char macText[18];
+    _formatMac(e.bssid, macText, sizeof(macText));
     e.channel = (uint8_t)WiFi.channel(i);
+    snprintf(e.bssidText, sizeof(e.bssidText), "%s CH%u", macText, (unsigned)e.channel);
     e.rssi = WiFi.RSSI(i);
   }
   WiFi.scanDelete();
@@ -190,7 +227,7 @@ void WifiPacketSnifferScreen::_scanBssids() {
 void WifiPacketSnifferScreen::_showBssids(bool forceScan, bool preserveSelection) {
   if (forceScan || !_scanValid) _scanBssids();
   _state = STATE_BSSID;
-  strncpy(_title, "Select Access Points", sizeof(_title));
+  strncpy(_title, "Packet Sniffer", sizeof(_title));
   strcpy(_selectLabels[0], "Rescan");
   _selectItems[0] = {_selectLabels[0]};
   snprintf(_selectLabels[1], sizeof(_selectLabels[1]), "[%c] All", _bssidCount == 0 ? 'x' : ' ');
@@ -222,15 +259,13 @@ void WifiPacketSnifferScreen::_scanClients() {
   esp_wifi_set_promiscuous_rx_cb(&_promiscCb);
   esp_wifi_set_promiscuous(true);
 
-  _hopChannel = 1;
-  _lastHop = 0;
-  _hop();
-  const uint32_t started = millis();
-  while (millis() - started < 3500) {
-    delay(10);
-    if (millis() - _lastHop >= HOP_MS) {
-      _lastHop = millis();
-      _hop();
+  // Discovery only: two 500 ms sweeps over channels 1-13.
+  // Preserve the accumulated station list across both passes.
+  // Do not change HOP_MS, which also controls normal packet capture.
+  for (uint8_t pass = 0; pass < 2; ++pass) {
+    for (uint8_t channel = 1; channel <= 13; ++channel) {
+      esp_wifi_set_channel(channel, WIFI_SECOND_CHAN_NONE);
+      delay(500);
     }
   }
 
@@ -246,27 +281,44 @@ void WifiPacketSnifferScreen::_scanClients() {
 
 void WifiPacketSnifferScreen::_showMacs(bool preserveSelection) {
   _state = STATE_MAC;
-  strncpy(_title, "Select Clients", sizeof(_title));
-  snprintf(_selectLabels[0], sizeof(_selectLabels[0]), "[%c] All", _macCount == 0 ? 'x' : ' ');
-  _selectItems[0] = {_selectLabels[0]};
+  strncpy(_title, "Packet Sniffer", sizeof(_title));
+  _selectItems[0] = {"Rescan"};
+  snprintf(_selectLabels[1], sizeof(_selectLabels[1]), "[%c] All", _macCount == 0 ? 'x' : ' ');
+  _selectItems[1] = {_selectLabels[1]};
 
   _clientMenuCount = 0;
+  uint8_t order[MAX_SEEN_CLIENTS];
+  for (uint8_t i = 0; i < _seenClientCount; ++i) order[i] = i;
+  for (uint8_t i = 1; i < _seenClientCount; ++i) {
+    uint8_t key = order[i], j = i;
+    while (j > 0 && _seenClients[order[j - 1]].rssi < _seenClients[key].rssi) {
+      order[j] = order[j - 1]; --j;
+    }
+    order[j] = key;
+  }
   for (uint8_t i = 0; i < _seenClientCount && _clientMenuCount < 20; ++i) {
-    memcpy(_clientMenuMacs[_clientMenuCount++], _seenClients[i].mac, 6);
+    memcpy(_clientMenuMacs[_clientMenuCount], _seenClients[order[i]].mac, 6);
+    _clientMenuChannels[_clientMenuCount++] = _seenClients[order[i]].channel;
   }
   // Keep manually selected clients visible even if the observed-client cache rotated them out.
   for (uint8_t i = 0; i < _macCount && _clientMenuCount < 20; ++i) {
     bool exists = false;
     for (uint8_t j = 0; j < _clientMenuCount; ++j) if (macEq(_clientMenuMacs[j], _macs[i])) { exists = true; break; }
-    if (!exists) memcpy(_clientMenuMacs[_clientMenuCount++], _macs[i], 6);
+    if (!exists) {
+      memcpy(_clientMenuMacs[_clientMenuCount], _macs[i], 6);
+      _clientMenuChannels[_clientMenuCount++] = (_bssidCount == 0 && _macCount == 1) ? _clientChannel : 0;
+    }
   }
 
   for (uint8_t i = 0; i < _clientMenuCount; ++i) {
     char m[18]; _formatMac(_clientMenuMacs[i], m, sizeof(m));
-    snprintf(_selectLabels[i + 1], sizeof(_selectLabels[i + 1]), "[%c] %s", _isSelectedMac(_clientMenuMacs[i]) ? 'x' : ' ', m);
-    _selectItems[i + 1] = {_selectLabels[i + 1]};
+    if (_bssidCount == 0 && _channelMask == 0 && _clientMenuChannels[i] >= 1 && _clientMenuChannels[i] <= 13)
+      snprintf(_selectLabels[i + 2], sizeof(_selectLabels[i + 2]), "[%c] %s CH%u", _isSelectedMac(_clientMenuMacs[i]) ? 'x' : ' ', m, _clientMenuChannels[i]);
+    else
+      snprintf(_selectLabels[i + 2], sizeof(_selectLabels[i + 2]), "[%c] %s", _isSelectedMac(_clientMenuMacs[i]) ? 'x' : ' ', m);
+    _selectItems[i + 2] = {_selectLabels[i + 2]};
   }
-  const uint8_t count = _clientMenuCount + 1;
+  const uint8_t count = _clientMenuCount + 2;
   if (preserveSelection) { setCount(count); render(); }
   else setItems(_selectItems, count);
 }
@@ -281,15 +333,22 @@ bool WifiPacketSnifferScreen::_isClientCandidate(const uint8_t* mac, const uint8
   return !bssid || isZeroMac(bssid) || !macEq(mac, bssid);
 }
 
-void WifiPacketSnifferScreen::_observeClient(const uint8_t* mac) {
+void WifiPacketSnifferScreen::_observeClient(const uint8_t* mac, uint8_t channel, int8_t rssi) {
   if (!mac || isZeroMac(mac) || (mac[0] & 0x01)) return;
   const uint32_t now = millis();
   for (uint8_t i = 0; i < _seenClientCount; ++i) {
-    if (macEq(_seenClients[i].mac, mac)) { _seenClients[i].lastSeen = now; return; }
+    if (macEq(_seenClients[i].mac, mac)) {
+      _seenClients[i].lastSeen = now;
+      _seenClients[i].rssi = rssi;
+      if (channel >= 1 && channel <= 13) _seenClients[i].channel = channel;
+      return;
+    }
   }
   if (_seenClientCount < MAX_SEEN_CLIENTS) {
     memcpy(_seenClients[_seenClientCount].mac, mac, 6);
-    _seenClients[_seenClientCount++].lastSeen = now;
+    _seenClients[_seenClientCount].lastSeen = now;
+    _seenClients[_seenClientCount].rssi = rssi;
+    _seenClients[_seenClientCount++].channel = channel;
     return;
   }
   uint8_t oldest = 0;
@@ -297,6 +356,8 @@ void WifiPacketSnifferScreen::_observeClient(const uint8_t* mac) {
     if (_seenClients[i].lastSeen < _seenClients[oldest].lastSeen) oldest = i;
   memcpy(_seenClients[oldest].mac, mac, 6);
   _seenClients[oldest].lastSeen = now;
+  _seenClients[oldest].rssi = rssi;
+  _seenClients[oldest].channel = channel;
 }
 
 void WifiPacketSnifferScreen::_makeDefaultFilename() {
@@ -468,7 +529,12 @@ void WifiPacketSnifferScreen::_endCapture() {
 
 void WifiPacketSnifferScreen::_start() {
   _ringHead = _ringCount = 0; _pausedOffset = 0; _pausedViewOffset = 0; _paused = false; _ringVersion = 0; _lastRenderedVersion = 0;
-  if (!_beginCapture()) { _showMenu(); return; }
+  if (!_beginCapture()) { if (_integrated) Screen.goBack(); else _showMenu(); return; }
+  _sessionStartMs = millis();
+  _lastStatsSampleMs = _sessionStartMs;
+  _lastStatsTotal = 0;
+  _packetsPerSecond = 0;
+  _totalPackets.store(0, std::memory_order_relaxed);
   _state = STATE_RUNNING; strncpy(_title, "Packet Sniffer", sizeof(_title));
   WiFi.mode(WIFI_STA); WiFi.disconnect();
   esp_wifi_set_promiscuous(false);
@@ -491,6 +557,12 @@ void WifiPacketSnifferScreen::_stop() {
 }
 
 void WifiPacketSnifferScreen::_hop() {
+  if (!_clientScanning && _bssidCount == 0 && _macCount == 1 &&
+      _clientChannel >= 1 && _clientChannel <= 13 &&
+      (_channelMask == 0 || (_channelMask & (1u << (_clientChannel - 1))))) {
+    esp_wifi_set_channel(_clientChannel, WIFI_SECOND_CHAN_NONE);
+    return;
+  }
   if (_channelMask == 0) {
     esp_wifi_set_channel(_hopChannel, WIFI_SECOND_CHAN_NONE);
     _hopChannel = (_hopChannel >= 13) ? 1 : _hopChannel + 1;
@@ -506,6 +578,15 @@ void WifiPacketSnifferScreen::_hop() {
 void WifiPacketSnifferScreen::onUpdate() {
   if (_state == STATE_RUNNING || _state == STATE_PAUSED || _state == STATE_DETAILS) {
     _flushCapture();
+    const uint32_t statsNow = millis();
+    if (statsNow - _lastStatsSampleMs >= 1000) {
+      const uint32_t total = _totalPackets.load(std::memory_order_relaxed);
+      const uint32_t dt = statsNow - _lastStatsSampleMs;
+      _packetsPerSecond = (uint32_t)((uint64_t)(total - _lastStatsTotal) * 1000ULL / dt);
+      _lastStatsTotal = total;
+      _lastStatsSampleMs = statsNow;
+      if (_state == STATE_RUNNING || _state == STATE_PAUSED) render();
+    }
     if ((_state == STATE_RUNNING || _captureActive) && millis() - _lastHop >= HOP_MS) { _lastHop = millis(); _hop(); }
     if (_state == STATE_DETAILS) {
       if (Uni.Nav->wasPressed()) { auto d = Uni.Nav->readDirection(); if (d == INavigation::DIR_BACK) { _state = STATE_PAUSED; render(); } }
@@ -514,14 +595,14 @@ void WifiPacketSnifferScreen::onUpdate() {
     if (Uni.Nav->wasPressed()) {
       auto d = Uni.Nav->readDirection();
       const uint32_t dur = Uni.Nav->pressDuration();
-      if (d == INavigation::DIR_BACK) { _stop(); _showMenu(); return; }
+      if (d == INavigation::DIR_BACK) { if (_state == STATE_PAUSED) _resume(); else { _stop(); if (_integrated) Screen.goBack(); else _showMenu(); } return; }
       if (_state == STATE_RUNNING && d == INavigation::DIR_PRESS) { _pause(); return; }
       if (_state == STATE_PAUSED) {
         if (d == INavigation::DIR_UP && _pausedOffset + 1 < _ringCount) {
           ++_pausedOffset;
           const int fh = Uni.Lcd.fontHeight();
           const int lineH = fh * 2 + 4;
-          const int footerH = fh + 4;
+          const int footerH = 38;
           const uint8_t slots = (uint8_t)((bodyH() - footerH) / lineH);
           if (slots > 0 && _pausedOffset >= _pausedViewOffset + slots)
             _pausedViewOffset = _pausedOffset - slots + 1;
@@ -535,7 +616,7 @@ void WifiPacketSnifferScreen::onUpdate() {
           return;
         }
         if (d == INavigation::DIR_PRESS) {
-          if (dur >= HOLD_MS) _openDetails(); else _resume();
+          _openDetails();
           return;
         }
       }
@@ -566,10 +647,11 @@ void WifiPacketSnifferScreen::onRender() {
 
 void WifiPacketSnifferScreen::_renderPackets() {
   Uni.Lcd.fillRect(bodyX(), bodyY(), bodyW(), bodyH(), TFT_BLACK);
+  Uni.Lcd.setTextSize(1);
   Uni.Lcd.setTextDatum(TL_DATUM);
   const int fh = Uni.Lcd.fontHeight();
   const int lineH = fh * 2 + 4;
-  const int footerH = fh + 4;
+  const int footerH = 38;
   const int slots = (bodyH() - footerH) / lineH;
   int y = bodyY();
   for (int row = slots - 1; row >= 0; --row) {
@@ -589,35 +671,100 @@ void WifiPacketSnifferScreen::_renderPackets() {
     Uni.Lcd.drawString(bot, bodyX() + 8, y + fh + 2);
     y += lineH;
   }
-  Uni.Lcd.drawFastHLine(bodyX(), bodyY() + bodyH() - footerH, bodyW(), TFT_DARKGREY);
-  Uni.Lcd.setTextColor(TFT_LIGHTGREY, TFT_BLACK);
+  const int footerY = bodyY() + bodyH() - footerH;
+  const int separatorY = footerY + 19;
+  const uint32_t seconds = (millis() - _sessionStartMs) / 1000;
+  char elapsed[20], totalText[20], rateText[20];
+  if (seconds >= 3600)
+    snprintf(elapsed, sizeof(elapsed), "%02lu:%02lu:%02lu",
+             (unsigned long)(seconds / 3600), (unsigned long)((seconds / 60) % 60),
+             (unsigned long)(seconds % 60));
+  else
+    snprintf(elapsed, sizeof(elapsed), "%02lu:%02lu",
+             (unsigned long)(seconds / 60), (unsigned long)(seconds % 60));
+  snprintf(totalText, sizeof(totalText), "%lu", (unsigned long)_totalPackets.load(std::memory_order_relaxed));
+  snprintf(rateText, sizeof(rateText), "%lu", (unsigned long)_packetsPerSecond);
   Uni.Lcd.setTextDatum(TL_DATUM);
-  const char* hint = _state == STATE_RUNNING ? "[Press] Pause   [Back] Exit" : "[Press] Resume  [Hold] Details";
+  Uni.Lcd.setTextColor(TFT_LIGHTGREY, TFT_BLACK);
+  // Compact single-line stats; reserve the bottom line for navigation hints.
+  char stats[80];
+  snprintf(stats, sizeof(stats), "Time %s  Total %s  P/s %s", elapsed, totalText, rateText);
+  while (stats[0] && Uni.Lcd.textWidth(stats) > bodyW() - 4)
+    stats[strlen(stats) - 1] = '\0';
+  Uni.Lcd.drawString(stats, bodyX() + 2, footerY + 2);
+  Uni.Lcd.drawFastHLine(bodyX(), separatorY, bodyW(), TFT_DARKGREY);
   if (_captureActive) {
-    char footer[48];
-    if (_captureDrops) snprintf(footer, sizeof(footer), "REC D:%lu  %s", (unsigned long)_captureDrops, hint);
-    else snprintf(footer, sizeof(footer), "REC  %s", hint);
-    Uni.Lcd.drawString(footer, bodyX() + 2, bodyY() + bodyH() - footerH + 2);
-  } else {
-    Uni.Lcd.drawString(hint, bodyX() + 2, bodyY() + bodyH() - footerH + 2);
+    char status[32];
+    if (_captureDrops)
+      snprintf(status, sizeof(status), "REC D:%lu", (unsigned long)_captureDrops);
+    else
+      snprintf(status, sizeof(status), "REC");
+    Uni.Lcd.setTextColor(TFT_DARKGREY, TFT_BLACK);
+    Uni.Lcd.setTextDatum(TR_DATUM);
+    Uni.Lcd.drawString(status, bodyX() + bodyW() - 2, separatorY + 2);
   }
+  Uni.Lcd.setTextColor(TFT_DARKGREY, TFT_BLACK);
+  Uni.Lcd.setTextDatum(BC_DATUM);
+  const char* hint = _state == STATE_RUNNING
+                   ? "[Press] Pause"
+                   : "[Press] Details  [Back] Resume";
+  Uni.Lcd.drawString(hint, bodyX() + bodyW() / 2, footerY + footerH - 2);
+
 }
 
 void WifiPacketSnifferScreen::_renderDetails() {
-  Uni.Lcd.fillRect(bodyX(), bodyY(), bodyW(), bodyH(), TFT_BLACK);
-  PacketMeta p; if (!_getByOffset(_pausedOffset, p)) return;
-  char src[18], dst[18], bssid[18], line[48];
-  _formatMac(p.src, src, sizeof(src)); _formatMac(p.dst, dst, sizeof(dst)); _formatMac(p.bssid, bssid, sizeof(bssid));
-  Uni.Lcd.setTextDatum(TL_DATUM); int y = bodyY() + 2; const int fh = Uni.Lcd.fontHeight() + 2;
-#define ROW(label, fmt, ...) do { snprintf(line, sizeof(line), label "  " fmt, ##__VA_ARGS__); Uni.Lcd.drawString(line, bodyX()+2, y); y += fh; } while(0)
-  ROW("Type", "%s", _kindName(p.kind)); ROW("Channel", "%u", p.channel); ROW("RSSI", "%d dBm", p.rssi); ROW("Length", "%u", p.length);
-  ROW("Source", "%s", src); ROW("Dest", "%s", dst); if (!isZeroMac(p.bssid)) ROW("BSSID", "%s", bssid);
-  if (p.kind == K_DEAUTH) ROW("Reason", "%u", p.info);
-#undef ROW
+  auto& lcd = Uni.Lcd;
+  lcd.fillRect(bodyX(), bodyY(), bodyW(), bodyH(), TFT_BLACK);
+  PacketMeta p;
+  if (!_getByOffset(_pausedOffset, p)) return;
+
+  char src[18], dst[18], bssid[18], value[32];
+  _formatMac(p.src, src, sizeof(src));
+  _formatMac(p.dst, dst, sizeof(dst));
+  _formatMac(p.bssid, bssid, sizeof(bssid));
+
+  lcd.setTextSize(1);
+  lcd.setTextDatum(TL_DATUM);
+  const int fh = lcd.fontHeight();
+  const int gap = 2;
+  int y = bodyY() + 2;
+  const int bottom = bodyY() + bodyH();
+  const int x = bodyX() + 2;
+  const int valueRight = bodyX() + bodyW() - 2;
+
+  // Use the same frame-category palette as Packet Monitor; auxiliary labels
+  // remain grey and values white. Avoid adding information not in PacketMeta.
+  auto row = [&](const char* label, const char* text, uint16_t color = TFT_WHITE) {
+    if (y + fh > bottom) return;
+    lcd.setTextColor(TFT_DARKGREY, TFT_BLACK);
+    lcd.drawString(label, x, y);
+    lcd.setTextColor(color, TFT_BLACK);
+    lcd.setTextDatum(TR_DATUM);
+    lcd.drawString(text, valueRight, y);
+    lcd.setTextDatum(TL_DATUM);
+    y += fh + gap;
+  };
+
+  row("Type", _kindName(p.kind), _kindColor(p.kind));
+  snprintf(value, sizeof(value), "%u", (unsigned)p.subtype);
+  row("Subtype", value);
+  snprintf(value, sizeof(value), "%u", (unsigned)p.channel);
+  row("Channel", value);
+  snprintf(value, sizeof(value), "%d dBm", (int)p.rssi);
+  row("RSSI", value);
+  snprintf(value, sizeof(value), "%u bytes", (unsigned)p.length);
+  row("Length", value);
+  row("Source", src);
+  row("Dest", dst);
+  if (!isZeroMac(p.bssid)) row("BSSID", bssid);
+  if (p.kind == K_DEAUTH) {
+    snprintf(value, sizeof(value), "%u", (unsigned)p.info);
+    row("Reason", value);
+  }
 }
 
 void WifiPacketSnifferScreen::onBack() {
-  if (_state == STATE_RUNNING || _state == STATE_PAUSED) { _stop(); _showMenu(); return; }
+  if (_state == STATE_RUNNING || _state == STATE_PAUSED) { _stop(); if (_integrated) Screen.goBack(); else _showMenu(); return; }
   if (_state == STATE_DETAILS) { _state = STATE_PAUSED; render(); return; }
   if (_state == STATE_FILTER || _state == STATE_CHANNEL || _state == STATE_BSSID || _state == STATE_MAC) { _showMenu(); return; }
   _stop(); Screen.goBack();
@@ -625,7 +772,10 @@ void WifiPacketSnifferScreen::onBack() {
 
 bool WifiPacketSnifferScreen::_accept(const PacketMeta& p) const {
   if (_filterMask && p.kind < K_OTHER && !(_filterMask & (1u << p.kind))) return false;
-  if (_channelMask && !(_channelMask & (1u << (p.channel - 1)))) return false;
+  // A channel is required only when a channel filter is active. With All,
+  // retain the legacy behavior for frames with unspecified channel metadata.
+  if (_channelMask && (p.channel < 1 || p.channel > 13 ||
+                       !(_channelMask & (1u << (p.channel - 1))))) return false;
   if (_bssidCount) { bool ok = false; for (uint8_t i=0;i<_bssidCount;i++) if (macEq(_bssids[i], p.bssid)) { ok=true; break; } if (!ok) return false; }
   if (_macCount) { bool ok = false; for (uint8_t i=0;i<_macCount;i++) if (macEq(_macs[i], p.src) || macEq(_macs[i], p.dst)) { ok=true; break; } if (!ok) return false; }
   return true;
@@ -653,10 +803,34 @@ void WifiPacketSnifferScreen::_promiscCb(void* buf, wifi_promiscuous_pkt_type_t 
   WifiPacketSnifferScreen* self = g_sniffer; if (!self || !buf) return;
   const wifi_promiscuous_pkt_t* pkt = (const wifi_promiscuous_pkt_t*)buf;
   PacketMeta p = {}; if (!_decode(pkt, type, p)) return;
-  if (self->_isClientCandidate(p.src, p.bssid)) self->_observeClient(p.src);
-  if (self->_isClientCandidate(p.dst, p.bssid)) self->_observeClient(p.dst);
+  if (self->_clientScanning) {
+    if (p.channel < 1 || p.channel > 13) return;
+    if (self->_channelMask && !(self->_channelMask & (1u << (p.channel - 1)))) return;
+    if (self->_bssidCount) {
+      bool matched = false;
+      for (uint8_t i = 0; i < self->_bssidCount; ++i)
+        if (macEq(self->_bssids[i], p.bssid)) { matched = true; break; }
+      if (!matched) return;
+    }
+    const uint8_t* frame = pkt->payload;
+    const uint16_t len = pkt->rx_ctrl.sig_len;
+    if (type == WIFI_PKT_MGMT && len >= 24) {
+      const uint8_t subtype = (frame[0] >> 4) & 0x0f;
+      if ((subtype == 4 || subtype == 0 || subtype == 2 || subtype == 11) &&
+          self->_isClientCandidate(p.src, p.bssid))
+        self->_observeClient(p.src, p.channel, p.rssi);
+    } else if (type == WIFI_PKT_DATA && len >= 24) {
+      const bool toDS = (frame[1] & 1) != 0;
+      const bool fromDS = (frame[1] & 2) != 0;
+      const uint8_t* station = (toDS && !fromDS) ? p.src :
+                               (!toDS && fromDS) ? p.dst : nullptr;
+      if (station && self->_isClientCandidate(station, p.bssid))
+        self->_observeClient(station, p.channel, p.rssi);
+    }
+  }
   if (self->_clientScanning) return;
   if (!self->_accept(p)) return;
+  self->_totalPackets.fetch_add(1, std::memory_order_relaxed);
   if (self->_captureActive) self->_queueCapture(pkt->payload, pkt->rx_ctrl.sig_len, p.timestamp);
   self->_push(p);
 }

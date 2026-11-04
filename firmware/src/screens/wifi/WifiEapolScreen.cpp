@@ -3,7 +3,6 @@
 #include "core/ScreenManager.h"
 #include "core/AchievementManager.h"
 #include "screens/wifi/WifiMenuScreen.h"
-#include "screens/wifi/WifiUnigotchiScreen.h"
 #include "ui/actions/InputNumberAction.h"
 #include "ui/actions/ShowStatusAction.h"
 #include "utils/StorageUtil.h"
@@ -119,7 +118,7 @@ void WifiEapolScreen::onInit() {
 
 void WifiEapolScreen::_showMenu() {
   _modeSub      = (_mode == MODE_TARGET) ? "Target" : "All";
-  _targetSub    = _target.ssid;
+  _targetSub    = (_target.ssid.isEmpty() || _target.ssid == "-") ? "-" : _target.ssid;
   _discoverySub = String(_discoveryDwellMs) + " ms";
   _attackSub    = String(_attackDwellMs) + " ms";
   _deauthSub    = String(_maxDeauthAttempts);
@@ -133,14 +132,13 @@ void WifiEapolScreen::_showMenu() {
 
   add("Mode", _modeSub.c_str(), ACT_MODE);
   if (_mode == MODE_TARGET) {
-    add("Target WiFi", _targetSub.c_str(), ACT_TARGET_WIFI);
+    add("Access Point", _targetSub.c_str(), ACT_TARGET_WIFI);
   } else {
     add("Discovery Dwell", _discoverySub.c_str(), ACT_DISCOVERY_DWELL);
     add("Attack Dwell",    _attackSub.c_str(),    ACT_ATTACK_DWELL);
   }
   add("Max Deauth", _deauthSub.c_str(), ACT_MAX_DEAUTH);
   add("Start",      nullptr,            ACT_START);
-  add("Unigotchi",  "auto pwn mode",    ACT_UNIGOTCHI);
 
   uint8_t selected = 0;
   for (uint8_t i = 0; i < _menuCount; ++i) {
@@ -192,15 +190,12 @@ void WifiEapolScreen::onItemSelected(uint8_t index) {
       _maxDeauthAttempts = InputNumberAction::popup("Max Deauth Attempts", 5, 30, _maxDeauthAttempts);
       _showMenu();
       break;
-    case ACT_UNIGOTCHI:
-      Screen.push(new WifiUnigotchiScreen());
-      break;
     case ACT_START: {
       // Target mode requires a picked AP — _target.channel only goes non-zero
       // once _selectWifi() lands a scan result, so it's the canonical
       // "no target set" indicator.
       if (_mode == MODE_TARGET && _target.channel == 0) {
-        ShowStatusAction::show("Target not selected");
+        ShowStatusAction::show("Access Point not set");
         return;
       }
 
@@ -291,7 +286,7 @@ void WifiEapolScreen::_showScanResults() {
   _scanItems[0] = {"Rescan"};
 
   for (int i = 0; i < _scanCount; i++) {
-    _scanItems[i + 1] = {_scanLabels[i], _scanValues[i]};
+    _scanItems[i + 1] = {_scanLabels[i], _scanDisplay[i]};
     _scanItems[i + 1].rssi            = _scanRssi[i];
     _scanItems[i + 1].hasRssi         = true;
     _scanItems[i + 1].sublabelMarquee = true;
@@ -321,6 +316,7 @@ void WifiEapolScreen::_selectWifi(bool forceScan) {
     _scanChannels[i] = (uint8_t)WiFi.channel(i);
     snprintf(_scanValues[i], sizeof(_scanValues[i]), "%s",
              WiFi.BSSIDstr(i).c_str());
+    snprintf(_scanDisplay[i], sizeof(_scanDisplay[i]), "%s CH%u", _scanValues[i], (unsigned)_scanChannels[i]);
     _scanRssi[i] = (int16_t)WiFi.RSSI(i);
   }
 

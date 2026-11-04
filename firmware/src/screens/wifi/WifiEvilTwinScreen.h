@@ -60,6 +60,7 @@ private:
   char     _scanLabels[MAX_SCAN][52];
   char     _scanSsids[MAX_SCAN][33];
   char     _scanValues[MAX_SCAN][18];
+  char     _scanDisplay[MAX_SCAN][24];
   int16_t  _scanRssi[MAX_SCAN] = {};
   uint8_t  _scanChannels[MAX_SCAN] = {};
   int      _scanCount = 0;

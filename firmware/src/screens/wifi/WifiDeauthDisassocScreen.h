@@ -18,6 +18,11 @@ public:
   }
   ~WifiDeauthDisassocScreen() override;
 
+  // Contextual entry from WiFi Scanner / Traffic Monitor.
+  // Prefills AP (+ optional client) and auto-starts deauth in onInit.
+  void configureFromChannel(uint8_t channel, const uint8_t* bssid,
+                            const uint8_t* client = nullptr, const char* ssid = nullptr);
+
   void onInit() override;
   void onItemSelected(uint8_t index) override;
   void onUpdate() override;
@@ -39,12 +44,14 @@ private:
     bool    valid;
   };
 
-  enum State { STATE_MAIN, STATE_SELECT_WIFI, STATE_DEAUTHING };
+  enum State { STATE_MAIN, STATE_SELECT_WIFI, STATE_SELECT_CLIENTS, STATE_DEAUTHING };
   enum Mode  { MODE_TARGET, MODE_ALL };
 
   State  _state = STATE_MAIN;
   Mode   _mode  = MODE_TARGET;
   Target _target;
+  uint8_t _mainSel = 0;  // keeps highlight on last selected main menu item
+  bool _fromContext = false;  // opened via configureFromChannel (Scanner/Monitor)
 
   class WifiAttackUtil* _attacker = nullptr;
 
@@ -56,13 +63,34 @@ private:
   uint8_t _allChanHop = 0;
   bool    _chromeDrawn = false;
 
-  ListItem _mainItems[3];
+  ListItem _mainItems[4];
+  String _clientsSub;
+
+  static constexpr uint8_t MAX_SELECTED_CLIENTS = 4;  // same limit as Packet Sniffer
+  static constexpr uint8_t MAX_SEEN_CLIENTS = 20;
+  struct ClientEntry { uint8_t mac[6]; int8_t rssi; char macStr[18]; };
+  ClientEntry _seenClients[MAX_SEEN_CLIENTS] = {};
+  uint8_t _seenClientCount = 0;
+  uint8_t _clientOrder[MAX_SEEN_CLIENTS] = {};  // display order (RSSI desc) → _seenClients index
+  uint8_t _selectedClients[MAX_SELECTED_CLIENTS][6] = {};
+  uint8_t _selectedClientCount = 0;
+  char _selectedClientMacStr[18] = {};  // cached MAC when exactly one client is selected
+  ListItem _clientItems[MAX_SEEN_CLIENTS + 2];
+  char _clientLabels[MAX_SEEN_CLIENTS + 2][32] = {};
+  static WifiDeauthDisassocScreen* _clientScanner;
+  static portMUX_TYPE _clientLock;
+  static void _clientCb(void* buf, wifi_promiscuous_pkt_type_t type);
+  void _scanClients();
+  void _showClients(bool preserveSelection = false);
+  bool _clientSelected(const uint8_t* mac) const;
+  void _refreshSelectedClientMacStr();
   String   _modeSub;
   String   _targetSub;
 
   ListItem _scanItems[MAX_SCAN + 1];
   char     _scanLabels[MAX_SCAN][52];
   char     _scanValues[MAX_SCAN][18];
+  char     _scanDisplay[MAX_SCAN][24];
   int16_t  _scanRssi[MAX_SCAN] = {};
   uint8_t  _scanChannels[MAX_SCAN] = {};
   int      _scanCount = 0;

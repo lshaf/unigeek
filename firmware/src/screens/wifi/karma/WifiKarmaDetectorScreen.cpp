@@ -3,6 +3,8 @@
 #include "core/ScreenManager.h"
 #include "core/AchievementManager.h"
 #include "screens/wifi/WifiMenuScreen.h"
+#include "screens/wifi/WifiChannelMonitorDetailsScreen.h"
+#include "screens/wifi/WifiTargetActions.h"
 
 #include <WiFi.h>
 #include <esp_random.h>
@@ -35,30 +37,34 @@ void WifiKarmaDetectorScreen::onInit()
 
 void WifiKarmaDetectorScreen::onUpdate()
 {
+  // A detection works like a paused list: it stays until the user acts.
+  // [Press] opens Options, [Back] resumes monitoring; while monitoring,
+  // [Back] leaves.
   if (Uni.Nav->wasPressed()) {
     auto dir = Uni.Nav->readDirection();
-    if (dir == INavigation::DIR_BACK) { onBack(); return; }
-    if (dir == INavigation::DIR_PRESS) {
-      _state      = STATE_SCANNING;
-      _detectedAt = 0;
-      _startScan();
-      render();
+    if (dir == INavigation::DIR_BACK) {
+      if (_state == STATE_DETECTED) _resume();
+      else                          onBack();
+      return;
+    }
+    if (dir == INavigation::DIR_PRESS && _state == STATE_DETECTED) {
+      _openOptions();
       return;
     }
   }
 
   if (!_scanning) return;
 
+  // Frozen on a detection: no probing, later answers are ignored.
+  if (_state == STATE_DETECTED) {
+    _newHit = false;
+    return;
+  }
+
   if (_newHit) {
     _newHit = false;
     _onHit();
     return;
-  }
-
-  // Linger timeout: back to scanning if AP stopped responding
-  if (_state == STATE_DETECTED && millis() - _detectedAt >= LINGER_MS) {
-    _state = STATE_SCANNING;
-    render();
   }
 
   if (millis() - _lastProbe >= PROBE_WAIT_MS) {
@@ -79,11 +85,12 @@ void WifiKarmaDetectorScreen::onRender()
   if (_state == STATE_SCANNING) {
     sp.setTextDatum(MC_DATUM);
     sp.setTextColor(TFT_DARKGREY, TFT_BLACK);
-    sp.drawString("Monitoring...", bodyW() / 2, bodyH() / 2 - 8);
+    sp.drawString("Scanning...", bodyW() / 2, bodyH() / 2 - 8);
     sp.drawString(_statusLine[0] ? _statusLine : "Starting...", bodyW() / 2, bodyH() / 2 + 8);
   } else {
-    // Alert view
-    const int cy = bodyH() / 2;
+    // Alert view, above the footer
+    static constexpr int kFooterH = 27;
+    const int cy = (bodyH() - kFooterH) / 2;
     sp.setTextDatum(MC_DATUM);
 
     sp.setTextColor(TFT_RED, TFT_BLACK);
@@ -100,6 +107,17 @@ void WifiKarmaDetectorScreen::onRender()
     snprintf(info, sizeof(info), "%d dBm   CH:%d", (int)_hitRssi, _hitChannel);
     sp.setTextColor(TFT_YELLOW, TFT_BLACK);
     sp.drawString(info, bodyW() / 2, cy + 20);
+
+    // Footer, same layout as Watchcat / Watchdog: Options on the upper line,
+    // Resume on the lower.
+    const int w = bodyW(), h = bodyH();
+    sp.drawFastHLine(0, h - kFooterH, w, TFT_DARKGREY);
+    sp.setTextColor(TFT_DARKGREY, TFT_BLACK);
+    sp.setTextDatum(BC_DATUM);
+    const char* resume = "[Back] Resume Scan";
+    if (sp.textWidth(resume) > w - 6) resume = "[Back] Resume";
+    sp.drawString("[Press] Options", w / 2, h - 14);
+    sp.drawString(resume, w / 2, h - 1);
   }
 
   sp.pushSprite(bodyX(), bodyY());
@@ -109,6 +127,54 @@ void WifiKarmaDetectorScreen::onRender()
 void WifiKarmaDetectorScreen::onBack()
 {
   Screen.goBack();
+}
+
+// Back from a tool opened on a detection: keep showing it, radio ready.
+void WifiKarmaDetectorScreen::onRestore()
+{
+  _instance = this;
+  _scanning = true;
+  WiFi.mode(WIFI_MODE_STA);
+  esp_wifi_set_promiscuous(true);
+  esp_wifi_set_promiscuous_rx_cb(&WifiKarmaDetectorScreen::_promiscuousCb);
+  esp_wifi_set_channel(_channel, WIFI_SECOND_CHAN_NONE);
+  render();
+}
+
+// Leave the detection and monitor again with a new fake network.
+void WifiKarmaDetectorScreen::_resume()
+{
+  _state      = STATE_SCANNING;
+  _detectedAt = 0;
+  _newHit     = false;
+  _startScan();
+  render();
+}
+
+// Same Options as the Watchdog lists. The target is the AP that answered.
+void WifiKarmaDetectorScreen::_openOptions()
+{
+  WifiTarget target;
+  target.client  = false;
+  target.channel = _hitChannel;
+  memcpy(target.mac, _hitBssid, 6);
+  memcpy(target.bssid, _hitBssid, 6);
+  strncpy(target.ssid, _fakeSSID, sizeof(target.ssid) - 1);
+
+  const auto action = WifiTargetActions::choose(
+      WifiTargetActions::DETAILS | WifiTargetActions::MONITOR |
+      WifiTargetActions::SNIFFER | WifiTargetActions::FOX_HUNT);
+  if (action == WifiTargetActions::NONE) { render(); return; }
+
+  _stopScan();  // hand the radio over; onRestore() takes it back
+  if (action == WifiTargetActions::DETAILS) {
+    // SSID: the fake network the AP claimed to be.
+    auto* details = new WifiChannelMonitorDetailsScreen();
+    details->configureBssid(_fakeSSID, _hitBssid, _hitRssi, _hitChannel);
+    Screen.push(details);
+    return;
+  }
+  WifiTargetActions::open(action, target);
 }
 
 // ── Private ───────────────────────────────────────────────────────────────────
