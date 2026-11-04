@@ -52,7 +52,7 @@ void NetworkSettingsScreen::_rebuild(uint8_t selected) {
     _values[5] = addressLabel(_config.dns2);
     add("IP Address", &_values[1], ROW_IP);
     add("Gateway", &_values[2], ROW_GATEWAY);
-    add("Netmask", &_values[3], ROW_NETMASK);
+    add("Subnet", &_values[3], ROW_NETMASK);
     add("DNS 1", &_values[4], ROW_DNS1);
     add("DNS 2", &_values[5], ROW_DNS2);
   }
