@@ -54,7 +54,7 @@ void PortScannerScreen::onItemSelected(uint8_t index) {
 
       static const InputSelectAction::Option kOptions[] = {
         {"Details", "details", nullptr, 0, false},
-        {"Audit", "audit", nullptr, 0, false},
+        {"Vuln Scan", "audit", nullptr, 0, false},
       };
       const char* choice = InputSelectAction::popup("Options", kOptions, 2);
       if (!choice) { render(); return; }

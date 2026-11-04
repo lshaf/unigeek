@@ -8,7 +8,7 @@
 // returns to the results.
 class PortAuditScreen : public ToolScreen {
 public:
-  const char* title() override { return "Audit"; }
+  const char* title() override { return "Vuln Scan"; }
 
   void configure(const String& host, uint16_t port) {
     _host = host;
