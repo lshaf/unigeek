@@ -16,7 +16,7 @@ protected:
 private:
   enum Row : uint8_t { ROW_HOST, ROW_COUNT, ROW_INTERVAL, ROW_SIZE };
   String    _host;
-  int       _countSetting = 4;
+  int       _countSetting = 0;  // 0 = continuous (Linux ping default): stop with [Press] Stop
   int       _intervalMs   = 1000;
   int       _size         = 32;
 

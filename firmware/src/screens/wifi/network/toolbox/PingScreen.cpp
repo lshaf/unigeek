@@ -3,7 +3,7 @@
 
 void PingScreen::_buildRows() {
   _addRow("Host", _host.length() ? _host : String("-"), ROW_HOST);
-  _addRow("Count", String(_countSetting), ROW_COUNT);
+  _addRow("Count", _countSetting == 0 ? String("Continuous") : String(_countSetting), ROW_COUNT);
   _addRow("Interval", String(_intervalMs) + " ms", ROW_INTERVAL);
   _addRow("Size", String(_size) + " bytes", ROW_SIZE);
 }
@@ -12,7 +12,8 @@ void PingScreen::_editRow(uint8_t id) {
   switch (id) {
     case ROW_HOST: _host = _editHost("Host", _host); break;
     case ROW_COUNT: {
-      const int v = InputNumberAction::popup("Count", 1, 100, _countSetting);
+      // 0 shows as "Continuous" (ping until [Press] Stop), like Linux ping.
+      const int v = InputNumberAction::popup("Count (0 = continuous)", 0, 100, _countSetting);
       if (!InputNumberAction::wasCancelled()) _countSetting = v;
       break;
     }
@@ -64,7 +65,7 @@ bool PingScreen::_step() {
       snprintf(line, sizeof(line), "seq=%u  timeout", _seq);
     }
     _print(line);
-    if (_seq >= _countSetting) {
+    if (_countSetting != 0 && _seq >= _countSetting) {  // 0 = until stopped
       _summary();
       return false;
     }
