@@ -3,8 +3,9 @@
 #include "utils/network/ExposureAudit.h"
 
 // Port Scan > (open port) > Options > Audit. Runs the exposure checks for the
-// one selected port and lists the findings, worst first. No settings: starts
-// straight away, [Press] Stop while probing, [Back] returns to the results.
+// one selected port and lists the findings, worst first. No settings and no
+// footer: it starts straight away, runs a few quick probes, and [Back]
+// returns to the results.
 class PortAuditScreen : public ToolScreen {
 public:
   const char* title() override { return "Audit"; }
@@ -19,6 +20,7 @@ protected:
   void _editRow(uint8_t) override {}
   bool _startsImmediately() const override { return true; }
   bool _allowsRestart() const override { return false; }
+  bool _allowsStop() const override { return false; }  // a few quick probes
 
   bool _begin() override {
     if (_host.length() == 0 || _port == 0) return false;
