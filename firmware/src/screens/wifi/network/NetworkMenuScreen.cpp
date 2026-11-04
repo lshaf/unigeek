@@ -7,6 +7,7 @@
 #include "core/AchievementManager.h"
 #include "screens/wifi/WifiMenuScreen.h"
 #include "screens/wifi/network/NetworkScannersScreen.h"
+#include "screens/wifi/network/toolbox/NetworkToolboxScreen.h"
 #include "screens/wifi/network/NetworkAttacksScreen.h"
 #include "screens/wifi/network/NetworkPranksScreen.h"
 #include "screens/wifi/network/NetworkServicesScreen.h"
@@ -64,11 +65,12 @@ void NetworkMenuScreen::onItemSelected(uint8_t index) {
       case 0: _showInformation(); break;
       case 1: _showWifiQR(); break;
       case 2: Screen.push(new NetworkScannersScreen()); break;
-      case 3: Screen.push(new NetworkAttacksScreen());  break;
-      case 4: Screen.push(new NetworkPranksScreen());   break;
-      case 5: Screen.push(new RemoteAccessScreen());    break;
-      case 6: Screen.push(new NetworkServicesScreen()); break;
-      case 7: Screen.push(new NetworkInternetScreen()); break;
+      case 3: Screen.push(new NetworkToolboxScreen());  break;
+      case 4: Screen.push(new NetworkAttacksScreen());  break;
+      case 5: Screen.push(new NetworkPranksScreen());   break;
+      case 6: Screen.push(new RemoteAccessScreen());    break;
+      case 7: Screen.push(new NetworkServicesScreen()); break;
+      case 8: Screen.push(new NetworkInternetScreen()); break;
     }
   } else if (_state == STATE_INFORMATION) {
     _showMenu();

@@ -42,23 +42,28 @@ static volatile uint8_t  s_replied[32] = {};      // bit per last octet
 static inline void markReplied(uint8_t octet) { s_replied[octet >> 3] |= (uint8_t)(1u << (octet & 7)); }
 static inline bool hasReplied(uint8_t octet)  { return s_replied[octet >> 3] & (1u << (octet & 7)); }
 
+// Consumes only replies to the scanner's echoes; anything else (echo requests
+// to this device, other tools' replies) goes on to lwIP.
 static uint8_t onPingRecv(void* /*arg*/, struct raw_pcb* /*pcb*/,
                           struct pbuf* p, const ip_addr_t* addr) {
+  bool ours = false;
   // pbuf payload starts at the IP header
   if (addr && IP_IS_V4(addr) && p->len >= 20) {
     uint8_t ihl = (((uint8_t*)p->payload)[0] & 0x0F) * 4;
     if (p->len >= ihl + (uint16_t)sizeof(struct icmp_echo_hdr)) {
       auto* iecho = (struct icmp_echo_hdr*)((uint8_t*)p->payload + ihl);
       const ip4_addr_t* src = ip_2_ip4(addr);
-      if (ICMPH_TYPE(iecho) == ICMP_ER && ntohs(iecho->id) == PING_ID &&
-          ip4_addr1(src) == s_subnet[0] && ip4_addr2(src) == s_subnet[1] &&
-          ip4_addr3(src) == s_subnet[2]) {
-        markReplied(ip4_addr4(src));
+      if (ICMPH_TYPE(iecho) == ICMP_ER && ntohs(iecho->id) == PING_ID) {
+        ours = true;
+        if (ip4_addr1(src) == s_subnet[0] && ip4_addr2(src) == s_subnet[1] &&
+            ip4_addr3(src) == s_subnet[2])
+          markReplied(ip4_addr4(src));
       }
     }
   }
+  if (!ours) return 0;
   pbuf_free(p);
-  return 1;  // consumed
+  return 1;
 }
 
 struct PcbCall {

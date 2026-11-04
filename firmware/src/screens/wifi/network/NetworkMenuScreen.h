@@ -44,10 +44,11 @@ private:
   //
   // The HAS_NET_TOOLS gate now lives inside Attacks and Services, which is why
   // this array no longer needs a conditional size or shifted switch indices.
-  ListItem _menuItems[8] = {
+  ListItem _menuItems[9] = {
     {"Information"},
     {"WiFi QRCode"},
     {"Scanners"},
+    {"Toolbox"},
     {"Attacks"},
     {"Pranks"},
     {"Remote Access"},
