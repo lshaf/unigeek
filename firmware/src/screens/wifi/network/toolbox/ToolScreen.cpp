@@ -99,8 +99,8 @@ void ToolScreen::onUpdate() {
       return;
     }
     if (dir == INavigation::DIR_PRESS) {
-      if (_state == STATE_RUNNING) _finish("Stopped.");
-      else                         _start();
+      if (_state == STATE_RUNNING) { if (_allowsStop()) _finish("Stopped."); }
+      else if (_allowsRestart())   _start();
       return;
     }
     if (_view.onNav(dir)) _renderOutput();
@@ -121,10 +121,11 @@ void ToolScreen::onRender() {
 }
 
 void ToolScreen::_renderOutput() {
-  _view.render(bodyX(), bodyY(), bodyW(), bodyH() - kFooterH);
+  _view.render(bodyX(), bodyY(), bodyW(), bodyH() - _footerH());
 }
 
 void ToolScreen::_renderFooter() {
+  if (_footerH() == 0) return;
   auto& lcd = Uni.Lcd;
   const int x = bodyX(), y = bodyY(), w = bodyW(), h = bodyH();
   const int top = y + h - kFooterH;
@@ -132,7 +133,10 @@ void ToolScreen::_renderFooter() {
   lcd.drawFastHLine(x, top, w, TFT_DARKGREY);
   lcd.setTextColor(TFT_DARKGREY, TFT_BLACK);
   lcd.setTextDatum(BC_DATUM);
-  lcd.drawString(_state == STATE_RUNNING ? "[Press] Stop" : "[Press] Restart", x + w / 2, y + h - 1);
+  const char* hint = _state == STATE_RUNNING ? (_allowsStop() ? "[Press] Stop" : nullptr)
+                   : _allowsRestart()         ? "[Press] Restart"
+                                              : nullptr;
+  if (hint) lcd.drawString(hint, x + w / 2, y + h - 1);
   lcd.setTextDatum(TL_DATUM);
 }
 

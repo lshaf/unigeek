@@ -38,6 +38,11 @@ protected:
   virtual void _end() {}
   // No setup list: run as soon as the tool opens (Connectivity Check).
   virtual bool _startsImmediately() const { return false; }
+  // [Press] Restart once finished; without it, the finished output has no hint.
+  virtual bool _allowsRestart() const { return true; }
+  // [Press] Stop while running; a quick tool can do without. With neither
+  // Stop nor Restart, there is no footer and the output takes the whole body.
+  virtual bool _allowsStop() const { return true; }
 
   void _addRow(const char* label, const String& value, uint8_t id);
   void _print(const String& line);
@@ -69,4 +74,5 @@ private:
   void _finish(const char* note);
   void _renderOutput();
   void _renderFooter();
+  int  _footerH() const { return (_allowsStop() || _allowsRestart()) ? kFooterH : 0; }
 };

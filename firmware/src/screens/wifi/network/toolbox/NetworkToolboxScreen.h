@@ -12,10 +12,10 @@ public:
   void onItemSelected(uint8_t index) override;
 
 private:
-  // From general to specific: is the internet working, then reachability,
-  // path, names, web; Wake-on-LAN, an action rather than a check, last.
-  ListItem _items[6] = {
-    {"Connectivity Check"},
+  // From general to specific: reachability, path, names, web; Wake-on-LAN,
+  // an action rather than a check, last. (Connectivity Check lives in
+  // Network > Information > Options.)
+  ListItem _items[5] = {
     {"Ping"},
     {"Traceroute"},
     {"DNS Lookup"},
