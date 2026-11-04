@@ -1,4 +1,5 @@
 #include "TerminalScreen.h"
+#include "screens/wifi/network/remote/SavedHostRows.h"
 #include "core/Device.h"
 #include "core/INavigation.h"
 #include "core/ScreenManager.h"
@@ -133,6 +134,20 @@ void TerminalScreen::onItemSelected(uint8_t index) {
     case ROW_LINE_ENDING: _configLineEnding();     break;
     case ROW_DISPLAY:     _configDisplay();        break;
     case ROW_START:       _startSession();         break;
+    case ROW_SAVED: {
+      SavedHostRows* saved = _savedHosts();
+      if (!saved) break;
+      const auto kind = (SavedHostRows::Kind)_savedKinds[index];
+      if (kind == SavedHostRows::DELETE) {
+        if (saved->confirmDelete()) { Screen.goBack(); return; }
+        render();
+        break;
+      }
+      saved->select(kind);
+      _refreshItems();
+      render();
+      break;
+    }
   }
 }
 
@@ -185,10 +200,24 @@ void TerminalScreen::_refreshItems() {
     _items[n] = {"Display", _displayLabel};
     _rows[n++] = ROW_DISPLAY;
   }
-  _items[n] = {_startLabel(), nullptr};
-  _rows[n++] = ROW_START;
+  uint8_t sel = _selectedIndex;
+  if (SavedHostRows* saved = _savedHosts()) {
+    SavedHostRows::Kind kinds[MAX_ITEMS] = {};
+    const uint8_t from = n;
+    n = saved->tail(_items, kinds, n, MAX_ITEMS, _startLabel());
+    for (uint8_t i = from; i < n; ++i) {
+      _rows[i] = kinds[i] == SavedHostRows::CONNECT ? ROW_START : ROW_SAVED;
+      _savedKinds[i] = kinds[i];
+      if (_startHighlight && kinds[i] == SavedHostRows::CONNECT) sel = i;
+    }
+  } else {
+    _items[n] = {_startLabel(), nullptr};
+    if (_startHighlight) sel = n;
+    _rows[n++] = ROW_START;
+  }
+  _startHighlight = false;
 
-  setItems(_items, n, _selectedIndex);
+  setItems(_items, n, sel < n ? sel : n - 1);
 }
 
 void TerminalScreen::_configLogMode() {
@@ -297,10 +326,25 @@ void TerminalScreen::_configDisplay() {
 void TerminalScreen::_startSession() {
   if (_state == STATE_RUNNING) return;
 
+  SavedHostRows* saved = _savedHosts();
+  if (saved && !saved->prepare()) {  // a host being saved needs a name
+    _refreshItems();
+    render();
+    return;
+  }
+
   TerminalTransport* transport = _createTransport();
   if (!transport) {
     render();
     return;
+  }
+
+  // Saved when starting, whether or not the server answers.
+  if (saved && saved->saving()) {
+    SavedHost host;
+    _fillSavedHost(host);
+    saved->persist(host);
+    _refreshItems();
   }
   if (!transport->begin()) {
     delete transport;
