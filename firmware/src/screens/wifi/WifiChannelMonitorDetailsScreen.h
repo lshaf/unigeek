@@ -19,7 +19,7 @@ public:
     memcpy(_stationMac, bssid, 6);
     _setMac(_mac, bssid);
     _ssid = ssid && ssid[0] ? ssid : "<hidden>";
-    _rssi = _formatRssi(rssi);
+    _rssi = rssi ? String(rssi) + " dBm" : String("Unknown");
     _channel = String(channel);
     static const char* labels[] = {"Unknown", "Open", "WEP", "WPA", "WPA2", "WPA3", "WPA2/WPA3"};
     _rows[0] = {"SSID", _ssid};
@@ -117,7 +117,7 @@ public:
     memcpy(_stationMac, bssid, 6);
     _setMac(_mac, bssid);
     _ssid = ssid && ssid[0] ? ssid : "<hidden>";
-    _rssi = rssi ? _formatRssi(rssi) : String("Unknown");
+    _rssi = rssi ? String(rssi) + " dBm" : String("Unknown");
     _channel = String(channel);
     _packets = extraValue;
     uint8_t n = 0;
@@ -147,7 +147,7 @@ public:
     else _setMac(_apMac, target);
     const bool spoofed = ssid && ssid[0];
     _ssid = spoofed ? ssid : "Unknown";
-    _rssi = rssi ? _formatRssi(rssi) : String("Unknown");
+    _rssi = rssi ? String(rssi) + " dBm" : String("Unknown");
     _channel = String(channel);
     _packets = String(frames);
     _rows[0] = {"Source", _mac};
@@ -175,7 +175,7 @@ public:
     _lookupVendor = false;
     _ssid = ssid && ssid[0] ? ssid : "<hidden>";
     _packets = String(bssids);
-    _rssi = rssi ? _formatRssi(rssi) : String("Unknown");
+    _rssi = rssi ? String(rssi) + " dBm" : String("Unknown");
     _channel = String(channel);
     _apMac = String(variants);
     uint8_t n = 0;
@@ -275,11 +275,6 @@ private:
     snprintf(buf, sizeof(buf), "%02X:%02X:%02X:%02X:%02X:%02X",
              mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
     out = buf;
-  }
-  static String _formatRssi(int rssi) {
-    const char* strength = rssi >= -50 ? "Very Good" : rssi >= -60 ? "Good" :
-                           rssi >= -70 ? "Better" : rssi >= -80 ? "Low" : "Very Low";
-    return "[" + String(rssi) + "] " + strength;
   }
   const char* _title = nullptr;
   bool _client = false;
