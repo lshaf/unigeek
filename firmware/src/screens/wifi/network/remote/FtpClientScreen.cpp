@@ -252,7 +252,6 @@ void FtpClientScreen::loadSaved(const SavedHost& host) {
   _password = host.get("password");
   _askPassword = !host.has("password");
   _saved.loadFrom(host);
-  _selectConnect = true;
 }
 
 void FtpClientScreen::onBack() {
@@ -317,11 +316,6 @@ void FtpClientScreen::_rebuildConfig() {
   _configItems[n++] = {"Password", _passwordLabel};
   for (uint8_t i = 0; i < n; ++i) _kinds[i] = SavedHostRows::NONE;
   n = _saved.tail(_configItems, _kinds, n, MAX_CONFIG_ROWS, "Connect");
-
-  if (_selectConnect) {
-    sel = SavedHostRows::connectIndex(_kinds, n);
-    _selectConnect = false;
-  }
   setItems(_configItems, n, min<uint8_t>(sel, n - 1));
 }
 

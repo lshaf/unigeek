@@ -208,14 +208,11 @@ void TerminalScreen::_refreshItems() {
     for (uint8_t i = from; i < n; ++i) {
       _rows[i] = kinds[i] == SavedHostRows::CONNECT ? ROW_START : ROW_SAVED;
       _savedKinds[i] = kinds[i];
-      if (_startHighlight && kinds[i] == SavedHostRows::CONNECT) sel = i;
     }
   } else {
     _items[n] = {_startLabel(), nullptr};
-    if (_startHighlight) sel = n;
     _rows[n++] = ROW_START;
   }
-  _startHighlight = false;
 
   setItems(_items, n, sel < n ? sel : n - 1);
 }

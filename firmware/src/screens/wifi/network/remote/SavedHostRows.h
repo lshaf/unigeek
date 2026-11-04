@@ -55,12 +55,6 @@ public:
     return n;
   }
 
-  // Index of the Connect row in the last tail(), for the initial highlight.
-  static uint8_t connectIndex(const Kind* kinds, uint8_t count) {
-    for (uint8_t i = 0; i < count; ++i) if (kinds[i] == CONNECT) return i;
-    return 0;
-  }
-
   // Handles SAVE / NAME / SAVE_PASSWORD (the caller rebuilds its list).
   void select(Kind k) {
     switch (k) {
