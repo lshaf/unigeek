@@ -86,8 +86,6 @@ protected:
   // before Start, Delete after it, and the host saved when starting.
   virtual SavedHostRows* _savedHosts() { return nullptr; }
   virtual void _fillSavedHost(SavedHost& host) { (void)host; }
-  // Highlights Start on the next setup refresh (opened from a saved host).
-  void _highlightStart() { _startHighlight = true; }
 
   // ── Helpers for subclasses ────────────────────────────────────────────────
   void _refreshItems();
@@ -125,7 +123,6 @@ private:
   Row      _rows[MAX_ITEMS]    = {};
   uint8_t  _transportRowCount  = 0;
   uint8_t  _savedKinds[MAX_ITEMS] = {};   // SavedHostRows::Kind of ROW_SAVED rows
-  bool     _startHighlight     = false;
 
   // ── session ───────────────────────────────────────────────────────────────
   TerminalTransport*  _transport = nullptr;

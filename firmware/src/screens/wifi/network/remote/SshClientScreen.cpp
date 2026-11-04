@@ -239,7 +239,6 @@ void SshClientScreen::loadSaved(const SavedHost& host) {
   _keyPath  = host.get("key");
   _password = host.get("password");
   _saved.loadFrom(host);
-  _selectConnect = true;
 }
 
 void SshClientScreen::onBack() {
@@ -323,11 +322,6 @@ void SshClientScreen::_rebuildItems() {
   for (uint8_t i = 0; i < n; ++i) _kinds[i] = SavedHostRows::NONE;
   _fieldCount = n;
   n = _saved.tail(_items, _kinds, n, MAX_CONFIG_ROWS, "Connect");
-
-  if (_selectConnect) {
-    sel = SavedHostRows::connectIndex(_kinds, n);
-    _selectConnect = false;
-  }
   setItems(_items, n, min<uint8_t>(sel, n - 1));
 }
 

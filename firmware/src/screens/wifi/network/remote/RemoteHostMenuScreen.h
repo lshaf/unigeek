@@ -6,7 +6,8 @@
 
 // First screen of each Remote Access client: New Host (the empty setup) or
 // Saved Hosts (the names saved for this service; picking one opens the setup
-// filled in, Connect highlighted). SSH and SFTP share their saved hosts.
+// filled in, highlighted on its first row like any setup). SSH and SFTP share
+// their saved hosts.
 class RemoteHostMenuScreen : public ListScreen {
 public:
   enum Service : uint8_t { TCP, TELNET, SSH, FTP, SFTP, WEBDAV };

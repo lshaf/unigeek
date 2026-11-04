@@ -10,12 +10,11 @@ class TelnetClientScreen : public TerminalScreen {
 public:
   TelnetClientScreen() : TerminalScreen(LINE_END_CRLF) {}
 
-  // Opened from Saved Hosts: fields filled in, Connect highlighted.
+  // Opened from Saved Hosts: fields filled in.
   void loadSaved(const SavedHost& host) {
     _host = host.get("host");
     _port = host.getInt("port", 23);
     _saved.loadFrom(host);
-    _highlightStart();
   }
   TelnetClientScreen(const String& host, int port)
     : TerminalScreen(LINE_END_CRLF), _host(host), _port(port) {}
