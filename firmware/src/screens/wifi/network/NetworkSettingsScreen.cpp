@@ -130,7 +130,7 @@ void NetworkSettingsScreen::_save() {
   delay(200);
   const bool ok = WifiUtility::connect(_ssid.c_str(), password.c_str());
   if (ok) {
-    ShowStatusAction::show(("Saved. IP " + WiFi.localIP().toString()).c_str(), 1800);
+    ShowStatusAction::show("Saved", 1200);
     Screen.goBack();  // back to Information, which reloads the details
     return;
   }
