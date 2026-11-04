@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ui/templates/TerminalScreen.h"
+#include "screens/wifi/network/remote/SavedHostRows.h"
 
 // TCP Client: raw TCP session to host:port. Terminal view and keys come from
 // TerminalScreen; the setup keeps only Host, Port and Connect (no log modes:
@@ -9,6 +10,14 @@
 class TcpClientScreen : public TerminalScreen {
 public:
   TcpClientScreen() : TerminalScreen(LINE_END_CRLF) {}
+
+  // Opened from Saved Hosts: fields filled in, Connect highlighted.
+  void loadSaved(const SavedHost& host) {
+    _host = host.get("host");
+    _port = host.getInt("port", 0);
+    _saved.loadFrom(host);
+    _highlightStart();
+  }
 
 protected:
   const char* _setupTitle() const override    { return "TCP Client"; }
@@ -28,7 +37,14 @@ protected:
   void _onTransportItem(uint8_t index) override;
   TerminalTransport* _createTransport() override;
 
+  SavedHostRows* _savedHosts() override { return &_saved; }
+  void _fillSavedHost(SavedHost& host) override {
+    host.set("host", _host);
+    host.set("port", String(_port));
+  }
+
 private:
+  SavedHostRows _saved{"/unigeek/wifi/remote/tcp", false};
   String _host;
   int    _port = 0;
 

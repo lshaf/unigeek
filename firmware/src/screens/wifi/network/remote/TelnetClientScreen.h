@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ui/templates/TerminalScreen.h"
+#include "screens/wifi/network/remote/SavedHostRows.h"
 
 // Telnet Client: Telnet session to host:port (default 23). Terminal view and
 // keys come from TerminalScreen; the setup keeps only Host, Port and Connect.
@@ -8,6 +9,14 @@
 class TelnetClientScreen : public TerminalScreen {
 public:
   TelnetClientScreen() : TerminalScreen(LINE_END_CRLF) {}
+
+  // Opened from Saved Hosts: fields filled in, Connect highlighted.
+  void loadSaved(const SavedHost& host) {
+    _host = host.get("host");
+    _port = host.getInt("port", 23);
+    _saved.loadFrom(host);
+    _highlightStart();
+  }
   TelnetClientScreen(const String& host, int port)
     : TerminalScreen(LINE_END_CRLF), _host(host), _port(port) {}
 
@@ -31,7 +40,14 @@ protected:
   void _onTransportItem(uint8_t index) override;
   TerminalTransport* _createTransport() override;
 
+  SavedHostRows* _savedHosts() override { return &_saved; }
+  void _fillSavedHost(SavedHost& host) override {
+    host.set("host", _host);
+    host.set("port", String(_port));
+  }
+
 private:
+  SavedHostRows _saved{"/unigeek/wifi/remote/telnet", false};
   String _host;
   int    _port = 23;
 

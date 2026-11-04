@@ -25,6 +25,9 @@
 // the subclass turns local echo off.
 //
 // Subclasses provide the titles, the transport rows and the transport itself.
+class SavedHostRows;
+struct SavedHost;
+
 class TerminalScreen : public ListScreen {
 public:
   enum LineEnding : uint8_t { LINE_END_CR, LINE_END_LF, LINE_END_CRLF };
@@ -79,6 +82,13 @@ protected:
   virtual void _onDataSent() {}
   virtual void _onLogStarted(TerminalLog::Mode mode) { (void)mode; }
 
+  // Optional saved hosts (Remote Access clients): Save host / Name rows
+  // before Start, Delete after it, and the host saved when starting.
+  virtual SavedHostRows* _savedHosts() { return nullptr; }
+  virtual void _fillSavedHost(SavedHost& host) { (void)host; }
+  // Highlights Start on the next setup refresh (opened from a saved host).
+  void _highlightStart() { _startHighlight = true; }
+
   // ── Helpers for subclasses ────────────────────────────────────────────────
   void _refreshItems();
   void _pushInfo(const String& message);  // shown on screen, not logged
@@ -86,7 +96,8 @@ protected:
 
 private:
   enum State : uint8_t { STATE_CONFIG, STATE_RUNNING };
-  enum Row : uint8_t { ROW_TRANSPORT, ROW_LOG_MODE, ROW_LOG_TARGET, ROW_LINE_ENDING, ROW_DISPLAY, ROW_START };
+  enum Row : uint8_t { ROW_TRANSPORT, ROW_LOG_MODE, ROW_LOG_TARGET, ROW_LINE_ENDING, ROW_DISPLAY, ROW_START,
+                       ROW_SAVED };
 
   static constexpr uint8_t  MAX_ITEMS          = 12;
   static constexpr uint8_t  MAX_TRANSPORT_ROWS = 6;
@@ -113,6 +124,8 @@ private:
   ListItem _items[MAX_ITEMS];
   Row      _rows[MAX_ITEMS]    = {};
   uint8_t  _transportRowCount  = 0;
+  uint8_t  _savedKinds[MAX_ITEMS] = {};   // SavedHostRows::Kind of ROW_SAVED rows
+  bool     _startHighlight     = false;
 
   // ── session ───────────────────────────────────────────────────────────────
   TerminalTransport*  _transport = nullptr;

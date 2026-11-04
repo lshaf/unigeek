@@ -293,6 +293,22 @@ void SftpClientScreen::onItemSelected(uint8_t index) {
 
   if (_state != STATE_CONFIG) return;
 
+  if (index >= _fieldCount) {
+    switch (_kinds[index]) {
+      case SavedHostRows::CONNECT: _connect(); break;
+      case SavedHostRows::DELETE:
+        if (_saved.confirmDelete()) { Screen.goBack(); return; }
+        render();
+        break;
+      default:
+        _saved.select(_kinds[index]);
+        _rebuildConfig();
+        render();
+        break;
+    }
+    return;
+  }
+
   switch (index) {
     case 0: _configHost();     break;
     case 1: _configPort();     break;
@@ -301,11 +317,21 @@ void SftpClientScreen::onItemSelected(uint8_t index) {
     case 4:
       if (_authMode == AUTH_PASSWORD) _configPassword();
       else if (_authMode == AUTH_PRIVATE_KEY) _openKeyPicker();
-      else _connect();
       break;
-    case 5: _connect(); break;
     default: break;
   }
+}
+
+void SftpClientScreen::loadSaved(const SavedHost& host) {
+  _host     = host.get("host");
+  _port     = host.getInt("port", 22);
+  _username = host.get("user");
+  const String auth = host.get("auth");
+  _authMode = auth == "key" ? AUTH_PRIVATE_KEY : auth == "password" ? AUTH_PASSWORD : AUTH_NONE;
+  _keyPath  = host.get("key");
+  _password = host.get("password");
+  _saved.loadFrom(host);
+  _selectConnect = true;
 }
 
 void SftpClientScreen::onBack() {
@@ -455,26 +481,23 @@ void SftpClientScreen::_updateLabels() {
 
 void SftpClientScreen::_rebuildConfig() {
   uint8_t sel = _selectedIndex;
-  _configItems[0] = {"Host", _hostLabel};
-  _configItems[1] = {"Port", _portLabel};
-  _configItems[2] = {"Username", _userLabel};
-  _configItems[3] = {"Auth Method", _authLabel};
+  uint8_t n = 0;
+  _configItems[n++] = {"Host", _hostLabel};
+  _configItems[n++] = {"Port", _portLabel};
+  _configItems[n++] = {"Username", _userLabel};
+  _configItems[n++] = {"Auth Method", _authLabel};
+  if (_authMode == AUTH_PASSWORD)         _configItems[n++] = {"Password", _passwordLabel};
+  else if (_authMode == AUTH_PRIVATE_KEY) _configItems[n++] = {"Key File", _keyLabel};
+  for (uint8_t i = 0; i < n; ++i) _kinds[i] = SavedHostRows::NONE;
+  _fieldCount = n;
+  n = _saved.tail(_configItems, _kinds, n, MAX_CONFIG_ROWS, "Connect");
 
-  if (_authMode == AUTH_PASSWORD) {
-    _configItems[4] = {"Password", _passwordLabel};
-    _configItems[5] = {"Connect", nullptr};
-    if (sel > 5) sel = 5;
-    setItems(_configItems, 6, sel);
-  } else if (_authMode == AUTH_PRIVATE_KEY) {
-    _configItems[4] = {"Key File", _keyLabel};
-    _configItems[5] = {"Connect", nullptr};
-    if (sel > 5) sel = 5;
-    setItems(_configItems, 6, sel);
-  } else {
-    _configItems[4] = {"Connect", nullptr};
-    if (sel > 4) sel = 4;
-    setItems(_configItems, 5, sel);
+  if (_selectConnect) {
+    sel = SavedHostRows::connectIndex(_kinds, n);
+    _selectConnect = false;
   }
+  if (sel > n - 1) sel = n - 1;
+  setItems(_configItems, n, sel);
 }
 
 void SftpClientScreen::_configHost() {
@@ -687,10 +710,16 @@ void SftpClientScreen::_connect() {
   if (_authMode == AUTH_NONE) {
     ShowStatusAction::show("Authentication method not set", 1500); render(); return;
   }
+  if (!_saved.prepare()) {  // a host being saved needs a name
+    _rebuildConfig(); render(); return;
+  }
 
   if (_authMode == AUTH_PASSWORD) {
     if (!_password.length()) {
-      ShowStatusAction::show("Password not set", 1200); render(); return;
+      // A saved host without its password asks for it, as SSH does.
+      String value = InputTextAction::popup("Password", "", InputTextAction::INPUT_TEXT);
+      if (InputTextAction::wasCancelled() || !value.length()) { render(); return; }
+      _password = value;
     }
   } else {
     if (!_keyPath.length()) {
@@ -703,6 +732,19 @@ void SftpClientScreen::_connect() {
     if (!_keyData.length()) {
       ShowStatusAction::show("Failed to read key", 1500); render(); return;
     }
+  }
+
+  // Saved when connecting, whether or not the server answers.
+  if (_saved.saving()) {
+    SavedHost host;
+    host.set("host", _host);
+    host.set("port", String(_port));
+    host.set("user", _username);
+    host.set("auth", _authMode == AUTH_PRIVATE_KEY ? "key" : "password");
+    if (_authMode == AUTH_PRIVATE_KEY) host.set("key", _keyPath);
+    else                               host.set("password", _password);
+    _saved.persist(host);
+    _rebuildConfig();
   }
 
   if (!_mutex) _mutex = xSemaphoreCreateMutex();

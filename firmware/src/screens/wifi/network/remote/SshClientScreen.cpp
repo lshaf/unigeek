@@ -201,6 +201,22 @@ void SshClientScreen::onItemSelected(uint8_t index) {
     return;
   }
 
+  if (index >= _fieldCount) {
+    switch (_kinds[index]) {
+      case SavedHostRows::CONNECT: _connect(); break;
+      case SavedHostRows::DELETE:
+        if (_saved.confirmDelete()) { Screen.goBack(); return; }
+        render();
+        break;
+      default:
+        _saved.select(_kinds[index]);
+        _rebuildItems();
+        render();
+        break;
+    }
+    return;
+  }
+
   switch (index) {
     case 0: _configHost();     break;
     case 1: _configPort();     break;
@@ -209,11 +225,21 @@ void SshClientScreen::onItemSelected(uint8_t index) {
     case 4:
       if (_authMode == AUTH_PASSWORD)          _configPassword();
       else if (_authMode == AUTH_PRIVATE_KEY)  _openKeyPicker();
-      else                                     _connect();
       break;
-    case 5: _connect();        break;
     default: break;
   }
+}
+
+void SshClientScreen::loadSaved(const SavedHost& host) {
+  _host     = host.get("host");
+  _port     = host.getInt("port", 22);
+  _username = host.get("user");
+  const String auth = host.get("auth");
+  _authMode = auth == "key" ? AUTH_PRIVATE_KEY : auth == "password" ? AUTH_PASSWORD : AUTH_NONE;
+  _keyPath  = host.get("key");
+  _password = host.get("password");
+  _saved.loadFrom(host);
+  _selectConnect = true;
 }
 
 void SshClientScreen::onBack() {
@@ -287,23 +313,22 @@ void SshClientScreen::_updateLabels() {
 
 void SshClientScreen::_rebuildItems() {
   uint8_t sel = _selectedIndex;
-  _items[0] = {"Host", _hostLabel};
-  _items[1] = {"Port", _portLabel};
-  _items[2] = {"Username", _userLabel};
-  _items[3] = {"Auth Method", _authLabel};
+  uint8_t n = 0;
+  _items[n++] = {"Host", _hostLabel};
+  _items[n++] = {"Port", _portLabel};
+  _items[n++] = {"Username", _userLabel};
+  _items[n++] = {"Auth Method", _authLabel};
+  if (_authMode == AUTH_PASSWORD)         _items[n++] = {"Password", _passwordLabel};
+  else if (_authMode == AUTH_PRIVATE_KEY) _items[n++] = {"Key File", _keyLabel};
+  for (uint8_t i = 0; i < n; ++i) _kinds[i] = SavedHostRows::NONE;
+  _fieldCount = n;
+  n = _saved.tail(_items, _kinds, n, MAX_CONFIG_ROWS, "Connect");
 
-  if (_authMode == AUTH_PASSWORD) {
-    _items[4] = {"Password", _passwordLabel};
-    _items[5] = {"Connect", nullptr};
-    setItems(_items, 6, min<uint8_t>(sel, 5));
-  } else if (_authMode == AUTH_PRIVATE_KEY) {
-    _items[4] = {"Key File", _keyLabel};
-    _items[5] = {"Connect", nullptr};
-    setItems(_items, 6, min<uint8_t>(sel, 5));
-  } else {
-    _items[4] = {"Connect", nullptr};
-    setItems(_items, 5, min<uint8_t>(sel, 4));
+  if (_selectConnect) {
+    sel = SavedHostRows::connectIndex(_kinds, n);
+    _selectConnect = false;
   }
+  setItems(_items, n, min<uint8_t>(sel, n - 1));
 }
 
 void SshClientScreen::_configHost() {
@@ -456,6 +481,11 @@ void SshClientScreen::_connect() {
     render();
     return;
   }
+  if (!_saved.prepare()) {  // a host being saved needs a name
+    _rebuildItems();
+    render();
+    return;
+  }
 
   if (_authMode == AUTH_NONE) {
     ShowStatusAction::show("Authentication method not set", 1500);
@@ -489,6 +519,19 @@ void SshClientScreen::_connect() {
       render();
       return;
     }
+  }
+
+  // Saved when connecting, whether or not the server answers.
+  if (_saved.saving()) {
+    SavedHost host;
+    host.set("host", _host);
+    host.set("port", String(_port));
+    host.set("user", _username);
+    host.set("auth", _authMode == AUTH_PRIVATE_KEY ? "key" : "password");
+    if (_authMode == AUTH_PRIVATE_KEY) host.set("key", _keyPath);
+    else                               host.set("password", _password);
+    _saved.persist(host);
+    _rebuildItems();
   }
 
   if (!_ioMutex) _ioMutex = xSemaphoreCreateMutex();
