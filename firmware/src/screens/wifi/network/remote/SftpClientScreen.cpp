@@ -489,6 +489,7 @@ void SftpClientScreen::_rebuildConfig() {
   else if (_authMode == AUTH_PRIVATE_KEY) _configItems[n++] = {"Key File", _keyLabel};
   for (uint8_t i = 0; i < n; ++i) _kinds[i] = SavedHostRows::NONE;
   _fieldCount = n;
+  _saved.setPasswordApplies(_authMode == AUTH_PASSWORD);
   n = _saved.tail(_configItems, _kinds, n, MAX_CONFIG_ROWS, "Connect");
   if (sel > n - 1) sel = n - 1;
   setItems(_configItems, n, sel);
@@ -710,10 +711,7 @@ void SftpClientScreen::_connect() {
 
   if (_authMode == AUTH_PASSWORD) {
     if (!_password.length()) {
-      // A saved host without its password asks for it, as SSH does.
-      String value = InputTextAction::popup("Password", "", InputTextAction::INPUT_TEXT);
-      if (InputTextAction::wasCancelled() || !value.length()) { render(); return; }
-      _password = value;
+      ShowStatusAction::show("Password not set", 1200); render(); return;
     }
   } else {
     if (!_keyPath.length()) {

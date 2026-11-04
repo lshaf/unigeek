@@ -399,13 +399,13 @@ void WebDavClientScreen::_connect() {
     render();
     return;
   }
-  // A saved host with a user but without its password asks for it.
+  // A saved host with a user but without its password needs it filled in,
+  // like any other unset field.
   if (_askPassword && !_password.length()) {
-    String value = InputTextAction::popup("Password", "");
-    if (InputTextAction::wasCancelled()) { render(); return; }
-    _password = value;
+    ShowStatusAction::show("Password not set", 1200);
+    render();
+    return;
   }
-  _askPassword = false;
 
   // Saved when connecting, whether or not the server answers.
   if (_saved.saving()) {

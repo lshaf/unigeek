@@ -321,6 +321,7 @@ void SshClientScreen::_rebuildItems() {
   else if (_authMode == AUTH_PRIVATE_KEY) _items[n++] = {"Key File", _keyLabel};
   for (uint8_t i = 0; i < n; ++i) _kinds[i] = SavedHostRows::NONE;
   _fieldCount = n;
+  _saved.setPasswordApplies(_authMode == AUTH_PASSWORD);
   n = _saved.tail(_items, _kinds, n, MAX_CONFIG_ROWS, "Connect");
   setItems(_items, n, min<uint8_t>(sel, n - 1));
 }
@@ -489,12 +490,9 @@ void SshClientScreen::_connect() {
 
   if (_authMode == AUTH_PASSWORD) {
     if (_password.length() == 0) {
-      String value = InputTextAction::popup("Password", "", InputTextAction::INPUT_TEXT);
-      if (InputTextAction::wasCancelled()) {
-        render();
-        return;
-      }
-      _password = value;
+      ShowStatusAction::show("Password not set", 1200);
+      render();
+      return;
     }
   } else {
     if (_keyPath.length() == 0) {
