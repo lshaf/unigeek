@@ -2,6 +2,7 @@
 
 #include "ui/templates/ListScreen.h"
 #include "ui/views/BrowseFileView.h"
+#include "screens/wifi/network/remote/SavedHostRows.h"
 
 class SftpClientScreen : public ListScreen
 {
@@ -19,6 +20,9 @@ public:
   void onRender() override;
   void onItemSelected(uint8_t index) override;
   void onBack() override;
+
+  // Opened from Saved Hosts: fields filled in.
+  void loadSaved(const SavedHost& host);
 
 private:
   enum State : uint8_t {
@@ -97,7 +101,11 @@ private:
     {"Download", nullptr},
     {"Upload", nullptr},
   };
-  ListItem _configItems[6];
+  static constexpr uint8_t MAX_CONFIG_ROWS = 10;
+  ListItem _configItems[MAX_CONFIG_ROWS];
+  SavedHostRows::Kind _kinds[MAX_CONFIG_ROWS] = {};
+  uint8_t  _fieldCount = 0;           // service fields before Save host
+  SavedHostRows _saved{"/unigeek/wifi/remote/ssh", true};  // shared with SSH
   ListItem _authItems[2] = {
     {"Password", nullptr},
     {"Private Key", nullptr},

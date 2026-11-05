@@ -11,7 +11,7 @@
 #include "utils/webauthn/CredentialStore.h"
 #include "utils/webauthn/WebAuthnCrypto.h"
 #include "utils/webauthn/WebAuthnConfig.h"
-#include "utils/webauthn/UsbProfile.h"
+#include "utils/usb/UsbProfile.h"
 #include "utils/webauthn/WebAuthnLog.h"
 
 namespace {
@@ -63,7 +63,7 @@ void WebAuthnScreen::onInit()
   // If keyboard/mouse already grabbed USB this boot, registration fails
   // and we render a "reboot to switch" message instead of starting up.
   webauthn::fido();
-  if (webauthn::activeUsbProfile() != webauthn::UsbProfile::WEBAUTHN
+  if (usb::activeUsbProfile() != usb::UsbProfile::WEBAUTHN
       || !webauthn::fido().isRegistered()) {
     _profileMismatch = true;
     return;
@@ -124,13 +124,8 @@ void WebAuthnScreen::onRender()
     lcd.drawString("USB busy", bodyX() + bodyW() / 2, bodyY() + bodyH() / 2 - 16);
     lcd.setTextSize(1);
     lcd.setTextColor(TFT_LIGHTGREY, TFT_BLACK);
-    lcd.drawString("Keyboard/Mouse already",
+    lcd.drawString("Reboot required",
                    bodyX() + bodyW() / 2, bodyY() + bodyH() / 2 + 4);
-    lcd.drawString("claimed USB this boot.",
-                   bodyX() + bodyW() / 2, bodyY() + bodyH() / 2 + 16);
-    lcd.setTextColor(TFT_YELLOW, TFT_BLACK);
-    lcd.drawString("Reboot, then open WebAuthn first.",
-                   bodyX() + bodyW() / 2, bodyY() + bodyH() / 2 + 32);
     return;
   }
 

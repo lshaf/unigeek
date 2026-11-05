@@ -4,6 +4,7 @@
 #include "ui/views/TextScrollView.h"
 #include "ui/views/TerminalCommandLine.h"
 #include "ui/views/BrowseFileView.h"
+#include "screens/wifi/network/remote/SavedHostRows.h"
 
 class SshClientScreen : public ListScreen
 {
@@ -20,6 +21,9 @@ public:
   void onRender() override;
   void onItemSelected(uint8_t index) override;
   void onBack() override;
+
+  // Opened from Saved Hosts: fields filled in.
+  void loadSaved(const SavedHost& host);
 
 private:
   enum State : uint8_t {
@@ -67,7 +71,11 @@ private:
   char _authLabel[20] = "-";
   char _passwordLabel[16] = "-";
   char _keyLabel[32] = {};
-  ListItem _items[6];
+  static constexpr uint8_t MAX_CONFIG_ROWS = 10;
+  ListItem _items[MAX_CONFIG_ROWS];
+  SavedHostRows::Kind _kinds[MAX_CONFIG_ROWS] = {};
+  uint8_t  _fieldCount = 0;           // service fields before Save host
+  SavedHostRows _saved{"/unigeek/wifi/remote/ssh", true};  // shared with SFTP
   BrowseFileView _browser;
   String _browsePath = "/unigeek/wifi/remote/ssh";
   ListItem _authItems[2] = {
@@ -109,6 +117,7 @@ private:
   void _selectKey(uint8_t index);
   void _connect();
   void _closeConnection(bool returnToConfig = true);
+  void _requestDisconnect();
 
   bool _startSshWorker();
   static void _sshWorkerEntry(void* arg);

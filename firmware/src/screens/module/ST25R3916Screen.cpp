@@ -1,28 +1,27 @@
-#include "ui/components/TagPrompt.h"
 #include "ST25R3916Screen.h"
-
+#include "core/ConfigManager.h"
 #include "core/Device.h"
 #include "core/ScreenManager.h"
-#include "ui/actions/ShowStatusAction.h"
+#include "screens/utility/NfcMemoryViewScreen.h"
+#include "ui/actions/ConfirmAction.h"
+#include "ui/actions/InputNumberAction.h"
 #include "ui/actions/InputSelectAction.h"
 #include "ui/actions/InputTextAction.h"
-#include "ui/actions/InputNumberAction.h"
-#include "core/ConfigManager.h"
-#include "ui/views/ProgressView.h"
-#include "ui/views/DictionaryKeyProgressView.h"
-#include "ui/views/DictionaryDiscoverySummary.h"
-#include "ui/views/LogView.h"
+#include "ui/actions/ShowStatusAction.h"
 #include "ui/components/Header.h"
 #include "ui/components/StatusBar.h"
 #include "ui/components/TagPrompt.h"
-#include "utils/nfc/NdefParser.h"
-#include "utils/nfc/HfDumpParser.h"
-#include "utils/nfc/NdefBuilder.h"
+#include "ui/views/DictionaryDiscoverySummary.h"
+#include "ui/views/DictionaryKeyProgressView.h"
+#include "ui/views/LogView.h"
+#include "ui/views/ProgressView.h"
+#include "utils/IdentityFile.h"
 #include "utils/nfc/HfDumpBuilder.h"
+#include "utils/nfc/HfDumpParser.h"
 #include "utils/nfc/MagicCard.h"
 #include "utils/nfc/MfcKeyStore.h"
-#include "utils/IdentityFile.h"
-#include "screens/utility/NfcMemoryViewScreen.h"
+#include "utils/nfc/NdefBuilder.h"
+#include "utils/nfc/NdefParser.h"
 #include <mbedtls/md.h>
 
 #if defined(DEVICE_HAS_ST25R3916)
@@ -332,10 +331,8 @@ static const char* st25MfuSensitivePageLabel(const String& type, uint16_t page) 
 static bool st25ConfirmMfuSensitiveWrite(const String& type, uint16_t page) {
   const char* label = st25MfuSensitivePageLabel(type, page);
   if (!label) return true;
-  static const InputSelectAction::Option opts[] = {{"Write anyway", "write"}};
-  String title = String("Warning: ") + label;
-  const char* choice = InputSelectAction::popup(title.c_str(), opts, 1, nullptr);
-  return choice && strcmp(choice, "write") == 0;
+  String title = String("Write ") + label + "?";
+  return ConfirmAction::popup(title.c_str(), "Sensitive tag memory");
 }
 
 static bool st25Type2DefaultCc(const String& type, uint8_t cc[4]) {
@@ -2106,6 +2103,10 @@ bool ST25R3916Screen::_writeMfcDumpToTag() {
 }
 
 void ST25R3916Screen::_eraseMfcTag() {
+  if (!ConfirmAction::popup("Erase tag?", "This action cannot be undone")) {
+    _showMfcTagMenu();
+    return;
+  }
 #if defined(DEVICE_HAS_ST25R3916)
   _state = STATE_MFC_ERASING;
   render();
@@ -2626,6 +2627,10 @@ bool ST25R3916Screen::_writeMfcNdef(const uint8_t* ndef, size_t ndefLen) {
 }
 
 void ST25R3916Screen::_eraseMfcNdef() {
+  if (!ConfirmAction::popup("Erase NDEF record?", "This action cannot be undone")) {
+    _showMfcNdefMenu();
+    return;
+  }
 #if defined(DEVICE_HAS_ST25R3916)
   _state = STATE_MFC_NDEF_WRITING;
   render();
@@ -3116,6 +3121,10 @@ bool ST25R3916Screen::_writeMfuDumpToTag() {
 }
 
 void ST25R3916Screen::_eraseMfuTag() {
+  if (!ConfirmAction::popup("Erase tag?", "This action cannot be undone")) {
+    _showMfuTagMenu();
+    return;
+  }
 #if defined(DEVICE_HAS_ST25R3916)
   _state = STATE_MFU_ERASING;
   render();
@@ -3707,6 +3716,10 @@ bool ST25R3916Screen::_writeMfuNdef(const uint8_t* ndef, size_t ndefLen) {
 }
 
 void ST25R3916Screen::_eraseMfuNdef() {
+  if (!ConfirmAction::popup("Erase NDEF record?", "This action cannot be undone")) {
+    _showMfuNdefMenu();
+    return;
+  }
 #if defined(DEVICE_HAS_ST25R3916)
   _ndefMfuTarget = true;
   _state = STATE_MFU_NDEF_WRITING;
@@ -4005,7 +4018,7 @@ void ST25R3916Screen::_editMfuMemory() {
 #if defined(DEVICE_HAS_ST25R3916)
   _advancedOperationTitle = "Edit Memory";
   _state=STATE_MFU_MEMORY; render(); _renderTagPrompt(); ST25R3916Backend dev; if(!st25Begin(dev, _interface)){_showStatusAndReturn("ST25R3916 not detected",STATE_MFU_ADVANCED_MENU,1600);return;} ST25R3916Backend::ScanResult tag; const auto waitResult=st25WaitForTag(dev,ST25R3916Backend::TECH_A,tag,5000,true); if(waitResult!=St25WaitResult::FOUND){if(waitResult==St25WaitResult::TIMEOUT)ShowStatusAction::show("Tag not detected",1600);_showMfuAdvancedMenu();return;} String type;uint16_t pages=0;if(!_detectMfuType(dev,type,pages)||pages<=4){dev.deactivate();_showStatusAndReturn("Tag not supported",STATE_MFU_ADVANCED_MENU,1600);return;}
-  int pg=InputNumberAction::popup((String("Page (4..")+String(pages-1)+")").c_str(),4,pages-1,4); if(InputNumberAction::wasCancelled()){dev.deactivate();_showMfuAdvancedMenu();return;} if(!st25ConfirmMfuSensitiveWrite(type,(uint16_t)pg)){dev.deactivate();_showMfuAdvancedMenu();return;} String hex=InputTextAction::popup("Page data (8 hex)","",InputTextAction::INPUT_HEX); if(InputTextAction::wasCancelled()){dev.deactivate();_showMfuAdvancedMenu();return;} hex.replace(" ","");hex.replace(":",""); if(hex.length()!=8){dev.deactivate();_state=STATE_MFU_MEMORY;render();_showStatusAndReturn("Need 8 hex chars",STATE_MFU_ADVANCED_MENU,1600);return;} uint8_t d[4]={};for(int i=0;i<4;++i){char b[3]={hex[i*2],hex[i*2+1],0};char*e=nullptr;unsigned long v=strtoul(b,&e,16);if(!e||*e){dev.deactivate();_state=STATE_MFU_MEMORY;render();_showStatusAndReturn("Bad hex",STATE_MFU_ADVANCED_MENU,1200);return;}d[i]=(uint8_t)v;}
+  int pg=InputNumberAction::popup((String("Page (4..")+String(pages-1)+")").c_str(),4,pages-1,4); if(InputNumberAction::wasCancelled()){dev.deactivate();_showMfuAdvancedMenu();return;} if(!st25ConfirmMfuSensitiveWrite(type,(uint16_t)pg)){dev.deactivate();_showMfuAdvancedMenu();return;} if(st25MfuSensitivePageLabel(type,(uint16_t)pg)){_state=STATE_MFU_MEMORY;render();} String hex=InputTextAction::popup("Page data (8 hex)","",InputTextAction::INPUT_HEX); if(InputTextAction::wasCancelled()){dev.deactivate();_showMfuAdvancedMenu();return;} hex.replace(" ","");hex.replace(":",""); if(hex.length()!=8){dev.deactivate();_state=STATE_MFU_MEMORY;render();_showStatusAndReturn("Need 8 hex chars",STATE_MFU_ADVANCED_MENU,1600);return;} uint8_t d[4]={};for(int i=0;i<4;++i){char b[3]={hex[i*2],hex[i*2+1],0};char*e=nullptr;unsigned long v=strtoul(b,&e,16);if(!e||*e){dev.deactivate();_state=STATE_MFU_MEMORY;render();_showStatusAndReturn("Bad hex",STATE_MFU_ADVANCED_MENU,1200);return;}d[i]=(uint8_t)v;}
   if(!st25EnsureMfuAuth(dev,type,pages,pg,pg,false)){dev.deactivate();_showMfuAdvancedMenu();return;} _state=STATE_MFU_MEMORY;render(); bool ok=dev.type2WritePage((uint8_t)pg,d);dev.deactivate();_showStatusAndReturn(ok?"Page written":"Failed",STATE_MFU_ADVANCED_MENU,1600);
 #endif
 }
@@ -4202,8 +4215,7 @@ void ST25R3916Screen::_lockMfuTag() {
   String type;uint16_t pages=0;if(!_detectMfuType(dev,type,pages)||type=="Ultralight C"||type=="Ultralight / NTAG"){dev.deactivate();_showStatusAndReturn("Lock not supported",STATE_MFU_ADVANCED_MENU,1600);return;}
   uint16_t lastUser=st25MfuDynamicLock(type);if(lastUser!=0xFFFF)--lastUser;else lastUser=15;
   if(lastUser<4){dev.deactivate();_showStatusAndReturn("No lockable memory",STATE_MFU_ADVANCED_MENU,1600);return;}
-  static const InputSelectAction::Option warn[]={{"Lock permanently","lock"}};
-  if(!InputSelectAction::popup("Make tag read-only?",warn,1,nullptr)){dev.deactivate();_showMfuAdvancedMenu();return;}
+  if(!ConfirmAction::popup("Make tag read-only?", "This action cannot be undone")){dev.deactivate();_showMfuAdvancedMenu();return;}
   _state=STATE_MFU_MEMORY;render();
   uint8_t sm[2]={},dm[3]={};if(!st25BuildMfuLockMasks(type,4,lastUser,sm,dm)){dev.deactivate();_showStatusAndReturn("Lock not supported",STATE_MFU_ADVANCED_MENU,1600);return;}
   uint16_t dyn=st25MfuDynamicLock(type);bool needsDyn=dyn!=0xFFFF&&(dm[0]||dm[1]||dm[2]);uint16_t authPage=needsDyn?dyn:2;
@@ -4217,6 +4229,10 @@ void ST25R3916Screen::_lockMfuTag() {
 }
 
 void ST25R3916Screen::_formatMfuNdef() {
+  if (!ConfirmAction::popup("Format tag as NDEF?", "This action cannot be undone")) {
+    _showMfuNdefMenu();
+    return;
+  }
 #if defined(DEVICE_HAS_ST25R3916)
   _state=STATE_MFU_NDEF_WRITING;render();_renderTagPrompt();ST25R3916Backend dev;
   if(!st25Begin(dev, _interface)){ShowStatusAction::show("ST25R3916 not detected");_showMfuNdefMenu();return;}
@@ -4927,8 +4943,8 @@ void ST25R3916Screen::_lockMfcUidGen3() {
 #if defined(DEVICE_HAS_ST25R3916)
   ST25R3916Backend dev; if(!st25Begin(dev, _interface)){ShowStatusAction::show("ST25R3916 not detected");_showMfcAdvancedMenu();return;}
   if(_detectMagicType(dev)!=MagicCardType::GEN3){ShowStatusAction::show("Tag is not Gen3");_showMfcAdvancedMenu();return;}
-  static const InputSelectAction::Option opts[]={{"Lock UID permanently","lock"}};
-  const char* choice=InputSelectAction::popup("Permanent UID lock",opts,1,nullptr); if(!choice||strcmp(choice,"lock")!=0){_showMfcAdvancedMenu();return;}
+  const bool confirmed=ConfirmAction::popup("Lock UID permanently?", "This action cannot be undone"); if(!confirmed){_showMfcAdvancedMenu();return;}
+  _showMfcAdvancedMenu(); // Restore the underlying screen before NFC commands/status.
   ST25R3916Backend::ScanResult tag; if(!dev.scan(ST25R3916Backend::TECH_A,tag,1000,true)){ShowStatusAction::show("Tag lost");_showMfcAdvancedMenu();return;}
   const uint8_t cmd[]={0x90,0xFD,0x11,0x11,0x00}; uint8_t rx[8]={}; size_t len=0; const bool ok=dev.nfcATransceive(cmd,sizeof(cmd),rx,sizeof(rx),len,500); dev.deactivate();
   ShowStatusAction::show(ok?"Gen3 UID locked":"Failed",1600);
@@ -5180,9 +5196,9 @@ void ST25R3916Screen::_experimentalNfcvAction(uint8_t index) {
     }
     dev.deactivate();_showStatusAndReturn("Password not supported", STATE_EXP_ADVANCED_MENU, 1600); return;
   }
-  if(index==4){int b=InputNumberAction::popup("Block to lock",0,info.blocks-1,0);if(InputNumberAction::wasCancelled()){dev.deactivate();_showExperimentalAdvancedMenu();return;}static const InputSelectAction::Option o[]={{"Lock permanently","lock"}};const char*c=InputSelectAction::popup("Permanent operation",o,1,nullptr);if(!c){dev.deactivate();_showExperimentalAdvancedMenu();return;}bool ok=ST25R3916Experimental::typeVLockBlock(dev,tag,b);dev.deactivate();_showStatusAndReturn(ok?"Block locked":"Failed", STATE_EXP_ADVANCED_MENU, 1600); return;}
+  if(index==4){int b=InputNumberAction::popup("Block to lock",0,info.blocks-1,0);if(InputNumberAction::wasCancelled()){dev.deactivate();_showExperimentalAdvancedMenu();return;}if(!ConfirmAction::popup("Lock block permanently?", "This action cannot be undone")){dev.deactivate();_showExperimentalAdvancedMenu();return;}_showExperimentalAdvancedMenu();bool ok=ST25R3916Experimental::typeVLockBlock(dev,tag,b);dev.deactivate();_showStatusAndReturn(ok?"Block locked":"Failed", STATE_EXP_ADVANCED_MENU, 1600); return;}
   if(index==10){int start=InputNumberAction::popup("Start block",0,info.blocks-1,0);if(InputNumberAction::wasCancelled()){dev.deactivate();_showExperimentalTagMenu();return;}String h=InputTextAction::popup("Data (hex, block aligned)","",InputTextAction::INPUT_HEX);if(InputTextAction::wasCancelled()){dev.deactivate();_showExperimentalTagMenu();return;}uint8_t d[256];size_t dl=0;if(!st25ParseHex(h,d,sizeof(d),dl)||!dl||dl%info.blockSize){dev.deactivate();_showStatusAndReturn("Data must align to blocks", STATE_EXP_TAG_MENU, 1600); return;}bool ok=true;for(size_t off=0;off<dl&&ok;off+=info.blockSize){uint16_t b=(uint16_t)(start+off/info.blockSize);if(b>=info.blocks){ok=false;break;}ok=ST25R3916Experimental::typeVWriteBlock(dev,tag,b,d+off,info.blockSize);}dev.deactivate();_showStatusAndReturn(ok?"Written":"Failed", STATE_EXP_TAG_MENU, 1600); return;}
-  static const InputSelectAction::Option o[]={{"Erase user data","erase"}};const char*c=InputSelectAction::popup("Preserve CC/control TLVs?",o,1,nullptr);if(!c){dev.deactivate();_showExperimentalTagMenu();return;}size_t erasedCapacity=0;bool ok=ST25R3916Experimental::typeVEraseTagSafe(dev,tag,erasedCapacity);dev.deactivate();_showStatusAndReturn(ok?"Tag data erased":"Safe erase not supported", STATE_EXP_TAG_MENU, 1600);
+  if(!ConfirmAction::popup("Erase user data?", "Preserves CC and control TLVs")){dev.deactivate();_showExperimentalTagMenu();return;}_showExperimentalTagMenu();size_t erasedCapacity=0;bool ok=ST25R3916Experimental::typeVEraseTagSafe(dev,tag,erasedCapacity);dev.deactivate();_showStatusAndReturn(ok?"Tag data erased":"Safe erase not supported", STATE_EXP_TAG_MENU, 1600);
 #endif
 }
 
@@ -5227,8 +5243,13 @@ bool ST25R3916Screen::_experimentalWriteNdef(const uint8_t* ndef, size_t ndefLen
 
 void ST25R3916Screen::_experimentalEraseNdef(bool formatOnly) {
   static const uint8_t empty = 0;
-  if(formatOnly){if(_experimentalWriteNdef(&empty,0,true))_showExperimentalNdefMenu();else _showExperimentalNdefMenu();return;}
-  static const InputSelectAction::Option o[]={{"Erase NDEF","erase"}};const char*c=InputSelectAction::popup("Erase NDEF?",o,1,nullptr);if(!c){_showExperimentalNdefMenu();return;}if(_experimentalWriteNdef(&empty,0,false))_showExperimentalNdefMenu();else _showExperimentalNdefMenu();
+  if(formatOnly){
+    if (!ConfirmAction::popup("Format tag as NDEF?", "This action cannot be undone")) {
+      _showExperimentalNdefMenu();
+      return;
+    }
+    if(_experimentalWriteNdef(&empty,0,true))_showExperimentalNdefMenu();else _showExperimentalNdefMenu();return;}
+  if(!ConfirmAction::popup("Erase NDEF record?", "This action cannot be undone")){_showExperimentalNdefMenu();return;}if(_experimentalWriteNdef(&empty,0,false))_showExperimentalNdefMenu();else _showExperimentalNdefMenu();
 }
 
 void ST25R3916Screen::_showDeviceInfo() {

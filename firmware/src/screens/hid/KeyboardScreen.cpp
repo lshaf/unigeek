@@ -1,3 +1,4 @@
+#include "ui/actions/ConfirmAction.h"
 #include "KeyboardScreen.h"
 #include "core/Device.h"
 #include "core/ScreenManager.h"
@@ -11,8 +12,8 @@
 #include "utils/keyboard/USBKeyboardUtil.h"  // must come before BLEKeyboardUtil — TinyUSB hid.h enum must be processed before NimBLE HIDTypes.h macro
 #endif
 #include "utils/keyboard/BLEKeyboardUtil.h"
-#ifdef DEVICE_HAS_WEBAUTHN
-#include "utils/webauthn/UsbProfile.h"
+#ifdef DEVICE_HAS_USB_HID
+#include "utils/usb/UsbProfile.h"
 #endif
 #include "utils/keyboard/DuckScriptUtil.h"
 
@@ -47,11 +48,16 @@ KeyboardScreen::~KeyboardScreen()
 
 void KeyboardScreen::onInit()
 {
-#if defined(DEVICE_HAS_USB_HID) && defined(DEVICE_HAS_WEBAUTHN)
-  if (_mode == MODE_USB &&
-      webauthn::activeUsbProfile() == webauthn::UsbProfile::WEBAUTHN) {
-    _profileMismatch = true;
-    return;
+#ifdef DEVICE_HAS_USB_HID
+  // USB HID needs the COMPOSITE profile. Any other USB feature opened earlier
+  // this boot (WebAuthn, Mass Storage, Serial Terminal, Boot from IMG/ISO)
+  // owns USB until reboot, and the keyboard would silently never enumerate.
+  if (_mode == MODE_USB) {
+    const auto active = usb::activeUsbProfile();
+    if (active != usb::UsbProfile::NONE && active != usb::UsbProfile::COMPOSITE) {
+      _profileMismatch = true;
+      return;
+    }
   }
 #endif
   _keyboard->begin();
@@ -100,10 +106,7 @@ void KeyboardScreen::onRender()
     lcd.drawString("USB busy", cx, cy - 16);
     lcd.setTextSize(1);
     lcd.setTextColor(TFT_LIGHTGREY, TFT_BLACK);
-    lcd.drawString("WebAuthn already", cx, cy + 4);
-    lcd.drawString("claimed USB this boot.", cx, cy + 16);
-    lcd.setTextColor(TFT_YELLOW, TFT_BLACK);
-    lcd.drawString("Reboot, then open Keyboard first.", cx, cy + 32);
+    lcd.drawString("Reboot required", cx, cy + 4);
     return;
   }
 
@@ -179,6 +182,8 @@ void KeyboardScreen::onItemSelected(uint8_t index)
     }
     if (_mode == MODE_BLE && index == idx) {
       // Reset Pair
+      if (!ConfirmAction::popup("Reset BLE pairing?")) { render(); return; }
+      render();
       _keyboard->resetPair();
       ShowStatusAction::show("Pairing reset", 1500);
       render();
@@ -212,6 +217,14 @@ void KeyboardScreen::onBack()
     _showFiles(parent);
   } else if (_state == STATE_MEDIA_MENU) {
     _goMenu();
+  } else if (_state == STATE_MENU) {
+    // Leaving the HID menu ends the USB/BLE device session.
+    // Stopping a running Ducky Script is handled separately, without a popup.
+    if (ConfirmAction::popup("Disconnect device?")) {
+      Screen.goBack();
+    } else {
+      render();
+    }
   } else {
     Screen.goBack();
   }
@@ -344,9 +357,9 @@ void KeyboardScreen::_renderConnected()
     const int footerY = bodyY() + bodyH() - FOOTER_H;
     lcd.drawFastHLine(bodyX(), footerY - 5, bodyW(), TFT_DARKGREY);
 #if defined(DEVICE_M5_CARDPUTER) || defined(DEVICE_M5_CARDPUTER_ADV)
-    lcd.drawString("[G0] Stop", bodyX() + bodyW() / 2, footerY + 7);
+    lcd.drawString("[BtnG0] Disconnect", bodyX() + bodyW() / 2, footerY + 7);
 #else
-    lcd.drawString("[Press] Stop", bodyX() + bodyW() / 2, footerY + 7);
+    lcd.drawString("[Press] Disconnect", bodyX() + bodyW() / 2, footerY + 7);
 #endif
 #endif
     _connectedChromeDrawn = true;
@@ -414,13 +427,17 @@ void KeyboardScreen::_handleKeyboardRelay()
 #if defined(DEVICE_M5_CARDPUTER) || defined(DEVICE_M5_CARDPUTER_ADV)
   // Cardputer: BtnG0 (boot button) exits relay
   if (digitalRead(BTN_BOOT) == LOW) {
-    _keyboard->releaseAll(); _goMenu(); return;
+    _keyboard->releaseAll();
+    _goMenu();
+    return;
   }
 #elif defined(DEVICE_T_LORA_PAGER)
   // T-Lora Pager: encoder button press exits relay
   if (Uni.Nav->wasPressed()) {
     if (Uni.Nav->readDirection() == INavigation::DIR_PRESS) {
-      _keyboard->releaseAll(); _goMenu(); return;
+      _keyboard->releaseAll();
+      _goMenu();
+      return;
     }
   }
 #endif
@@ -439,6 +456,7 @@ void KeyboardScreen::_handleKeyboardRelay()
     if (dir == INavigation::DIR_BACK || dir == INavigation::DIR_PRESS) {
       _keyboard->releaseAll();
       _goMenu();
+      return;
     }
   }
 #endif

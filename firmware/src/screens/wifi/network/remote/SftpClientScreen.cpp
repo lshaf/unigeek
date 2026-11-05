@@ -1,3 +1,4 @@
+#include "ui/actions/ConfirmAction.h"
 #include "SftpClientScreen.h"
 
 #include "core/Device.h"
@@ -292,6 +293,18 @@ void SftpClientScreen::onItemSelected(uint8_t index) {
 
   if (_state != STATE_CONFIG) return;
 
+  if (index >= _fieldCount) {
+    switch (_kinds[index]) {
+      case SavedHostRows::CONNECT: _connect(); break;
+      default:
+        _saved.select(_kinds[index]);
+        _rebuildConfig();
+        render();
+        break;
+    }
+    return;
+  }
+
   switch (index) {
     case 0: _configHost();     break;
     case 1: _configPort();     break;
@@ -300,16 +313,29 @@ void SftpClientScreen::onItemSelected(uint8_t index) {
     case 4:
       if (_authMode == AUTH_PASSWORD) _configPassword();
       else if (_authMode == AUTH_PRIVATE_KEY) _openKeyPicker();
-      else _connect();
       break;
-    case 5: _connect(); break;
     default: break;
   }
+}
+
+void SftpClientScreen::loadSaved(const SavedHost& host) {
+  _host     = host.get("host");
+  _port     = host.getInt("port", 22);
+  _username = host.get("user");
+  const String auth = host.get("auth");
+  _authMode = auth == "key" ? AUTH_PRIVATE_KEY : auth == "password" ? AUTH_PASSWORD : AUTH_NONE;
+  _keyPath  = host.get("key");
+  _password = host.get("password");
+  _saved.loadFrom(host);
 }
 
 void SftpClientScreen::onBack() {
   if (_state == STATE_ACTION) {
     // Leaving the Download/Upload hub ends the SFTP session.
+    if (!ConfirmAction::popup("Disconnect from server?")) {
+      render();
+      return;
+    }
     _closeConnection(false);
     Screen.goBack();
     return;
@@ -450,26 +476,19 @@ void SftpClientScreen::_updateLabels() {
 
 void SftpClientScreen::_rebuildConfig() {
   uint8_t sel = _selectedIndex;
-  _configItems[0] = {"Host", _hostLabel};
-  _configItems[1] = {"Port", _portLabel};
-  _configItems[2] = {"Username", _userLabel};
-  _configItems[3] = {"Auth Method", _authLabel};
-
-  if (_authMode == AUTH_PASSWORD) {
-    _configItems[4] = {"Password", _passwordLabel};
-    _configItems[5] = {"Connect", nullptr};
-    if (sel > 5) sel = 5;
-    setItems(_configItems, 6, sel);
-  } else if (_authMode == AUTH_PRIVATE_KEY) {
-    _configItems[4] = {"Key File", _keyLabel};
-    _configItems[5] = {"Connect", nullptr};
-    if (sel > 5) sel = 5;
-    setItems(_configItems, 6, sel);
-  } else {
-    _configItems[4] = {"Connect", nullptr};
-    if (sel > 4) sel = 4;
-    setItems(_configItems, 5, sel);
-  }
+  uint8_t n = 0;
+  _configItems[n++] = {"Host", _hostLabel};
+  _configItems[n++] = {"Port", _portLabel};
+  _configItems[n++] = {"Username", _userLabel};
+  _configItems[n++] = {"Auth Method", _authLabel};
+  if (_authMode == AUTH_PASSWORD)         _configItems[n++] = {"Password", _passwordLabel};
+  else if (_authMode == AUTH_PRIVATE_KEY) _configItems[n++] = {"Key File", _keyLabel};
+  for (uint8_t i = 0; i < n; ++i) _kinds[i] = SavedHostRows::NONE;
+  _fieldCount = n;
+  _saved.setPasswordApplies(_authMode == AUTH_PASSWORD);
+  n = _saved.tail(_configItems, _kinds, n, MAX_CONFIG_ROWS, "Connect");
+  if (sel > n - 1) sel = n - 1;
+  setItems(_configItems, n, sel);
 }
 
 void SftpClientScreen::_configHost() {
@@ -682,6 +701,9 @@ void SftpClientScreen::_connect() {
   if (_authMode == AUTH_NONE) {
     ShowStatusAction::show("Authentication method not set", 1500); render(); return;
   }
+  if (!_saved.prepare()) {  // a host being saved needs a name
+    _rebuildConfig(); render(); return;
+  }
 
   if (_authMode == AUTH_PASSWORD) {
     if (!_password.length()) {
@@ -698,6 +720,19 @@ void SftpClientScreen::_connect() {
     if (!_keyData.length()) {
       ShowStatusAction::show("Failed to read key", 1500); render(); return;
     }
+  }
+
+  // Saved when connecting, whether or not the server answers.
+  if (_saved.saving()) {
+    SavedHost host;
+    host.set("host", _host);
+    host.set("port", String(_port));
+    host.set("user", _username);
+    host.set("auth", _authMode == AUTH_PRIVATE_KEY ? "key" : "password");
+    if (_authMode == AUTH_PRIVATE_KEY) host.set("key", _keyPath);
+    else                               host.set("password", _password);
+    _saved.persist(host);
+    _rebuildConfig();
   }
 
   if (!_mutex) _mutex = xSemaphoreCreateMutex();
@@ -1206,24 +1241,8 @@ void SftpClientScreen::_chooseUploadDestination(const String& remoteDir) {
 
 bool SftpClientScreen::_confirmTransfer(const char* title, const String& name) {
   (void)name;
-
-  InputSelectAction::Option opts[] = {
-    {"Yes", "yes"},
-    {"No", "no"},
-  };
-
-  // InputSelectAction renders its title as a single-line overlay heading.
-  // Do not embed the selected filename/directory with a newline here; doing so
-  // produces visual artifacts on the UG display.
-  // File-browser screens may leave a different LCD font selected. Normalize it
-  // before opening the popup so its title/options render consistently.
   Uni.Lcd.setTextFont(1);
-  Uni.Lcd.setTextSize(1);
-  Uni.Lcd.setTextDatum(TL_DATUM);
-
-  const char* result = InputSelectAction::popup(
-    title, opts, 2, "yes");
-  return result && strcmp(result, "yes") == 0;
+  return ConfirmAction::popup(title);
 }
 
 void SftpClientScreen::_requestDownload(const String& remotePath, bool directory) {
