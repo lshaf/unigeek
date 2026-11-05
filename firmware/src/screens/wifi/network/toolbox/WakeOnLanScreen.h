@@ -1,6 +1,7 @@
 #pragma once
 #include <WiFiUdp.h>
 #include "ToolScreen.h"
+#include "utils/network/SavedHosts.h"
 
 // Sends the Wake-on-LAN magic packet (6 x FF, then the MAC 16 times) three
 // times. Broadcast reaches a sleeping computer on this network; a host (IP
@@ -8,6 +9,9 @@
 class WakeOnLanScreen : public ToolScreen {
 public:
   const char* title() override { return "Wake-on-LAN"; }
+
+  // Opened from Saved Hosts: fields filled in.
+  void loadSaved(const SavedHost& host);
 
 protected:
   void _buildRows() override;
@@ -17,7 +21,7 @@ protected:
   void _end() override;
 
 private:
-  enum Row : uint8_t { ROW_MAC, ROW_DESTINATION, ROW_HOST, ROW_PORT };
+  enum Row : uint8_t { ROW_MAC, ROW_DESTINATION, ROW_HOST, ROW_PORT, ROW_SAVE, ROW_NAME };
   static constexpr uint8_t SENDS = 3;
 
   uint8_t _mac[6] = {};
@@ -32,6 +36,14 @@ private:
   uint8_t       _sent = 0;
   unsigned long _nextAt = 0;
 
+  // Saving, as in the Remote Access clients (simplified: no Save Password).
+  bool    _save = false;
+  String  _name;
+  String  _origName;  // non-empty when opened from a saved host
+  char    _nameLabel[24] = {};
+  static constexpr const char* SAVED_DIR = "/unigeek/wifi/remote/wol";
+
   String _macText() const;
   static bool _parseMac(const String& text, uint8_t out[6]);
+  void   _persist();
 };

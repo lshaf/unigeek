@@ -4,6 +4,7 @@
 #include "ui/actions/InputNumberAction.h"
 #include "ui/actions/InputTextAction.h"
 #include "ui/actions/ShowStatusAction.h"
+#include "core/ScreenManager.h"
 
 String WakeOnLanScreen::_macText() const {
   if (!_hasMac) return "-";
@@ -38,6 +39,11 @@ void WakeOnLanScreen::_buildRows() {
   _addRow("Destination", _toHost ? "Host" : "Broadcast", ROW_DESTINATION);
   if (_toHost) _addRow("Host", _host.length() ? _host : String("-"), ROW_HOST);
   _addRow("Port", String(_port), ROW_PORT);
+  _addRow(_origName.length() ? "Save Changes" : "Save", _save ? "Yes" : "No", ROW_SAVE);
+  if (_save) {
+    snprintf(_nameLabel, sizeof(_nameLabel), "%s", _name.length() ? _name.c_str() : "-");
+    _addRow("Name", _nameLabel, ROW_NAME);
+  }
 }
 
 void WakeOnLanScreen::_editRow(uint8_t id) {
@@ -74,6 +80,42 @@ void WakeOnLanScreen::_editRow(uint8_t id) {
       if (!InputNumberAction::wasCancelled()) _port = v;
       break;
     }
+    case ROW_SAVE:
+      _save = !_save;
+      break;
+    case ROW_NAME: {
+      String v = InputTextAction::popup("Name", _name, InputTextAction::INPUT_TEXT);
+      if (!InputTextAction::wasCancelled()) { v.trim(); if (v.length()) _name = v; }
+      break;
+    }
+  }
+}
+
+void WakeOnLanScreen::loadSaved(const SavedHost& host) {
+  _parseMac(host.get("mac"), _mac);
+  _hasMac = host.has("mac");
+  _toHost = host.get("dest") == "host";
+  _host   = host.get("host");
+  _port   = host.getInt("port", 9);
+  _name = _origName = host.name;
+}
+
+// Saved when the packet is sent. The magic packet needs a MAC; a host target
+// needs its address; a name is required to save.
+void WakeOnLanScreen::_persist() {
+  if (!_save) return;
+  if (_name.length() == 0) { ShowStatusAction::show("Name not set", 1200); return; }
+  SavedHost host;
+  host.name = _name;
+  host.set("mac", _macText());
+  host.set("dest", _toHost ? "host" : "broadcast");
+  if (_toHost) host.set("host", _host);
+  host.set("port", String(_port));
+  if (SavedHosts::upsert(SAVED_DIR, host, _origName)) {
+    _origName = _name;
+    _save = false;
+  } else {
+    ShowStatusAction::show("Could not save", 1500);
   }
 }
 
@@ -120,6 +162,7 @@ bool WakeOnLanScreen::_step() {
 
   if (_sent < SENDS) return true;
   _print("Done. Ping the computer to check it woke up.");
+  if (_save) _persist();
   return false;
 }
 
