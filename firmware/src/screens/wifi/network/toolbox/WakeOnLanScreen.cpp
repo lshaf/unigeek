@@ -65,7 +65,7 @@ void WakeOnLanScreen::_editRow(uint8_t id) {
         memcpy(_mac, mac, 6);
         _hasMac = true;
       } else {
-        ShowStatusAction::show("Invalid MAC", 1500);
+        render(); ShowStatusAction::show("Invalid MAC", 1500);
       }
       break;
     }
@@ -161,7 +161,6 @@ bool WakeOnLanScreen::_step() {
   _nextAt = millis() + 300;
 
   if (_sent < SENDS) return true;
-  _print("Done. Ping the computer to check it woke up.");
   if (_save) _persist();
   return false;
 }

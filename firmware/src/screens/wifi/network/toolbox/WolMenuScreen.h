@@ -18,7 +18,7 @@ private:
   static constexpr uint8_t MAX_SAVED = 32;
   enum State : uint8_t { STATE_MENU, STATE_SAVED };
   State    _state = STATE_MENU;
-  ListItem _menu[2] = {{"New"}, {"Saved"}};
+  ListItem _menu[2] = {{"New Host"}, {"Saved Hosts"}};
   std::vector<SavedHost> _hosts;
   ListItem _items[MAX_SAVED];
   String   _details[MAX_SAVED];
