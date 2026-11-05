@@ -137,13 +137,7 @@ void TerminalScreen::onItemSelected(uint8_t index) {
     case ROW_SAVED: {
       SavedHostRows* saved = _savedHosts();
       if (!saved) break;
-      const auto kind = (SavedHostRows::Kind)_savedKinds[index];
-      if (kind == SavedHostRows::DELETE) {
-        if (saved->confirmDelete()) { Screen.goBack(); return; }
-        render();
-        break;
-      }
-      saved->select(kind);
+      saved->select((SavedHostRows::Kind)_savedKinds[index]);
       _refreshItems();
       render();
       break;

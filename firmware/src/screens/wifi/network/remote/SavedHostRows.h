@@ -1,7 +1,6 @@
 #pragma once
 
 #include "ui/templates/ListScreen.h"
-#include "ui/actions/ConfirmAction.h"
 #include "ui/actions/InputTextAction.h"
 #include "ui/actions/ShowStatusAction.h"
 #include "utils/network/SavedHosts.h"
@@ -12,7 +11,6 @@
 //   Name             "-" until set (when saving)
 //   Save Password    No | Yes   (when saving, with password authentication)
 //   Connect / Start
-//   Delete           (when the setup came from a saved host)
 // The client lists its own fields, then appends tail(); a selected tail row
 // goes back to select(). Nothing is asked for on its own: Name is filled in
 // by selecting its row, and Connect without one shows "Name not set".
@@ -20,7 +18,7 @@
 // holding it.
 class SavedHostRows {
 public:
-  enum Kind : uint8_t { NONE, SAVE, NAME, SAVE_PASSWORD, CONNECT, DELETE };
+  enum Kind : uint8_t { NONE, SAVE, NAME, SAVE_PASSWORD, CONNECT };
 
   SavedHostRows(const char* dir, bool hasPassword) : _dir(dir), _hasPassword(hasPassword) {}
 
@@ -62,7 +60,6 @@ public:
       if (_passwordRow()) add("Save Password", _savePassword ? "Yes" : "No", SAVE_PASSWORD);
     }
     add(connectLabel, nullptr, CONNECT);
-    if (fromSaved()) add("Delete", nullptr, DELETE);
     return n;
   }
 
@@ -99,18 +96,6 @@ public:
     } else {
       ShowStatusAction::show("Could not save host", 1500);
     }
-  }
-
-  // Confirms and deletes the saved host this setup came from. True if gone.
-  bool confirmDelete() {
-    if (!fromSaved()) return false;
-    if (!ConfirmAction::popup("Delete host?", "This action cannot be undone")) return false;
-    if (!SavedHosts::remove(_dir, _origName)) {
-      ShowStatusAction::show("Could not delete host", 1500);
-      return false;
-    }
-    _origName = "";
-    return true;
   }
 
 private:
