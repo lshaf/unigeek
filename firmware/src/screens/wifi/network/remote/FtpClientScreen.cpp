@@ -223,10 +223,6 @@ void FtpClientScreen::onItemSelected(uint8_t index) {
   if (index >= FIELD_COUNT) {
     switch (_kinds[index]) {
       case SavedHostRows::CONNECT: _connect(); break;
-      case SavedHostRows::DELETE:
-        if (_saved.confirmDelete()) { Screen.goBack(); return; }
-        render();
-        break;
       default:
         _saved.select(_kinds[index]);
         _rebuildConfig();
