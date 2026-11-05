@@ -1,4 +1,8 @@
 #include "PortScannerScreen.h"
+#include "PortServiceDetailsScreen.h"
+#include "PortAuditScreen.h"
+#include "ui/actions/InputSelectAction.h"
+#include "utils/network/ServiceProbeUtil.h"
 #include "utils/network/TargetResolveUtil.h"
 #include <WiFi.h>
 #include <ctype.h>
@@ -11,6 +15,14 @@
 #include "ui/actions/ShowStatusAction.h"
 #include "ui/views/ProgressView.h"
 #include "utils/network/ScanCancelUtil.h"
+
+void PortScannerScreen::configureTarget(const char* ip) {
+  if (!ip || !*ip) return;
+  _scanMode = MODE_TARGETS;
+  _singleTargetView = true;
+  _targets[0] = ip;
+  for (uint8_t i = 1; i < MAX_TARGETS; ++i) _targets[i] = "";
+}
 
 void PortScannerScreen::onInit() {
   memset(_hosts,       0, sizeof(_hosts));
@@ -29,6 +41,40 @@ void PortScannerScreen::onBack() {
 }
 
 void PortScannerScreen::onItemSelected(uint8_t index) {
+  if (_state == STATE_RESULTS) {
+    if (index < _resultCount) {
+      // Same overlay pattern as Network > Rescan: render the current list,
+      // display a transient status, then perform the operation.
+      const PortScanUtil::Result selected = _results[index];
+      const String endpoint = selected.label;
+      const int colon = endpoint.lastIndexOf(':');
+      if (colon <= 0) return;
+      const String host = endpoint.substring(0, colon);
+      const uint16_t port = (uint16_t)endpoint.substring(colon + 1).toInt();
+
+      static const InputSelectAction::Option kOptions[] = {
+        {"Details", "details", nullptr, 0, false},
+        {"Vuln Scan", "audit", nullptr, 0, false},
+      };
+      const char* choice = InputSelectAction::popup("Options", kOptions, 2);
+      if (!choice) { render(); return; }
+
+      if (strcmp(choice, "audit") == 0) {
+        auto* audit = new PortAuditScreen();
+        audit->configure(host, port);
+        Screen.push(audit);
+        return;
+      }
+
+      render();
+      ShowStatusAction::show("Probing...", 0);
+      const ServiceProbeUtil::Result probe = ServiceProbeUtil::probe(host.c_str(), port);
+      auto* details = new PortServiceDetailsScreen();
+      details->configure(selected, probe);
+      Screen.push(details);
+    }
+    return;
+  }
   if (_state != STATE_INPUT || index >= _configCount) return;
 
   switch (_configActions[index]) {
@@ -90,6 +136,11 @@ void PortScannerScreen::onItemSelected(uint8_t index) {
     }
 
 
+    case CFG_DEPTH:
+      _aggressive = !_aggressive;
+      _showInput(index);
+      break;
+
     case CFG_START_SCAN:
       _scan();
       break;
@@ -108,7 +159,9 @@ void PortScannerScreen::_showInput(uint8_t selectedIndex) {
     _configCount++;
   };
 
-  add("Mode", _scanMode == MODE_RANGE ? "Range" : "Targets", CFG_MODE);
+  if (!_singleTargetView) {
+    add("Mode", _scanMode == MODE_RANGE ? "Range" : "Targets", CFG_MODE);
+  }
 
   if (_scanMode == MODE_TARGETS) {
     static const ConfigAction targetActions[MAX_TARGETS] = {
@@ -118,9 +171,10 @@ void PortScannerScreen::_showInput(uint8_t selectedIndex) {
       "Target 1", "Target 2", "Target 3", "Target 4"
     };
 
-    for (uint8_t i = 0; i < MAX_TARGETS; ++i) {
+    for (uint8_t i = 0; i < (_singleTargetView ? 1 : MAX_TARGETS); ++i) {
       _targetSubs[i] = _targets[i].length() > 0 ? _targets[i] : "-";
-      add(targetLabels[i], _targetSubs[i].c_str(), targetActions[i]);
+      add(_singleTargetView ? "Target" : targetLabels[i],
+          _targetSubs[i].c_str(), targetActions[i]);
     }
   } else {
     _startIpSub = String(_startIp);
@@ -138,7 +192,8 @@ void PortScannerScreen::_showInput(uint8_t selectedIndex) {
     add("Custom Ports", _customPortsSub.c_str(), CFG_CUSTOM_PORTS);
   }
 
-  add("Start Scan", nullptr, CFG_START_SCAN);
+  add("Profile", _aggressive ? "Aggressive" : "Fast", CFG_DEPTH);
+  add("Start", nullptr, CFG_START_SCAN);
   setItems(_configItems, _configCount, selectedIndex);
 }
 
@@ -224,7 +279,8 @@ void PortScannerScreen::_scan() {
       (uint8_t)_startIp, (uint8_t)_endIp,
       _hosts, MAX_FOUND_HOSTS, false,
       [](uint8_t pct) { ProgressView::progress("Scanning hosts...", pct); },
-    []() { return ScanCancelUtil::poll(); }
+    []() { return ScanCancelUtil::poll(); },
+      _aggressive ? IpScanUtil::Profile::Aggressive : IpScanUtil::Profile::Fast
   );
 
     for (uint8_t i = 0; i < hostCount && _resultCount < PortScanUtil::MAX_RESULTS; i++) {
@@ -292,7 +348,11 @@ void PortScannerScreen::_editTarget(uint8_t targetIndex, uint8_t selectedIndex) 
     : _networkPrefix();
 
   char title[16];
-  snprintf(title, sizeof(title), "Target %u", (unsigned)(targetIndex + 1));
+  if (_singleTargetView) {
+    snprintf(title, sizeof(title), "Target");
+  } else {
+    snprintf(title, sizeof(title), "Target %u", (unsigned)(targetIndex + 1));
+  }
 
   String ip = InputTextAction::popup(
     title,
@@ -312,7 +372,7 @@ bool PortScannerScreen::_scanTarget(const char* ip, uint8_t& count, const char* 
 
   uint8_t remaining = PortScanUtil::MAX_RESULTS - count;
   uint8_t found = 0;
-  const bool patient = _scanMode == MODE_TARGETS;
+  const bool patient = _scanMode == MODE_TARGETS || _aggressive;
 
   if (_portMode == PORTS_COMMON) {
     found = PortScanUtil::scan(ip, &_results[count], remaining, progressLabel, false, patient);

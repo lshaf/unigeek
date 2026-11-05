@@ -20,6 +20,10 @@ public:
   void onBack() override;
 
 private:
+  // Setup rows, in display order. Used for the switch, the list and every
+  // place that restores the highlight, so a row can't drift out of sync.
+  enum ConfigRow : uint8_t { ROW_URL, ROW_USER, ROW_PASSWORD, ROW_CONNECT, CONFIG_ROWS };
+
   enum State : uint8_t {
     STATE_CONFIG,
     STATE_ACTION,
@@ -57,7 +61,7 @@ private:
   char _userLabel[32] = {};
   char _passwordLabel[16] = "-";
 
-  ListItem _configItems[4];
+  ListItem _configItems[CONFIG_ROWS];
   ListItem _actionItems[2] = {
     {"Download", nullptr},
     {"Upload", nullptr},

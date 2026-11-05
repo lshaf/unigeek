@@ -98,7 +98,7 @@ void SshClientScreen::onUpdate() {
       _password = "";
       _keyData = "";
       _workerState = WORKER_IDLE;
-      _state = STATE_CONFIG;
+      _returnToConfig(_connectRow());
       ShowStatusAction::show(error.c_str(), 1800);
       render();
       return;
@@ -108,9 +108,7 @@ void SshClientScreen::onUpdate() {
       _password = "";
       _keyData = "";
       _workerState = WORKER_IDLE;
-      _state = STATE_CONFIG;
-      _updateLabels();
-      _rebuildItems();
+      _returnToConfig(_connectRow());
       render();
       return;
     }
@@ -200,17 +198,19 @@ void SshClientScreen::onItemSelected(uint8_t index) {
     return;
   }
 
+  if (index == _connectRow()) {
+    _connect();
+    return;
+  }
   switch (index) {
-    case 0: _configHost();     break;
-    case 1: _configPort();     break;
-    case 2: _configUsername(); break;
-    case 3: _auth();           break;
-    case 4:
-      if (_authMode == AUTH_PASSWORD)          _configPassword();
-      else if (_authMode == AUTH_PRIVATE_KEY)  _openKeyPicker();
-      else                                     _connect();
+    case ROW_HOST: _configHost();     break;
+    case ROW_PORT: _configPort();     break;
+    case ROW_USER: _configUsername(); break;
+    case ROW_AUTH: _auth();           break;
+    case ROW_SECRET:
+      if (_authMode == AUTH_PASSWORD) _configPassword();
+      else                            _openKeyPicker();
       break;
-    case 5: _connect();        break;
     default: break;
   }
 }
@@ -227,9 +227,8 @@ void SshClientScreen::onBack() {
   }
 
   if (_state == STATE_SELECT_AUTH || _state == STATE_SELECT_KEY) {
-    _state = STATE_CONFIG;
-    _updateLabels();
-    _rebuildItems();
+    // Cancelled: back to the row that opened the submenu.
+    _returnToConfig(_state == STATE_SELECT_AUTH ? ROW_AUTH : ROW_SECRET);
     render();
     return;
   }
@@ -267,25 +266,30 @@ void SshClientScreen::_updateLabels() {
   snprintf(_portLabel, sizeof(_portLabel), "%d", _port);
 }
 
-void SshClientScreen::_rebuildItems() {
-  uint8_t sel = _selectedIndex;
-  _items[0] = {"Host", _hostLabel};
-  _items[1] = {"Port", _portLabel};
-  _items[2] = {"Username", _userLabel};
-  _items[3] = {"Auth Method", _authLabel};
+uint8_t SshClientScreen::_connectRow() const {
+  return (_authMode == AUTH_PASSWORD || _authMode == AUTH_PRIVATE_KEY) ? ROW_SECRET + 1 : ROW_SECRET;
+}
 
-  if (_authMode == AUTH_PASSWORD) {
-    _items[4] = {"Password", _passwordLabel};
-    _items[5] = {"Connect", nullptr};
-    setItems(_items, 6, min<uint8_t>(sel, 5));
-  } else if (_authMode == AUTH_PRIVATE_KEY) {
-    _items[4] = {"Key File", _keyLabel};
-    _items[5] = {"Connect", nullptr};
-    setItems(_items, 6, min<uint8_t>(sel, 5));
-  } else {
-    _items[4] = {"Connect", nullptr};
-    setItems(_items, 5, min<uint8_t>(sel, 4));
-  }
+void SshClientScreen::_rebuildItems() {
+  const uint8_t connectRow = _connectRow();
+  _items[ROW_HOST] = {"Host", _hostLabel};
+  _items[ROW_PORT] = {"Port", _portLabel};
+  _items[ROW_USER] = {"Username", _userLabel};
+  _items[ROW_AUTH] = {"Auth Method", _authLabel};
+  if (_authMode == AUTH_PASSWORD)    _items[ROW_SECRET] = {"Password", _passwordLabel};
+  if (_authMode == AUTH_PRIVATE_KEY) _items[ROW_SECRET] = {"Key File", _keyLabel};
+  _items[connectRow] = {"Connect", nullptr};
+  setItems(_items, connectRow + 1, min<uint8_t>(_selectedIndex, connectRow));
+}
+
+// Back to the setup list with `row` highlighted. Needed whenever another list
+// (auth options, key browser) or the session was shown, since its row index
+// would otherwise leak into setup.
+void SshClientScreen::_returnToConfig(uint8_t row) {
+  _selectedIndex = row;
+  _state = STATE_CONFIG;
+  _updateLabels();
+  _rebuildItems();
 }
 
 void SshClientScreen::_configHost() {
@@ -338,7 +342,7 @@ void SshClientScreen::_configPassword() {
     _password = value;
   }
 
-  _selectedIndex = 4;
+  _selectedIndex = ROW_SECRET;
   _updateLabels();
   _rebuildItems();
   render();
@@ -365,12 +369,9 @@ void SshClientScreen::_selectAuth(uint8_t index) {
     _password = "";
   }
 
-  // Return to CONFIG with Auth still selected. The submenu index (0/1) must not
-  // leak into the main menu selection, otherwise CONFIG jumps to Host/Port.
-  _selectedIndex = 3;
-  _state = STATE_CONFIG;
-  _updateLabels();
-  _rebuildItems();
+  // The submenu index (0/1) must not leak into setup, otherwise it jumps to
+  // Host/Port.
+  _returnToConfig(ROW_AUTH);
   render();
 }
 
@@ -411,9 +412,7 @@ void SshClientScreen::_selectKey(uint8_t index) {
   }
 
   _keyPath = entry.path;
-  _state = STATE_CONFIG;
-  _updateLabels();
-  _rebuildItems();
+  _returnToConfig(ROW_SECRET);  // not the browser's row index
   render();
 }
 
@@ -809,9 +808,7 @@ void SshClientScreen::_closeConnection(bool returnToConfig) {
   _remoteClosed = false;
 
   if (returnToConfig) {
-    _state = STATE_CONFIG;
-    _updateLabels();
-    _rebuildItems();
+    _returnToConfig(_connectRow());
     render();
   }
 }
