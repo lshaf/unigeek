@@ -35,7 +35,7 @@ void BLETagRingScreen::_draw() {
 
   if (_busy) {
     lcd.setTextColor(TFT_YELLOW, TFT_BLACK);
-    lcd.drawString(_playing ? "Stopping..." : "Ringing...", x + w / 2, cy + 10);
+    lcd.drawString(_playing ? "Stopping..." : "Connecting...", x + w / 2, cy + 10);
     return;  // no hint while busy
   } else {
     const bool ok = _result == BleTagRing::Result::Playing;
