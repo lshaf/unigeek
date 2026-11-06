@@ -57,7 +57,7 @@ BleTagRing::Result BleTagRing::send(const NimBLEAddress& address, bool start) {
 
 const char* BleTagRing::resultText(Result r) {
   switch (r) {
-    case Result::Playing:             return "Playing";
+    case Result::Playing:             return "Ringing...";
     case Result::RejectedOwnerNearby: return "Rejected (owner nearby?)";
     case Result::NotReachable:        return "Not reachable";
     default:                          return "Not supported";

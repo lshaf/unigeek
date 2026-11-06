@@ -9,7 +9,7 @@
 // The opener must have stopped scanning before pushing this.
 class BLETagRingScreen : public BaseScreen {
 public:
-  const char* title() override { return "Play Sound"; }
+  const char* title() override { return "Ring"; }
 
   void configureTarget(NimBLEAdvertisedDevice& tag) {
     _address = tag.getAddress();

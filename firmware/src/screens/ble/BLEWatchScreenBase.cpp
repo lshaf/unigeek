@@ -799,7 +799,7 @@ void BLEWatchScreenBase::_openOptions()
     {"Details", "details", nullptr, 0, false},
   };
   uint8_t count = 1;
-  if (tracker) opts[count++] = {"Play Sound", "ring", nullptr, 0, false};
+  if (tracker) opts[count++] = {"Ring", "ring", nullptr, 0, false};
   opts[count++] = {"Fox Hunt", "fox", nullptr, 0, false};
   const char* choice = InputSelectAction::popup("Options", opts, count);
   if (!choice) { render(); return; }

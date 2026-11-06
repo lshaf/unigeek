@@ -360,7 +360,7 @@ void BLEDetectorScreen::_showOptions()
     {"Details", "details", nullptr, 0, false},
   };
   uint8_t count = 1;
-  if (tag) options[count++] = {"Play Sound", "ring", nullptr, 0, false};
+  if (tag) options[count++] = {"Ring", "ring", nullptr, 0, false};
   options[count++] = {"Fox Hunt", "fox", nullptr, 0, false};
   const char* choice = InputSelectAction::popup("Options", options, count);
   if (!choice) { _chromeDrawn = false; render(); return; }
