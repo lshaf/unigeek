@@ -14,7 +14,7 @@
 class BleTagRing {
 public:
   enum class Result : uint8_t {
-    Ringing...,           // command accepted
+    Playing,              // command accepted
     RejectedOwnerNearby,  // connected but the tag refused (owner in range)
     NotReachable,         // could not connect
     NotSupported,         // no known sound service on the device
