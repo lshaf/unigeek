@@ -2,6 +2,7 @@
 #include "BLEAnalyzerScreen.h"
 #include "BLEFoxHuntScreen.h"
 #include "ui/actions/InputSelectAction.h"
+#include "screens/ble/BLETagRingScreen.h"
 #include "core/Device.h"
 #include "core/ScreenManager.h"
 #include "core/AchievementManager.h"
@@ -353,11 +354,15 @@ void BLEDetectorScreen::_ensureSelectedVisible()
 void BLEDetectorScreen::_showOptions()
 {
   if (_selected < 0 || _selected >= _deviceCount) return;
-  static const InputSelectAction::Option options[] = {
+  // A tracker (AirTag / Find My) can be rung to locate it.
+  const bool tag = strcmp(_devices[_selected].type, "AirTag") == 0;
+  InputSelectAction::Option options[3] = {
     {"Details", "details", nullptr, 0, false},
-    {"Fox Hunt", "fox", nullptr, 0, false},
   };
-  const char* choice = InputSelectAction::popup("Options", options, 2);
+  uint8_t count = 1;
+  if (tag) options[count++] = {"Play Sound", "ring", nullptr, 0, false};
+  options[count++] = {"Fox Hunt", "fox", nullptr, 0, false};
+  const char* choice = InputSelectAction::popup("Options", options, count);
   if (!choice) { _chromeDrawn = false; render(); return; }
 
   // Copy the snapshot before opening a child, which may reuse NimBLE buffers.
@@ -372,6 +377,12 @@ void BLEDetectorScreen::_showOptions()
     fox->configureTarget(target);
     _returningFromAction = true;
     Screen.push(fox);
+  } else if (strcmp(choice, "ring") == 0) {
+    _stopScan();  // hand the radio over for the GATT connection
+    auto* ring = new BLETagRingScreen();
+    ring->configureTarget(target);
+    _returningFromAction = true;
+    Screen.push(ring);
   }
 }
 
@@ -446,7 +457,7 @@ void BLEDetectorScreen::_draw()
     sp.fillSprite(TFT_BLACK);
     sp.setTextDatum(MC_DATUM);
     sp.setTextColor(TFT_DARKGREY, TFT_BLACK);
-    sp.drawString(_paused ? "Nothing captured" : "Monitoring...", bodyW() / 2, spH / 2);
+    sp.drawString(_paused ? "Nothing captured" : "Scanning...", bodyW() / 2, spH / 2);
     sp.pushSprite(bodyX(), spY);
     sp.deleteSprite();
     if (spY > contentY)
