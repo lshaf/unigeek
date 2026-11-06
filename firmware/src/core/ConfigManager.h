@@ -28,6 +28,8 @@
 // restores the phone-style 12-key multi-tap pad used before the keyboard rework.
 #define APP_CONFIG_KEYBOARD_STYLE               "kbd_style"
 #define APP_CONFIG_KEYBOARD_STYLE_DEFAULT       "full"
+#define APP_CONFIG_CONFIRM_ACTIONS              "confirm_actions"
+#define APP_CONFIG_CONFIRM_ACTIONS_DEFAULT      "1"
 #define APP_CONFIG_PRIMARY_COLOR                "primary_color"
 #define APP_CONFIG_PRIMARY_COLOR_DEFAULT        "Blue"
 #define APP_CONFIG_NAV_MODE                     "nav_mode"

@@ -1,3 +1,4 @@
+#include "ui/actions/ConfirmAction.h"
 #include "PasswordManagerScreen.h"
 #include <Arduino.h>  // pulls pins_arduino.h so DEVICE_HAS_WEBAUTHN is defined
 #include "core/Device.h"
@@ -461,6 +462,9 @@ void PasswordManagerScreen::_showEntryOptions(uint8_t index)
 
 void PasswordManagerScreen::_deleteEntry(uint8_t index)
 {
+  if (index >= _entryCount) return;
+  if (!ConfirmAction::popup("Delete credential?", "This action cannot be undone")) { render(); return; }
+  render();
   for (uint8_t i = index; i < _entryCount - 1; i++)
     _entries[i] = _entries[i + 1];
   _entryCount--;

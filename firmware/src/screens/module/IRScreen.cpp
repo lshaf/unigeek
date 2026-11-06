@@ -2,6 +2,7 @@
 // IR Remote Screen
 //
 
+#include "ui/actions/ConfirmAction.h"
 #include "IRScreen.h"
 #include "ui/actions/ShowStatusAction.h"
 
@@ -410,6 +411,7 @@ void IRScreen::_onRecvItemAction(uint8_t index) {
       _captured[index].name = newName;
     }
   } else if (strcmp(sel, "delete") == 0) {
+    if (!ConfirmAction::popup("Delete IR signal?", "This action cannot be undone")) { _showReceiveList(); return; }
     for (uint8_t i = index; i < _capturedCount - 1; i++) {
       _captured[i] = _captured[i + 1];
     }
@@ -512,6 +514,7 @@ void IRScreen::_onSendItemAction(uint8_t index) {
       _sendDirty = true;
     }
   } else if (strcmp(sel, "delete") == 0) {
+    if (!ConfirmAction::popup("Delete IR signal?", "This action cannot be undone")) { _refreshSendList(); return; }
     for (uint8_t i = index; i < _sendCount - 1; i++) {
       _sendSignals[i] = _sendSignals[i + 1];
     }

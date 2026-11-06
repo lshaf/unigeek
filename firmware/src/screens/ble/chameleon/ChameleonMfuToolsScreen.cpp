@@ -1,3 +1,4 @@
+#include "ui/actions/ConfirmAction.h"
 #include "ChameleonMfuAdvancedScreen.h"
 #include "ChameleonMfuAuthUtils.h"
 #include "ChameleonMfuScreen.h"
@@ -114,6 +115,7 @@ void ChameleonMfuToolsScreen::_writeTag() {
 }
 
 void ChameleonMfuToolsScreen::_eraseTag() {
+  if (!ConfirmAction::popup("Erase tag?", "This action cannot be undone")) { render(); return; }
   Header header; header.render("Erase Tag");
   auto& c = ChameleonClient::get();
 

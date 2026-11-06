@@ -589,9 +589,9 @@ private:
           _scrollPos = 0;
 
           _drawFullGrid();
+          _drawGridInput();
           _cursorVisible = true;
           _lastBlinkTime = millis();
-          _drawGridInput();
         }
       }
 

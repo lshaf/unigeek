@@ -2,11 +2,13 @@
 
 #include <NimBLEDevice.h>
 #include <string>
+#include <vector>
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>
 
 #include "ui/templates/BaseScreen.h"
 #include "ui/views/ScrollListView.h"
+#include "utils/ble/BleSpamSignature.h"
 
 class BLEWatchScreenBase : public BaseScreen {
 public:
@@ -21,6 +23,7 @@ public:
   void onInit() override;
   void onUpdate() override;
   void onRender() override;
+  void onRestore() override;
 
 protected:
   Mode _mode;
@@ -36,10 +39,12 @@ private:
   static constexpr int MAX_ACTIVITY = 32;
 #endif
   static constexpr unsigned long WINDOW_MS = 30000UL;
-  static constexpr unsigned long SPAM_WINDOW_MS = 3000UL;
   static constexpr unsigned long RATE_WINDOW_MS = 2000UL;
-  static constexpr uint16_t SPAM_THRESHOLD = 4;
-  static constexpr uint16_t SUSPICIOUS_RATE_THRESHOLD = 25;
+  static constexpr uint16_t SUSPICIOUS_RATE_THRESHOLD = 25;  // per RATE_WINDOW_MS
+  // The rate must hold this long: devices may advertise every 20 ms for the
+  // first 30 s after powering up or disconnecting (Apple's guideline), then
+  // slow down; a beacon flood or a tool keeps it up.
+  static constexpr unsigned long SUSPICIOUS_SUSTAIN_MS = 32000UL;
 
   enum View : uint8_t {
     VIEW_OVERALL,
@@ -58,9 +63,9 @@ private:
     uint16_t count = 0;
     unsigned long firstSeen = 0;
     unsigned long lastSeen = 0;
-    unsigned long burstStart = 0;
-    uint16_t burstCount = 0;
     bool visible = true;
+    bool hasDevice = false;
+    NimBLEAdvertisedDevice device;  // last advertisement, for Details / Fox Hunt
   };
 
   struct Activity {
@@ -69,6 +74,7 @@ private:
     unsigned long lastSeen = 0;
     uint16_t packets = 0;
     int8_t rssi = -127;
+    uint8_t highWindows = 0;  // consecutive windows at or above the rate
   };
 
   bool _scanning = false;
@@ -87,9 +93,17 @@ private:
   int _activityCount = 0;
 
   ScrollListView _scroll;
+  BleSpam::SpamTracker _spamTracker;  // spam = one type from several addresses
+
+  // Paused list (as in the Wi-Fi Watchdog / Watchcat): a frozen snapshot of
+  // the category, one row per entry, so the selection can't move.
+  bool _paused = false;
+  bool _holdHandled = false;
+  std::vector<Entry> _snap;
+  NimBLEAdvertisedDevice* _currentDev = nullptr;  // set while classifying
   ScrollListView::Row _rows[MAX_ROWS] = {};
   char _labels[MAX_ROWS][32] = {};
-  char _values[MAX_ROWS][16] = {};
+  char _values[MAX_ROWS][20] = {};  // fits a MAC
   int _itemCount = 0;
 
   void _startScan();
@@ -113,11 +127,18 @@ private:
   void _drawGridCell(int idx, int count);
   void _drawBackButton();
   void _setListState(int count);
+  void _collectCategory(uint8_t category, std::vector<Entry>& out);
+  int  _listHeight();
+  void _renderFooter();
+  void _pause();
+  void _resume();
+  void _leaveList();
+  void _openOptions();
 
-  static bool _matchPattern(const char* pattern, const uint8_t* data, size_t len);
   static bool _containsNoCase(const std::string& text, const char* needle);
   static bool _isNamed(const std::string& text, const char* needle);
   static const char* _spamType(NimBLEAdvertisedDevice* dev);
+  static bool _matchSpamType(NimBLEAdvertisedDevice* dev, const void* type);
 
   class ScanCallbacks;
   friend class ScanCallbacks;

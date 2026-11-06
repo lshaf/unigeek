@@ -12,6 +12,7 @@
 #include "screens/wifi/network/NetworkServicesScreen.h"
 #include "screens/wifi/network/NetworkInternetScreen.h"
 #include "screens/wifi/network/remote/RemoteAccessScreen.h"
+#include "ui/actions/ConfirmAction.h"
 #include "ui/actions/ShowStatusAction.h"
 #include "ui/actions/ShowQRCodeAction.h"
 #include <WiFi.h>
@@ -31,6 +32,10 @@ void NetworkMenuScreen::onInit() {
 }
 
 void NetworkMenuScreen::onBack() {
+  if (!ConfirmAction::popup("Disconnect from network?")) {
+    render();
+    return;
+  }
   WiFi.disconnect(true);
   Screen.goBack();
 }

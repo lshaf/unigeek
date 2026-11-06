@@ -1,3 +1,4 @@
+#include "ui/actions/ConfirmAction.h"
 #include "HfDumpToolsScreen.h"
 #include <new>
 #include <esp_system.h>
@@ -24,7 +25,7 @@ const char* shortType(HfDumpParser::Type t){switch(t){case HfDumpParser::TYPE_MI
 uint16_t ntagConfig0(HfDumpParser::Type t){switch(t){case HfDumpParser::TYPE_NTAG210:return 16;case HfDumpParser::TYPE_NTAG212:return 37;case HfDumpParser::TYPE_NTAG213:return 41;case HfDumpParser::TYPE_NTAG215:return 131;case HfDumpParser::TYPE_NTAG216:return 227;default:return 0xFFFF;}}
 uint16_t ntagDynamicLockPage(HfDumpParser::Type t){switch(t){case HfDumpParser::TYPE_NTAG212:return 36;case HfDumpParser::TYPE_NTAG213:return 40;case HfDumpParser::TYPE_NTAG215:return 130;case HfDumpParser::TYPE_NTAG216:return 226;default:return 0xFFFF;}}
 const char* ntagSensitivePageLabel(HfDumpParser::Type t,uint16_t page){uint16_t dl=ntagDynamicLockPage(t),c=ntagConfig0(t);if(page==dl)return "Dynamic lock page";if(page==c||page==c+1)return "Configuration page";if(page==c+2)return "Password page";if(page==c+3)return "PACK page";return nullptr;}
-bool confirmNtagSensitiveWrite(HfDumpParser::Type t,uint16_t page){const char*l=ntagSensitivePageLabel(t,page);if(!l)return true;static const InputSelectAction::Option o[]={{"Write anyway","write"}};String title=String("Warning: ")+l;const char*c=InputSelectAction::popup(title.c_str(),o,1,nullptr);return c&&strcmp(c,"write")==0;}
+bool confirmNtagSensitiveWrite(HfDumpParser::Type t,uint16_t page){const char*l=ntagSensitivePageLabel(t,page);if(!l)return true;String title=String("Write ")+l+"?";return ConfirmAction::popup(title.c_str(), "Sensitive tag memory");}
 }
 
 const char* HfDumpLibraryScreen::title(){return _state==BROWSE?"Saved HF Dumps":(_state==DETAILS?"HF Dump Details":"HF Dump Actions");}

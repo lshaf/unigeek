@@ -6,10 +6,17 @@
 
 class BLEFoxHuntScreen : public ListScreen {
 public:
-  const char* title() override { return "BLE Fox Hunt"; }
+  const char* title() override { return "Fox Hunt"; }
   bool inhibitPowerSave() override { return _state == STATE_TRACK; }
 
   ~BLEFoxHuntScreen() override;
+  void configureTarget(NimBLEAdvertisedDevice& device);
+  // Track every advertisement match() accepts instead of one address: for
+  // attacks that draw a new random address per advertisement (BLE spam), all
+  // sent from one device. sample seeds the reading; label names the target.
+  using Matcher = bool (*)(NimBLEAdvertisedDevice* dev, const void* ctx);
+  void configureSignatureTarget(NimBLEAdvertisedDevice& sample, const char* label,
+                                Matcher match, const void* ctx);
   void onInit() override;
   void onUpdate() override;
   void onRender() override;
@@ -27,6 +34,9 @@ private:
   NimBLEScanResults _scanResults;
   NimBLEAdvertisedDevice _devices[kMaxDevices];
   NimBLEAdvertisedDevice _selDev;
+  bool _externalTarget = false;
+  Matcher     _matcher    = nullptr;
+  const void* _matcherCtx = nullptr;
 
   String   _labels[kMaxDevices];
   String   _subs[kMaxDevices];
