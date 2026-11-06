@@ -1,5 +1,6 @@
 #include "BLEWatchScreenBase.h"
 #include "ui/actions/InputSelectAction.h"
+#include "screens/ble/BLETagRingScreen.h"
 #include "screens/ble/BLEFoxHuntScreen.h"
 #include "screens/ble/BLEAnalyzerScreen.h"
 
@@ -792,17 +793,25 @@ void BLEWatchScreenBase::_openOptions()
   if (index < 0 || index >= (int)_snap.size() || !_snap[index].hasDevice) return;
   const bool spamList = _mode == Mode::Watchdog && _view == VIEW_CAT0;
 
-  static const InputSelectAction::Option kAll[] = {
+  // Trackers (Watchcat Find My / SmartTag) can be rung to locate them.
+  const bool tracker = _mode == Mode::Watchcat && (_view == VIEW_CAT0 || _view == VIEW_CAT1);
+  InputSelectAction::Option opts[3] = {
     {"Details", "details", nullptr, 0, false},
-    {"Fox Hunt", "fox", nullptr, 0, false},
   };
-  const char* choice = InputSelectAction::popup("Options", kAll, 2);
+  uint8_t count = 1;
+  if (tracker) opts[count++] = {"Play Sound", "ring", nullptr, 0, false};
+  opts[count++] = {"Fox Hunt", "fox", nullptr, 0, false};
+  const char* choice = InputSelectAction::popup("Options", opts, count);
   if (!choice) { render(); return; }
 
   // Hand the scanner over; onRestore() starts ours again on the same list.
   NimBLEAdvertisedDevice target = _snap[index].device;
   _stopScan();
-  if (strcmp(choice, "details") == 0) {
+  if (strcmp(choice, "ring") == 0) {
+    auto* ring = new BLETagRingScreen();
+    ring->configureTarget(target);
+    Screen.push(ring);
+  } else if (strcmp(choice, "details") == 0) {
     auto* details = new BLEAnalyzerScreen();
     details->configureTarget(target);
     Screen.push(details);
