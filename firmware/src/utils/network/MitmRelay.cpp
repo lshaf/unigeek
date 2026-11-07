@@ -39,6 +39,7 @@ volatile uint32_t MitmRelay::_loopDropped = 0;
 ArpSpoofer*    MitmRelay::_arpS       = nullptr;
 volatile bool  MitmRelay::_forwardS   = true;
 volatile bool  MitmRelay::_captureS   = false;
+MitmRelay::CaptureFilter MitmRelay::_captureFilter = nullptr;
 char           MitmRelay::_errBuf[48] = {};
 
 // ── Ring ────────────────────────────────────────────────────────────────────
@@ -320,7 +321,7 @@ esp_err_t MitmRelay::_rxCb(void* buffer, uint16_t len, void* eb) {
     _arpS->observeIpv4(src, srcIp);
   }
 
-  if (_captureS) _enqueue(eth, len);
+  if (_captureS && (!_captureFilter || _captureFilter(eth, len))) _enqueue(eth, len);
 
   // Only unicast transit IPv4 is a forwarding candidate. Forwarding broadcast
   // would loop it straight back onto the same link.

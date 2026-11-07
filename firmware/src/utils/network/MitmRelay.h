@@ -46,6 +46,12 @@ public:
   void update();          // main loop: drain the ring into the PCAP file
 
   void setPcap(PcapWriter* w)     { _pcap = w; }
+  // Optional capture filter (MITM Capture Filters). Called in RELAY mode on the
+  // decrypted Ethernet frame before it is staged for the PCAP; return false to
+  // skip writing it. Header-only decision; forwarding is unaffected. null =
+  // keep everything.
+  using CaptureFilter = bool (*)(const uint8_t* eth, uint16_t len);
+  void setCaptureFilter(CaptureFilter f) { _captureFilter = f; }
   void setArp(ArpSpoofer* a)      { _arp = a; }
   void setForward(bool on)        { _forward = on; }
 
@@ -112,6 +118,7 @@ private:
   static ArpSpoofer*    _arpS;
   static volatile bool  _forwardS;
   static volatile bool  _captureS;    // false = no PCAP attached, skip the ring
+  static CaptureFilter  _captureFilter;
   static char           _errBuf[48];  // backs _error when the text is dynamic
 
   static esp_err_t _rxCb(void* buffer, uint16_t len, void* eb);

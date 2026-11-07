@@ -6,8 +6,13 @@
 #include "ui/actions/ShowStatusAction.h"
 
 #include <WiFi.h>
+#include "ui/actions/InputTextAction.h"
+#include "ui/actions/InputSelectAction.h"
 
 static constexpr uint64_t kMinFree = 64 * 1024;
+
+static uint16_t s_captureMask = 0;  // relay calls the filter by fn ptr
+static bool mitmCaptureFilter(const uint8_t* eth, uint16_t len);  // defined below
 
 NetworkMitmScreen::~NetworkMitmScreen() {
   if (_state == STATE_RUNNING) _stop("Screen closed");
@@ -25,59 +30,140 @@ void NetworkMitmScreen::onBack() {
     _showMenu();
     return;
   }
+  if (_state == STATE_FILTERS) { _showMenu(); return; }
   Screen.goBack();
 }
 
 // ── Menu ────────────────────────────────────────────────────────────────────
 
-void NetworkMitmScreen::_showMenu() {
-  _state      = STATE_MENU;
-  _arpSub     = _arpEnabled     ? "On" : "Off";
-  _snifferSub = _snifferEnabled ? "On" : "Off";
+// Row kinds, so a row can move as the mode changes without a fixed index.
+enum : uint8_t { R_MODE, R_TARGET1, R_TARGET2, R_TARGET3, R_TARGET4,
+                 R_FILTERS, R_SAVE, R_FILENAME, R_START };
 
-  _menuItems[0] = {"ARP Spoof",       _arpSub.c_str()};
-  _menuItems[1] = {"Network Sniffer", _snifferSub.c_str()};
-  _menuItems[2] = {"Start"};
-  setItems(_menuItems, 3, _menuIndex);
+void NetworkMitmScreen::_showMenu(uint8_t selected) {
+  _state = STATE_MENU;
+  static const char* kModeNames[] = {"Full", "Targeted", "Passive"};
+  const bool decrypted = _mode != MODE_PASSIVE;
+
+  uint8_t n = 0;
+  auto add = [&](const char* label, const String& val, uint8_t kind) {
+    _subs[n] = val;
+    _menuItems[n] = {label, _subs[n].length() ? _subs[n].c_str() : nullptr};
+    _rowKind[n] = kind; ++n;
+  };
+  add("Mode", kModeNames[_mode], R_MODE);
+  if (_mode == MODE_TARGETED) {
+    for (uint8_t i = 0; i < 4; ++i) {
+      char lbl[12]; snprintf(lbl, sizeof(lbl), "Target %u", i + 1);
+      add(lbl, _targets[i] ? String(_targetText[i]) : String("-"), R_TARGET1 + i);
+    }
+  }
+  // Capture filters only mean something on decrypted traffic.
+  if (decrypted) add("Capture Filters", _captureMask ? "Custom" : "All", R_FILTERS);
+  add("Save to File", _saveToFile ? "On" : "Off", R_SAVE);
+  if (_saveToFile) add("File Name", _fileName.length() ? _fileName : String("(auto)"), R_FILENAME);
+  add("Start", String(), R_START);
+
+  _rowCount = n;
+  setItems(_menuItems, n, selected < n ? selected : n - 1);
+}
+
+void NetworkMitmScreen::_editTarget(uint8_t i) {
+  const String prefix = WiFi.localIP().toString();
+  const int dot = prefix.lastIndexOf('.');
+  const String initial = _targets[i] ? String(_targetText[i])
+                                     : (dot > 0 ? prefix.substring(0, dot + 1) : String());
+#ifdef DEVICE_HAS_KEYBOARD
+  const auto mode = InputTextAction::INPUT_TEXT;
+#else
+  const auto mode = InputTextAction::INPUT_IP_ADDRESS;
+#endif
+  String v = InputTextAction::popup("Target IP", initial, mode);
+  if (InputTextAction::wasCancelled()) return;
+  v.trim();
+  if (v.length() == 0) { _targets[i] = 0; _targetText[i][0] = '\0'; return; }
+  IPAddress ip;
+  if (!ip.fromString(v)) { ShowStatusAction::show("Invalid IP", 1200); return; }
+  _targets[i] = (uint32_t)ip;  // network order on ESP32
+  snprintf(_targetText[i], sizeof(_targetText[i]), "%s", v.c_str());
 }
 
 void NetworkMitmScreen::onItemSelected(uint8_t index) {
-  if (_state != STATE_MENU) return;
+  if (_state == STATE_FILTERS) {
+    if (index == 0) _captureMask = 0;                       // All
+    else if (index <= FILTER_COUNT) _captureMask ^= (uint16_t)(1u << (index - 1));
+    _showFilters(true);
+    return;
+  }
+  if (_state != STATE_MENU || index >= _rowCount) return;
   _menuIndex = index;
 
-  switch (index) {
-    case 0:
-      _arpEnabled = !_arpEnabled;
-      _showMenu();
+  switch (_rowKind[index]) {
+    case R_MODE:
+      _mode = (Mode)((_mode + 1) % 3);
+      _showMenu(index);
       break;
-
-    case 1:
-      if (!_snifferEnabled &&
-          (!Uni.StorageSD || !Uni.StorageSD->isAvailable())) {
-        ShowStatusAction::show("SD card not available", 1500);
-        render();
-        return;
+    case R_TARGET1: case R_TARGET2: case R_TARGET3: case R_TARGET4:
+      _editTarget(_rowKind[index] - R_TARGET1);
+      _showMenu(index);
+      break;
+    case R_FILTERS:
+      _showFilters();
+      break;
+    case R_SAVE:
+      if (!_saveToFile && (!Uni.StorageSD || !Uni.StorageSD->isAvailable())) {
+        ShowStatusAction::show("SD card not available", 1500); render(); return;
       }
-      _snifferEnabled = !_snifferEnabled;
-      _showMenu();
+      _saveToFile = !_saveToFile;
+      _showMenu(index);
       break;
-
-    case 2:
+    case R_FILENAME: {
+      String v = InputTextAction::popup("File Name", _fileName, InputTextAction::INPUT_TEXT);
+      if (!InputTextAction::wasCancelled()) { v.trim(); _fileName = v; }
+      _showMenu(index);
+      break;
+    }
+    case R_START:
       _start();
       break;
   }
 }
 
+void NetworkMitmScreen::_showFilters(bool keepSel) {
+  static const char* kNames[FILTER_COUNT] = {
+    "ARP", "ICMP", "DNS", "DHCP", "HTTP", "TLS/HTTPS",
+    "mDNS", "NTP", "SSH", "Telnet", "FTP", "Other TCP/UDP"
+  };
+  _state = STATE_FILTERS;
+  snprintf(_filterLabels[0], sizeof(_filterLabels[0]), "[%c] All", _captureMask == 0 ? 'x' : ' ');
+  _filterItems[0] = {_filterLabels[0]};
+  for (uint8_t i = 0; i < FILTER_COUNT; ++i) {
+    snprintf(_filterLabels[i + 1], sizeof(_filterLabels[i + 1]), "[%c] %s",
+             (_captureMask & (1u << i)) ? 'x' : ' ', kNames[i]);
+    _filterItems[i + 1] = {_filterLabels[i + 1]};
+  }
+  if (keepSel) { setCount(FILTER_COUNT + 1); render(); }
+  else setItems(_filterItems, FILTER_COUNT + 1);
+}
+
 // ── Start ───────────────────────────────────────────────────────────────────
 
 void NetworkMitmScreen::_start() {
-  if (!_arpEnabled && !_snifferEnabled) {
-    ShowStatusAction::show("No option enabled");
-    return;
-  }
   if (WiFi.status() != WL_CONNECTED) {
     ShowStatusAction::show("Not connected", 1500);
     return;
+  }
+  // Mode -> engine flags. Full/Targeted poison (relay, decrypted); Passive does
+  // not (monitor, encrypted). Targeted needs at least one IP.
+  _arpEnabled     = _mode != MODE_PASSIVE;
+  _snifferEnabled = _saveToFile;
+  if (_mode == MODE_TARGETED) {
+    uint32_t ips[4]; uint8_t nt = 0;
+    for (uint8_t i = 0; i < 4; ++i) if (_targets[i]) ips[nt++] = _targets[i];
+    if (nt == 0) { ShowStatusAction::show("No target set", 1500); return; }
+    _arp.setTargets(ips, nt);
+  } else {
+    _arp.setTargets(nullptr, 0);  // full-subnet sweep
   }
 
   _log.clear();
@@ -113,6 +199,8 @@ void NetworkMitmScreen::_start() {
   // 1. Capture file. Link type depends on where the frames come from: the relay
   //    yields decrypted Ethernet, the monitor fallback raw 802.11.
   const bool relayMode = _arpEnabled;
+  // A chosen file name overrides the auto SSID-based one.
+  const char* nameBase = _fileName.length() ? _fileName.c_str() : WiFi.SSID().c_str();
   if (_snifferEnabled) {
     if (!Uni.StorageSD || !Uni.StorageSD->isAvailable()) {
       _log.addLine("SD card not available", TFT_RED);
@@ -123,7 +211,7 @@ void NetworkMitmScreen::_start() {
     } else {
       const uint32_t linktype = relayMode ? PcapWriter::LINKTYPE_ETHERNET
                                           : PcapWriter::LINKTYPE_IEEE802_11;
-      if (_pcap.begin(Uni.StorageSD, SAVE_DIR, WiFi.SSID(), linktype, MitmRelay::SNAP_LEN)) {
+      if (_pcap.begin(Uni.StorageSD, SAVE_DIR, nameBase, linktype, MitmRelay::SNAP_LEN)) {
         _pcapUp = true;
         snprintf(buf, sizeof(buf), "PCAP: %s", _pcap.filename().c_str());
         _log.addLine(buf, TFT_GREEN);
@@ -154,6 +242,9 @@ void NetworkMitmScreen::_start() {
     _relay.setPcap(_pcapUp ? &_pcap : nullptr);
     _relay.setArp(_arpUp ? &_arp : nullptr);
     _relay.setForward(_arpEnabled);
+    // Capture Filters only apply to decrypted (relay) traffic.
+    s_captureMask = relayMode ? _captureMask : 0;
+    _relay.setCaptureFilter(relayMode ? &mitmCaptureFilter : nullptr);
 
     if (_relay.begin(relayMode ? MitmRelay::MODE_RELAY : MitmRelay::MODE_MONITOR)) {
       _relayUp = true;
@@ -437,4 +528,41 @@ void NetworkMitmScreen::_drawLog() {
       sp.setTextColor(minK < 15 ? TFT_RED : TFT_MAGENTA, TFT_BLACK);
       sp.drawString(right, w - 2, barY);
     }, this);
+}
+
+// Etapa 1 capture filter: true when the decrypted Ethernet frame matches the
+// Capture Filters (All passes everything). Reads only headers (EtherType, IP
+// protocol, TCP/UDP ports) to decide which packets to keep — never content.
+static bool mitmCaptureFilter(const uint8_t* eth, uint16_t len) {
+  using M = NetworkMitmScreen;
+  const uint16_t m = s_captureMask;
+  if (m == 0) return true;            // All
+  if (len < 14) return m & M::F_OTHER;
+  const uint16_t ethertype = (eth[12] << 8) | eth[13];
+  if (ethertype == 0x0806) return m & M::F_ARP;
+  if (ethertype != 0x0800) return m & M::F_OTHER;   // non-IPv4
+  if (len < 14 + 20) return m & M::F_OTHER;
+  const uint8_t* ip = eth + 14;
+  const uint8_t ihl = (ip[0] & 0x0F) * 4;
+  const uint8_t proto = ip[9];
+  if (proto == 1) return m & M::F_ICMP;
+  if (proto == 6 || proto == 17) {   // TCP / UDP
+    const uint8_t* l4 = ip + ihl;
+    if (len < (uint16_t)(14 + ihl + 4)) return m & M::F_OTHER;
+    const uint16_t sp = (l4[0] << 8) | l4[1], dp = (l4[2] << 8) | l4[3];
+    auto hit = [&](uint16_t port, uint16_t bit) {
+      return (sp == port || dp == port) && (m & bit);
+    };
+    if (hit(53, M::F_DNS))    return true;
+    if (hit(67, M::F_DHCP) || hit(68, M::F_DHCP)) return true;
+    if (hit(80, M::F_HTTP))   return true;
+    if (hit(443, M::F_TLS))   return true;
+    if (hit(5353, M::F_MDNS)) return true;
+    if (hit(123, M::F_NTP))   return true;
+    if (hit(22, M::F_SSH))    return true;
+    if (hit(23, M::F_TELNET)) return true;
+    if (hit(21, M::F_FTP))    return true;
+    return m & M::F_OTHER;
+  }
+  return m & M::F_OTHER;
 }

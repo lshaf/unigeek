@@ -1,11 +1,17 @@
 //
 // NetworkMitmScreen — man-in-the-middle against the network you are joined to.
 //
-// Three toggles feeding one engine:
+// A setup screen (Mode, Targets, Capture Filters, Save to File) feeding one
+// engine. Mode chooses how traffic is captured:
 //
-//   ARP Spoof       sweeps the whole subnet and poisons every host it finds,
-//                   in both directions, so their traffic reaches us
-//   Network Sniffer writes the traffic to a PCAP on the SD card
+//   Full      poison every host in the subnet; the relay yields decrypted
+//             Ethernet, which is what the capture and preview see.
+//   Targeted  poison only the 1-4 chosen IPs (ArpSpoofer::setTargets).
+//   Passive   no poisoning: 802.11 promiscuous capture of the current
+//             channel — everything on the air, but CCMP-encrypted.
+//
+// Capture Filters keep only chosen protocols in the PCAP (decrypted modes).
+// Save to File and File Name control the PCAP. (Live Preview comes next.)
 //
 // DNS spoofing used to be a third toggle here and was removed. Serving the
 // forged pages needs a web server, and on a board without PSRAM that server
@@ -32,6 +38,15 @@
 
 class NetworkMitmScreen : public ListScreen {
 public:
+  // Capture-filter protocols (decrypted modes). Bit set = keep it. Public so the
+  // relay's file-scope capture filter can name them.
+  enum FilterBit : uint16_t {
+    F_ARP = 1<<0, F_ICMP = 1<<1, F_DNS = 1<<2, F_DHCP = 1<<3, F_HTTP = 1<<4,
+    F_TLS = 1<<5, F_MDNS = 1<<6, F_NTP = 1<<7, F_SSH = 1<<8, F_TELNET = 1<<9,
+    F_FTP = 1<<10, F_OTHER = 1<<11,
+  };
+  static constexpr uint8_t FILTER_COUNT = 12;
+
   const char* title()    override { return "MITM Attack"; }
   bool inhibitPowerOff() override { return _state == STATE_RUNNING; }
 
@@ -44,20 +59,34 @@ public:
   void onBack() override;
 
 private:
-  enum State  { STATE_MENU, STATE_RUNNING };
+  enum State  { STATE_MENU, STATE_FILTERS, STATE_RUNNING };
   enum Phase  { PHASE_SWEEP, PHASE_POISON };
+
+  enum Mode : uint8_t { MODE_FULL, MODE_TARGETED, MODE_PASSIVE };
+
 
   static constexpr const char* SAVE_DIR = "/unigeek/wifi/sniffer";
 
   State _state = STATE_MENU;
   Phase _phase = PHASE_SWEEP;
 
-  // Options
-  bool _arpEnabled     = false;
-  bool _snifferEnabled = false;
+  // Setup
+  Mode     _mode          = MODE_FULL;
+  uint32_t _targets[4]    = {};   // network order; 0 = unset
+  char     _targetText[4][16] = {};
+  uint16_t _captureMask   = 0;    // 0 = All
+  bool     _saveToFile    = true;
+  String   _fileName;
+  bool     _arpEnabled     = false;  // derived from Mode at Start
+  bool     _snifferEnabled = true;   // derived from _saveToFile at Start
 
-  String _arpSub, _snifferSub;
-  ListItem _menuItems[3];
+  String   _subs[10];
+  ListItem _menuItems[10];
+  uint8_t  _rowKind[10] = {};
+  uint8_t  _rowCount    = 0;
+
+  ListItem _filterItems[FILTER_COUNT + 1];
+  char     _filterLabels[FILTER_COUNT + 1][18];
 
   // Engine
   ArpSpoofer _arp;
@@ -83,7 +112,9 @@ private:
 
   uint8_t _menuIndex = 0;
 
-  void _showMenu();
+  void _showMenu(uint8_t selected = 0);
+  void _showFilters(bool keepSel = false);
+  void _editTarget(uint8_t i);
   void _start();
   void _stop(const char* reason);
   void _drawLog();

@@ -33,6 +33,12 @@ public:
     bool     used;
   };
 
+  // Restrict the attack to specific hosts (MITM "Targeted" mode): only these
+  // IPs are swept and poisoned, instead of the whole subnet. Call before
+  // begin(); pass 1-4 host-order-agnostic dotted addresses (parsed here). An
+  // empty list keeps the default full-subnet sweep.
+  void setTargets(const uint32_t* ipsNetworkOrder, uint8_t count);
+
   // Snapshots our IP/MAC, the gateway and the subnet. Returns false when not
   // associated or when the subnet is unusable.
   bool begin();
@@ -165,6 +171,10 @@ private:
 
   uint32_t _netBase   = 0;   // first host address
   uint32_t _hostCount = 0;   // usable hosts in the subnet, capped
+  // Targeted mode: a short explicit list the sweep uses instead of the subnet.
+  static constexpr int MAX_EXPLICIT = 4;
+  uint32_t _explicit[MAX_EXPLICIT] = {};  // network order
+  uint8_t  _explicitCount = 0;
   uint32_t _netH      = 0;   // network address, host byte order
   uint32_t _maskH     = 0;   // subnet mask, host byte order
   uint32_t _sweepIdx  = 0;
