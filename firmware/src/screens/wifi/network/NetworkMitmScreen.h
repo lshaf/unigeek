@@ -123,8 +123,8 @@ private:
   uint8_t _menuIndex = 0;
 
   void _showMenu(uint8_t selected = 0);
-  // Rebuilds Capture/Preview filter rows. Uses ListScreen::_selectedIndex the
-  // same way SshClientScreen::_rebuildItems does.
+  // Rebuilds Capture/Preview filter rows using ListScreen::_selectedIndex
+  // (same pattern as SshClientScreen::_rebuildItems).
   void _showFilters();
   void _editTarget(uint8_t i);
   void _drawPreview();

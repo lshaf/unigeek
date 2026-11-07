@@ -532,14 +532,25 @@ void NetworkMitmScreen::onUpdate() {
       if (s_previewMask && !(s_previewMask & bit)) continue;   // preview filter
       char src[16] = "", dst[16] = "";
       if (m.ethertype == 0x0800) { ipStr(m.srcIp, src, sizeof(src)); ipStr(m.dstIp, dst, sizeof(dst)); }
-      if (m.srcPort || m.dstPort)
-        snprintf(line, sizeof(line), "%-5s %s:%u > %s:%u  %uB",
-                 protoName(bit), src, m.srcPort, dst, m.dstPort, m.length);
-      else if (m.ethertype == 0x0800)
-        snprintf(line, sizeof(line), "%-5s %s > %s  %uB", protoName(bit), src, dst, m.length);
-      else
+      // Multi-line on IP flows so src/dst fit the narrow screen:
+      //   TLS  192.168.1.10:443 >
+      //        192.168.1.50:52341  1420B
+      if (m.srcPort || m.dstPort) {
+        snprintf(line, sizeof(line), "%-5s %s:%u >",
+                 protoName(bit), src, m.srcPort);
+        _log.addLine(line);
+        snprintf(line, sizeof(line), "      %s:%u  %uB",
+                 dst, m.dstPort, m.length);
+        _log.addLine(line, TFT_DARKGREY);
+      } else if (m.ethertype == 0x0800) {
+        snprintf(line, sizeof(line), "%-5s %s >", protoName(bit), src);
+        _log.addLine(line);
+        snprintf(line, sizeof(line), "      %s  %uB", dst, m.length);
+        _log.addLine(line, TFT_DARKGREY);
+      } else {
         snprintf(line, sizeof(line), "%-5s  %uB", protoName(bit), m.length);
-      _log.addLine(line);
+        _log.addLine(line);
+      }
     }
   }
 
