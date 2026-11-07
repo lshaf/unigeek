@@ -77,9 +77,9 @@ void NetworkMitmScreen::_showMenu(uint8_t selected) {
   // Capture filters only mean something on decrypted traffic.
   if (decrypted) add("Capture Filters", _captureMask ? "Custom" : "All", R_FILTERS);
   add("Live Preview", _livePreview ? "On" : "Off", R_PREVIEW);
-  if (_livePreview && decrypted) add("Preview Filter", _previewMask ? "Custom" : "All", R_PREVFILT);
+  if (_livePreview && decrypted) add("Preview Filters", _previewMask ? "Custom" : "All", R_PREVFILT);
   add("Save to File", _saveToFile ? "On" : "Off", R_SAVE);
-  if (_saveToFile) add("File Name", _fileName.length() ? _fileName : String("(auto)"), R_FILENAME);
+  if (_saveToFile) add("File Name", _fileName.length() ? _fileName : String("Auto"), R_FILENAME);
   add("Start", String(), R_START);
 
   _rowCount = n;
