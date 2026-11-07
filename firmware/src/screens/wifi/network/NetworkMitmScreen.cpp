@@ -44,7 +44,7 @@ void NetworkMitmScreen::onBack() {
     _showMenu();
     return;
   }
-  if (_state == STATE_FILTERS) { _showMenu(); return; }
+  if (_state == STATE_FILTERS) { _showMenu(_menuIndex); return; }
   Screen.goBack();
 }
 
@@ -109,35 +109,44 @@ void NetworkMitmScreen::_editTarget(uint8_t i) {
 void NetworkMitmScreen::onItemSelected(uint8_t index) {
   if (_state == STATE_FILTERS) {
     uint16_t& mask = _editingPreview ? _previewMask : _captureMask;
-    if (index == 0) mask = 0;                               // All
-    else if (index <= FILTER_COUNT) mask ^= (uint16_t)(1u << (index - 1));
-    // Preview can only narrow what capture keeps: drop bits capture excludes.
-    if (_editingPreview && _captureMask) _previewMask &= _captureMask;
-    _showFilters(true);
+    if (index == 0) {
+      mask = 0;  // All
+    } else if (index < _filterRowCount) {
+      mask ^= (uint16_t)(1u << _filterBitOfRow[index]);
+    }
+    // Preview can only narrow what capture keeps.
+    if (_captureMask) _previewMask &= _captureMask;
+    // SSH/DHCP pattern: pin selection, then rebuild.
+    _selectedIndex = index;
+    _showFilters();
     return;
   }
   if (_state != STATE_MENU || index >= _rowCount) return;
   _menuIndex = index;
+  _selectedIndex = index;
 
   switch (_rowKind[index]) {
     case R_MODE:
       _mode = (Mode)((_mode + 1) % 3);
-      _showMenu(0);   // Mode is row 0; the rows below it change with the mode
+      _selectedIndex = 0;  // Mode is row 0; rows below change with the mode
+      _showMenu(_selectedIndex);
       break;
     case R_TARGET1: case R_TARGET2: case R_TARGET3: case R_TARGET4:
       _editTarget(_rowKind[index] - R_TARGET1);
-      _showMenu(index);
+      _showMenu(_selectedIndex);
       break;
     case R_FILTERS:
       _editingPreview = false;
+      _selectedIndex = 0;  // fresh list → top
       _showFilters();
       break;
     case R_PREVIEW:
       _livePreview = !_livePreview;
-      _showMenu(index);
+      _showMenu(_selectedIndex);
       break;
     case R_PREVFILT:
       _editingPreview = true;
+      _selectedIndex = 0;
       _showFilters();
       break;
     case R_SAVE:
@@ -145,12 +154,12 @@ void NetworkMitmScreen::onItemSelected(uint8_t index) {
         ShowStatusAction::show("SD card not available", 1500); render(); return;
       }
       _saveToFile = !_saveToFile;
-      _showMenu(index);
+      _showMenu(_selectedIndex);
       break;
     case R_FILENAME: {
       String v = InputTextAction::popup("File Name", _fileName, InputTextAction::INPUT_TEXT);
       if (!InputTextAction::wasCancelled()) { v.trim(); _fileName = v; }
-      _showMenu(index);
+      _showMenu(_selectedIndex);
       break;
     }
     case R_START:
@@ -159,25 +168,34 @@ void NetworkMitmScreen::onItemSelected(uint8_t index) {
   }
 }
 
-void NetworkMitmScreen::_showFilters(bool keepSel) {
+void NetworkMitmScreen::_showFilters() {
   static const char* kNames[FILTER_COUNT] = {
     "ARP", "ICMP", "DNS", "DHCP", "HTTP", "TLS/HTTPS",
     "mDNS", "NTP", "SSH", "Telnet", "FTP", "Other TCP/UDP"
   };
   _state = STATE_FILTERS;
   const uint16_t mask = _editingPreview ? _previewMask : _captureMask;
-  // Preview filter is limited to what capture keeps (All capture = all shown).
+  // Preview lists only protocols Capture keeps (All capture = every protocol).
   const uint16_t allowed = (_editingPreview && _captureMask) ? _captureMask : 0xFFFF;
-  snprintf(_filterLabels[0], sizeof(_filterLabels[0]), "[%c] All", mask == 0 ? 'x' : ' ');
-  _filterItems[0] = {_filterLabels[0]};
+
+  uint8_t n = 0;
+  snprintf(_filterLabels[n], sizeof(_filterLabels[n]), "[%c] All", mask == 0 ? 'x' : ' ');
+  _filterItems[n] = {_filterLabels[n], nullptr, 0, false, false};
+  _filterBitOfRow[n] = 0xFF;
+  ++n;
+
   for (uint8_t i = 0; i < FILTER_COUNT; ++i) {
-    const bool dim = !(allowed & (1u << i));   // not captured -> can't preview
-    snprintf(_filterLabels[i + 1], sizeof(_filterLabels[i + 1]), "[%c] %s%s",
-             (mask & (1u << i)) ? 'x' : ' ', kNames[i], dim ? " -" : "");
-    _filterItems[i + 1] = {_filterLabels[i + 1]};
+    if (!(allowed & (1u << i))) continue;
+    snprintf(_filterLabels[n], sizeof(_filterLabels[n]), "[%c] %s",
+             (mask & (1u << i)) ? 'x' : ' ', kNames[i]);
+    _filterItems[n] = {_filterLabels[n], nullptr, 0, false, false};
+    _filterBitOfRow[n] = i;
+    ++n;
   }
-  if (keepSel) { setCount(FILTER_COUNT + 1); render(); }
-  else setItems(_filterItems, FILTER_COUNT + 1);
+  _filterRowCount = n;
+
+  // Same as SshClientScreen::_rebuildItems / DhcpAttackScreen::_showMenu.
+  setItems(_filterItems, n, min<uint8_t>(_selectedIndex, n > 0 ? (uint8_t)(n - 1) : 0));
 }
 
 // ── Start ───────────────────────────────────────────────────────────────────

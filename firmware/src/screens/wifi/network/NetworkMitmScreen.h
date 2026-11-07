@@ -94,6 +94,9 @@ private:
 
   ListItem _filterItems[FILTER_COUNT + 1];
   char     _filterLabels[FILTER_COUNT + 1][18];
+  // Preview may hide protocols Capture excludes → row index ≠ bit index.
+  uint8_t  _filterBitOfRow[FILTER_COUNT + 1] = {};
+  uint8_t  _filterRowCount = 0;
 
   // Engine
   ArpSpoofer _arp;
@@ -120,7 +123,9 @@ private:
   uint8_t _menuIndex = 0;
 
   void _showMenu(uint8_t selected = 0);
-  void _showFilters(bool keepSel = false);   // edits _captureMask or _previewMask
+  // Rebuilds Capture/Preview filter rows. Uses ListScreen::_selectedIndex the
+  // same way SshClientScreen::_rebuildItems does.
+  void _showFilters();
   void _editTarget(uint8_t i);
   void _drawPreview();
   static void _previewSink(const MitmRelay::PacketMeta& m);
