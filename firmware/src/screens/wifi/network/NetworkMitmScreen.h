@@ -60,6 +60,7 @@ public:
 
 private:
   enum State  { STATE_MENU, STATE_FILTERS, STATE_RUNNING };
+  // Modes shown to the user.
   enum Phase  { PHASE_SWEEP, PHASE_POISON };
 
   enum Mode : uint8_t { MODE_FULL, MODE_TARGETED, MODE_PASSIVE };
@@ -75,6 +76,10 @@ private:
   uint32_t _targets[4]    = {};   // network order; 0 = unset
   char     _targetText[4][16] = {};
   uint16_t _captureMask   = 0;    // 0 = All
+  bool     _livePreview   = false;
+  uint16_t _previewMask   = 0;    // 0 = All; subset of _captureMask
+  bool     _previewPaused = false;
+  bool     _editingPreview = false;  // which filter the checkbox list edits
   bool     _saveToFile    = true;
   String   _fileName;
   bool     _arpEnabled     = false;  // derived from Mode at Start
@@ -113,8 +118,10 @@ private:
   uint8_t _menuIndex = 0;
 
   void _showMenu(uint8_t selected = 0);
-  void _showFilters(bool keepSel = false);
+  void _showFilters(bool keepSel = false);   // edits _captureMask or _previewMask
   void _editTarget(uint8_t i);
+  void _drawPreview();
+  static void _previewSink(const MitmRelay::PacketMeta& m);
   void _start();
   void _stop(const char* reason);
   void _drawLog();

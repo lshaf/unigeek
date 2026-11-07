@@ -13,6 +13,20 @@ static constexpr uint64_t kMinFree = 64 * 1024;
 
 static uint16_t s_captureMask = 0;  // relay calls the filter by fn ptr
 static bool mitmCaptureFilter(const uint8_t* eth, uint16_t len);  // defined below
+namespace {
+uint16_t    metaBit(const MitmRelay::PacketMeta& m);
+const char* protoName(uint16_t bit);
+void        ipStr(uint32_t ipN, char* out, size_t n);
+}  // namespace
+
+// Live Preview: the relay sink (WiFi task) writes PacketMeta into this lock-free
+// ring; onUpdate() on the main loop drains it into the LogView. Preview filter
+// applied on drain (UI side), so it never slows the capture path.
+static uint16_t s_previewMask = 0;              // 0 = All (subset of capture)
+static constexpr uint8_t PREV_RING = 64;
+static volatile MitmRelay::PacketMeta s_ring[PREV_RING];
+static volatile uint8_t s_ringHead = 0;         // written by WiFi task
+static volatile uint8_t s_ringTail = 0;         // read by main loop
 
 NetworkMitmScreen::~NetworkMitmScreen() {
   if (_state == STATE_RUNNING) _stop("Screen closed");
@@ -38,11 +52,11 @@ void NetworkMitmScreen::onBack() {
 
 // Row kinds, so a row can move as the mode changes without a fixed index.
 enum : uint8_t { R_MODE, R_TARGET1, R_TARGET2, R_TARGET3, R_TARGET4,
-                 R_FILTERS, R_SAVE, R_FILENAME, R_START };
+                 R_FILTERS, R_PREVIEW, R_PREVFILT, R_SAVE, R_FILENAME, R_START };
 
 void NetworkMitmScreen::_showMenu(uint8_t selected) {
   _state = STATE_MENU;
-  static const char* kModeNames[] = {"Full", "Targeted", "Passive"};
+  static const char* kModeNames[] = {"ARP Poison - Full", "ARP Poison - Targeted", "Passive"};
   const bool decrypted = _mode != MODE_PASSIVE;
 
   uint8_t n = 0;
@@ -60,6 +74,8 @@ void NetworkMitmScreen::_showMenu(uint8_t selected) {
   }
   // Capture filters only mean something on decrypted traffic.
   if (decrypted) add("Capture Filters", _captureMask ? "Custom" : "All", R_FILTERS);
+  add("Live Preview", _livePreview ? "On" : "Off", R_PREVIEW);
+  if (_livePreview && decrypted) add("Preview Filter", _previewMask ? "Custom" : "All", R_PREVFILT);
   add("Save to File", _saveToFile ? "On" : "Off", R_SAVE);
   if (_saveToFile) add("File Name", _fileName.length() ? _fileName : String("(auto)"), R_FILENAME);
   add("Start", String(), R_START);
@@ -90,8 +106,11 @@ void NetworkMitmScreen::_editTarget(uint8_t i) {
 
 void NetworkMitmScreen::onItemSelected(uint8_t index) {
   if (_state == STATE_FILTERS) {
-    if (index == 0) _captureMask = 0;                       // All
-    else if (index <= FILTER_COUNT) _captureMask ^= (uint16_t)(1u << (index - 1));
+    uint16_t& mask = _editingPreview ? _previewMask : _captureMask;
+    if (index == 0) mask = 0;                               // All
+    else if (index <= FILTER_COUNT) mask ^= (uint16_t)(1u << (index - 1));
+    // Preview can only narrow what capture keeps: drop bits capture excludes.
+    if (_editingPreview && _captureMask) _previewMask &= _captureMask;
     _showFilters(true);
     return;
   }
@@ -108,6 +127,15 @@ void NetworkMitmScreen::onItemSelected(uint8_t index) {
       _showMenu(index);
       break;
     case R_FILTERS:
+      _editingPreview = false;
+      _showFilters();
+      break;
+    case R_PREVIEW:
+      _livePreview = !_livePreview;
+      _showMenu(index);
+      break;
+    case R_PREVFILT:
+      _editingPreview = true;
       _showFilters();
       break;
     case R_SAVE:
@@ -135,11 +163,15 @@ void NetworkMitmScreen::_showFilters(bool keepSel) {
     "mDNS", "NTP", "SSH", "Telnet", "FTP", "Other TCP/UDP"
   };
   _state = STATE_FILTERS;
-  snprintf(_filterLabels[0], sizeof(_filterLabels[0]), "[%c] All", _captureMask == 0 ? 'x' : ' ');
+  const uint16_t mask = _editingPreview ? _previewMask : _captureMask;
+  // Preview filter is limited to what capture keeps (All capture = all shown).
+  const uint16_t allowed = (_editingPreview && _captureMask) ? _captureMask : 0xFFFF;
+  snprintf(_filterLabels[0], sizeof(_filterLabels[0]), "[%c] All", mask == 0 ? 'x' : ' ');
   _filterItems[0] = {_filterLabels[0]};
   for (uint8_t i = 0; i < FILTER_COUNT; ++i) {
-    snprintf(_filterLabels[i + 1], sizeof(_filterLabels[i + 1]), "[%c] %s",
-             (_captureMask & (1u << i)) ? 'x' : ' ', kNames[i]);
+    const bool dim = !(allowed & (1u << i));   // not captured -> can't preview
+    snprintf(_filterLabels[i + 1], sizeof(_filterLabels[i + 1]), "[%c] %s%s",
+             (mask & (1u << i)) ? 'x' : ' ', kNames[i], dim ? " -" : "");
     _filterItems[i + 1] = {_filterLabels[i + 1]};
   }
   if (keepSel) { setCount(FILTER_COUNT + 1); render(); }
@@ -245,6 +277,12 @@ void NetworkMitmScreen::_start() {
     // Capture Filters only apply to decrypted (relay) traffic.
     s_captureMask = relayMode ? _captureMask : 0;
     _relay.setCaptureFilter(relayMode ? &mitmCaptureFilter : nullptr);
+    // Live Preview only on decrypted (relay) traffic.
+    const bool preview = _livePreview && relayMode;
+    s_previewMask = preview ? _previewMask : 0;
+    s_ringHead = s_ringTail = 0;
+    _previewPaused = false;
+    _relay.setPreviewSink(preview ? &_previewSink : nullptr);
 
     if (_relay.begin(relayMode ? MitmRelay::MODE_RELAY : MitmRelay::MODE_MONITOR)) {
       _relayUp = true;
@@ -459,10 +497,43 @@ void NetworkMitmScreen::onUpdate() {
     _lastDraw = now;
   }
 
+  // Drain the preview ring into the log (unless the preview is paused). Capture
+  // never pauses — only the on-screen list freezes for inspection.
+  if (_livePreview && _arpEnabled && !_previewPaused) {
+    char line[64];
+    while (s_ringTail != s_ringHead) {
+      volatile MitmRelay::PacketMeta& v = s_ring[s_ringTail];
+      MitmRelay::PacketMeta m;
+      m.ethertype = v.ethertype; m.ipProto = v.ipProto;
+      m.srcIp = v.srcIp; m.dstIp = v.dstIp;
+      m.srcPort = v.srcPort; m.dstPort = v.dstPort; m.length = v.length;
+      s_ringTail = (uint8_t)((s_ringTail + 1) % PREV_RING);
+      const uint16_t bit = metaBit(m);
+      if (s_previewMask && !(s_previewMask & bit)) continue;   // preview filter
+      char src[16] = "", dst[16] = "";
+      if (m.ethertype == 0x0800) { ipStr(m.srcIp, src, sizeof(src)); ipStr(m.dstIp, dst, sizeof(dst)); }
+      if (m.srcPort || m.dstPort)
+        snprintf(line, sizeof(line), "%-5s %s:%u > %s:%u  %uB",
+                 protoName(bit), src, m.srcPort, dst, m.dstPort, m.length);
+      else if (m.ethertype == 0x0800)
+        snprintf(line, sizeof(line), "%-5s %s > %s  %uB", protoName(bit), src, dst, m.length);
+      else
+        snprintf(line, sizeof(line), "%-5s  %uB", protoName(bit), m.length);
+      _log.addLine(line);
+    }
+  }
+
   if (Uni.Nav->wasPressed()) {
     const auto dir = Uni.Nav->readDirection();
-    if (dir == INavigation::DIR_BACK || dir == INavigation::DIR_PRESS) {
+    if (dir == INavigation::DIR_BACK) {
       _stop("Stopped");
+      _showMenu();
+    } else if (dir == INavigation::DIR_PRESS && _livePreview && _arpEnabled) {
+      // Pause/resume the on-screen preview; capture keeps running.
+      _previewPaused = !_previewPaused;
+      render();
+    } else if (dir == INavigation::DIR_PRESS) {
+      _stop("Stopped");   // no preview: a press stops, as before
       _showMenu();
     }
   }
@@ -513,6 +584,14 @@ void NetworkMitmScreen::_drawLog() {
         sp.setTextColor(broken ? TFT_RED : TFT_GREEN, TFT_BLACK);
       }
       sp.drawString(label, 2, barY);
+
+      // Preview paused marker, centred, so it's obvious capture continues while
+      // the list is frozen.
+      if (s->_livePreview && s->_arpEnabled && s->_previewPaused) {
+        sp.setTextDatum(TC_DATUM);
+        sp.setTextColor(TFT_YELLOW, TFT_BLACK);
+        sp.drawString("PAUSED", w / 2, barY);
+      }
 
       // Free heap on the right, alongside the low-water mark. The WiFi driver
       // takes its TX buffers from this heap, so the minimum is what says
@@ -566,3 +645,62 @@ static bool mitmCaptureFilter(const uint8_t* eth, uint16_t len) {
   }
   return m & M::F_OTHER;
 }
+
+
+// WiFi-task callback: stash header-only metadata, drop if the ring is full
+// (preview is best-effort; the PCAP is the record). Cheap and non-blocking.
+void NetworkMitmScreen::_previewSink(const MitmRelay::PacketMeta& m) {
+  const uint8_t next = (uint8_t)((s_ringHead + 1) % PREV_RING);
+  if (next == s_ringTail) return;   // full — skip
+  volatile MitmRelay::PacketMeta& slot = s_ring[s_ringHead];
+  slot.ethertype = m.ethertype; slot.ipProto = m.ipProto;
+  slot.srcIp = m.srcIp; slot.dstIp = m.dstIp;
+  slot.srcPort = m.srcPort; slot.dstPort = m.dstPort; slot.length = m.length;
+  s_ringHead = next;
+}
+
+namespace {
+// Which FilterBit a packet's metadata maps to, for the preview filter.
+uint16_t metaBit(const MitmRelay::PacketMeta& m) {
+  using M = NetworkMitmScreen;
+  if (m.ethertype == 0x0806) return M::F_ARP;
+  if (m.ethertype != 0x0800) return M::F_OTHER;
+  if (m.ipProto == 1) return M::F_ICMP;
+  if (m.ipProto == 6 || m.ipProto == 17) {
+    const uint16_t sp = m.srcPort, dp = m.dstPort;
+    auto is = [&](uint16_t p){ return sp == p || dp == p; };
+    if (is(53))   return M::F_DNS;
+    if (is(67) || is(68)) return M::F_DHCP;
+    if (is(80))   return M::F_HTTP;
+    if (is(443))  return M::F_TLS;
+    if (is(5353)) return M::F_MDNS;
+    if (is(123))  return M::F_NTP;
+    if (is(22))   return M::F_SSH;
+    if (is(23))   return M::F_TELNET;
+    if (is(21))   return M::F_FTP;
+  }
+  return M::F_OTHER;
+}
+
+const char* protoName(uint16_t bit) {
+  switch (bit) {
+    case NetworkMitmScreen::F_ARP:  return "ARP";
+    case NetworkMitmScreen::F_ICMP: return "ICMP";
+    case NetworkMitmScreen::F_DNS:  return "DNS";
+    case NetworkMitmScreen::F_DHCP: return "DHCP";
+    case NetworkMitmScreen::F_HTTP: return "HTTP";
+    case NetworkMitmScreen::F_TLS:  return "TLS";
+    case NetworkMitmScreen::F_MDNS: return "mDNS";
+    case NetworkMitmScreen::F_NTP:  return "NTP";
+    case NetworkMitmScreen::F_SSH:  return "SSH";
+    case NetworkMitmScreen::F_TELNET: return "Telnet";
+    case NetworkMitmScreen::F_FTP:  return "FTP";
+    default: return "TCP/UDP";
+  }
+}
+
+void ipStr(uint32_t ipN, char* out, size_t n) {
+  const uint8_t* b = (const uint8_t*)&ipN;   // network order bytes
+  snprintf(out, n, "%u.%u.%u.%u", b[0], b[1], b[2], b[3]);
+}
+}  // namespace

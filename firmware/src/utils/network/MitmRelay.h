@@ -52,6 +52,20 @@ public:
   // keep everything.
   using CaptureFilter = bool (*)(const uint8_t* eth, uint16_t len);
   void setCaptureFilter(CaptureFilter f) { _captureFilter = f; }
+
+  // Optional Live Preview sink (MITM preview). In RELAY mode, after a frame
+  // passes the capture filter, this is called with HEADER-ONLY metadata of the
+  // decrypted Ethernet frame — never its payload. Used to draw one preview
+  // line per packet; the full frame still goes to the PCAP independently.
+  struct PacketMeta {
+    uint16_t ethertype;
+    uint8_t  ipProto;     // 0 if not IPv4
+    uint32_t srcIp, dstIp;
+    uint16_t srcPort, dstPort;  // 0 if not TCP/UDP
+    uint16_t length;      // on-wire length
+  };
+  using PreviewSink = void (*)(const PacketMeta& m);
+  void setPreviewSink(PreviewSink s) { _previewSink = s; }
   void setArp(ArpSpoofer* a)      { _arp = a; }
   void setForward(bool on)        { _forward = on; }
 
@@ -119,6 +133,8 @@ private:
   static volatile bool  _forwardS;
   static volatile bool  _captureS;    // false = no PCAP attached, skip the ring
   static CaptureFilter  _captureFilter;
+  static PreviewSink    _previewSink;
+  static void _emitPreview(const uint8_t* eth, uint16_t len);
   static char           _errBuf[48];  // backs _error when the text is dynamic
 
   static esp_err_t _rxCb(void* buffer, uint16_t len, void* eb);
