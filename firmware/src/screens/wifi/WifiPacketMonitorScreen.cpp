@@ -418,18 +418,32 @@ void WifiPacketMonitorScreen::_showClients(bool preserveSelection)
     char mac[18];
     _formatMac(_clientMenuMacs[i], mac, sizeof(mac));
     uint8_t observedChannel = 0;
-    for (uint8_t j = 0; j < _seenClientCount; ++j)
+    int8_t observedRssi = 0;
+    bool hasRssi = false;
+
+    for (uint8_t j = 0; j < _seenClientCount; ++j) {
       if (macEq(_seenClients[j].mac, _clientMenuMacs[i])) {
         observedChannel = _seenClients[j].channel;
+        observedRssi = _seenClients[j].rssi;
+        hasRssi = true;
         break;
       }
+    }
+
     if (_bssidCount == 0 && _channelMask == 0 && observedChannel >= 1 && observedChannel <= MAX_CH)
       snprintf(_clientLabels[i + 2], sizeof(_clientLabels[i + 2]), "[%c] %s CH%u",
                _isSelectedClient(_clientMenuMacs[i]) ? 'x' : ' ', mac, observedChannel);
     else
       snprintf(_clientLabels[i + 2], sizeof(_clientLabels[i + 2]), "[%c] %s",
                _isSelectedClient(_clientMenuMacs[i]) ? 'x' : ' ', mac);
+
     _clientItems[i + 2] = {_clientLabels[i + 2]};
+
+    // Adiciona as informações de RSSI e ativa o suporte visual de cor/sinal
+    if (hasRssi) {
+      _clientItems[i + 2].rssi = (int16_t)observedRssi;
+      _clientItems[i + 2].hasRssi = true;
+    }
   }
 
   const uint8_t count = _clientMenuCount + 2;

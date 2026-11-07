@@ -316,7 +316,10 @@ void WifiPacketSnifferScreen::_showMacs(bool preserveSelection) {
       snprintf(_selectLabels[i + 2], sizeof(_selectLabels[i + 2]), "[%c] %s CH%u", _isSelectedMac(_clientMenuMacs[i]) ? 'x' : ' ', m, _clientMenuChannels[i]);
     else
       snprintf(_selectLabels[i + 2], sizeof(_selectLabels[i + 2]), "[%c] %s", _isSelectedMac(_clientMenuMacs[i]) ? 'x' : ' ', m);
+    
     _selectItems[i + 2] = {_selectLabels[i + 2]};
+    _selectItems[i + 2].rssi = _seenClients[order[i]].rssi;
+    _selectItems[i + 2].hasRssi = true;
   }
   const uint8_t count = _clientMenuCount + 2;
   if (preserveSelection) { setCount(count); render(); }
