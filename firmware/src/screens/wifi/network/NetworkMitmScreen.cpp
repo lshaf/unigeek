@@ -61,8 +61,10 @@ void NetworkMitmScreen::_showMenu(uint8_t selected) {
 
   uint8_t n = 0;
   auto add = [&](const char* label, const String& val, uint8_t kind) {
+    if (n >= MAX_ROWS) return;
+    snprintf(_rowLabels[n], sizeof(_rowLabels[n]), "%s", label);  // persistent
     _subs[n] = val;
-    _menuItems[n] = {label, _subs[n].length() ? _subs[n].c_str() : nullptr};
+    _menuItems[n] = {_rowLabels[n], _subs[n].length() ? _subs[n].c_str() : nullptr};
     _rowKind[n] = kind; ++n;
   };
   add("Mode", kModeNames[_mode], R_MODE);
@@ -120,7 +122,7 @@ void NetworkMitmScreen::onItemSelected(uint8_t index) {
   switch (_rowKind[index]) {
     case R_MODE:
       _mode = (Mode)((_mode + 1) % 3);
-      _showMenu(index);
+      _showMenu(0);   // Mode is row 0; the rows below it change with the mode
       break;
     case R_TARGET1: case R_TARGET2: case R_TARGET3: case R_TARGET4:
       _editTarget(_rowKind[index] - R_TARGET1);

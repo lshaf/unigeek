@@ -85,9 +85,11 @@ private:
   bool     _arpEnabled     = false;  // derived from Mode at Start
   bool     _snifferEnabled = true;   // derived from _saveToFile at Start
 
-  String   _subs[10];
-  ListItem _menuItems[10];
-  uint8_t  _rowKind[10] = {};
+  static constexpr uint8_t MAX_ROWS = 12;
+  String   _subs[MAX_ROWS];
+  char     _rowLabels[MAX_ROWS][16];   // persistent labels (e.g. "Target 1")
+  ListItem _menuItems[MAX_ROWS];
+  uint8_t  _rowKind[MAX_ROWS] = {};
   uint8_t  _rowCount    = 0;
 
   ListItem _filterItems[FILTER_COUNT + 1];
