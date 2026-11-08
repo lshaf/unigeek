@@ -175,6 +175,7 @@ private:
   static constexpr int MAX_EXPLICIT = 4;
   uint32_t _explicit[MAX_EXPLICIT] = {};  // network order
   uint8_t  _explicitCount = 0;
+  uint8_t  _peerIdx = 0;     // cycles through peer pairs in targeted mode
   uint32_t _netH      = 0;   // network address, host byte order
   uint32_t _maskH     = 0;   // subnet mask, host byte order
   uint32_t _sweepIdx  = 0;
@@ -205,4 +206,6 @@ private:
   void _queueRetry(const uint8_t* frame);
   int  _indexOf(uint32_t ip) const;
   void _add(uint32_t ip, const uint8_t* mac);
+  bool _isExplicit(uint32_t ip) const;
+  void _poisonPeers();
 };

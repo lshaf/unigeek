@@ -209,13 +209,11 @@ void NetworkMitmScreen::_start() {
   // not (monitor, encrypted). Targets needs at least one IP.
   _arpEnabled     = _mode != MODE_PASSIVE;
   _snifferEnabled = _saveToFile;
+  uint32_t peerIps[4];
+  uint8_t  peerN = 0;
   if (_mode == MODE_TARGETS) {
-    uint32_t ips[4]; uint8_t nt = 0;
-    for (uint8_t i = 0; i < 4; ++i) if (_targets[i]) ips[nt++] = _targets[i];
-    if (nt == 0) { ShowStatusAction::show("No target set", 1500); return; }
-    _arp.setTargets(ips, nt);
-  } else {
-    _arp.setTargets(nullptr, 0);  // full-subnet sweep
+    for (uint8_t i = 0; i < 4; ++i) if (_targets[i]) peerIps[peerN++] = _targets[i];
+    if (peerN == 0) { ShowStatusAction::show("No target set", 1500); return; }
   }
 
   _log.clear();
@@ -279,6 +277,12 @@ void NetworkMitmScreen::_start() {
   // 2. ARP spoofer — must be up before the relay so the hook can feed it.
   if (_arpEnabled) {
     if (_arp.begin()) {
+      // setTargets after begin() so self/gateway are known and filtered out.
+      // With two or more targets the spoofer also poisons each against the
+      // others, so traffic between them is intercepted even when neither is
+      // the gateway.
+      _arp.setTargets(_mode == MODE_TARGETS ? peerIps : nullptr,
+                      _mode == MODE_TARGETS ? peerN : 0);
       _arpUp = true;
       snprintf(buf, sizeof(buf), "Sweeping %lu hosts...",
                (unsigned long)_arp.sweepTotal());
