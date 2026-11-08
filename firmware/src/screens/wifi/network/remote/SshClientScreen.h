@@ -22,15 +22,10 @@ public:
   void onBack() override;
 
 private:
-  // Setup rows, in display order. ROW_SECRET is Password or Key File; Connect
-  // follows it (or takes its place before an auth method is chosen), see
-  // _connectRow(). Used for the switch, the list and every place that restores
-  // the highlight, so a row can't drift out of sync.
   enum ConfigRow : uint8_t { ROW_HOST, ROW_PORT, ROW_USER, ROW_AUTH, ROW_SECRET };
 
   enum State : uint8_t {
     STATE_CONFIG,
-    STATE_SELECT_AUTH,
     STATE_SELECT_KEY,
     STATE_CONNECTING,
     STATE_HOSTKEY_CONFIRM,
@@ -76,10 +71,6 @@ private:
   ListItem _items[ROW_SECRET + 2];  // + Password/Key File + Connect
   BrowseFileView _browser;
   String _browsePath = "/unigeek/wifi/remote/ssh";
-  ListItem _authItems[2] = {
-    {"Password", nullptr},
-    {"Private Key", nullptr},
-  };
 
   TaskHandle_t _sshTask = nullptr;
   SemaphoreHandle_t _ioMutex = nullptr;
@@ -110,8 +101,7 @@ private:
   void _configPort();
   void _configUsername();
   void _configPassword();
-  void _auth();
-  void _selectAuth(uint8_t index);
+  void _toggleAuthMode();
   void _openKeyPicker();
   void _loadKeyDir(const String& path);
   void _selectKey(uint8_t index);

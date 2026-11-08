@@ -17,8 +17,6 @@ SshClientScreen::~SshClientScreen() {
 #endif
   _closeConnection(false);
 
-  // The worker owns libssh objects. Do not destroy synchronization primitives
-  // until it has finished its cleanup.
   uint32_t start = millis();
   while (_sshTask && millis() - start < 3000) {
     delay(10);
@@ -61,7 +59,7 @@ void SshClientScreen::onUpdate() {
     return;
   }
 
-  if (_state == STATE_SELECT_AUTH || _state == STATE_SELECT_KEY) {
+  if (_state == STATE_SELECT_KEY) {
     ListScreen::onUpdate();
     return;
   }
@@ -114,8 +112,6 @@ void SshClientScreen::onUpdate() {
     }
 
     if (Uni.Nav->wasPressed() && Uni.Nav->readDirection() == INavigation::DIR_BACK) {
-      // Request cancellation, but stay in CONNECTING until the worker has
-      // actually released its libssh objects.
       _stopRequested = true;
     }
     return;
@@ -172,7 +168,7 @@ void SshClientScreen::onUpdate() {
 }
 
 void SshClientScreen::onRender() {
-  if (_state == STATE_CONFIG || _state == STATE_SELECT_AUTH || _state == STATE_SELECT_KEY) {
+  if (_state == STATE_CONFIG || _state == STATE_SELECT_KEY) {
     ListScreen::onRender();
     return;
   }
@@ -188,11 +184,6 @@ void SshClientScreen::onRender() {
 }
 
 void SshClientScreen::onItemSelected(uint8_t index) {
-  if (_state == STATE_SELECT_AUTH) {
-    _selectAuth(index);
-    return;
-  }
-
   if (_state == STATE_SELECT_KEY) {
     _selectKey(index);
     return;
@@ -206,7 +197,7 @@ void SshClientScreen::onItemSelected(uint8_t index) {
     case ROW_HOST: _configHost();     break;
     case ROW_PORT: _configPort();     break;
     case ROW_USER: _configUsername(); break;
-    case ROW_AUTH: _auth();           break;
+    case ROW_AUTH: _toggleAuthMode(); break;
     case ROW_SECRET:
       if (_authMode == AUTH_PASSWORD) _configPassword();
       else                            _openKeyPicker();
@@ -226,9 +217,8 @@ void SshClientScreen::onBack() {
     return;
   }
 
-  if (_state == STATE_SELECT_AUTH || _state == STATE_SELECT_KEY) {
-    // Cancelled: back to the row that opened the submenu.
-    _returnToConfig(_state == STATE_SELECT_AUTH ? ROW_AUTH : ROW_SECRET);
+  if (_state == STATE_SELECT_KEY) {
+    _returnToConfig(ROW_SECRET);
     render();
     return;
   }
@@ -282,9 +272,6 @@ void SshClientScreen::_rebuildItems() {
   setItems(_items, connectRow + 1, min<uint8_t>(_selectedIndex, connectRow));
 }
 
-// Back to the setup list with `row` highlighted. Needed whenever another list
-// (auth options, key browser) or the session was shown, since its row index
-// would otherwise leak into setup.
 void SshClientScreen::_returnToConfig(uint8_t row) {
   _selectedIndex = row;
   _state = STATE_CONFIG;
@@ -348,30 +335,16 @@ void SshClientScreen::_configPassword() {
   render();
 }
 
-void SshClientScreen::_auth() {
-  _state = STATE_SELECT_AUTH;
-
-  // If no method has been chosen yet, start on Password without making it the
-  // active method until the user actually confirms the selection.
-  uint8_t selected = (_authMode == AUTH_PRIVATE_KEY) ? 1 : 0;
-  setItems(_authItems, 2, selected);
-  render();
-}
-
-void SshClientScreen::_selectAuth(uint8_t index) {
-  if (index > 1) return;
-
-  _authMode = (index == 0) ? AUTH_PASSWORD : AUTH_PRIVATE_KEY;
-
-  if (_authMode == AUTH_PASSWORD) {
+void SshClientScreen::_toggleAuthMode() {
+  if (_authMode == AUTH_PRIVATE_KEY) {
+    _authMode = AUTH_PASSWORD;
     _keyData = "";
   } else {
+    _authMode = AUTH_PRIVATE_KEY;
     _password = "";
   }
-
-  // The submenu index (0/1) must not leak into setup, otherwise it jumps to
-  // Host/Port.
-  _returnToConfig(ROW_AUTH);
+  _updateLabels();
+  _rebuildItems();
   render();
 }
 
@@ -382,8 +355,6 @@ void SshClientScreen::_openKeyPicker() {
     return;
   }
 
-  // Keep SSH keys under the Wi-Fi subtree by default. Create each level
-  // explicitly because not every storage backend creates parent directories.
   Uni.Storage->makeDir("/unigeek");
   Uni.Storage->makeDir("/unigeek/wifi");
   Uni.Storage->makeDir("/unigeek/wifi/remote");
@@ -412,7 +383,7 @@ void SshClientScreen::_selectKey(uint8_t index) {
   }
 
   _keyPath = entry.path;
-  _returnToConfig(ROW_SECRET);  // not the browser's row index
+  _returnToConfig(ROW_SECRET);
   render();
 }
 
@@ -538,8 +509,6 @@ void SshClientScreen::_sshWorker() {
   ssh_session session = nullptr;
   ssh_channel channel = nullptr;
 
-  // Copy connection settings before entering libssh. The CONFIG UI is no longer
-  // editable while STATE_CONNECTING is active.
   String host = _host;
   String user = _username;
   String password = _password;
@@ -571,7 +540,6 @@ void SshClientScreen::_sshWorker() {
 
   if (_stopRequested) goto cleanup;
 
-  // Present the server identity before sending any user credential.
   {
     ssh_key serverKey = nullptr;
     unsigned char* hash = nullptr;
@@ -694,9 +662,6 @@ void SshClientScreen::_sshWorker() {
     bool activity = false;
     char buf[256];
 
-    // TX queue: move complete commands out of the shared String, then keep
-    // retrying a temporarily non-writable channel. A zero-byte write is not an
-    // error in non-blocking mode and must not silently discard the tail.
     String tx;
     if (_ioMutex && xSemaphoreTake(_ioMutex, pdMS_TO_TICKS(10)) == pdTRUE) {
       if (_workerTx.length() > 0) {
@@ -795,9 +760,6 @@ void SshClientScreen::_closeConnection(bool returnToConfig) {
   _stopRequested = true;
   _hostKeyDecision = -1;
 
-  // When the session is already running, the worker is non-blocking and should
-  // exit promptly. Avoid deleting it from the UI task because libssh objects
-  // belong exclusively to the worker.
   uint32_t start = millis();
   while (_sshTask && _workerState == WORKER_RUNNING && millis() - start < 500) {
     delay(5);
@@ -1125,8 +1087,6 @@ void SshClientScreen::_renderConnecting() {
 
 void SshClientScreen::_acceptHostKey(bool trust) {
   _hostKeyDecision = trust ? 1 : -1;
-  // Leave WAIT_HOSTKEY immediately on the UI side. Otherwise onUpdate() can
-  // re-open the Trust prompt before the worker observes the decision.
   _workerState = WORKER_CONNECTING;
 
   if (trust) {
@@ -1171,8 +1131,6 @@ void SshClientScreen::_renderHostKeyConfirm() {
     xSemaphoreGive(_ioMutex);
   }
 
-  // 6 px per character with font 1. Wrap the SHA-256 fingerprint so the entire
-  // server identity remains visible even on narrow screens.
   const int charsPerLine = max(8, (w - PAD * 2) / 6);
   int pos = 0;
   while (pos < (int)fingerprint.length() && cy < y + h - 34) {

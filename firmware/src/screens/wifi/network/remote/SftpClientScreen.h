@@ -30,7 +30,6 @@ private:
   enum State : uint8_t {
     STATE_ACTION,
     STATE_CONFIG,
-    STATE_SELECT_AUTH,
     STATE_SELECT_KEY,
     STATE_CONNECTING,
     STATE_HOSTKEY_CONFIRM,
@@ -104,10 +103,6 @@ private:
     {"Upload", nullptr},
   };
   ListItem _configItems[ROW_SECRET + 2];  // + Password/Key File + Connect
-  ListItem _authItems[2] = {
-    {"Password", nullptr},
-    {"Private Key", nullptr},
-  };
 
   BrowseFileView _localBrowser;
   String _localBrowsePath = "/unigeek/wifi/remote/ssh";
@@ -166,8 +161,7 @@ private:
   void _configPort();
   void _configUsername();
   void _configPassword();
-  void _selectAuthMenu();
-  void _selectAuth(uint8_t index);
+  void _toggleAuthMode();
   void _openKeyPicker();
   void _loadKeyDir(const String& path, const String& restoreName = "");
   void _selectKey(uint8_t index);
