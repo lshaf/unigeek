@@ -685,16 +685,17 @@ void WifiPacketSnifferScreen::_renderPackets() {
   else
     snprintf(elapsed, sizeof(elapsed), "%02lu:%02lu",
              (unsigned long)(seconds / 60), (unsigned long)(seconds % 60));
-  snprintf(totalText, sizeof(totalText), "%lu", (unsigned long)_totalPackets.load(std::memory_order_relaxed));
-  snprintf(rateText, sizeof(rateText), "%lu", (unsigned long)_packetsPerSecond);
-  Uni.Lcd.setTextDatum(TL_DATUM);
+  snprintf(totalText, sizeof(totalText), "Total %lu", (unsigned long)_totalPackets.load(std::memory_order_relaxed));
+  snprintf(rateText, sizeof(rateText), "P/s %lu", (unsigned long)_packetsPerSecond);
+  char timeText[24];
+  snprintf(timeText, sizeof(timeText), "Time %s", elapsed);
   Uni.Lcd.setTextColor(TFT_LIGHTGREY, TFT_BLACK);
-  // Compact single-line stats; reserve the bottom line for navigation hints.
-  char stats[80];
-  snprintf(stats, sizeof(stats), "Time %s  Total %s  P/s %s", elapsed, totalText, rateText);
-  while (stats[0] && Uni.Lcd.textWidth(stats) > bodyW() - 4)
-    stats[strlen(stats) - 1] = '\0';
-  Uni.Lcd.drawString(stats, bodyX() + 2, footerY + 2);
+  Uni.Lcd.setTextDatum(TL_DATUM);
+  Uni.Lcd.drawString(timeText, bodyX() + 2, footerY + 2);
+  Uni.Lcd.setTextDatum(TC_DATUM);
+  Uni.Lcd.drawString(totalText, bodyX() + bodyW() / 2, footerY + 2);
+  Uni.Lcd.setTextDatum(TR_DATUM);
+  Uni.Lcd.drawString(rateText, bodyX() + bodyW() - 2, footerY + 2);
   Uni.Lcd.drawFastHLine(bodyX(), separatorY, bodyW(), TFT_DARKGREY);
   if (_captureActive) {
     char status[32];
