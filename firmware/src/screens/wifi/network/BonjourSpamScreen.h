@@ -21,7 +21,7 @@ public:
 private:
   enum State { ST_IDLE, ST_RUNNING };
 
-  // Idle list rows: [0] Start Spam, [1..N] category toggles
+  // Idle list rows: [0..CAT_COUNT-1] category toggles, [CAT_COUNT] Start
   static constexpr uint8_t IDLE_ROWS = 1 + BonjourSpamUtil::CAT_COUNT;
 
   State    _state          = ST_IDLE;
@@ -33,7 +33,7 @@ private:
   bool     _statusChrome   = false;
 
   ListItem _items[IDLE_ROWS];
-  String   _itemSubs[IDLE_ROWS];
+  String   _itemSubs[BonjourSpamUtil::CAT_COUNT]; // Stores sublabels only for categories
 
   void _showIdle();
   void _refreshIdleLabels();
