@@ -56,7 +56,7 @@ enum : uint8_t { R_MODE, R_TARGET1, R_TARGET2, R_TARGET3, R_TARGET4,
 
 void NetworkMitmScreen::_showMenu(uint8_t selected) {
   _state = STATE_MENU;
-  static const char* kModeNames[] = {"ARP Poison - Full", "ARP Poison - Targeted", "Passive"};
+  static const char* kModeNames[] = {"ARP Poison - All", "ARP Poison - Targets", "Passive"};
   const bool decrypted = _mode != MODE_PASSIVE;
 
   uint8_t n = 0;
@@ -68,7 +68,7 @@ void NetworkMitmScreen::_showMenu(uint8_t selected) {
     _rowKind[n] = kind; ++n;
   };
   add("Mode", kModeNames[_mode], R_MODE);
-  if (_mode == MODE_TARGETED) {
+  if (_mode == MODE_TARGETS) {
     for (uint8_t i = 0; i < 4; ++i) {
       char lbl[12]; snprintf(lbl, sizeof(lbl), "Target %u", i + 1);
       add(lbl, _targets[i] ? String(_targetText[i]) : String("-"), R_TARGET1 + i);
@@ -205,11 +205,11 @@ void NetworkMitmScreen::_start() {
     ShowStatusAction::show("Not connected", 1500);
     return;
   }
-  // Mode -> engine flags. Full/Targeted poison (relay, decrypted); Passive does
-  // not (monitor, encrypted). Targeted needs at least one IP.
+  // Mode -> engine flags. All/Targets poison (relay, decrypted); Passive does
+  // not (monitor, encrypted). Targets needs at least one IP.
   _arpEnabled     = _mode != MODE_PASSIVE;
   _snifferEnabled = _saveToFile;
-  if (_mode == MODE_TARGETED) {
+  if (_mode == MODE_TARGETS) {
     uint32_t ips[4]; uint8_t nt = 0;
     for (uint8_t i = 0; i < 4; ++i) if (_targets[i]) ips[nt++] = _targets[i];
     if (nt == 0) { ShowStatusAction::show("No target set", 1500); return; }

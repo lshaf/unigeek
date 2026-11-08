@@ -4,9 +4,9 @@
 // A setup screen (Mode, Targets, Capture Filters, Save to File) feeding one
 // engine. Mode chooses how traffic is captured:
 //
-//   Full      poison every host in the subnet; the relay yields decrypted
+//   All       poison every host in the subnet; the relay yields decrypted
 //             Ethernet, which is what the capture and preview see.
-//   Targeted  poison only the 1-4 chosen IPs (ArpSpoofer::setTargets).
+//   Targets   poison only the 1-4 chosen IPs (ArpSpoofer::setTargets).
 //   Passive   no poisoning: 802.11 promiscuous capture of the current
 //             channel — everything on the air, but CCMP-encrypted.
 //
@@ -63,7 +63,7 @@ private:
   // Modes shown to the user.
   enum Phase  { PHASE_SWEEP, PHASE_POISON };
 
-  enum Mode : uint8_t { MODE_FULL, MODE_TARGETED, MODE_PASSIVE };
+  enum Mode : uint8_t { MODE_ALL, MODE_TARGETS, MODE_PASSIVE };
 
 
   static constexpr const char* SAVE_DIR = "/unigeek/wifi/sniffer";
@@ -72,7 +72,7 @@ private:
   Phase _phase = PHASE_SWEEP;
 
   // Setup
-  Mode     _mode          = MODE_FULL;
+  Mode     _mode          = MODE_ALL;
   uint32_t _targets[4]    = {};   // network order; 0 = unset
   char     _targetText[4][16] = {};
   uint16_t _captureMask   = 0;    // 0 = All
