@@ -31,7 +31,6 @@
 #pragma once
 
 #include "ui/templates/ListScreen.h"
-#include "ui/views/LogView.h"
 #include "utils/network/ArpSpoofer.h"
 #include "utils/network/MitmRelay.h"
 #include "utils/network/PcapWriter.h"
@@ -120,19 +119,12 @@ private:
   unsigned long _lastSweep   = 0;
   unsigned long _lastPoison  = 0;
   unsigned long _lastRescan  = 0;
-  unsigned long _lastStats   = 0;
   unsigned long _lastDraw    = 0;
   unsigned long _lastFreeChk = 0;
   unsigned long _sessionStartMs = 0;
   unsigned long _lastRateMs  = 0;
   uint32_t      _lastRateSeen = 0;
   uint32_t      _packetsPerSec = 0;
-  int           _lastTargets   = 0;
-  uint32_t      _lastProbeLost    = 0;
-  uint32_t      _lastProbeDropped = 0;
-  bool          _gwLogged      = false; // gateway MAC printed once, when learned
-
-  LogView _log;
 
   uint8_t _menuIndex = 0;
 
@@ -148,7 +140,6 @@ private:
   static void _previewSink(const MitmRelay::PacketMeta& m);
   void _start();
   void _stop(const char* reason);
-  void _drawLog();
   bool _checkFreeSpace();
   static void _fmtMac(const uint8_t* mac, char* out, size_t n);
 };

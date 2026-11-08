@@ -121,6 +121,7 @@ void NetworkMitmScreen::_editTarget(uint8_t i) {
   const auto mode = InputTextAction::INPUT_IP_ADDRESS;
 #endif
   String v = InputTextAction::popup("Target IP", initial, mode);
+  render();  // the popup wipes its area to black and does not restore the menu
   if (InputTextAction::wasCancelled()) return;
   v.trim();
   if (v.length() == 0) { _targets[i] = 0; _targetText[i][0] = '\0'; return; }
@@ -182,6 +183,7 @@ void NetworkMitmScreen::onItemSelected(uint8_t index) {
       break;
     case R_FILENAME: {
       String v = InputTextAction::popup("File Name", _fileName, InputTextAction::INPUT_TEXT);
+      render();
       if (!InputTextAction::wasCancelled()) { v.trim(); _fileName = v; }
       _showMenu(_selectedIndex);
       break;
@@ -241,12 +243,7 @@ void NetworkMitmScreen::_start() {
     if (peerN == 0) { ShowStatusAction::show("No target set", 1500); return; }
   }
 
-  _log.clear();
   _relayUp = _arpUp = _pcapUp = false;
-  _lastTargets      = 0;
-  _lastProbeLost    = 0;
-  _lastProbeDropped = 0;
-  _gwLogged         = false;
   _phase       = PHASE_SWEEP;
 
   char buf[60];
@@ -254,7 +251,6 @@ void NetworkMitmScreen::_start() {
   snprintf(buf, sizeof(buf), "IP: %s, gateway: %s",
            WiFi.localIP().toString().c_str(),
            WiFi.gatewayIP().toString().c_str());
-  _log.addLine(buf);
 
   // Our MAC is what a poisoned victim should show for the gateway. Print it
   // here so the two values can be compared without leaving this screen.
@@ -262,14 +258,12 @@ void NetworkMitmScreen::_start() {
   WiFi.macAddress(self);
   _fmtMac(self, mac, sizeof(mac));
   snprintf(buf, sizeof(buf), "MAC: %s", mac);
-  _log.addLine(buf, TFT_YELLOW);
 
   // Baseline heap. Serving portal files is the heaviest allocator in the whole
   // attack, so knowing what we started with tells a leak apart from simply not
   // having had the room to begin with.
   const uint32_t heap0 = ESP.getFreeHeap() / 1024;
   snprintf(buf, sizeof(buf), "Heap: %lu KB free", (unsigned long)heap0);
-  _log.addLine(buf, heap0 < 40 ? TFT_RED : TFT_DARKGREY);
 
   // 1. Capture file. Link type depends on where the frames come from: the relay
   //    yields decrypted Ethernet, the monitor fallback raw 802.11.
@@ -278,10 +272,8 @@ void NetworkMitmScreen::_start() {
   const char* nameBase = _fileName.length() ? _fileName.c_str() : WiFi.SSID().c_str();
   if (_snifferEnabled) {
     if (!Uni.StorageSD || !Uni.StorageSD->isAvailable()) {
-      _log.addLine("SD card not available", TFT_RED);
       _snifferEnabled = false;
     } else if (Uni.StorageSD->freeBytes() < kMinFree) {
-      _log.addLine("SD card full", TFT_RED);
       _snifferEnabled = false;
     } else {
       const uint32_t linktype = relayMode ? PcapWriter::LINKTYPE_ETHERNET
@@ -289,11 +281,8 @@ void NetworkMitmScreen::_start() {
       if (_pcap.begin(Uni.StorageSD, SAVE_DIR, nameBase, linktype, MitmRelay::SNAP_LEN)) {
         _pcapUp = true;
         snprintf(buf, sizeof(buf), "PCAP: %s", _pcap.filename().c_str());
-        _log.addLine(buf, TFT_GREEN);
-        _log.addLine(relayMode ? "    Ethernet (decrypted)" : "    802.11 (encrypted)");
       } else {
         snprintf(buf, sizeof(buf), "%s", _pcap.error() ? _pcap.error() : "Failed to create PCAP");
-        _log.addLine(buf, TFT_RED);
         _snifferEnabled = false;
       }
     }
@@ -311,9 +300,7 @@ void NetworkMitmScreen::_start() {
       _arpUp = true;
       snprintf(buf, sizeof(buf), "Sweeping %lu hosts...",
                (unsigned long)_arp.sweepTotal());
-      _log.addLine(buf);
     } else {
-      _log.addLine("Failed to start ARP spoofing", TFT_RED);
       _arpEnabled = false;
     }
   }
@@ -338,10 +325,8 @@ void NetworkMitmScreen::_start() {
 
     if (_relay.begin(relayMode ? MitmRelay::MODE_RELAY : MitmRelay::MODE_MONITOR)) {
       _relayUp = true;
-      _log.addLine(relayMode ? "Relay active" : "Monitor active", TFT_GREEN);
     } else {
       snprintf(buf, sizeof(buf), "Relay: %s", _relay.error());
-      _log.addLine(buf, TFT_RED);
       _stop(_relay.error());
       _showMenu();
       return;
@@ -352,7 +337,6 @@ void NetworkMitmScreen::_start() {
     // Everything the user picked failed to come up. The per-component lines
     // above already say why; repeat the first cause in the toast so it is
     // visible without scrolling the log.
-    _log.addLine("Nothing started", TFT_RED);
     _stop(_pcap.error() ? _pcap.error() : "Nothing started");
     _showMenu();
     return;
@@ -413,16 +397,6 @@ void NetworkMitmScreen::onUpdate() {
 
   if (_relayUp) _relay.update();
 
-  // The gateway usually answers within the first second of the sweep; print its
-  // real MAC as soon as it is known, before any poisoning takes effect.
-  if (_arpUp && !_gwLogged && _arp.gatewayKnown()) {
-    _gwLogged = true;
-    char mac[20], line[60];
-    _fmtMac(_arp.gatewayMac(), mac, sizeof(mac));
-    snprintf(line, sizeof(line), "Gateway: %s", mac);
-    _log.addLine(line, TFT_CYAN);
-  }
-
   if (_arpUp) {
     // Answers to reachability probes the driver refused. Runs every iteration
     // and paces itself — it has to get in ahead of everything else here, since
@@ -438,12 +412,6 @@ void NetworkMitmScreen::onUpdate() {
       if (_arp.sweepDone() && _phase == PHASE_SWEEP) {
         _phase      = PHASE_POISON;
         _lastRescan = now;
-        char buf[60];
-        snprintf(buf, sizeof(buf), "%d hosts, gateway: %s",
-                 _arp.targetCount(), _arp.gatewayKnown() ? "ok" : "UNKNOWN");
-        _log.addLine(buf, _arp.gatewayKnown() ? TFT_GREEN : TFT_RED);
-        if (!_arp.gatewayKnown())
-          _log.addLine("Gateway MAC not found, skipping poisoning", TFT_RED);
       }
     }
 
@@ -465,38 +433,10 @@ void NetworkMitmScreen::onUpdate() {
         _arp.restartSweep();
         _lastRescan = now;
       }
-
-      // A lost gateway claim is the failure mode that looks like nothing at all:
-      // the victim silently goes back to the real gateway and the attack is
-      // over with every counter still climbing. The two causes need different
-      // fixes, so they get different lines — reporting a full queue as TX
-      // starvation sends the next person debugging this the wrong way.
-      if (_arp.probeLost() != _lastProbeLost) {
-        _lastProbeLost = _arp.probeLost();
-        char buf[52];
-        snprintf(buf, sizeof(buf), "%lu gateway claims lost, TX starved",
-                 (unsigned long)_lastProbeLost);
-        _log.addLine(buf, TFT_RED);
-      }
-      if (_arp.probeDropped() != _lastProbeDropped) {
-        _lastProbeDropped = _arp.probeDropped();
-        char buf[52];
-        snprintf(buf, sizeof(buf), "%lu gateway claims dropped, queue full",
-                 (unsigned long)_lastProbeDropped);
-        _log.addLine(buf, TFT_RED);
-      }
-
-      if (_arp.targetCount() != _lastTargets) {
-        _lastTargets = _arp.targetCount();
-        char buf[48];
-        snprintf(buf, sizeof(buf), "Poisoning %d hosts", _lastTargets);
-        _log.addLine(buf, TFT_GREEN);
-      }
     }
   }
 
   if (_relayUp && _relay.storageFailed()) {
-    _log.addLine("Failed to write to SD", TFT_RED);
     _stop("Failed to write to SD");
     _showMenu();
     return;
@@ -509,43 +449,6 @@ void NetworkMitmScreen::onUpdate() {
       _showMenu();
       return;
     }
-  }
-
-  // The status bar is one line on a 240 px screen and cannot hold every
-  // counter — it was being cut off exactly when the numbers mattered. Dump a
-  // compact snapshot into the log instead, where it scrolls and stays readable.
-  if (now - _lastStats > 10000) {
-    _lastStats = now;
-    char s[60];
-    // Two lines, because S is the one that settles what is actually wrong and
-    // it must not be the field that gets truncated. S counts every frame the
-    // RX hook was handed; F how many of those were relayed. S flat while the
-    // victim is poisoned means its traffic is not reaching us at all — a
-    // different failure from S climbing with F stuck, which would be the relay
-    // refusing to forward.
-    snprintf(s, sizeof(s), "[=] S%lu F%lu X%lu L%lu",
-             (unsigned long)_relay.seen(),
-             (unsigned long)_relay.forwarded(),
-             (unsigned long)_relay.txFailed(),
-             (unsigned long)_relay.loopDropped());
-    _log.addLine(s, TFT_DARKGREY);
-
-    // G counts the router broadcasting its own address, which corrects every
-    // cache on the segment at once. The two heap figures are free now and the
-    // low-water mark: this board has no PSRAM, and the WiFi driver takes its RX
-    // buffers from the same heap the web server allocates from, so a low
-    // minimum means frames were being dropped before the relay ever saw them.
-    snprintf(s, sizeof(s), "[=] A%lu!%lu R%lu!%lud%lu G%lu %luk/%luk",
-             (unsigned long)_arp.arpSent(),
-             (unsigned long)_arp.arpFailed(),
-             (unsigned long)_arp.probeRetried(),
-             (unsigned long)_arp.probeLost(),
-             (unsigned long)_arp.probeDropped(),
-             (unsigned long)_arp.gatewayAnnounced(),
-             (unsigned long)(ESP.getFreeHeap() / 1024),
-             (unsigned long)(ESP.getMinFreeHeap() / 1024));
-    _log.addLine(s, TFT_DARKGREY);
-    _lastDraw = 0;
   }
 
   if (now - _lastRateMs >= 1000) {
@@ -712,8 +615,8 @@ void NetworkMitmScreen::_drawPreview() {
     row.fillSprite(bg);
 
     if (have) {
-      char src[16] = "", dst[16] = "", sz[8] = "", rest[48];
-      if (m.ethertype == 0x0800) { ipStr(m.srcIp, src, sizeof(src)); ipStr(m.dstIp, dst, sizeof(dst)); }
+      char src[8] = "", dst[8] = "", sz[8] = "", rest[36];
+      if (m.ethertype == 0x0800) { ipShort(m.srcIp, src, sizeof(src)); ipShort(m.dstIp, dst, sizeof(dst)); }
       sizeStr(m.length, sz, sizeof(sz));
       if (m.srcPort || m.dstPort)
         snprintf(rest, sizeof(rest), "%s:%u>%s:%u", src, m.srcPort, dst, m.dstPort);
@@ -729,15 +632,17 @@ void NetworkMitmScreen::_drawPreview() {
       row.setTextColor(selected ? TFT_WHITE : TFT_LIGHTGREY, bg);
       row.setTextDatum(TR_DATUM);
       row.drawString(sz, bodyW() - 2, 1);
-      const int left = 2 + row.textWidth(name) + 2;
-      const int right = bodyW() - 2 - row.textWidth(sz) - 2;
-      if (right > left) {
-        // Clip the address run so it never runs into the size.
+
+      // Address centred in the gap between the protocol and the size.
+      const int left = 2 + row.textWidth(name) + 4;
+      const int right = bodyW() - 2 - row.textWidth(sz) - 4;
+      if (rest[0] && right > left) {
         while (rest[0] && row.textWidth(rest) > right - left)
           rest[strlen(rest) - 1] = '\0';
-        row.setTextDatum(TL_DATUM);
-        row.drawString(rest, left, 1);
+        row.setTextDatum(TC_DATUM);
+        row.drawString(rest, (left + right) / 2, 1);
       }
+      row.setTextDatum(TL_DATUM);
     }
     row.pushSprite(bodyX(), y);
     y += lineH;
@@ -812,60 +717,6 @@ void NetworkMitmScreen::_drawDetails() {
 }
 
 // ── Status bar ──────────────────────────────────────────────────────────────
-
-void NetworkMitmScreen::_drawLog() {
-  _log.draw(Uni.Lcd, bodyX(), bodyY(), bodyW(), bodyH(),
-    [](Sprite& sp, int barY, int w, void* ud) {
-      auto* s = static_cast<NetworkMitmScreen*>(ud);
-      sp.setTextDatum(TL_DATUM);
-      char label[48];
-
-      if (s->_arpUp && s->_phase == PHASE_SWEEP) {
-        sp.setTextColor(TFT_YELLOW, TFT_BLACK);
-        snprintf(label, sizeof(label), "Sweep %lu/%lu  found %d",
-                 (unsigned long)s->_arp.sweepProgress(),
-                 (unsigned long)s->_arp.sweepTotal(),
-                 s->_arp.targetCount());
-      } else {
-        // Deliberately short: the full picture goes to the log every 10 s, and
-        // a truncated status line is worse than a terse one.
-        const uint32_t pcapN = s->_pcap.frames();
-        const bool     gwOk  = s->_arp.gatewayKnown();
-
-        int n = snprintf(label, sizeof(label), "H%d %s F%lu",
-                         s->_arp.targetCount(),
-                         s->_arpUp ? (gwOk ? "GWok" : "GW??") : "----",
-                         (unsigned long)s->_relay.forwarded());
-        if (pcapN) snprintf(label + n, sizeof(label) - n, " P%lu", (unsigned long)pcapN);
-
-        const bool broken = (s->_arpUp && !gwOk);
-        sp.setTextColor(broken ? TFT_RED : TFT_GREEN, TFT_BLACK);
-      }
-      sp.drawString(label, 2, barY);
-
-      // Preview paused marker, centred, so it's obvious capture continues while
-      // the list is frozen.
-      if (s->_livePreview && s->_arpEnabled && s->_previewPaused) {
-        sp.setTextDatum(TC_DATUM);
-        sp.setTextColor(TFT_YELLOW, TFT_BLACK);
-        sp.drawString("PAUSED", w / 2, barY);
-      }
-
-      // Free heap on the right, alongside the low-water mark. The WiFi driver
-      // takes its TX buffers from this heap, so the minimum is what says
-      // whether the poison is about to start failing.
-      const uint32_t heapK = (uint32_t)(ESP.getFreeHeap() / 1024);
-      const uint32_t minK  = (uint32_t)(ESP.getMinFreeHeap() / 1024);
-
-      char right[28];
-      snprintf(right, sizeof(right), "%luk/%luk",
-               (unsigned long)heapK, (unsigned long)minK);
-
-      sp.setTextDatum(TR_DATUM);
-      sp.setTextColor(minK < 15 ? TFT_RED : TFT_MAGENTA, TFT_BLACK);
-      sp.drawString(right, w - 2, barY);
-    }, this);
-}
 
 // Etapa 1 capture filter: true when the decrypted Ethernet frame matches the
 // Capture Filters (All passes everything). Reads only headers (EtherType, IP
@@ -1026,6 +877,7 @@ void ipStr(uint32_t ipN, char* out, size_t n) {
   snprintf(out, n, "%u.%u.%u.%u", b[0], b[1], b[2], b[3]);
 }
 
+// Last octet on our /24, otherwise the last two. Keeps a one-line entry readable.
 void ipShort(uint32_t ipN, char* out, size_t n) {
   const uint8_t* b = (const uint8_t*)&ipN;
   const uint32_t self = (uint32_t)WiFi.localIP();
