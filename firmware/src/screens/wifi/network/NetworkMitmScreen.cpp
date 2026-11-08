@@ -11,22 +11,45 @@
 
 static constexpr uint64_t kMinFree = 64 * 1024;
 
-static uint16_t s_captureMask = 0;  // relay calls the filter by fn ptr
+static uint32_t s_captureMask = 0;  // relay calls the filter by fn ptr
 static bool mitmCaptureFilter(const uint8_t* eth, uint16_t len);  // defined below
 namespace {
-uint16_t    metaBit(const MitmRelay::PacketMeta& m);
-const char* protoName(uint16_t bit);
+uint32_t    metaBit(const MitmRelay::PacketMeta& m);
+const char* protoName(uint32_t bit);
+uint16_t    protoColor(uint32_t bit);
 void        ipStr(uint32_t ipN, char* out, size_t n);
+void        ipShort(uint32_t ipN, char* out, size_t n);
+void        sizeStr(uint16_t len, char* out, size_t n);
 }  // namespace
 
 // Live Preview: the relay sink (WiFi task) writes PacketMeta into this lock-free
-// ring; onUpdate() on the main loop drains it into the LogView. Preview filter
-// applied on drain (UI side), so it never slows the capture path.
-static uint16_t s_previewMask = 0;              // 0 = All (subset of capture)
+// ring; onUpdate() on the main loop drains it into the display list. Preview
+// filter applied on drain (UI side), so it never slows the capture path.
+static uint32_t s_previewMask = 0;              // 0 = All (subset of capture)
 static constexpr uint8_t PREV_RING = 64;
 static volatile MitmRelay::PacketMeta s_ring[PREV_RING];
 static volatile uint8_t s_ringHead = 0;         // written by WiFi task
 static volatile uint8_t s_ringTail = 0;         // read by main loop
+
+// Display ring: drained, filtered entries. Pause freezes this, not the capture.
+static constexpr uint8_t DISP_RING = 48;
+static MitmRelay::PacketMeta s_disp[DISP_RING];
+static uint8_t s_dispHead = 0;
+static uint8_t s_dispCount = 0;
+static uint32_t s_dispVersion = 0;
+
+static void dispPush(const MitmRelay::PacketMeta& m) {
+  s_disp[s_dispHead] = m;
+  s_dispHead = (uint8_t)((s_dispHead + 1) % DISP_RING);
+  if (s_dispCount < DISP_RING) s_dispCount++;
+  s_dispVersion++;
+}
+static bool dispGet(uint8_t offset, MitmRelay::PacketMeta& out) {
+  if (offset >= s_dispCount) return false;
+  const uint8_t idx = (uint8_t)((s_dispHead + DISP_RING - 1 - offset) % DISP_RING);
+  out = s_disp[idx];
+  return true;
+}
 
 NetworkMitmScreen::~NetworkMitmScreen() {
   if (_state == STATE_RUNNING) _stop("Screen closed");
@@ -39,6 +62,7 @@ void NetworkMitmScreen::onInit() {
 }
 
 void NetworkMitmScreen::onBack() {
+  if (_state == STATE_DETAILS) { _state = STATE_RUNNING; render(); return; }
   if (_state == STATE_RUNNING) {
     _stop("Stopped");
     _showMenu();
@@ -108,11 +132,11 @@ void NetworkMitmScreen::_editTarget(uint8_t i) {
 
 void NetworkMitmScreen::onItemSelected(uint8_t index) {
   if (_state == STATE_FILTERS) {
-    uint16_t& mask = _editingPreview ? _previewMask : _captureMask;
+    uint32_t& mask = _editingPreview ? _previewMask : _captureMask;
     if (index == 0) {
       mask = 0;  // All
     } else if (index < _filterRowCount) {
-      mask ^= (uint16_t)(1u << _filterBitOfRow[index]);
+      mask ^= (1u << _filterBitOfRow[index]);
     }
     // Preview can only narrow what capture keeps.
     if (_captureMask) _previewMask &= _captureMask;
@@ -170,13 +194,14 @@ void NetworkMitmScreen::onItemSelected(uint8_t index) {
 
 void NetworkMitmScreen::_showFilters() {
   static const char* kNames[FILTER_COUNT] = {
-    "ARP", "ICMP", "DNS", "DHCP", "HTTP", "TLS/HTTPS",
-    "mDNS", "NTP", "SSH", "Telnet", "FTP", "Other TCP/UDP"
+    "ARP", "ICMP", "DNS", "DHCP", "mDNS", "LLMNR", "NetBIOS", "SSDP",
+    "HTTP", "TLS/HTTPS", "QUIC", "SSH", "Telnet", "RDP", "VNC",
+    "FTP", "SMB", "SMTP", "IMAP", "POP3", "NTP", "MQTT", "SIP", "Other"
   };
   _state = STATE_FILTERS;
-  const uint16_t mask = _editingPreview ? _previewMask : _captureMask;
+  const uint32_t mask = _editingPreview ? _previewMask : _captureMask;
   // Preview lists only protocols Capture keeps (All capture = every protocol).
-  const uint16_t allowed = (_editingPreview && _captureMask) ? _captureMask : 0xFFFF;
+  const uint32_t allowed = (_editingPreview && _captureMask) ? _captureMask : 0xFFFFFFFFu;
 
   uint8_t n = 0;
   snprintf(_filterLabels[n], sizeof(_filterLabels[n]), "[%c] All", mask == 0 ? 'x' : ' ');
@@ -305,7 +330,10 @@ void NetworkMitmScreen::_start() {
     const bool preview = _livePreview && relayMode;
     s_previewMask = preview ? _previewMask : 0;
     s_ringHead = s_ringTail = 0;
+    s_dispHead = s_dispCount = 0;
+    s_dispVersion = 0;
     _previewPaused = false;
+    _previewSel = _previewView = 0;
     _relay.setPreviewSink(preview ? &_previewSink : nullptr);
 
     if (_relay.begin(relayMode ? MitmRelay::MODE_RELAY : MitmRelay::MODE_MONITOR)) {
@@ -339,6 +367,10 @@ void NetworkMitmScreen::_start() {
   _lastPoison  = 0;
   _lastDraw    = 0;
   _lastFreeChk = millis();
+  _sessionStartMs = millis();
+  _lastRateMs = _sessionStartMs;
+  _lastRateSeen = 0;
+  _packetsPerSec = 0;
   setItems(nullptr, 0);
   render();
 }
@@ -516,15 +548,28 @@ void NetworkMitmScreen::onUpdate() {
     _lastDraw = 0;
   }
 
-  if (now - _lastDraw > 800) {
+  if (now - _lastRateMs >= 1000) {
+    const uint32_t seen = _relay.seen();
+    const uint32_t elapsed = now - _lastRateMs;
+    _packetsPerSec = elapsed ? (uint32_t)((uint64_t)(seen - _lastRateSeen) * 1000ULL / elapsed) : 0;
+    _lastRateSeen = seen;
+    _lastRateMs = now;
+  }
+
+  // Redraw the list only when new packets arrived (throttled), and refresh the
+  // Time/P/s line once a second. A full clear every tick is what flickered.
+  static uint32_t s_drawnVersion = 0;
+  const bool listDirty = s_dispVersion != s_drawnVersion;
+  const bool statsDue  = now - _lastDraw >= 1000;
+  if (!_previewPaused && (listDirty || statsDue) && now - _lastDraw >= 200) {
+    s_drawnVersion = s_dispVersion;
     render();
     _lastDraw = now;
   }
 
-  // Drain the preview ring into the log (unless the preview is paused). Capture
-  // never pauses — only the on-screen list freezes for inspection.
-  if (_livePreview && _arpEnabled && !_previewPaused) {
-    char line[64];
+  // Drain the preview ring into the display list (unless paused). Capture never
+  // pauses — only the on-screen list freezes for inspection.
+  if (_livePreview && _arpEnabled && !_previewPaused && _state != STATE_DETAILS) {
     while (s_ringTail != s_ringHead) {
       volatile MitmRelay::PacketMeta& v = s_ring[s_ringTail];
       MitmRelay::PacketMeta m;
@@ -532,43 +577,43 @@ void NetworkMitmScreen::onUpdate() {
       m.srcIp = v.srcIp; m.dstIp = v.dstIp;
       m.srcPort = v.srcPort; m.dstPort = v.dstPort; m.length = v.length;
       s_ringTail = (uint8_t)((s_ringTail + 1) % PREV_RING);
-      const uint16_t bit = metaBit(m);
-      if (s_previewMask && !(s_previewMask & bit)) continue;   // preview filter
-      char src[16] = "", dst[16] = "";
-      if (m.ethertype == 0x0800) { ipStr(m.srcIp, src, sizeof(src)); ipStr(m.dstIp, dst, sizeof(dst)); }
-      // Multi-line on IP flows so src/dst fit the narrow screen:
-      //   TLS  192.168.1.10:443 >
-      //        192.168.1.50:52341  1420B
-      if (m.srcPort || m.dstPort) {
-        snprintf(line, sizeof(line), "%-5s %s:%u >",
-                 protoName(bit), src, m.srcPort);
-        _log.addLine(line);
-        snprintf(line, sizeof(line), "      %s:%u  %uB",
-                 dst, m.dstPort, m.length);
-        _log.addLine(line);
-      } else if (m.ethertype == 0x0800) {
-        snprintf(line, sizeof(line), "%-5s %s >", protoName(bit), src);
-        _log.addLine(line);
-        snprintf(line, sizeof(line), "      %s  %uB", dst, m.length);
-        _log.addLine(line);
-      } else {
-        snprintf(line, sizeof(line), "%-5s  %uB", protoName(bit), m.length);
-        _log.addLine(line);
-      }
+      const uint32_t bit = metaBit(m);
+      if (s_previewMask && !(s_previewMask & bit)) continue;
+      dispPush(m);
     }
   }
 
   if (Uni.Nav->wasPressed()) {
     const auto dir = Uni.Nav->readDirection();
-    if (dir == INavigation::DIR_BACK) {
+    if (_state == STATE_DETAILS) {
+      if (dir == INavigation::DIR_BACK) { _state = STATE_RUNNING; render(); }
+      return;
+    }
+    if (_livePreview && _arpEnabled) {
+      if (!_previewPaused) {
+        if (dir == INavigation::DIR_PRESS) {
+          _previewPaused = true;
+          _previewSel = _previewView = 0;
+          render();
+          return;
+        }
+        if (dir == INavigation::DIR_BACK) { _stop("Stopped"); _showMenu(); return; }
+      } else {
+        if (dir == INavigation::DIR_BACK) { _previewPaused = false; render(); return; }
+        if (dir == INavigation::DIR_PRESS) {
+          if (s_dispCount) { _state = STATE_DETAILS; render(); }
+          return;
+        }
+        // Newest is at the top: Down/Right moves to older, Up/Left to newer.
+        const bool down = dir == INavigation::DIR_DOWN || dir == INavigation::DIR_RIGHT;
+        const bool up   = dir == INavigation::DIR_UP   || dir == INavigation::DIR_LEFT;
+        if (down && _previewSel + 1 < s_dispCount) { _previewSel++; render(); return; }
+        if (up   && _previewSel > 0)               { _previewSel--; render(); return; }
+      }
+      return;
+    }
+    if (dir == INavigation::DIR_BACK || dir == INavigation::DIR_PRESS) {
       _stop("Stopped");
-      _showMenu();
-    } else if (dir == INavigation::DIR_PRESS && _livePreview && _arpEnabled) {
-      // Pause/resume the on-screen preview; capture keeps running.
-      _previewPaused = !_previewPaused;
-      render();
-    } else if (dir == INavigation::DIR_PRESS) {
-      _stop("Stopped");   // no preview: a press stops, as before
       _showMenu();
     }
   }
@@ -584,8 +629,186 @@ bool NetworkMitmScreen::_checkFreeSpace() {
 }
 
 void NetworkMitmScreen::onRender() {
-  if (_state == STATE_RUNNING) { _drawLog(); return; }
+  if (_state == STATE_DETAILS) { _drawDetails(); return; }
+  if (_state == STATE_RUNNING) {
+    if (_livePreview && _arpEnabled) { _drawPreview(); return; }
+    _drawCapturing();
+    return;
+  }
   ListScreen::onRender();
+}
+
+void NetworkMitmScreen::_drawStats(int x, int y, int w) {
+  auto& lcd = Uni.Lcd;
+  const uint32_t seconds = (millis() - _sessionStartMs) / 1000;
+  char elapsed[12], left[20], mid[20], right[16];
+  if (seconds >= 3600)
+    snprintf(elapsed, sizeof(elapsed), "%02lu:%02lu:%02lu",
+             (unsigned long)(seconds / 3600), (unsigned long)((seconds / 60) % 60),
+             (unsigned long)(seconds % 60));
+  else
+    snprintf(elapsed, sizeof(elapsed), "%02lu:%02lu",
+             (unsigned long)(seconds / 60), (unsigned long)(seconds % 60));
+  snprintf(left,  sizeof(left),  "Time %s", elapsed);
+  snprintf(mid,   sizeof(mid),   "Total %lu", (unsigned long)_relay.seen());
+  snprintf(right, sizeof(right), "P/s %lu", (unsigned long)_packetsPerSec);
+
+  lcd.setTextColor(TFT_LIGHTGREY, TFT_BLACK);
+  lcd.setTextDatum(TL_DATUM);
+  lcd.drawString(left, x + 2, y);
+  lcd.setTextDatum(TC_DATUM);
+  lcd.drawString(mid, x + w / 2, y);
+  lcd.setTextDatum(TR_DATUM);
+  lcd.drawString(right, x + w - 2, y);
+  lcd.setTextDatum(TL_DATUM);
+}
+
+void NetworkMitmScreen::_drawCapturing() {
+  auto& lcd = Uni.Lcd;
+  lcd.fillRect(bodyX(), bodyY(), bodyW(), bodyH(), TFT_BLACK);
+  lcd.setTextSize(1);
+  const int fh = lcd.fontHeight();
+  const int footerH = fh + 6;
+
+  lcd.setTextDatum(MC_DATUM);
+  lcd.setTextColor(TFT_DARKGREY, TFT_BLACK);
+  lcd.drawString("Capturing...", bodyX() + bodyW() / 2, bodyY() + (bodyH() - footerH) / 2);
+
+  const int sepY = bodyY() + bodyH() - footerH;
+  lcd.drawFastHLine(bodyX(), sepY, bodyW(), TFT_DARKGREY);
+  _drawStats(bodyX(), sepY + 2, bodyW());
+}
+
+void NetworkMitmScreen::_drawPreview() {
+  // Per-line sprites, same as LogView: each row is pushed atomically, so there
+  // is no full-body black flash.
+  auto& panel = Uni.Lcd;
+  panel.setTextSize(1);
+  const int fh = panel.fontHeight();
+  const int lineH = fh + 3;
+  const int footerH = fh * 3 + 8;
+  const int bh = bodyH();
+  const int slots = (bh - footerH) / lineH;
+  const int listH = slots > 0 ? slots * lineH : 0;
+
+  if (_previewPaused && slots > 0) {
+    if (_previewSel < _previewView) _previewView = _previewSel;
+    if (_previewSel >= _previewView + slots)
+      _previewView = _previewSel - slots + 1;
+  }
+
+  int y = bodyY();
+  Sprite row(&panel);
+  row.createSprite(bodyW(), lineH);
+  row.setTextSize(1);
+  row.setTextDatum(TL_DATUM);
+  for (int i = 0; i < slots; i++) {
+    const uint8_t off = (_previewPaused ? _previewView : 0) + i;
+    MitmRelay::PacketMeta m;
+    const bool have = dispGet(off, m);
+    const uint32_t bit = have ? metaBit(m) : 0;
+    const bool selected = have && _previewPaused && off == _previewSel;
+    const uint16_t bg = selected ? Config.getThemeColor() : TFT_BLACK;
+    row.fillSprite(bg);
+
+    if (have) {
+      char src[16] = "", dst[16] = "", sz[8] = "", rest[48];
+      if (m.ethertype == 0x0800) { ipStr(m.srcIp, src, sizeof(src)); ipStr(m.dstIp, dst, sizeof(dst)); }
+      sizeStr(m.length, sz, sizeof(sz));
+      if (m.srcPort || m.dstPort)
+        snprintf(rest, sizeof(rest), "%s:%u>%s:%u", src, m.srcPort, dst, m.dstPort);
+      else if (m.ethertype == 0x0800)
+        snprintf(rest, sizeof(rest), "%s>%s", src, dst);
+      else
+        rest[0] = '\0';
+
+      const char* name = protoName(bit);
+      row.setTextDatum(TL_DATUM);
+      row.setTextColor(protoColor(bit), bg);
+      row.drawString(name, 2, 1);
+      row.setTextColor(selected ? TFT_WHITE : TFT_LIGHTGREY, bg);
+      row.setTextDatum(TR_DATUM);
+      row.drawString(sz, bodyW() - 2, 1);
+      const int left = 2 + row.textWidth(name) + 2;
+      const int right = bodyW() - 2 - row.textWidth(sz) - 2;
+      if (right > left) {
+        // Clip the address run so it never runs into the size.
+        while (rest[0] && row.textWidth(rest) > right - left)
+          rest[strlen(rest) - 1] = '\0';
+        row.setTextDatum(TL_DATUM);
+        row.drawString(rest, left, 1);
+      }
+    }
+    row.pushSprite(bodyX(), y);
+    y += lineH;
+  }
+  row.deleteSprite();
+
+  const int statusY = bodyY() + listH;
+  panel.drawFastHLine(bodyX(), statusY, bodyW(), TFT_DARKGREY);
+  panel.fillRect(bodyX(), statusY + 1, bodyW(), fh + 2, TFT_BLACK);
+  _drawStats(bodyX(), statusY + 2, bodyW());
+
+  const int hintSep = statusY + fh + 4;
+  panel.drawFastHLine(bodyX(), hintSep, bodyW(), TFT_DARKGREY);
+  panel.fillRect(bodyX(), hintSep + 1, bodyW(), bodyY() + bodyH() - hintSep - 1, TFT_BLACK);
+  panel.setTextDatum(BC_DATUM);
+  panel.setTextColor(TFT_DARKGREY, TFT_BLACK);
+  if (_previewPaused) {
+    panel.drawString("[Options] Details", bodyX() + bodyW() / 2, hintSep + fh + 2);
+    panel.drawString("[Back] Resume Scan", bodyX() + bodyW() / 2, bodyY() + bodyH() - 1);
+  } else {
+    panel.drawString("[Press] Pause", bodyX() + bodyW() / 2, bodyY() + bodyH() - 1);
+  }
+  panel.setTextDatum(TL_DATUM);
+}
+
+void NetworkMitmScreen::_drawDetails() {
+  auto& lcd = Uni.Lcd;
+  lcd.fillRect(bodyX(), bodyY(), bodyW(), bodyH(), TFT_BLACK);
+  MitmRelay::PacketMeta m;
+  if (!dispGet(_previewSel, m)) {
+    lcd.setTextDatum(MC_DATUM);
+    lcd.setTextColor(TFT_DARKGREY, TFT_BLACK);
+    lcd.drawString("No entry", bodyX() + bodyW() / 2, bodyY() + bodyH() / 2);
+    return;
+  }
+  const uint32_t bit = metaBit(m);
+  char src[16] = "-", dst[16] = "-";
+  if (m.ethertype == 0x0800) { ipStr(m.srcIp, src, sizeof(src)); ipStr(m.dstIp, dst, sizeof(dst)); }
+
+  // Same layout as Packet Sniffer details: grey labels, white values, type in
+  // its colour, 2 px gap, no footer hint.
+  lcd.setTextSize(1);
+  lcd.setTextDatum(TL_DATUM);
+  const int fh = lcd.fontHeight();
+  const int gap = 2;
+  int y = bodyY() + 2;
+  const int bottom = bodyY() + bodyH();
+  const int x = bodyX() + 2;
+  const int valueRight = bodyX() + bodyW() - 2;
+  auto row = [&](const char* label, const char* text, uint16_t color = TFT_WHITE) {
+    if (y + fh > bottom) return;
+    lcd.setTextColor(TFT_DARKGREY, TFT_BLACK);
+    lcd.drawString(label, x, y);
+    lcd.setTextColor(color, TFT_BLACK);
+    lcd.setTextDatum(TR_DATUM);
+    lcd.drawString(text, valueRight, y);
+    lcd.setTextDatum(TL_DATUM);
+    y += fh + gap;
+  };
+  char value[24];
+  row("Protocol", protoName(bit), protoColor(bit));
+  row("Source", src);
+  row("Dest", dst);
+  snprintf(value, sizeof(value), "%u", m.srcPort);
+  row("Src Port", value);
+  snprintf(value, sizeof(value), "%u", m.dstPort);
+  row("Dst Port", value);
+  snprintf(value, sizeof(value), "%u bytes", (unsigned)m.length);
+  row("Length", value);
+  snprintf(value, sizeof(value), "0x%04X", m.ethertype);
+  row("EtherType", value);
 }
 
 // ── Status bar ──────────────────────────────────────────────────────────────
@@ -649,7 +872,7 @@ void NetworkMitmScreen::_drawLog() {
 // protocol, TCP/UDP ports) to decide which packets to keep — never content.
 static bool mitmCaptureFilter(const uint8_t* eth, uint16_t len) {
   using M = NetworkMitmScreen;
-  const uint16_t m = s_captureMask;
+  const uint32_t m = s_captureMask;
   if (m == 0) return true;            // All
   if (len < 14) return m & M::F_OTHER;
   const uint16_t ethertype = (eth[12] << 8) | eth[13];
@@ -664,18 +887,30 @@ static bool mitmCaptureFilter(const uint8_t* eth, uint16_t len) {
     const uint8_t* l4 = ip + ihl;
     if (len < (uint16_t)(14 + ihl + 4)) return m & M::F_OTHER;
     const uint16_t sp = (l4[0] << 8) | l4[1], dp = (l4[2] << 8) | l4[3];
-    auto hit = [&](uint16_t port, uint16_t bit) {
+    auto hit = [&](uint16_t port, uint32_t bit) {
       return (sp == port || dp == port) && (m & bit);
     };
-    if (hit(53, M::F_DNS))    return true;
+    if (hit(53, M::F_DNS)) return true;
     if (hit(67, M::F_DHCP) || hit(68, M::F_DHCP)) return true;
-    if (hit(80, M::F_HTTP))   return true;
-    if (hit(443, M::F_TLS))   return true;
     if (hit(5353, M::F_MDNS)) return true;
-    if (hit(123, M::F_NTP))   return true;
-    if (hit(22, M::F_SSH))    return true;
+    if (hit(5355, M::F_LLMNR)) return true;
+    if (hit(137, M::F_NETBIOS) || hit(138, M::F_NETBIOS) || hit(139, M::F_NETBIOS)) return true;
+    if (hit(1900, M::F_SSDP)) return true;
+    if (hit(80, M::F_HTTP)) return true;
+    if (proto == 17 && hit(443, M::F_QUIC)) return true;
+    if (proto == 6  && hit(443, M::F_TLS))  return true;
+    if (hit(22, M::F_SSH)) return true;
     if (hit(23, M::F_TELNET)) return true;
-    if (hit(21, M::F_FTP))    return true;
+    if (hit(3389, M::F_RDP)) return true;
+    if (hit(5900, M::F_VNC)) return true;
+    if (hit(21, M::F_FTP)) return true;
+    if (hit(445, M::F_SMB)) return true;
+    if (hit(25, M::F_SMTP) || hit(587, M::F_SMTP)) return true;
+    if (hit(143, M::F_IMAP) || hit(993, M::F_IMAP)) return true;
+    if (hit(110, M::F_POP3) || hit(995, M::F_POP3)) return true;
+    if (hit(123, M::F_NTP)) return true;
+    if (hit(1883, M::F_MQTT) || hit(8883, M::F_MQTT)) return true;
+    if (hit(5060, M::F_SIP)) return true;
     return m & M::F_OTHER;
   }
   return m & M::F_OTHER;
@@ -695,8 +930,7 @@ void NetworkMitmScreen::_previewSink(const MitmRelay::PacketMeta& m) {
 }
 
 namespace {
-// Which FilterBit a packet's metadata maps to, for the preview filter.
-uint16_t metaBit(const MitmRelay::PacketMeta& m) {
+uint32_t metaBit(const MitmRelay::PacketMeta& m) {
   using M = NetworkMitmScreen;
   if (m.ethertype == 0x0806) return M::F_ARP;
   if (m.ethertype != 0x0800) return M::F_OTHER;
@@ -706,36 +940,104 @@ uint16_t metaBit(const MitmRelay::PacketMeta& m) {
     auto is = [&](uint16_t p){ return sp == p || dp == p; };
     if (is(53))   return M::F_DNS;
     if (is(67) || is(68)) return M::F_DHCP;
-    if (is(80))   return M::F_HTTP;
-    if (is(443))  return M::F_TLS;
     if (is(5353)) return M::F_MDNS;
-    if (is(123))  return M::F_NTP;
+    if (is(5355)) return M::F_LLMNR;
+    if (is(137) || is(138) || is(139)) return M::F_NETBIOS;
+    if (is(1900)) return M::F_SSDP;
+    if (is(80))   return M::F_HTTP;
+    if (m.ipProto == 17 && is(443)) return M::F_QUIC;
+    if (m.ipProto == 6  && is(443)) return M::F_TLS;
     if (is(22))   return M::F_SSH;
     if (is(23))   return M::F_TELNET;
+    if (is(3389)) return M::F_RDP;
+    if (is(5900)) return M::F_VNC;
     if (is(21))   return M::F_FTP;
+    if (is(445))  return M::F_SMB;
+    if (is(25) || is(587)) return M::F_SMTP;
+    if (is(143) || is(993)) return M::F_IMAP;
+    if (is(110) || is(995)) return M::F_POP3;
+    if (is(123))  return M::F_NTP;
+    if (is(1883) || is(8883)) return M::F_MQTT;
+    if (is(5060)) return M::F_SIP;
   }
   return M::F_OTHER;
 }
 
-const char* protoName(uint16_t bit) {
+const char* protoName(uint32_t bit) {
   switch (bit) {
-    case NetworkMitmScreen::F_ARP:  return "ARP";
-    case NetworkMitmScreen::F_ICMP: return "ICMP";
-    case NetworkMitmScreen::F_DNS:  return "DNS";
-    case NetworkMitmScreen::F_DHCP: return "DHCP";
-    case NetworkMitmScreen::F_HTTP: return "HTTP";
-    case NetworkMitmScreen::F_TLS:  return "TLS";
-    case NetworkMitmScreen::F_MDNS: return "mDNS";
-    case NetworkMitmScreen::F_NTP:  return "NTP";
-    case NetworkMitmScreen::F_SSH:  return "SSH";
-    case NetworkMitmScreen::F_TELNET: return "Telnet";
-    case NetworkMitmScreen::F_FTP:  return "FTP";
-    default: return "TCP/UDP";
+    case NetworkMitmScreen::F_ARP:     return "ARP";
+    case NetworkMitmScreen::F_ICMP:    return "ICMP";
+    case NetworkMitmScreen::F_DNS:     return "DNS";
+    case NetworkMitmScreen::F_DHCP:    return "DHCP";
+    case NetworkMitmScreen::F_MDNS:    return "mDNS";
+    case NetworkMitmScreen::F_LLMNR:   return "LLMNR";
+    case NetworkMitmScreen::F_NETBIOS: return "NB";
+    case NetworkMitmScreen::F_SSDP:    return "SSDP";
+    case NetworkMitmScreen::F_HTTP:    return "HTTP";
+    case NetworkMitmScreen::F_TLS:     return "TLS";
+    case NetworkMitmScreen::F_QUIC:    return "QUIC";
+    case NetworkMitmScreen::F_SSH:     return "SSH";
+    case NetworkMitmScreen::F_TELNET:  return "TEL";
+    case NetworkMitmScreen::F_RDP:     return "RDP";
+    case NetworkMitmScreen::F_VNC:     return "VNC";
+    case NetworkMitmScreen::F_FTP:     return "FTP";
+    case NetworkMitmScreen::F_SMB:     return "SMB";
+    case NetworkMitmScreen::F_SMTP:    return "SMTP";
+    case NetworkMitmScreen::F_IMAP:    return "IMAP";
+    case NetworkMitmScreen::F_POP3:    return "POP3";
+    case NetworkMitmScreen::F_NTP:     return "NTP";
+    case NetworkMitmScreen::F_MQTT:    return "MQTT";
+    case NetworkMitmScreen::F_SIP:     return "SIP";
+    default: return "TCP";
+  }
+}
+
+uint16_t protoColor(uint32_t bit) {
+  switch (bit) {
+    case NetworkMitmScreen::F_ARP:     return TFT_YELLOW;
+    case NetworkMitmScreen::F_ICMP:    return TFT_PINK;
+    case NetworkMitmScreen::F_DNS:     return TFT_CYAN;
+    case NetworkMitmScreen::F_DHCP:    return TFT_GREEN;
+    case NetworkMitmScreen::F_MDNS:
+    case NetworkMitmScreen::F_LLMNR:
+    case NetworkMitmScreen::F_NETBIOS:
+    case NetworkMitmScreen::F_SSDP:    return TFT_DARKGREEN;
+    case NetworkMitmScreen::F_HTTP:    return TFT_GREENYELLOW;
+    case NetworkMitmScreen::F_TLS:     return TFT_BLUE;
+    case NetworkMitmScreen::F_QUIC:    return TFT_SKYBLUE;
+    case NetworkMitmScreen::F_SSH:
+    case NetworkMitmScreen::F_TELNET:  return TFT_ORANGE;
+    case NetworkMitmScreen::F_RDP:
+    case NetworkMitmScreen::F_VNC:     return TFT_VIOLET;
+    case NetworkMitmScreen::F_FTP:
+    case NetworkMitmScreen::F_SMB:     return TFT_GOLD;
+    case NetworkMitmScreen::F_SMTP:
+    case NetworkMitmScreen::F_IMAP:
+    case NetworkMitmScreen::F_POP3:    return TFT_MAGENTA;
+    case NetworkMitmScreen::F_NTP:     return TFT_DARKCYAN;
+    case NetworkMitmScreen::F_MQTT:    return TFT_CYAN;
+    case NetworkMitmScreen::F_SIP:     return TFT_PINK;
+    default: return TFT_LIGHTGREY;
   }
 }
 
 void ipStr(uint32_t ipN, char* out, size_t n) {
-  const uint8_t* b = (const uint8_t*)&ipN;   // network order bytes
+  const uint8_t* b = (const uint8_t*)&ipN;
   snprintf(out, n, "%u.%u.%u.%u", b[0], b[1], b[2], b[3]);
+}
+
+void ipShort(uint32_t ipN, char* out, size_t n) {
+  const uint8_t* b = (const uint8_t*)&ipN;
+  const uint32_t self = (uint32_t)WiFi.localIP();
+  const uint8_t* s = (const uint8_t*)&self;
+  if (b[0] == s[0] && b[1] == s[1] && b[2] == s[2])
+    snprintf(out, n, ".%u", b[3]);
+  else
+    snprintf(out, n, "%u.%u", b[2], b[3]);
+}
+
+void sizeStr(uint16_t len, char* out, size_t n) {
+  if (len >= 1000) snprintf(out, n, "%u.%uk", len / 1000, (len % 1000) / 100);
+  else snprintf(out, n, "%uB", len);
 }
 }  // namespace

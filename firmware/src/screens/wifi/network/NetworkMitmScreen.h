@@ -39,16 +39,23 @@
 class NetworkMitmScreen : public ListScreen {
 public:
   // Capture-filter protocols (decrypted modes). Bit set = keep it. Public so the
-  // relay's file-scope capture filter can name them.
-  enum FilterBit : uint16_t {
-    F_ARP = 1<<0, F_ICMP = 1<<1, F_DNS = 1<<2, F_DHCP = 1<<3, F_HTTP = 1<<4,
-    F_TLS = 1<<5, F_MDNS = 1<<6, F_NTP = 1<<7, F_SSH = 1<<8, F_TELNET = 1<<9,
-    F_FTP = 1<<10, F_OTHER = 1<<11,
+  // relay's file-scope capture filter can name them. uint32_t: the list is
+  // general → specific and no longer fits in 16 bits.
+  enum FilterBit : uint32_t {
+    F_ARP = 1u<<0,  F_ICMP = 1u<<1,
+    F_DNS = 1u<<2,  F_DHCP = 1u<<3, F_MDNS = 1u<<4, F_LLMNR = 1u<<5,
+    F_NETBIOS = 1u<<6, F_SSDP = 1u<<7,
+    F_HTTP = 1u<<8, F_TLS = 1u<<9, F_QUIC = 1u<<10,
+    F_SSH = 1u<<11, F_TELNET = 1u<<12, F_RDP = 1u<<13, F_VNC = 1u<<14,
+    F_FTP = 1u<<15, F_SMB = 1u<<16,
+    F_SMTP = 1u<<17, F_IMAP = 1u<<18, F_POP3 = 1u<<19,
+    F_NTP = 1u<<20, F_MQTT = 1u<<21, F_SIP = 1u<<22,
+    F_OTHER = 1u<<23,
   };
-  static constexpr uint8_t FILTER_COUNT = 12;
+  static constexpr uint8_t FILTER_COUNT = 24;
 
   const char* title()    override { return "MITM Attack"; }
-  bool inhibitPowerOff() override { return _state == STATE_RUNNING; }
+  bool inhibitPowerOff() override { return _state == STATE_RUNNING || _state == STATE_DETAILS; }
 
   ~NetworkMitmScreen();
 
@@ -59,7 +66,7 @@ public:
   void onBack() override;
 
 private:
-  enum State  { STATE_MENU, STATE_FILTERS, STATE_RUNNING };
+  enum State  { STATE_MENU, STATE_FILTERS, STATE_RUNNING, STATE_DETAILS };
   // Modes shown to the user.
   enum Phase  { PHASE_SWEEP, PHASE_POISON };
 
@@ -75,11 +82,14 @@ private:
   Mode     _mode          = MODE_ALL;
   uint32_t _targets[4]    = {};   // network order; 0 = unset
   char     _targetText[4][16] = {};
-  uint16_t _captureMask   = 0;    // 0 = All
+  uint32_t _captureMask   = 0;    // 0 = All
   bool     _livePreview   = false;
-  uint16_t _previewMask   = 0;    // 0 = All; subset of _captureMask
+  uint32_t _previewMask   = 0;    // 0 = All; subset of _captureMask
   bool     _previewPaused = false;
   bool     _editingPreview = false;  // which filter the checkbox list edits
+  // Paused-preview selection. 0 = newest entry.
+  uint8_t  _previewSel = 0;
+  uint8_t  _previewView = 0;
   bool     _saveToFile    = true;
   String   _fileName;
   bool     _arpEnabled     = false;  // derived from Mode at Start
@@ -113,6 +123,10 @@ private:
   unsigned long _lastStats   = 0;
   unsigned long _lastDraw    = 0;
   unsigned long _lastFreeChk = 0;
+  unsigned long _sessionStartMs = 0;
+  unsigned long _lastRateMs  = 0;
+  uint32_t      _lastRateSeen = 0;
+  uint32_t      _packetsPerSec = 0;
   int           _lastTargets   = 0;
   uint32_t      _lastProbeLost    = 0;
   uint32_t      _lastProbeDropped = 0;
@@ -128,6 +142,9 @@ private:
   void _showFilters();
   void _editTarget(uint8_t i);
   void _drawPreview();
+  void _drawCapturing();
+  void _drawStats(int x, int y, int w);
+  void _drawDetails();
   static void _previewSink(const MitmRelay::PacketMeta& m);
   void _start();
   void _stop(const char* reason);
