@@ -489,9 +489,12 @@ void WifiAnalyzerScreen::_showStationDetails(int index)
 // A short press on a result opens the same target actions without a pause step.
 void WifiAnalyzerScreen::_openOptions(int index)
 {
-  const auto action = WifiTargetActions::choose(
-      WifiTargetActions::DETAILS | WifiTargetActions::MONITOR | WifiTargetActions::SNIFFER |
-      WifiTargetActions::FOX_HUNT | WifiTargetActions::DEAUTH);
+  uint8_t allowed = WifiTargetActions::DETAILS | WifiTargetActions::MONITOR |
+                    WifiTargetActions::SNIFFER | WifiTargetActions::FOX_HUNT |
+                    WifiTargetActions::DEAUTH;
+  if (!_stationMode) allowed |= WifiTargetActions::CONNECT;
+
+  const auto action = WifiTargetActions::choose(allowed);
   if (action == WifiTargetActions::NONE) { render(); return; }
 
   // Keep the scanner's existing Details screens and their navigation intact.
@@ -530,6 +533,7 @@ void WifiAnalyzerScreen::_openOptions(int index)
   }
 
   WifiTargetActions::open(action, target);
+  if (action == WifiTargetActions::CONNECT) render();
 }
 
 void WifiAnalyzerScreen::_doScan()

@@ -20,6 +20,7 @@ namespace WifiTargetActions {
 enum Action : uint8_t {
   NONE     = 0,
   DETAILS  = 1 << 0,
+  CONNECT  = 1 << 6,  // AP only: join the selected network
   MONITOR  = 1 << 1,
   SNIFFER  = 1 << 2,
   FOX_HUNT = 1 << 3,

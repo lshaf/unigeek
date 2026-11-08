@@ -8,6 +8,8 @@
 #include "screens/wifi/WifiPacketMonitorScreen.h"
 #include "screens/wifi/WifiPacketSnifferScreen.h"
 #include "ui/actions/InputSelectAction.h"
+#include "ui/actions/ShowStatusAction.h"
+#include "utils/network/WifiUtility.h"
 
 namespace WifiTargetActions {
 
@@ -21,6 +23,7 @@ struct Entry {
 
 constexpr Entry kEntries[] = {
   {DETAILS,  "Details",         "details"},
+  {CONNECT,  "Connect",         "connect"},
   {MONITOR,  "Packet Monitor",  "monitor"},
   {SNIFFER,  "Packet Sniffer",  "sniffer"},
   {FOX_HUNT, "Fox Hunt",        "foxhunt"},
@@ -91,6 +94,20 @@ void open(Action action, const WifiTarget& t) {
       auto* deauth = new WifiDeauthDisassocScreen();
       deauth->configureFromChannel(t.channel, apFilter, clientFilter, ssid);
       Screen.push(deauth);
+      break;
+    }
+    case CONNECT: {
+      // AP only. Tries a saved password, then asks. Hidden networks have no
+      // SSID to join.
+      if (!ssid) { ShowStatusAction::show("No SSID", 1500); break; }
+      char bssid[18];
+      snprintf(bssid, sizeof(bssid), "%02X:%02X:%02X:%02X:%02X:%02X",
+               t.mac[0], t.mac[1], t.mac[2], t.mac[3], t.mac[4], t.mac[5]);
+      const auto result = WifiUtility::connectWithPrompt(bssid, ssid);
+      if (result == WifiUtility::CONNECT_OK)
+        ShowStatusAction::show("Connected", 1500);
+      else if (result == WifiUtility::CONNECT_FAILED)
+        ShowStatusAction::show("Connection failed", 1500);
       break;
     }
     default:
