@@ -1,3 +1,4 @@
+#include "ui/actions/ConfirmAction.h"
 #include "KeyboardScreen.h"
 #include "core/Device.h"
 #include "core/ScreenManager.h"
@@ -11,10 +12,71 @@
 #include "utils/keyboard/USBKeyboardUtil.h"  // must come before BLEKeyboardUtil — TinyUSB hid.h enum must be processed before NimBLE HIDTypes.h macro
 #endif
 #include "utils/keyboard/BLEKeyboardUtil.h"
-#ifdef DEVICE_HAS_WEBAUTHN
-#include "utils/webauthn/UsbProfile.h"
+#ifdef DEVICE_HAS_USB_HID
+#include "utils/usb/UsbProfile.h"
 #endif
 #include "utils/keyboard/DuckScriptUtil.h"
+
+// ── Cardputer hotkeys ───────────────────────────────────────────────────────
+#if defined(DEVICE_HAS_KEYBOARD) && (defined(DEVICE_M5_CARDPUTER) || defined(DEVICE_M5_CARDPUTER_ADV))
+namespace {
+
+// Fn layer, following the map adopted by the official M5Cardputer library
+// (m5stack/M5Cardputer#15): Fn+` = Esc, Fn+1..0,-,= = F1..F12,
+// Fn+Backspace = Delete, Fn+; , . / = arrows.
+// Each entry matches the unshifted and shifted legend, so Shift+Fn combos
+// (Shift+F5, Shift+Up...) resolve to the same key.
+struct FnKey { char n; char s; uint8_t key; };
+constexpr FnKey kFnLayer[] = {
+  {'`', '~', KEY_ESC},
+  {'1', '!', KEY_F1},  {'2', '@', KEY_F2},  {'3', '#', KEY_F3},
+  {'4', '$', KEY_F4},  {'5', '%', KEY_F5},  {'6', '^', KEY_F6},
+  {'7', '&', KEY_F7},  {'8', '*', KEY_F8},  {'9', '(', KEY_F9},
+  {'0', ')', KEY_F10}, {'-', '_', KEY_F11}, {'=', '+', KEY_F12},
+  {'\b', '\b', KEY_DELETE},
+  {';', ':', KEY_UP_ARROW},   {'.', '>', KEY_DOWN_ARROW},
+  {',', '<', KEY_LEFT_ARROW}, {'/', '?', KEY_RIGHT_ARROW},
+};
+
+uint8_t fnLayerKey(char c)
+{
+  for (const auto& e : kFnLayer)
+    if (c == e.n || c == e.s) return e.key;
+  return 0;
+}
+
+// Send one key with the Cardputer's modifiers applied:
+//   Ctrl -> Left Ctrl, Alt -> Left Alt, Opt -> Left GUI (Super/Win/Cmd).
+// Shift is already folded into printable characters by the driver ('C', '!'),
+// and kAsciiMap re-adds it on the HID side, so Ctrl+Shift+C works as is.
+// Keys whose legend doesn't change with Shift (Tab, Enter, Backspace, Space,
+// and everything from the Fn layer) get Shift sent explicitly instead.
+void sendCardputerKey(HIDKeyboardUtil* kb, char c, uint8_t mods)
+{
+  uint8_t key     = (uint8_t)c;
+  bool    special = false;
+  if (mods & IKeyboard::MOD_FN) {
+    const uint8_t k = fnLayerKey(c);
+    if (k) { key = k; special = true; }
+  }
+
+  const bool shiftAsModifier = (mods & IKeyboard::MOD_SHIFT) &&
+      (special || c == '\t' || c == '\n' || c == '\b' || c == ' ');
+
+  uint8_t held[4];
+  uint8_t n = 0;
+  if (mods & IKeyboard::MOD_CTRL) held[n++] = KEY_LEFT_CTRL;
+  if (mods & IKeyboard::MOD_ALT)  held[n++] = KEY_LEFT_ALT;
+  if (mods & IKeyboard::MOD_OPT)  held[n++] = KEY_LEFT_GUI;
+  if (shiftAsModifier)            held[n++] = KEY_LEFT_SHIFT;
+
+  for (uint8_t i = 0; i < n; i++) kb->press(held[i]);
+  kb->write(key);
+  while (n) kb->release(held[--n]);
+}
+
+} // namespace
+#endif
 
 // ── Constructor / Destructor ────────────────────────────────────────────────
 
@@ -47,11 +109,16 @@ KeyboardScreen::~KeyboardScreen()
 
 void KeyboardScreen::onInit()
 {
-#if defined(DEVICE_HAS_USB_HID) && defined(DEVICE_HAS_WEBAUTHN)
-  if (_mode == MODE_USB &&
-      webauthn::activeUsbProfile() == webauthn::UsbProfile::WEBAUTHN) {
-    _profileMismatch = true;
-    return;
+#ifdef DEVICE_HAS_USB_HID
+  // USB HID needs the COMPOSITE profile. Any other USB feature opened earlier
+  // this boot (WebAuthn, Mass Storage, Serial Terminal, Boot from IMG/ISO)
+  // owns USB until reboot, and the keyboard would silently never enumerate.
+  if (_mode == MODE_USB) {
+    const auto active = usb::activeUsbProfile();
+    if (active != usb::UsbProfile::NONE && active != usb::UsbProfile::COMPOSITE) {
+      _profileMismatch = true;
+      return;
+    }
   }
 #endif
   _keyboard->begin();
@@ -100,10 +167,7 @@ void KeyboardScreen::onRender()
     lcd.drawString("USB busy", cx, cy - 16);
     lcd.setTextSize(1);
     lcd.setTextColor(TFT_LIGHTGREY, TFT_BLACK);
-    lcd.drawString("WebAuthn already", cx, cy + 4);
-    lcd.drawString("claimed USB this boot.", cx, cy + 16);
-    lcd.setTextColor(TFT_YELLOW, TFT_BLACK);
-    lcd.drawString("Reboot, then open Keyboard first.", cx, cy + 32);
+    lcd.drawString("Reboot required", cx, cy + 4);
     return;
   }
 
@@ -179,6 +243,8 @@ void KeyboardScreen::onItemSelected(uint8_t index)
     }
     if (_mode == MODE_BLE && index == idx) {
       // Reset Pair
+      if (!ConfirmAction::popup("Reset BLE pairing?")) { render(); return; }
+      render();
       _keyboard->resetPair();
       ShowStatusAction::show("Pairing reset", 1500);
       render();
@@ -212,6 +278,14 @@ void KeyboardScreen::onBack()
     _showFiles(parent);
   } else if (_state == STATE_MEDIA_MENU) {
     _goMenu();
+  } else if (_state == STATE_MENU) {
+    // Leaving the HID menu ends the USB/BLE device session.
+    // Stopping a running Ducky Script is handled separately, without a popup.
+    if (ConfirmAction::popup("Disconnect device?")) {
+      Screen.goBack();
+    } else {
+      render();
+    }
   } else {
     Screen.goBack();
   }
@@ -344,9 +418,9 @@ void KeyboardScreen::_renderConnected()
     const int footerY = bodyY() + bodyH() - FOOTER_H;
     lcd.drawFastHLine(bodyX(), footerY - 5, bodyW(), TFT_DARKGREY);
 #if defined(DEVICE_M5_CARDPUTER) || defined(DEVICE_M5_CARDPUTER_ADV)
-    lcd.drawString("[G0] Stop", bodyX() + bodyW() / 2, footerY + 7);
+    lcd.drawString("[BtnG0] Disconnect", bodyX() + bodyW() / 2, footerY + 7);
 #else
-    lcd.drawString("[Press] Stop", bodyX() + bodyW() / 2, footerY + 7);
+    lcd.drawString("[Press] Disconnect", bodyX() + bodyW() / 2, footerY + 7);
 #endif
 #endif
     _connectedChromeDrawn = true;
@@ -414,21 +488,37 @@ void KeyboardScreen::_handleKeyboardRelay()
 #if defined(DEVICE_M5_CARDPUTER) || defined(DEVICE_M5_CARDPUTER_ADV)
   // Cardputer: BtnG0 (boot button) exits relay
   if (digitalRead(BTN_BOOT) == LOW) {
-    _keyboard->releaseAll(); _goMenu(); return;
+    _keyboard->releaseAll();
+    _goMenu();
+    return;
   }
 #elif defined(DEVICE_T_LORA_PAGER)
   // T-Lora Pager: encoder button press exits relay
   if (Uni.Nav->wasPressed()) {
     if (Uni.Nav->readDirection() == INavigation::DIR_PRESS) {
-      _keyboard->releaseAll(); _goMenu(); return;
+      _keyboard->releaseAll();
+      _goMenu();
+      return;
     }
   }
 #endif
 
   // Forward all remaining keyboard chars to HID
   while (Uni.Keyboard && Uni.Keyboard->available()) {
-    char c = Uni.Keyboard->getKey();
+#if defined(DEVICE_M5_CARDPUTER) || defined(DEVICE_M5_CARDPUTER_ADV)
+    // Snapshot taken at key-down, so a quick Ctrl+C isn't sent as a plain 'c'.
+    const uint8_t mods = Uni.Keyboard->keyModifiers();
+#endif
+    const char c = Uni.Keyboard->getKey();
+    // HIDKeyboardUtil::press() reads bytes >= 0x80 as modifier / raw HID codes,
+    // so non-ASCII input (e.g. UTF-8 injected by the web remote) would reach the
+    // host as stray Ctrl/GUI/F-key presses. Drop it.
+    if ((uint8_t)c >= 0x80) continue;
+#if defined(DEVICE_M5_CARDPUTER) || defined(DEVICE_M5_CARDPUTER_ADV)
+    sendCardputerKey(_keyboard, c, mods);
+#else
     _keyboard->write((uint8_t)c);
+#endif
   }
 
   _refreshBatteryLevel();
@@ -439,6 +529,7 @@ void KeyboardScreen::_handleKeyboardRelay()
     if (dir == INavigation::DIR_BACK || dir == INavigation::DIR_PRESS) {
       _keyboard->releaseAll();
       _goMenu();
+      return;
     }
   }
 #endif

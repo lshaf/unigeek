@@ -1,27 +1,30 @@
 #include "BLEMenuScreen.h"
+#include "ui/actions/ConfirmAction.h"
 #include "core/Device.h"
 #include "core/ScreenManager.h"
 #include "screens/MainMenuScreen.h"
 #include "screens/ble/BLEMonitoringDetectionMenuScreen.h"
 #include "screens/ble/BLEAttacksMenuScreen.h"
 #include "screens/ble/BLEExtensionsMenuScreen.h"
+#include "screens/hid/KeyboardScreen.h"
 #include "core/ScreenMirror.h"
 #include "utils/uart/BleFileManager.h"
 #include "utils/uart/UartFileManager.h"
 
 void BLEMenuScreen::onInit()
 {
-  _items[3].sublabel = BleFM.isActive() ? "On" : "Off";
+  _items[BLE_REMOTE_IDX].sublabel = BleFM.isActive() ? "On" : "Off";
   setItems(_items);
 }
 
 void BLEMenuScreen::onItemSelected(uint8_t index)
 {
   switch (index) {
-    case 0: Screen.push(new BLEMonitoringDetectionMenuScreen()); break;
-    case 1: Screen.push(new BLEAttacksMenuScreen());           break;
-    case 2: Screen.push(new BLEExtensionsMenuScreen());        break;
-    case 3: _toggleRemoteDevice();                             break;
+    case BLE_REMOTE_IDX: _toggleRemoteDevice();                break;
+    case 1: Screen.push(new KeyboardScreen(KeyboardScreen::MODE_BLE)); break;
+    case 2: Screen.push(new BLEMonitoringDetectionMenuScreen()); break;
+    case 3: Screen.push(new BLEAttacksMenuScreen());           break;
+    case 4: Screen.push(new BLEExtensionsMenuScreen());        break;
   }
 }
 
@@ -33,13 +36,17 @@ void BLEMenuScreen::onItemSelected(uint8_t index)
 void BLEMenuScreen::_toggleRemoteDevice()
 {
   if (BleFM.isActive()) {
+    if (!ConfirmAction::popup("Disconnect device?")) {
+      render();
+      return;
+    }
     BleFM.end();
     Mirror.setEnabled(UartFM.isActive());
   } else {
     Mirror.setEnabled(true);
     BleFM.begin();
   }
-  _items[3].sublabel = BleFM.isActive() ? "On" : "Off";
+  _items[BLE_REMOTE_IDX].sublabel = BleFM.isActive() ? "On" : "Off";
   render();
 }
 

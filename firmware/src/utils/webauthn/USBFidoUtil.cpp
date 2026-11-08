@@ -2,7 +2,7 @@
 
 #ifdef DEVICE_HAS_WEBAUTHN
 
-#include "UsbProfile.h"
+#include "utils/usb/UsbProfile.h"
 #include "WebAuthnLog.h"
 
 #include <Arduino.h>     // millis(), delay()
@@ -64,7 +64,7 @@ USBFidoUtil::USBFidoUtil()
     initialized = true;
     // Composite HID with both kbd/mouse and FIDO is rejected by Windows
     // webauthn.dll. Take exclusive ownership of the USB HID profile here.
-    if (claimUsbProfile(UsbProfile::WEBAUTHN)) {
+    if (usb::claimUsbProfile(usb::UsbProfile::WEBAUTHN)) {
       _registered = _hid.addDevice(this, sizeof(kFidoReportDescriptor));
       WA_LOG("USBFidoUtil ctor: claim=ok addDevice=%d desc_len=%u",
              (int)_registered, (unsigned)sizeof(kFidoReportDescriptor));
@@ -160,7 +160,7 @@ void USBFidoUtil::begin()
   // soft tud_suspend_cb / tud_resume_cb. Setting it here before USB.begin()
   // applies the new bmAttributes byte. usbAttributes() is a no-op once
   // USB.begin() has been called (any earlier USB profile loses); fine for
-  // WebAuthn since claimUsbProfile() guarantees we're first.
+  // WebAuthn since usb::claimUsbProfile() guarantees we're first.
   USB.usbAttributes(TUSB_DESC_CONFIG_ATT_SELF_POWERED |
                     TUSB_DESC_CONFIG_ATT_REMOTE_WAKEUP);
   USB.begin();      // idempotent — also called by USBKeyboardUtil
