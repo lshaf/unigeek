@@ -490,11 +490,11 @@ void SftpClientScreen::_configPassword() {
 }
 
 void SftpClientScreen::_toggleAuthMode() {
-  if (_authMode == AUTH_PRIVATE_KEY) {
-    _authMode = AUTH_PASSWORD;
+  if (_authMode == AUTH_PASSWORD) {
+    _authMode = AUTH_PRIVATE_KEY;
     _keyData = "";
   } else {
-    _authMode = AUTH_PRIVATE_KEY;
+    _authMode = AUTH_PASSWORD;
     _password = "";
   }
   _updateLabels();
