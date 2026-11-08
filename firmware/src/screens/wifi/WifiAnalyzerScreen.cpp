@@ -495,7 +495,9 @@ void WifiAnalyzerScreen::_openOptions(int index)
   if (!_stationMode) allowed |= WifiTargetActions::CONNECT;
 
   const auto action = WifiTargetActions::choose(allowed);
-  if (action == WifiTargetActions::NONE) { render(); return; }
+  // The popup wipes its area to black and does not restore the list.
+  render();
+  if (action == WifiTargetActions::NONE) return;
 
   // Keep the scanner's existing Details screens and their navigation intact.
   if (action == WifiTargetActions::DETAILS) {
