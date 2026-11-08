@@ -80,19 +80,7 @@ void WifiEvilTwinScreen::onItemSelected(uint8_t index)
     _menuIndex = index;
     switch (index) {
       case 0: _selectWifi();    break;
-      case 1:
-        _deauth = !_deauth;
-        _deauthSub = _deauth ? "On" : "Off";
-        _menuItems[1].sublabel = _deauthSub.c_str();
-        render();
-        break;
-      case 2:
-        _checkPwd = !_checkPwd;
-        _checkPwdSub = _checkPwd ? "On" : "Off";
-        _menuItems[2].sublabel = _checkPwdSub.c_str();
-        render();
-        break;
-      case 3: { // Portal
+      case 1: { // Portal
         _state = STATE_SELECT_PORTAL;
         // Portal folder must live under PORTALS_DIR (hardcoded into the
         // captive server) — no parent navigation here; BACK already cancels.
@@ -107,6 +95,18 @@ void WifiEvilTwinScreen::onItemSelected(uint8_t index)
         setItems(_browser.items(), n);
         break;
       }
+      case 2:
+        _deauth = !_deauth;
+        _deauthSub = _deauth ? "On" : "Off";
+        _menuItems[2].sublabel = _deauthSub.c_str();
+        render();
+        break;
+      case 3:
+        _checkPwd = !_checkPwd;
+        _checkPwdSub = _checkPwd ? "On" : "Off";
+        _menuItems[3].sublabel = _checkPwdSub.c_str();
+        render();
+        break;
       case 4: _startAttack();   break;
     }
   } else if (_state == STATE_SELECT_PORTAL && index < _browser.count()) {
@@ -193,15 +193,15 @@ void WifiEvilTwinScreen::onBack()
 void WifiEvilTwinScreen::_showMenu()
 {
   _state = STATE_MENU;
-  _networkSub  = _target.ssid;
+  _networkSub  = (_target.ssid.isEmpty() || _target.ssid == "-") ? "-" : _target.ssid;
   _deauthSub   = _deauth ? "On" : "Off";
   _checkPwdSub = _checkPwd ? "On" : "Off";
   _portalSub   = _portal.portalFolder().isEmpty() ? "-" : _portal.portalFolder();
 
-  _menuItems[0] = {"Network",        _networkSub.c_str()};
-  _menuItems[1] = {"Deauth",         _deauthSub.c_str()};
-  _menuItems[2] = {"Check Password", _checkPwdSub.c_str()};
-  _menuItems[3] = {"Portal",         _portalSub.c_str()};
+  _menuItems[0] = {"Access Point",   _networkSub.c_str()};
+  _menuItems[1] = {"Portal",         _portalSub.c_str()};
+  _menuItems[2] = {"Deauth",         _deauthSub.c_str()};
+  _menuItems[3] = {"Check Password", _checkPwdSub.c_str()};
   _menuItems[4] = {"Start"};
   setItems(_menuItems, 5, _menuIndex);
 }
@@ -214,7 +214,7 @@ void WifiEvilTwinScreen::_showScanResults()
   _scanItems[0] = {"Rescan"};
 
   for (int i = 0; i < _scanCount; i++) {
-    _scanItems[i + 1] = {_scanLabels[i], _scanValues[i]};
+    _scanItems[i + 1] = {_scanLabels[i], _scanDisplay[i]};
     _scanItems[i + 1].rssi            = _scanRssi[i];
     _scanItems[i + 1].hasRssi         = true;
     _scanItems[i + 1].sublabelMarquee = true;
@@ -247,6 +247,7 @@ void WifiEvilTwinScreen::_selectWifi(bool forceScan)
     _scanChannels[i] = (uint8_t)WiFi.channel(i);
     snprintf(_scanValues[i], sizeof(_scanValues[i]), "%s",
              WiFi.BSSIDstr(i).c_str());
+    snprintf(_scanDisplay[i], sizeof(_scanDisplay[i]), "%s CH%u", _scanValues[i], (unsigned)_scanChannels[i]);
     _scanRssi[i] = (int16_t)WiFi.RSSI(i);
   }
 
@@ -294,11 +295,11 @@ void WifiEvilTwinScreen::_startAttack()
 {
   const MacAddr blank = {0, 0, 0, 0, 0, 0};
   if (_target.ssid == "-" && memcmp(_target.bssid, blank, 6) == 0) {
-    ShowStatusAction::show("Network not selected");
+    ShowStatusAction::show("Access Point not set");
     return;
   }
   if (_portal.portalFolder().isEmpty()) {
-    ShowStatusAction::show("Portal not selected");
+    ShowStatusAction::show("Portal not set");
     return;
   }
 

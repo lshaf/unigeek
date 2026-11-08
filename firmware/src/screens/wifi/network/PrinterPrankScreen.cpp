@@ -144,7 +144,7 @@ void PrinterPrankScreen::_print(uint8_t index) {
 
   const char* body = _currentBody();
   if (!body || !*body) {
-    ShowStatusAction::show("Message not set", 1500);
+    ShowStatusAction::show("Message not set");
     _showDevices();
     return;
   }

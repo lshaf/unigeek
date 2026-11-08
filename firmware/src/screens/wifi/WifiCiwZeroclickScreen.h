@@ -20,6 +20,10 @@ public:
   void onBack() override;
 
 private:
+  // Menu rows, in display order. The menu is rebuilt with the row to keep
+  // highlighted, so an edit doesn't send the highlight back to the top.
+  enum MenuRow : uint8_t { ROW_CATEGORIES, ROW_ROTATION, ROW_DEVICES, ROW_ALERTS, ROW_START, MENU_ROWS };
+
   enum State { STATE_MENU, STATE_BROADCASTING, STATE_DEVICES, STATE_ALERTS };
 
   enum CatIdx : uint8_t {
@@ -59,7 +63,7 @@ private:
   ScrollListView::Row _scrollRows[30];
   String _scrollLabels[30];
 
-  void _refreshMenu();
+  void _refreshMenu(uint8_t row);
   void _loadPayloads();
   void _startBroadcast();
   void _stopBroadcast();

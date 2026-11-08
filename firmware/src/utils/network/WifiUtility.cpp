@@ -20,6 +20,7 @@ uint8_t WifiUtility::scan(ScannedWifi* out, uint8_t maxCount)
     strncpy(out[i].bssid, WiFi.BSSIDstr(i).c_str(), sizeof(out[i].bssid));
     strncpy(out[i].ssid,  WiFi.SSID(i).c_str(),     sizeof(out[i].ssid));
     out[i].rssi = (int16_t)rssi;
+    out[i].channel = (uint8_t)WiFi.channel(i);
   }
 
   return (uint8_t)total;

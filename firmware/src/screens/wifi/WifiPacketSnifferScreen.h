@@ -3,6 +3,7 @@
 #include <WiFi.h>
 #include <esp_wifi.h>
 #include <FS.h>
+#include <atomic>
 #include "ui/templates/ListScreen.h"
 
 class WifiPacketSnifferScreen : public ListScreen {
@@ -11,6 +12,7 @@ public:
   bool inhibitPowerSave() override { return _state == STATE_RUNNING || _state == STATE_PAUSED || _state == STATE_DETAILS; }
   ~WifiPacketSnifferScreen();
 
+  void configureFromChannel(uint8_t channel, const uint8_t bssid[6], const uint8_t* client);
   void onInit() override;
   void onUpdate() override;
   void onRender() override;
@@ -47,6 +49,8 @@ private:
   struct SeenClient {
     uint8_t mac[6];
     uint32_t lastSeen;
+    uint8_t channel;
+    int8_t rssi;
   };
   struct CaptureFrame {
     uint32_t timestamp;
@@ -56,7 +60,7 @@ private:
   };
   struct ScanEntry {
     char ssid[33];
-    char bssidText[18];
+    char bssidText[24];
     uint8_t bssid[6];
     uint8_t channel;
     int rssi;
@@ -65,11 +69,13 @@ private:
   char _title[20] = "Packet Sniffer";
   State _state = STATE_MENU;
   ListItem _menuItems[7];
+  uint8_t _menuIndex = 0;
   char _filterSub[16] = "All";
   char _channelSub[16] = "All";
   char _bssidSub[16] = "All";
   char _macSub[16] = "All";
   bool _saveCapture = false;
+  bool _integrated = false;
   char _filename[40] = {};
   char _capturePath[96] = {};
 
@@ -88,6 +94,8 @@ private:
   SeenClient _seenClients[MAX_SEEN_CLIENTS] = {};
   uint8_t _seenClientCount = 0;
   uint8_t _clientMenuMacs[20][6] = {};
+  uint8_t _clientMenuChannels[20] = {};
+  uint8_t _clientChannel = 0;
   uint8_t _clientMenuCount = 0;
 
   ListItem _selectItems[22];
@@ -100,6 +108,11 @@ private:
   volatile uint32_t _ringVersion = 0;
   uint32_t _lastRenderedVersion = 0;
   uint32_t _lastRenderMs = 0;
+  uint32_t _sessionStartMs = 0;
+  uint32_t _lastStatsSampleMs = 0;
+  uint32_t _lastStatsTotal = 0;
+  uint32_t _packetsPerSecond = 0;
+  std::atomic<uint32_t> _totalPackets{0};
   int8_t _pausedOffset = 0; // 0 newest, positive = older
   int8_t _pausedViewOffset = 0; // newest offset currently visible while paused
   bool _paused = false;
@@ -124,7 +137,7 @@ private:
   void _scanBssids();
   void _showMacs(bool preserveSelection = false);
   void _scanClients();
-  void _observeClient(const uint8_t* mac);
+  void _observeClient(const uint8_t* mac, uint8_t channel, int8_t rssi);
   bool _isSelectedMac(const uint8_t* mac) const;
   bool _isClientCandidate(const uint8_t* mac, const uint8_t* bssid) const;
   void _updateSummaries();
