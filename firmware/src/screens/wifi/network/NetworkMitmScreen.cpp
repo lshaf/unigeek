@@ -541,12 +541,12 @@ void NetworkMitmScreen::onUpdate() {
         _log.addLine(line);
         snprintf(line, sizeof(line), "      %s:%u  %uB",
                  dst, m.dstPort, m.length);
-        _log.addLine(line, TFT_DARKGREY);
+        _log.addLine(line);
       } else if (m.ethertype == 0x0800) {
         snprintf(line, sizeof(line), "%-5s %s >", protoName(bit), src);
         _log.addLine(line);
         snprintf(line, sizeof(line), "      %s  %uB", dst, m.length);
-        _log.addLine(line, TFT_DARKGREY);
+        _log.addLine(line);
       } else {
         snprintf(line, sizeof(line), "%-5s  %uB", protoName(bit), m.length);
         _log.addLine(line);
