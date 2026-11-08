@@ -17,7 +17,6 @@ public:
     }
     if (_kb && _kb->available()) {
       char c = _kb->peekKey();
-      const bool fn = (_kb->keyModifiers() & IKeyboard::MOD_FN) != 0;
       Direction dir = DIR_NONE;
       if      (c == ';')  dir = DIR_UP;
       else if (c == '.')  dir = DIR_DOWN;
@@ -25,8 +24,8 @@ public:
       else if (c == '\b') dir = DIR_BACK;
       else if (c == ',')  dir = DIR_LEFT;
       else if (c == '/')  dir = DIR_RIGHT;
-      // Fn+` is Esc on the Cardputer Fn layer (same as the HID relay): Back.
-      else if (fn && (c == '`' || c == '~')) dir = DIR_BACK;
+      // ` (and Fn+` / Esc) act as Back in menus.
+      else if (c == '`' || c == '~') dir = DIR_BACK;
 
       if (dir != DIR_NONE) {
         _kb->getKey();
