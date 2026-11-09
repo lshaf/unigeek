@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "core/ScreenManager.h"
+#include "screens/wifi/network/NetworkMenuScreen.h"
 #include "screens/wifi/WifiDeauthDisassocScreen.h"
 #include "screens/wifi/WifiFoxHuntScreen.h"
 #include "screens/wifi/WifiPacketMonitorScreen.h"
@@ -104,9 +105,10 @@ void open(Action action, const WifiTarget& t) {
       snprintf(bssid, sizeof(bssid), "%02X:%02X:%02X:%02X:%02X:%02X",
                t.mac[0], t.mac[1], t.mac[2], t.mac[3], t.mac[4], t.mac[5]);
       const auto result = WifiUtility::connectWithPrompt(bssid, ssid);
-      if (result == WifiUtility::CONNECT_OK)
+      if (result == WifiUtility::CONNECT_OK) {
         ShowStatusAction::show("Connected", 1500);
-      else if (result == WifiUtility::CONNECT_FAILED)
+        Screen.replace(new NetworkMenuScreen());
+      } else if (result == WifiUtility::CONNECT_FAILED)
         ShowStatusAction::show("Connection failed", 1500);
       break;
     }
