@@ -35,7 +35,7 @@ void ChameleonMenuScreen::onUpdate()
 {
   if (_toScan) {
     _toScan = false;
-    Screen.push(new ChameleonScanScreen());
+    Screen.replace(new ChameleonScanScreen());
     return;
   }
   ListScreen::onUpdate();
