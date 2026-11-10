@@ -620,7 +620,7 @@ void NetworkMitmScreen::_drawPreview() {
   panel.setTextSize(1);
   const int fh = panel.fontHeight();
   const int lineH = fh + 3;
-  const int footerH = fh * 3 + 8;
+  const int footerH = fh * 2 + 8;  // stats + one hint line, like Packet Sniffer
   const int bh = bodyH();
   const int slots = (bh - footerH) / lineH;
   const int listH = slots > 0 ? slots * lineH : 0;
@@ -700,14 +700,11 @@ void NetworkMitmScreen::_drawPreview() {
   const int hintSep = statusY + fh + 4;
   panel.drawFastHLine(bodyX(), hintSep, bodyW(), TFT_DARKGREY);
   panel.fillRect(bodyX(), hintSep + 1, bodyW(), bodyY() + bodyH() - hintSep - 1, TFT_BLACK);
+  // One centred hint line, as in the Packet Sniffer.
   panel.setTextDatum(BC_DATUM);
   panel.setTextColor(TFT_DARKGREY, TFT_BLACK);
-  if (_previewPaused) {
-    panel.drawString("[Press] Options", bodyX() + bodyW() / 2, hintSep + fh + 2);
-    panel.drawString("[Back] Resume Scan", bodyX() + bodyW() / 2, bodyY() + bodyH() - 1);
-  } else {
-    panel.drawString("[Press] Pause", bodyX() + bodyW() / 2, bodyY() + bodyH() - 1);
-  }
+  panel.drawString(_previewPaused ? "[Press] Options  [Back] Resume" : "[Press] Pause",
+                   bodyX() + bodyW() / 2, bodyY() + bodyH() - 1);
   panel.setTextDatum(TL_DATUM);
 }
 
