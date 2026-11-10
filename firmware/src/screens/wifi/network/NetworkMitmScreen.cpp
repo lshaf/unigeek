@@ -693,8 +693,11 @@ void NetworkMitmScreen::_drawPreview() {
   row.deleteSprite();
 
   const int statusY = bodyY() + listH;
+  // Clear everything from the list's end to the bottom first: slots truncates,
+  // so a few pixels between listH and the footer would otherwise keep whatever
+  // was there before (e.g. the previous screen's "Start").
+  panel.fillRect(bodyX(), statusY, bodyW(), bodyY() + bh - statusY, TFT_BLACK);
   panel.drawFastHLine(bodyX(), statusY, bodyW(), TFT_DARKGREY);
-  panel.fillRect(bodyX(), statusY + 1, bodyW(), fh + 2, TFT_BLACK);
   _drawStats(bodyX(), statusY + 2, bodyW());
 
   const int hintSep = statusY + fh + 4;
