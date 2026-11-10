@@ -8,6 +8,7 @@
 #include <WiFi.h>
 #include "ui/actions/InputTextAction.h"
 #include "ui/actions/InputSelectAction.h"
+#include "screens/wifi/network/MitmReverseDnsScreen.h"
 
 static constexpr uint64_t kMinFree = 64 * 1024;
 
@@ -37,6 +38,11 @@ static MitmRelay::PacketMeta s_disp[DISP_RING];
 static uint8_t s_dispHead = 0;
 static uint8_t s_dispCount = 0;
 static uint32_t s_dispVersion = 0;
+// Frozen copy taken on pause: navigation/Details read this, not the live ring.
+static MitmRelay::PacketMeta s_frozen[DISP_RING];
+static uint8_t s_frozenCount = 0;
+static uint32_t s_counts[NetworkMitmScreen::FILTER_COUNT] = {};  // per-protocol tally (Counter view)
+static uint32_t s_targetIps[4] = {};  // Targeted mode: shown as T1..T4 in the preview
 
 static void dispPush(const MitmRelay::PacketMeta& m) {
   s_disp[s_dispHead] = m;
@@ -48,6 +54,17 @@ static bool dispGet(uint8_t offset, MitmRelay::PacketMeta& out) {
   if (offset >= s_dispCount) return false;
   const uint8_t idx = (uint8_t)((s_dispHead + DISP_RING - 1 - offset) % DISP_RING);
   out = s_disp[idx];
+  return true;
+}
+// Copy the live ring newest-first into the frozen buffer (called on pause).
+static void dispFreeze() {
+  s_frozenCount = s_dispCount;
+  for (uint8_t i = 0; i < s_dispCount; ++i) dispGet(i, s_frozen[i]);
+}
+// Paused reads come from the frozen snapshot; live reads from the ring.
+static bool frozenGet(uint8_t offset, MitmRelay::PacketMeta& out) {
+  if (offset >= s_frozenCount) return false;
+  out = s_frozen[offset];
   return true;
 }
 
@@ -100,8 +117,12 @@ void NetworkMitmScreen::_showMenu(uint8_t selected) {
   }
   // Capture filters only mean something on decrypted traffic.
   if (decrypted) add("Capture Filters", _captureMask ? "Custom" : "All", R_FILTERS);
-  add("Live Preview", _livePreview ? "On" : "Off", R_PREVIEW);
-  if (_livePreview && decrypted) add("Preview Filters", _previewMask ? "Custom" : "All", R_PREVFILT);
+  // Preview (Counter/Traffic) and its filters only apply to decrypted traffic.
+  if (decrypted) {
+    static const char* kPreviewNames[] = {"Counters", "Packets"};
+    add("Preview", kPreviewNames[_livePreview], R_PREVIEW);
+    add("Preview Filters", _previewMask ? "Custom" : "All", R_PREVFILT);
+  }
   add("Save to File", _saveToFile ? "On" : "Off", R_SAVE);
   if (_saveToFile) add("File Name", _fileName.length() ? _fileName : String("Auto"), R_FILENAME);
   add("Start", String(), R_START);
@@ -166,7 +187,7 @@ void NetworkMitmScreen::onItemSelected(uint8_t index) {
       _showFilters();
       break;
     case R_PREVIEW:
-      _livePreview = !_livePreview;
+      _livePreview = (PreviewMode)((_livePreview + 1) % 2);
       _showMenu(_selectedIndex);
       break;
     case R_PREVFILT:
@@ -314,10 +335,11 @@ void NetworkMitmScreen::_start() {
     s_captureMask = relayMode ? _captureMask : 0;
     _relay.setCaptureFilter(relayMode ? &mitmCaptureFilter : nullptr);
     // Live Preview only on decrypted (relay) traffic.
-    const bool preview = _livePreview && relayMode;
+    const bool preview = relayMode;   // always previewing (Counter/Traffic)
     s_previewMask = preview ? _previewMask : 0;
     s_ringHead = s_ringTail = 0;
     s_dispHead = s_dispCount = 0;
+    memset((void*)s_counts, 0, sizeof(s_counts));
     s_dispVersion = 0;
     _previewPaused = false;
     _previewSel = _previewView = 0;
@@ -472,7 +494,7 @@ void NetworkMitmScreen::onUpdate() {
 
   // Drain the preview ring into the display list (unless paused). Capture never
   // pauses — only the on-screen list freezes for inspection.
-  if (_livePreview && _arpEnabled && !_previewPaused && _state != STATE_DETAILS) {
+  if (_arpEnabled && !_previewPaused && _state != STATE_DETAILS) {
     while (s_ringTail != s_ringHead) {
       volatile MitmRelay::PacketMeta& v = s_ring[s_ringTail];
       MitmRelay::PacketMeta m;
@@ -481,6 +503,9 @@ void NetworkMitmScreen::onUpdate() {
       m.srcPort = v.srcPort; m.dstPort = v.dstPort; m.length = v.length;
       s_ringTail = (uint8_t)((s_ringTail + 1) % PREV_RING);
       const uint32_t bit = metaBit(m);
+      // Counter view tallies every captured packet (before the preview filter).
+      for (uint8_t b = 0; b < NetworkMitmScreen::FILTER_COUNT; ++b)
+        if (bit == (1u << b)) { s_counts[b]++; break; }
       if (s_previewMask && !(s_previewMask & bit)) continue;
       dispPush(m);
     }
@@ -492,9 +517,14 @@ void NetworkMitmScreen::onUpdate() {
       if (dir == INavigation::DIR_BACK) { _state = STATE_RUNNING; render(); }
       return;
     }
-    if (_livePreview && _arpEnabled) {
+    if (_livePreview == PREVIEW_COUNTER && _arpEnabled) {
+      if (dir == INavigation::DIR_BACK) { _stop("Stopped"); _showMenu(); }
+      return;  // running total: no pause/inspect
+    }
+    if (_livePreview == PREVIEW_TRAFFIC && _arpEnabled) {
       if (!_previewPaused) {
         if (dir == INavigation::DIR_PRESS) {
+          dispFreeze();                 // stable snapshot for inspection
           _previewPaused = true;
           _previewSel = _previewView = 0;
           render();
@@ -504,13 +534,13 @@ void NetworkMitmScreen::onUpdate() {
       } else {
         if (dir == INavigation::DIR_BACK) { _previewPaused = false; render(); return; }
         if (dir == INavigation::DIR_PRESS) {
-          if (s_dispCount) { _state = STATE_DETAILS; render(); }
+          if (s_frozenCount) _showPreviewOptions();
           return;
         }
         // Newest is at the top: Down/Right moves to older, Up/Left to newer.
         const bool down = dir == INavigation::DIR_DOWN || dir == INavigation::DIR_RIGHT;
         const bool up   = dir == INavigation::DIR_UP   || dir == INavigation::DIR_LEFT;
-        if (down && _previewSel + 1 < s_dispCount) { _previewSel++; render(); return; }
+        if (down && _previewSel + 1 < s_frozenCount) { _previewSel++; render(); return; }
         if (up   && _previewSel > 0)               { _previewSel--; render(); return; }
       }
       return;
@@ -534,7 +564,8 @@ bool NetworkMitmScreen::_checkFreeSpace() {
 void NetworkMitmScreen::onRender() {
   if (_state == STATE_DETAILS) { _drawDetails(); return; }
   if (_state == STATE_RUNNING) {
-    if (_livePreview && _arpEnabled) { _drawPreview(); return; }
+    if (_arpEnabled && _livePreview == PREVIEW_COUNTER) { _drawCounters(); return; }
+    if (_arpEnabled && _livePreview == PREVIEW_TRAFFIC) { _drawPreview(); return; }
     _drawCapturing();
     return;
   }
@@ -575,7 +606,7 @@ void NetworkMitmScreen::_drawCapturing() {
 
   lcd.setTextDatum(MC_DATUM);
   lcd.setTextColor(TFT_DARKGREY, TFT_BLACK);
-  lcd.drawString("Capturing...", bodyX() + bodyW() / 2, bodyY() + (bodyH() - footerH) / 2);
+  lcd.drawString("Sniffing...", bodyX() + bodyW() / 2, bodyY() + (bodyH() - footerH) / 2);
 
   const int sepY = bodyY() + bodyH() - footerH;
   lcd.drawFastHLine(bodyX(), sepY, bodyW(), TFT_DARKGREY);
@@ -594,6 +625,18 @@ void NetworkMitmScreen::_drawPreview() {
   const int slots = (bh - footerH) / lineH;
   const int listH = slots > 0 ? slots * lineH : 0;
 
+  // Nothing captured yet: show a single centred hint over the list area.
+  const uint8_t shown = _previewPaused ? s_frozenCount : s_dispCount;
+  if (shown == 0) {
+    panel.fillRect(bodyX(), bodyY(), bodyW(), listH, TFT_BLACK);
+    panel.setTextColor(TFT_DARKGREY, TFT_BLACK);
+    panel.setTextDatum(MC_DATUM);
+    panel.drawString("Sniffing...", bodyX() + bodyW() / 2, bodyY() + listH / 2);
+    panel.setTextDatum(TL_DATUM);
+    _drawStats(bodyX(), bodyY() + listH + 1, bodyW());
+    return;
+  }
+
   if (_previewPaused && slots > 0) {
     if (_previewSel < _previewView) _previewView = _previewSel;
     if (_previewSel >= _previewView + slots)
@@ -608,7 +651,7 @@ void NetworkMitmScreen::_drawPreview() {
   for (int i = 0; i < slots; i++) {
     const uint8_t off = (_previewPaused ? _previewView : 0) + i;
     MitmRelay::PacketMeta m;
-    const bool have = dispGet(off, m);
+    const bool have = _previewPaused ? frozenGet(off, m) : dispGet(off, m);
     const uint32_t bit = have ? metaBit(m) : 0;
     const bool selected = have && _previewPaused && off == _previewSel;
     const uint16_t bg = selected ? Config.getThemeColor() : TFT_BLACK;
@@ -660,7 +703,7 @@ void NetworkMitmScreen::_drawPreview() {
   panel.setTextDatum(BC_DATUM);
   panel.setTextColor(TFT_DARKGREY, TFT_BLACK);
   if (_previewPaused) {
-    panel.drawString("[Options] Details", bodyX() + bodyW() / 2, hintSep + fh + 2);
+    panel.drawString("[Press] Options", bodyX() + bodyW() / 2, hintSep + fh + 2);
     panel.drawString("[Back] Resume Scan", bodyX() + bodyW() / 2, bodyY() + bodyH() - 1);
   } else {
     panel.drawString("[Press] Pause", bodyX() + bodyW() / 2, bodyY() + bodyH() - 1);
@@ -668,11 +711,93 @@ void NetworkMitmScreen::_drawPreview() {
   panel.setTextDatum(TL_DATUM);
 }
 
+void NetworkMitmScreen::_drawCounters() {
+  // Per-protocol packet counts, names in their protocol colour. Two columns;
+  // only protocols kept by the Preview Filters are shown (All = every one with
+  // a non-zero count, plus the always-present common ones).
+  auto& lcd = Uni.Lcd;
+  lcd.setTextSize(1);
+  const int fh = lcd.fontHeight();
+  const int rowH = fh + 4;
+  const int footerH = fh * 2 + 6;
+  const int bh = bodyH();
+  const int rows = (bh - footerH) / rowH;
+  const int colW = bodyW() / 2;
+
+  lcd.fillRect(bodyX(), bodyY(), bodyW(), bh - footerH, TFT_BLACK);
+
+  // Build the visible protocol list: filtered subset, or all with activity.
+  uint8_t order[FILTER_COUNT]; uint8_t n = 0;
+  for (uint8_t b = 0; b < FILTER_COUNT; ++b) {
+    const uint32_t bit = 1u << b;
+    if (_previewMask && !(_previewMask & bit)) continue;   // respect Preview Filters
+    if (!_previewMask && s_counts[b] == 0) continue;       // All: hide idle protocols
+    order[n++] = b;
+  }
+
+  int x = bodyX() + 2, y = bodyY() + 2, col = 0;
+  char cnt[12];
+  for (uint8_t i = 0; i < n; ++i) {
+    const uint8_t b = order[i];
+    const uint32_t bit = 1u << b;
+    if (col == 0 && (y + rowH > bodyY() + bh - footerH)) { col = 1; x = bodyX() + colW + 2; y = bodyY() + 2; }
+    if (col == 1 && (y + rowH > bodyY() + bh - footerH)) break;  // no room
+    lcd.setTextColor(protoColor(bit), TFT_BLACK);
+    lcd.setTextDatum(TL_DATUM);
+    lcd.drawString(protoName(bit), x, y);
+    snprintf(cnt, sizeof(cnt), "%lu", (unsigned long)s_counts[b]);
+    lcd.setTextColor(TFT_WHITE, TFT_BLACK);
+    lcd.setTextDatum(TR_DATUM);
+    lcd.drawString(cnt, x + colW - 6, y);
+    y += rowH;
+  }
+  lcd.setTextDatum(TL_DATUM);
+  if (n == 0) {
+    lcd.setTextColor(TFT_DARKGREY, TFT_BLACK);
+    lcd.setTextDatum(MC_DATUM);
+    lcd.drawString("Sniffing...", bodyX() + bodyW() / 2, bodyY() + (bh - footerH) / 2);
+    lcd.setTextDatum(TL_DATUM);
+  }
+
+  // Footer: the stats bar, no pause (Counter is a running total; Back stops).
+  const int statusY = bodyY() + bh - footerH;
+  lcd.drawFastHLine(bodyX(), statusY, bodyW(), TFT_DARKGREY);
+  lcd.fillRect(bodyX(), statusY + 1, bodyW(), footerH - 1, TFT_BLACK);
+  _drawStats(bodyX(), statusY + 2, bodyW());
+}
+
+// Paused preview, a packet selected: Options popup (Details, DNS Lookup). DNS
+// Lookup does a reverse (PTR) lookup of the selected packet's source IP.
+void NetworkMitmScreen::_showPreviewOptions() {
+  MitmRelay::PacketMeta m;
+  if (!frozenGet(_previewSel, m)) return;
+  const bool haveIp = m.ethertype == 0x0800 && m.srcIp;
+  InputSelectAction::Option opts[2];
+  uint8_t count = 0;
+  opts[count++] = {"Details", "details", nullptr, 0, false};
+  if (haveIp) opts[count++] = {"DNS Lookup", "dns", nullptr, 0, false};
+  const char* choice = InputSelectAction::popup("Options", opts, count);
+  // Clear the whole body: the popup drew over the list and the stats footer,
+  // and _drawPreview only repaints the list rows, so a cleared body avoids a
+  // leftover black rectangle where the popup was.
+  Uni.Lcd.fillRect(bodyX(), bodyY(), bodyW(), bodyH(), TFT_BLACK);
+  if (!choice) { render(); return; }
+  if (strcmp(choice, "details") == 0) {
+    _state = STATE_DETAILS;
+    render();
+  } else if (strcmp(choice, "dns") == 0 && haveIp) {
+    char ip[16]; ipStr(m.srcIp, ip, sizeof(ip));
+    auto* dns = new MitmReverseDnsScreen();   // runs the PTR straight away
+    dns->configure(ip);
+    Screen.push(dns);                          // Back returns to the paused preview
+  }
+}
+
 void NetworkMitmScreen::_drawDetails() {
   auto& lcd = Uni.Lcd;
   lcd.fillRect(bodyX(), bodyY(), bodyW(), bodyH(), TFT_BLACK);
   MitmRelay::PacketMeta m;
-  if (!dispGet(_previewSel, m)) {
+  if (!frozenGet(_previewSel, m)) {
     lcd.setTextDatum(MC_DATUM);
     lcd.setTextColor(TFT_DARKGREY, TFT_BLACK);
     lcd.drawString("No entry", bodyX() + bodyW() / 2, bodyY() + bodyH() / 2);
@@ -877,8 +1002,11 @@ void ipStr(uint32_t ipN, char* out, size_t n) {
   snprintf(out, n, "%u.%u.%u.%u", b[0], b[1], b[2], b[3]);
 }
 
-// Last octet on our /24, otherwise the last two. Keeps a one-line entry readable.
+// In Targeted mode an explicit target shows as T1..T4; otherwise the last octet
+// on our /24, or the last two. Keeps a one-line entry readable.
 void ipShort(uint32_t ipN, char* out, size_t n) {
+  for (uint8_t i = 0; i < 4; ++i)
+    if (s_targetIps[i] && s_targetIps[i] == ipN) { snprintf(out, n, "T%u", i + 1); return; }
   const uint8_t* b = (const uint8_t*)&ipN;
   const uint32_t self = (uint32_t)WiFi.localIP();
   const uint8_t* s = (const uint8_t*)&self;

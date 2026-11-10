@@ -6,6 +6,10 @@ class DnsLookupScreen : public ToolScreen {
 public:
   const char* title() override { return "DNS Lookup"; }
 
+  // Opened pre-filled with an IP for a reverse (PTR) lookup, e.g. from the
+  // MITM preview Options.
+  void configureReverse(const String& ip) { _name = ip; _type = DnsQuery::PTR; }
+
 protected:
   void _buildRows() override;
   void _editRow(uint8_t id) override;

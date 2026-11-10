@@ -82,7 +82,8 @@ private:
   uint32_t _targets[4]    = {};   // network order; 0 = unset
   char     _targetText[4][16] = {};
   uint32_t _captureMask   = 0;    // 0 = All
-  bool     _livePreview   = false;
+  enum PreviewMode : uint8_t { PREVIEW_COUNTER, PREVIEW_TRAFFIC };
+  PreviewMode _livePreview = PREVIEW_COUNTER;
   uint32_t _previewMask   = 0;    // 0 = All; subset of _captureMask
   bool     _previewPaused = false;
   bool     _editingPreview = false;  // which filter the checkbox list edits
@@ -133,7 +134,9 @@ private:
   // (same pattern as SshClientScreen::_rebuildItems).
   void _showFilters();
   void _editTarget(uint8_t i);
-  void _drawPreview();
+  void _drawPreview();   // PREVIEW_TRAFFIC: the per-packet list
+  void _drawCounters();  // PREVIEW_COUNTER: per-protocol packet counts
+  void _showPreviewOptions();  // paused preview: Details / DNS Lookup
   void _drawCapturing();
   void _drawStats(int x, int y, int w);
   void _drawDetails();
