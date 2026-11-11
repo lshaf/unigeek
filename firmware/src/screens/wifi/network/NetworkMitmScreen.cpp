@@ -43,6 +43,7 @@ static MitmRelay::PacketMeta s_frozen[DISP_RING];
 static uint8_t s_frozenCount = 0;
 static uint32_t s_counts[NetworkMitmScreen::FILTER_COUNT] = {};  // per-protocol tally (Counter view)
 static uint32_t s_targetIps[4] = {};  // Targeted mode: shown as T1..T4 in the preview
+static uint32_t s_gatewayIp = 0;      // which target, if any, is the gateway -> Tn(G)
 
 static void dispPush(const MitmRelay::PacketMeta& m) {
   s_disp[s_dispHead] = m;
@@ -260,11 +261,14 @@ void NetworkMitmScreen::_start() {
   uint32_t peerIps[4];
   uint8_t  peerN = 0;
   for (uint8_t i = 0; i < 4; ++i) s_targetIps[i] = 0;
+  s_gatewayIp = 0;
   if (_mode == MODE_TARGETS) {
     for (uint8_t i = 0; i < 4; ++i) if (_targets[i]) peerIps[peerN++] = _targets[i];
     if (peerN == 0) { ShowStatusAction::show("No target set", 1500); return; }
-    // Label these in the preview as T1..T4 (same slot order the user entered).
+    // Label these in the preview as T1..T4 (same slot order the user entered);
+    // a target that is the network gateway shows as Tn(G).
     for (uint8_t i = 0; i < 4; ++i) s_targetIps[i] = _targets[i];
+    s_gatewayIp = (uint32_t)WiFi.gatewayIP();
   }
 
   _relayUp = _arpUp = _pcapUp = false;
@@ -1014,7 +1018,10 @@ void ipStr(uint32_t ipN, char* out, size_t n) {
 // on our /24, or the last two. Keeps a one-line entry readable.
 void ipShort(uint32_t ipN, char* out, size_t n) {
   for (uint8_t i = 0; i < 4; ++i)
-    if (s_targetIps[i] && s_targetIps[i] == ipN) { snprintf(out, n, "T%u", i + 1); return; }
+    if (s_targetIps[i] && s_targetIps[i] == ipN) {
+      snprintf(out, n, (s_gatewayIp && ipN == s_gatewayIp) ? "T%u(G)" : "T%u", i + 1);
+      return;
+    }
   const uint8_t* b = (const uint8_t*)&ipN;
   const uint32_t self = (uint32_t)WiFi.localIP();
   const uint8_t* s = (const uint8_t*)&self;

