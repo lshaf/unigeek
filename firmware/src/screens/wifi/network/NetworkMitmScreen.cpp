@@ -673,9 +673,9 @@ void NetworkMitmScreen::_drawPreview() {
       if (m.ethertype == 0x0800) { ipShort(m.srcIp, src, sizeof(src)); ipShort(m.dstIp, dst, sizeof(dst)); }
       sizeStr(m.length, sz, sizeof(sz));
       if (m.srcPort || m.dstPort)
-        snprintf(rest, sizeof(rest), "%s:%u>%s:%u", src, m.srcPort, dst, m.dstPort);
+        snprintf(rest, sizeof(rest), "%s:%u > %s:%u", src, m.srcPort, dst, m.dstPort);
       else if (m.ethertype == 0x0800)
-        snprintf(rest, sizeof(rest), "%s>%s", src, dst);
+        snprintf(rest, sizeof(rest), "%s > %s", src, dst);
       else
         rest[0] = '\0';
 
@@ -714,8 +714,11 @@ void NetworkMitmScreen::_drawPreviewFooter(int statusY) {
   panel.setTextSize(1);
   const int fh = panel.fontHeight();
   panel.fillRect(bodyX(), statusY, bodyW(), bodyY() + bodyH() - statusY, TFT_BLACK);
-  panel.drawFastHLine(bodyX(), statusY, bodyW(), TFT_DARKGREY);
+  panel.drawFastHLine(bodyX(), statusY, bodyW(), TFT_DARKGREY);   // above the stats
   _drawStats(bodyX(), statusY + 2, bodyW());
+  // Separator between the stats (Time/Total/...) and the hint line.
+  const int hintSep = statusY + fh + 4;
+  panel.drawFastHLine(bodyX(), hintSep, bodyW(), TFT_DARKGREY);
   panel.setTextDatum(BC_DATUM);
   panel.setTextColor(TFT_DARKGREY, TFT_BLACK);
   panel.drawString(_previewPaused ? "[Press] Options  [Back] Resume" : "[Press] Pause",
