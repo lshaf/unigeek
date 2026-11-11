@@ -592,7 +592,7 @@ void NetworkMitmScreen::_drawStats(int x, int y, int w) {
     snprintf(elapsed, sizeof(elapsed), "%02lu:%02lu",
              (unsigned long)(seconds / 60), (unsigned long)(seconds % 60));
   snprintf(left,  sizeof(left),  "Time %s", elapsed);
-  snprintf(mid,   sizeof(mid),   "Total %lu", (unsigned long)_relay.seen());
+  snprintf(mid,   sizeof(mid),   "Total %lu", (unsigned long)_relay.captured());
   snprintf(right, sizeof(right), "P/s %lu", (unsigned long)_packetsPerSec);
 
   lcd.setTextColor(TFT_LIGHTGREY, TFT_BLACK);

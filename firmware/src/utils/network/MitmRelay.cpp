@@ -118,7 +118,6 @@ void MitmRelay::_enqueue(const uint8_t* data, uint16_t len) {
   m.tsUsec  = (ms % 1000) * 1000;
 
   _head = next;
-  _captured++;
 }
 
 // ── Lifecycle ───────────────────────────────────────────────────────────────
@@ -371,6 +370,7 @@ esp_err_t MitmRelay::_rxCb(void* buffer, uint16_t len, void* eb) {
     }
   }
   if (targetOk && (!_captureFilter || _captureFilter(eth, len))) {
+    _captured++;
     if (_captureS) _enqueue(eth, len);
     if (_previewSink) _emitPreview(eth, len);
   }
