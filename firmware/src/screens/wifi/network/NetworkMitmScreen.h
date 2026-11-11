@@ -137,6 +137,8 @@ private:
   void _drawPreview();   // PREVIEW_TRAFFIC: the per-packet list
   void _drawPreviewFooter(int statusY);
   void _drawCounters();  // PREVIEW_COUNTER: per-protocol packet counts
+  void _pollPrepare();   // log poisoning-setup progress
+  bool _prepLogged[4] = {};
   void _showPreviewOptions();  // paused preview: Details / DNS Lookup
   void _drawCapturing();
   void _drawStats(int x, int y, int w);

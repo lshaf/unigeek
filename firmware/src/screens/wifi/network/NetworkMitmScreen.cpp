@@ -45,6 +45,19 @@ static uint32_t s_counts[NetworkMitmScreen::FILTER_COUNT] = {};  // per-protocol
 static uint32_t s_targetIps[4] = {};  // Targeted mode: shown as T1..T4 in the preview
 static uint32_t s_gatewayIp = 0;      // which target, if any, is the gateway -> Tn(G)
 
+// Ephemeral poisoning-setup log: lines shown in the capture body during the
+// prepare phase (resolving targets, poisoning). Cleared once packets flow, so
+// they scroll away on their own. One small ring, text only.
+static constexpr uint8_t STATUS_LINES = 8;
+static char    s_status[STATUS_LINES][40];
+static uint8_t s_statusCount = 0;
+static bool    s_prepDone = false;    // targets resolved and poisoning started
+static void statusLog(const char* line) {
+  if (s_statusCount < STATUS_LINES)
+    snprintf(s_status[s_statusCount++], sizeof(s_status[0]), "%s", line);
+}
+static void statusReset() { s_statusCount = 0; s_prepDone = false; }
+
 static void dispPush(const MitmRelay::PacketMeta& m) {
   s_disp[s_dispHead] = m;
   s_dispHead = (uint8_t)((s_dispHead + 1) % DISP_RING);
@@ -258,6 +271,9 @@ void NetworkMitmScreen::_start() {
   // not (monitor, encrypted). Targets needs at least one IP.
   _arpEnabled     = _mode != MODE_PASSIVE;
   _snifferEnabled = _saveToFile;
+  statusReset();
+  static const char* kModeN[] = {"Full", "Targets", "Passive"};
+  { char l[40]; snprintf(l, sizeof(l), "MITM %s", kModeN[_mode]); statusLog(l); }
   uint32_t peerIps[4];
   uint8_t  peerN = 0;
   for (uint8_t i = 0; i < 4; ++i) s_targetIps[i] = 0;
@@ -326,6 +342,7 @@ void NetworkMitmScreen::_start() {
       // the gateway.
       _arp.setTargets(_mode == MODE_TARGETS ? peerIps : nullptr,
                       _mode == MODE_TARGETS ? peerN : 0);
+      statusLog(_mode == MODE_TARGETS ? "Resolving targets..." : "Sweeping subnet...");
       _arpUp = true;
       snprintf(buf, sizeof(buf), "Sweeping %lu hosts...",
                (unsigned long)_arp.sweepTotal());
@@ -417,6 +434,46 @@ void NetworkMitmScreen::_stop(const char* reason) {
 
 // ── Update ──────────────────────────────────────────────────────────────────
 
+
+// While the attack is coming up, log progress into the ephemeral status lines:
+// each target as its MAC resolves, then poisoning/capture start. Read-only
+// polling of ArpSpoofer; cleared once packets flow.
+void NetworkMitmScreen::_pollPrepare() {
+  if (s_prepDone || !_arpUp) return;
+  // Log any target resolved since last tick (slot order, matching T1..T4).
+  for (uint8_t i = 0; i < 4; ++i) {
+    if (!_targets[i] || _prepLogged[i]) continue;
+    const ArpSpoofer::Target* t = _arp.findByIp(_targets[i]);
+    const bool isGw = _arp.gatewayKnown() && _targets[i] == _arp.gatewayIp();
+    if (isGw && _arp.gatewayKnown()) {
+      char mac[18]; _fmtMac(_arp.gatewayMac(), mac, sizeof(mac));
+      char l[40]; snprintf(l, sizeof(l), "T%u %s (gateway)", i + 1, mac);
+      statusLog(l); _prepLogged[i] = true;
+    } else if (t) {
+      char mac[18]; _fmtMac(t->mac, mac, sizeof(mac));
+      char l[40]; snprintf(l, sizeof(l), "T%u %s", i + 1, mac);
+      statusLog(l); _prepLogged[i] = true;
+    }
+  }
+  // All targets resolved (and the gateway, if one is a target): poison is live.
+  bool allResolved = true;
+  for (uint8_t i = 0; i < 4; ++i) if (_targets[i] && !_prepLogged[i]) allResolved = false;
+  if (allResolved) {
+    statusLog("Poisoning started");
+    statusLog("Capturing...");
+    s_prepDone = true;
+  } else if (_arp.sweepDone()) {
+    // Sweep finished but some target never answered — flag it, then proceed.
+    for (uint8_t i = 0; i < 4; ++i)
+      if (_targets[i] && !_prepLogged[i]) {
+        char l[40]; snprintf(l, sizeof(l), "T%u not responding", i + 1);
+        statusLog(l); _prepLogged[i] = true;
+      }
+    statusLog("Capturing...");
+    s_prepDone = true;
+  }
+}
+
 void NetworkMitmScreen::onUpdate() {
   if (_state != STATE_RUNNING) {
     ListScreen::onUpdate();
@@ -424,6 +481,7 @@ void NetworkMitmScreen::onUpdate() {
   }
 
   const unsigned long now = millis();
+  if (_arpEnabled) _pollPrepare();
 
   if (_relayUp) _relay.update();
 
@@ -639,20 +697,30 @@ void NetworkMitmScreen::_drawPreview() {
   const int slots = (bh - footerH) / lineH;
   const int listH = slots > 0 ? slots * lineH : 0;
 
-  // Nothing captured yet: show a single centred hint over the list area.
+  // Nothing captured yet: show the setup log (resolving/poisoning) if present,
+  // else a centred "Sniffing...". The log lines are ephemeral — the first
+  // packets replace them.
   const uint8_t shown = _previewPaused ? s_frozenCount : s_dispCount;
   if (shown == 0) {
-    // Clear the whole body (not just the list): otherwise the previous screen's
-    // footer — the "Start" row — shows through below the stats until the first
-    // packet arrives.
     panel.fillRect(bodyX(), bodyY(), bodyW(), bh, TFT_BLACK);
     panel.setTextColor(TFT_DARKGREY, TFT_BLACK);
-    panel.setTextDatum(MC_DATUM);
-    panel.drawString("Sniffing...", bodyX() + bodyW() / 2, bodyY() + listH / 2);
-    panel.setTextDatum(TL_DATUM);
-    _drawPreviewFooter(bodyY() + listH);   // stats + the hint line
+    if (s_statusCount > 0) {
+      panel.setTextDatum(TL_DATUM);
+      int yy = bodyY() + 2;
+      for (uint8_t i = 0; i < s_statusCount && yy + fh < bodyY() + listH; ++i) {
+        panel.drawString(s_status[i], bodyX() + 2, yy);
+        yy += lineH;
+      }
+    } else {
+      panel.setTextDatum(MC_DATUM);
+      panel.drawString("Sniffing...", bodyX() + bodyW() / 2, bodyY() + listH / 2);
+      panel.setTextDatum(TL_DATUM);
+    }
+    _drawPreviewFooter(bodyY() + listH);
     return;
   }
+  // Packets are flowing: the setup log has served its purpose, drop it.
+  if (s_statusCount) statusReset();
 
   if (_previewPaused && slots > 0) {
     if (_previewSel < _previewView) _previewView = _previewSel;
@@ -775,9 +843,20 @@ void NetworkMitmScreen::_drawCounters() {
   lcd.setTextDatum(TL_DATUM);
   if (n == 0) {
     lcd.setTextColor(TFT_DARKGREY, TFT_BLACK);
-    lcd.setTextDatum(MC_DATUM);
-    lcd.drawString("Sniffing...", bodyX() + bodyW() / 2, bodyY() + (bh - footerH) / 2);
-    lcd.setTextDatum(TL_DATUM);
+    if (s_statusCount > 0) {
+      lcd.setTextDatum(TL_DATUM);
+      int yy = bodyY() + 2;
+      for (uint8_t i = 0; i < s_statusCount && yy + fh < bodyY() + bh - footerH; ++i) {
+        lcd.drawString(s_status[i], bodyX() + 2, yy);
+        yy += rowH;
+      }
+    } else {
+      lcd.setTextDatum(MC_DATUM);
+      lcd.drawString("Sniffing...", bodyX() + bodyW() / 2, bodyY() + (bh - footerH) / 2);
+      lcd.setTextDatum(TL_DATUM);
+    }
+  } else if (s_statusCount) {
+    statusReset();   // counts flowing: drop the setup log
   }
 
   // Footer: the stats bar, no pause (Counter is a running total; Back stops).
