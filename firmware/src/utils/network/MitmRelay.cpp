@@ -348,16 +348,26 @@ esp_err_t MitmRelay::_rxCb(void* buffer, uint16_t len, void* eb) {
 
   bool targetOk = true;
   if (_arpS && _arpS->hasExplicitTargets()) {
-    // Targets mode: keep only IPv4 traffic BETWEEN two chosen targets. Both
-    // ends must be targets, so T1<->T2 passes but T1<->internet does not
-    // (unless the gateway itself is a target, in which case it is one of the
-    // two ends). ARP and non-IPv4 / short frames are dropped from the capture.
+    // Targets mode (ettercap-style): keep IPv4 traffic that links two chosen
+    // targets. Normally both ends are targets (T1<->T2). When the gateway is a
+    // target, a target's internet traffic also counts: its IP destination is a
+    // remote host (not the gateway's IP), but it egresses through the gateway
+    // target — so accept "one end is a target, the other is a non-local IP" in
+    // that case. ARP and non-IPv4 / short frames are dropped.
     targetOk = false;
     if (etherType == 0x0800 && len >= 14 + 20) {
       uint32_t sip, dip;
       memcpy(&sip, eth + 14 + 12, 4);
       memcpy(&dip, eth + 14 + 16, 4);
-      targetOk = _arpS->isExplicitTarget(sip) && _arpS->isExplicitTarget(dip);
+      const bool sT = _arpS->isExplicitTarget(sip), dT = _arpS->isExplicitTarget(dip);
+      if (sT && dT) {
+        targetOk = true;                       // between two targets
+      } else if (_arpS->gatewayKnown() && _arpS->isExplicitTarget(_arpS->gatewayIp())) {
+        // Gateway is a target: a target talking to a remote (non-local) host
+        // is its internet traffic, routed via the gateway target.
+        if (sT && !_arpS->isLocal(dip)) targetOk = true;
+        if (dT && !_arpS->isLocal(sip)) targetOk = true;
+      }
     }
   }
   if (targetOk && (!_captureFilter || _captureFilter(eth, len))) {
