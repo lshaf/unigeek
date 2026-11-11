@@ -98,7 +98,7 @@ enum : uint8_t { R_MODE, R_TARGET1, R_TARGET2, R_TARGET3, R_TARGET4,
 
 void NetworkMitmScreen::_showMenu(uint8_t selected) {
   _state = STATE_MENU;
-  static const char* kModeNames[] = {"ARP Poison - All", "ARP Poison - Targets", "Passive"};
+  static const char* kModeNames[] = {"Full", "Targets", "Passive"};
   const bool decrypted = _mode != MODE_PASSIVE;
 
   uint8_t n = 0;
