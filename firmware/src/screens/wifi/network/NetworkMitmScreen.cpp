@@ -489,13 +489,19 @@ void NetworkMitmScreen::onUpdate() {
     _lastRateMs = now;
   }
 
-  // Redraw the list only when new packets arrived (throttled), and refresh the
-  // Time/P/s line once a second. A full clear every tick is what flickered.
+  // Redraw when there is something new, throttled. Packets view keys on the
+  // display ring (new rows); Counter view keys on captured() (the tallies
+  // change even for packets the preview filter hides). Time/P/s refreshes once
+  // a second regardless.
   static uint32_t s_drawnVersion = 0;
-  const bool listDirty = s_dispVersion != s_drawnVersion;
+  static uint32_t s_drawnCaptured = 0;
+  const bool listDirty = (_livePreview == PREVIEW_COUNTER)
+                           ? _relay.captured() != s_drawnCaptured
+                           : s_dispVersion != s_drawnVersion;
   const bool statsDue  = now - _lastDraw >= 1000;
   if (!_previewPaused && (listDirty || statsDue) && now - _lastDraw >= 200) {
-    s_drawnVersion = s_dispVersion;
+    s_drawnVersion  = s_dispVersion;
+    s_drawnCaptured = _relay.captured();
     render();
     _lastDraw = now;
   }
