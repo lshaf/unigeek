@@ -80,6 +80,13 @@ public:
   void restore();
 
   int  targetCount() const { return _count; }
+  // Targeted (MITM "Targets") mode: a short explicit host list is set.
+  bool hasExplicitTargets() const { return _explicitCount > 0; }
+  // True if ip (network order) is one of the explicit targets.
+  bool isExplicitTarget(uint32_t ip) const {
+    for (uint8_t i = 0; i < _explicitCount; ++i) if (_explicit[i] == ip) return true;
+    return false;
+  }
   bool gatewayKnown() const { return _gwKnown; }
 
   // ARP frames the driver accepted / refused. Without these a failing

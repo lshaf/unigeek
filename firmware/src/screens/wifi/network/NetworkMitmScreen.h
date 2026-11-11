@@ -135,6 +135,7 @@ private:
   void _showFilters();
   void _editTarget(uint8_t i);
   void _drawPreview();   // PREVIEW_TRAFFIC: the per-packet list
+  void _drawPreviewFooter(int statusY);
   void _drawCounters();  // PREVIEW_COUNTER: per-protocol packet counts
   void _showPreviewOptions();  // paused preview: Details / DNS Lookup
   void _drawCapturing();

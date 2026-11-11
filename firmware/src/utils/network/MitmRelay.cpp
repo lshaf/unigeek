@@ -346,7 +346,17 @@ esp_err_t MitmRelay::_rxCb(void* buffer, uint16_t len, void* eb) {
     _arpS->observeIpv4(src, srcIp);
   }
 
-  if (!_captureFilter || _captureFilter(eth, len)) {
+  bool targetOk = true;
+  if (_arpS && _arpS->hasExplicitTargets() && etherType == 0x0800 && len >= 14 + 20) {
+    uint32_t sip, dip;
+    memcpy(&sip, eth + 14 + 12, 4);
+    memcpy(&dip, eth + 14 + 16, 4);
+    // Keep only frames involving a chosen target (between two of them, or the
+    // gateway-as-target case). Drops stray frames that reached our stack but
+    // are not part of the Targets capture.
+    targetOk = _arpS->isExplicitTarget(sip) || _arpS->isExplicitTarget(dip);
+  }
+  if (targetOk && (!_captureFilter || _captureFilter(eth, len))) {
     if (_captureS) _enqueue(eth, len);
     if (_previewSink) _emitPreview(eth, len);
   }

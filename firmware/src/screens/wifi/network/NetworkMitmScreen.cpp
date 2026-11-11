@@ -644,9 +644,7 @@ void NetworkMitmScreen::_drawPreview() {
     panel.setTextDatum(MC_DATUM);
     panel.drawString("Sniffing...", bodyX() + bodyW() / 2, bodyY() + listH / 2);
     panel.setTextDatum(TL_DATUM);
-    const int sy = bodyY() + listH;
-    panel.drawFastHLine(bodyX(), sy, bodyW(), TFT_DARKGREY);
-    _drawStats(bodyX(), sy + 2, bodyW());
+    _drawPreviewFooter(bodyY() + listH);   // stats + the hint line
     return;
   }
 
@@ -705,18 +703,19 @@ void NetworkMitmScreen::_drawPreview() {
   }
   row.deleteSprite();
 
-  const int statusY = bodyY() + listH;
-  // Clear everything from the list's end to the bottom first: slots truncates,
-  // so a few pixels between listH and the footer would otherwise keep whatever
-  // was there before (e.g. the previous screen's "Start").
-  panel.fillRect(bodyX(), statusY, bodyW(), bodyY() + bh - statusY, TFT_BLACK);
+  _drawPreviewFooter(bodyY() + listH);
+}
+
+// Stats line + one centred hint line below a separator, for the Packets view
+// (used both with packets and in the empty "Sniffing..." state). Clears from
+// statusY to the bottom so nothing shows through.
+void NetworkMitmScreen::_drawPreviewFooter(int statusY) {
+  auto& panel = Uni.Lcd;
+  panel.setTextSize(1);
+  const int fh = panel.fontHeight();
+  panel.fillRect(bodyX(), statusY, bodyW(), bodyY() + bodyH() - statusY, TFT_BLACK);
   panel.drawFastHLine(bodyX(), statusY, bodyW(), TFT_DARKGREY);
   _drawStats(bodyX(), statusY + 2, bodyW());
-
-  const int hintSep = statusY + fh + 4;
-  panel.drawFastHLine(bodyX(), hintSep, bodyW(), TFT_DARKGREY);
-  panel.fillRect(bodyX(), hintSep + 1, bodyW(), bodyY() + bodyH() - hintSep - 1, TFT_BLACK);
-  // One centred hint line, as in the Packet Sniffer.
   panel.setTextDatum(BC_DATUM);
   panel.setTextColor(TFT_DARKGREY, TFT_BLACK);
   panel.drawString(_previewPaused ? "[Press] Options  [Back] Resume" : "[Press] Pause",
