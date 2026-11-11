@@ -264,7 +264,8 @@ void NetworkMitmScreen::_start() {
   s_gatewayIp = 0;
   if (_mode == MODE_TARGETS) {
     for (uint8_t i = 0; i < 4; ++i) if (_targets[i]) peerIps[peerN++] = _targets[i];
-    if (peerN == 0) { ShowStatusAction::show("No target set", 1500); return; }
+    // Capture is between targets, so a single host has nothing to intercept.
+    if (peerN < 2) { ShowStatusAction::show("At least two targets required", 1800); return; }
     // Label these in the preview as T1..T4 (same slot order the user entered);
     // a target that is the network gateway shows as Tn(G).
     for (uint8_t i = 0; i < 4; ++i) s_targetIps[i] = _targets[i];

@@ -354,20 +354,18 @@ bool ArpSpoofer::_isExplicit(uint32_t ip) const {
 }
 
 void ArpSpoofer::_poisonPeers() {
-  // Each listed host is told every other listed host lives at our MAC.
-  // One pair per call so we do not burst into the TX pool. Neither address
-  // needs to be the gateway — this is what makes host-to-host traffic flow
-  // through the relay. Pairs involving the gateway are skipped here; the
-  // gateway-poison path below already covers those.
+  // Each listed host is told every other listed host lives at our MAC, one
+  // pair per call so we do not burst into the TX pool. This is what makes
+  // host-to-host traffic flow through the relay. A pair where one side is the
+  // gateway is poisoned too (its MAC comes from _gwMac), which diverts the
+  // other target's internet traffic; that only happens when the user entered
+  // the gateway as a target.
   const uint8_t pairs = _explicitCount * _explicitCount;
   for (uint8_t tries = 0; tries < pairs; tries++) {
     const uint8_t i = _peerIdx % _explicitCount;
     const uint8_t j = (_peerIdx / _explicitCount) % _explicitCount;
     _peerIdx++;
     if (i == j) continue;
-    // If the gateway is one of the targets it is poisoned as a peer too, which
-    // diverts the other targets' internet traffic through us (Tn(G) in the UI).
-    // A pair is skipped only if it is self-paired above.
     // Resolve each side's MAC: a normal target from the table, or the gateway
     // from _gwMac (the sweep never adds the gateway as a Target).
     const bool iGw = _explicit[i] == _gwIp, jGw = _explicit[j] == _gwIp;
@@ -464,14 +462,22 @@ void ArpSpoofer::restore() {
   }
 
   // Undo peer poisoning: tell each explicit target the real MAC of the others.
+  // Mirrors _poisonPeers(), including a pair where one side is the gateway (MAC
+  // from _gwMac) — otherwise that victim would keep pointing at us until its
+  // cache ages out, which can cut its internet for minutes.
   if (_explicitCount >= 2) {
     for (uint8_t i = 0; i < _explicitCount; i++) {
       for (uint8_t j = 0; j < _explicitCount; j++) {
-        if (i == j || _explicit[i] == _gwIp || _explicit[j] == _gwIp) continue;
-        const Target* ti = findByIp(_explicit[i]);
-        const Target* tj = findByIp(_explicit[j]);
-        if (!ti || !tj) continue;
-        _sendArp(2, ti->mac, _selfMac, tj->mac, tj->ip, ti->mac, ti->ip);
+        if (i == j) continue;
+        const bool iGw = _explicit[i] == _gwIp, jGw = _explicit[j] == _gwIp;
+        const Target* ti = iGw ? nullptr : findByIp(_explicit[i]);
+        const Target* tj = jGw ? nullptr : findByIp(_explicit[j]);
+        if ((!ti && !iGw) || (!tj && !jGw)) continue;
+        if ((iGw || jGw) && !_gwKnown) continue;
+        const uint8_t* iMac = iGw ? _gwMac : ti->mac;
+        const uint8_t* jMac = jGw ? _gwMac : tj->mac;
+        // Tell i the real MAC of j (sender = j's true MAC).
+        _sendArp(2, iMac, _selfMac, jMac, _explicit[j], iMac, _explicit[i]);
         delay(2);
       }
     }
