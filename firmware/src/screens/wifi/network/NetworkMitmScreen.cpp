@@ -8,7 +8,7 @@
 #include <WiFi.h>
 #include "ui/actions/InputTextAction.h"
 #include "ui/actions/InputSelectAction.h"
-#include "screens/wifi/network/MitmReverseDnsScreen.h"
+#include "screens/wifi/network/toolbox/DnsLookupScreen.h"
 
 static constexpr uint64_t kMinFree = 64 * 1024;
 
@@ -259,9 +259,12 @@ void NetworkMitmScreen::_start() {
   _snifferEnabled = _saveToFile;
   uint32_t peerIps[4];
   uint8_t  peerN = 0;
+  for (uint8_t i = 0; i < 4; ++i) s_targetIps[i] = 0;
   if (_mode == MODE_TARGETS) {
     for (uint8_t i = 0; i < 4; ++i) if (_targets[i]) peerIps[peerN++] = _targets[i];
     if (peerN == 0) { ShowStatusAction::show("No target set", 1500); return; }
+    // Label these in the preview as T1..T4 (same slot order the user entered).
+    for (uint8_t i = 0; i < 4; ++i) s_targetIps[i] = _targets[i];
   }
 
   _relayUp = _arpUp = _pcapUp = false;
@@ -628,12 +631,17 @@ void NetworkMitmScreen::_drawPreview() {
   // Nothing captured yet: show a single centred hint over the list area.
   const uint8_t shown = _previewPaused ? s_frozenCount : s_dispCount;
   if (shown == 0) {
-    panel.fillRect(bodyX(), bodyY(), bodyW(), listH, TFT_BLACK);
+    // Clear the whole body (not just the list): otherwise the previous screen's
+    // footer — the "Start" row — shows through below the stats until the first
+    // packet arrives.
+    panel.fillRect(bodyX(), bodyY(), bodyW(), bh, TFT_BLACK);
     panel.setTextColor(TFT_DARKGREY, TFT_BLACK);
     panel.setTextDatum(MC_DATUM);
     panel.drawString("Sniffing...", bodyX() + bodyW() / 2, bodyY() + listH / 2);
     panel.setTextDatum(TL_DATUM);
-    _drawStats(bodyX(), bodyY() + listH + 1, bodyW());
+    const int sy = bodyY() + listH;
+    panel.drawFastHLine(bodyX(), sy, bodyW(), TFT_DARKGREY);
+    _drawStats(bodyX(), sy + 2, bodyW());
     return;
   }
 
@@ -787,9 +795,9 @@ void NetworkMitmScreen::_showPreviewOptions() {
     render();
   } else if (strcmp(choice, "dns") == 0 && haveIp) {
     char ip[16]; ipStr(m.srcIp, ip, sizeof(ip));
-    auto* dns = new MitmReverseDnsScreen();   // runs the PTR straight away
-    dns->configure(ip);
-    Screen.push(dns);                          // Back returns to the paused preview
+    auto* dns = new DnsLookupScreen();   // the full Toolbox DNS Lookup screen
+    dns->configureReverse(ip);
+    Screen.push(dns);
   }
 }
 
