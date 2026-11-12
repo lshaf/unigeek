@@ -6,14 +6,15 @@
 #include "core/ScreenManager.h"
 #include "core/AchievementManager.h"
 #include "screens/wifi/WifiMenuScreen.h"
+#include "screens/wifi/network/NetworkInformationScreen.h"
 #include "screens/wifi/network/NetworkScannersScreen.h"
+#include "screens/wifi/network/toolbox/NetworkToolboxScreen.h"
 #include "screens/wifi/network/NetworkAttacksScreen.h"
 #include "screens/wifi/network/NetworkPranksScreen.h"
 #include "screens/wifi/network/NetworkServicesScreen.h"
 #include "screens/wifi/network/NetworkInternetScreen.h"
 #include "screens/wifi/network/remote/RemoteAccessScreen.h"
 #include "ui/actions/ShowStatusAction.h"
-#include "ui/actions/ShowQRCodeAction.h"
 #include <WiFi.h>
 
 NetworkMenuScreen::NetworkMenuScreen() {
@@ -36,17 +37,6 @@ void NetworkMenuScreen::onBack() {
 }
 
 void NetworkMenuScreen::onUpdate() {
-  if (_state == STATE_INFORMATION) {
-    if (Uni.Nav->wasPressed()) {
-      auto dir = Uni.Nav->readDirection();
-      if (dir == INavigation::DIR_BACK) { _showMenu(); return; }
-#ifndef DEVICE_HAS_KEYBOARD
-      if (dir == INavigation::DIR_PRESS) { _showMenu(); return; }
-#endif
-      _scrollView.onNav(dir);
-    }
-    return;
-  }
   ListScreen::onUpdate();
 }
 
@@ -61,17 +51,15 @@ void NetworkMenuScreen::onItemSelected(uint8_t index) {
     _connectToSelected(wifiIndex);
   } else if (_state == STATE_MENU) {
     switch (index) {
-      case 0: _showInformation(); break;
-      case 1: _showWifiQR(); break;
-      case 2: Screen.push(new NetworkScannersScreen()); break;
-      case 3: Screen.push(new NetworkAttacksScreen());  break;
-      case 4: Screen.push(new NetworkPranksScreen());   break;
-      case 5: Screen.push(new RemoteAccessScreen());    break;
-      case 6: Screen.push(new NetworkServicesScreen()); break;
-      case 7: Screen.push(new NetworkInternetScreen()); break;
+      case 0: Screen.push(new NetworkScannersScreen()); break;
+      case 1: Screen.push(new NetworkToolboxScreen());  break;
+      case 2: Screen.push(new NetworkAttacksScreen());  break;
+      case 3: Screen.push(new NetworkPranksScreen());   break;
+      case 4: Screen.push(new RemoteAccessScreen());    break;
+      case 5: Screen.push(new NetworkServicesScreen()); break;
+      case 6: Screen.push(new NetworkInternetScreen()); break;
+      case 7: Screen.push(new NetworkInformationScreen()); break;
     }
-  } else if (_state == STATE_INFORMATION) {
-    _showMenu();
   }
 }
 
@@ -126,44 +114,4 @@ void NetworkMenuScreen::_connectToSelected(uint8_t index) {
     ShowStatusAction::show("Failed", 1500);
     _showWifiList();
   }
-}
-
-void NetworkMenuScreen::_showWifiQR() {
-  String ssid = WiFi.SSID();
-  String pass = WiFi.psk();
-
-  String content = "WIFI:T:";
-  content += (pass.length() > 0) ? "WPA" : "nopass";
-  content += ";S:";
-  content += ssid;
-  content += ";P:";
-  content += pass;
-  content += ";;";
-
-  ShowQRCodeAction::show(ssid.c_str(), content.c_str());
-  int nq = Achievement.inc("wifi_qr_shown");
-  if (nq == 1) Achievement.unlock("wifi_qr_shown");
-  _showMenu();
-}
-
-void NetworkMenuScreen::_showInformation() {
-  _state = STATE_INFORMATION;
-  setItems(nullptr, 0);
-
-  _infoRows[0]  = {"IP",       WiFi.localIP().toString()};
-  _infoRows[1]  = {"DNS",      WiFi.dnsIP().toString()};
-  _infoRows[2]  = {"Gateway",  WiFi.gatewayIP().toString()};
-  _infoRows[3]  = {"Subnet",   WiFi.subnetMask().toString()};
-  _infoRows[4]  = {"Channel",  String(WiFi.channel())};
-  _infoRows[5]  = {"SSID",     WiFi.SSID()};
-  _infoRows[6]  = {"Password", WiFi.psk()};
-  _infoRows[7]  = {"RSSI",     String(WiFi.RSSI()) + " dBm"};
-  _infoRows[8]  = {"Hostname", String(WiFi.getHostname())};
-  _infoRows[9]  = {"MAC",      WiFi.macAddress()};
-  _infoRows[10] = {"BSSID",    WiFi.BSSIDstr()};
-
-  int ni = Achievement.inc("wifi_info_viewed");
-  if (ni == 1) Achievement.unlock("wifi_info_viewed");
-  _scrollView.setRows(_infoRows, 11);
-  _scrollView.render(bodyX(), bodyY(), bodyW(), bodyH());
 }

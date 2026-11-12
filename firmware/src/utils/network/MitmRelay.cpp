@@ -39,6 +39,8 @@ volatile uint32_t MitmRelay::_loopDropped = 0;
 ArpSpoofer*    MitmRelay::_arpS       = nullptr;
 volatile bool  MitmRelay::_forwardS   = true;
 volatile bool  MitmRelay::_captureS   = false;
+MitmRelay::CaptureFilter MitmRelay::_captureFilter = nullptr;
+MitmRelay::PreviewSink   MitmRelay::_previewSink   = nullptr;
 char           MitmRelay::_errBuf[48] = {};
 
 // ── Ring ────────────────────────────────────────────────────────────────────
@@ -116,7 +118,6 @@ void MitmRelay::_enqueue(const uint8_t* data, uint16_t len) {
   m.tsUsec  = (ms % 1000) * 1000;
 
   _head = next;
-  _captured++;
 }
 
 // ── Lifecycle ───────────────────────────────────────────────────────────────
@@ -255,6 +256,30 @@ void MitmRelay::update() {
   }
 }
 
+// Header-only metadata for the Live Preview. Reads the Ethernet/IP/L4 headers
+// to fill PacketMeta; never touches the payload. Runs in the WiFi callback, so
+// it only calls the sink, which must be cheap (it stashes into a ring the UI
+// drains).
+void MitmRelay::_emitPreview(const uint8_t* eth, uint16_t len) {
+  PacketMeta m = {};
+  m.length = len;
+  if (len < 14) { _previewSink(m); return; }
+  m.ethertype = (eth[12] << 8) | eth[13];
+  if (m.ethertype == 0x0800 && len >= 14 + 20) {
+    const uint8_t* ip = eth + 14;
+    const uint8_t ihl = (ip[0] & 0x0F) * 4;
+    m.ipProto = ip[9];
+    memcpy(&m.srcIp, ip + 12, 4);
+    memcpy(&m.dstIp, ip + 16, 4);
+    if ((m.ipProto == 6 || m.ipProto == 17) && len >= (uint16_t)(14 + ihl + 4)) {
+      const uint8_t* l4 = ip + ihl;
+      m.srcPort = (l4[0] << 8) | l4[1];
+      m.dstPort = (l4[2] << 8) | l4[3];
+    }
+  }
+  _previewSink(m);
+}
+
 // ── 802.11 monitor fallback ─────────────────────────────────────────────────
 
 void MitmRelay::_promiscuousCb(void* buf, wifi_promiscuous_pkt_type_t type) {
@@ -320,7 +345,35 @@ esp_err_t MitmRelay::_rxCb(void* buffer, uint16_t len, void* eb) {
     _arpS->observeIpv4(src, srcIp);
   }
 
-  if (_captureS) _enqueue(eth, len);
+  bool targetOk = true;
+  if (_arpS && _arpS->hasExplicitTargets()) {
+    // Targets mode (ettercap-style): keep IPv4 traffic that links two chosen
+    // targets. Normally both ends are targets (T1<->T2). When the gateway is a
+    // target, a target's internet traffic also counts: its IP destination is a
+    // remote host (not the gateway's IP), but it egresses through the gateway
+    // target — so accept "one end is a target, the other is a non-local IP" in
+    // that case. ARP and non-IPv4 / short frames are dropped.
+    targetOk = false;
+    if (etherType == 0x0800 && len >= 14 + 20) {
+      uint32_t sip, dip;
+      memcpy(&sip, eth + 14 + 12, 4);
+      memcpy(&dip, eth + 14 + 16, 4);
+      const bool sT = _arpS->isExplicitTarget(sip), dT = _arpS->isExplicitTarget(dip);
+      if (sT && dT) {
+        targetOk = true;                       // between two targets
+      } else if (_arpS->gatewayKnown() && _arpS->isExplicitTarget(_arpS->gatewayIp())) {
+        // Gateway is a target: a target talking to a remote (non-local) host
+        // is its internet traffic, routed via the gateway target.
+        if (sT && !_arpS->isLocal(dip)) targetOk = true;
+        if (dT && !_arpS->isLocal(sip)) targetOk = true;
+      }
+    }
+  }
+  if (targetOk && (!_captureFilter || _captureFilter(eth, len))) {
+    _captured++;
+    if (_captureS) _enqueue(eth, len);
+    if (_previewSink) _emitPreview(eth, len);
+  }
 
   // Only unicast transit IPv4 is a forwarding candidate. Forwarding broadcast
   // would loop it straight back onto the same link.

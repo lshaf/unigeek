@@ -35,11 +35,13 @@ private:
     CFG_TARGET_4,
     CFG_START_IP,
     CFG_END_IP,
+    CFG_DEPTH,
     CFG_START_SCAN,
   };
 
   State    _state    = STATE_CONFIG;
   ScanMode _scanMode = MODE_RANGE;
+  bool _aggressive = false;  // Profile: Fast / Aggressive
 
   static constexpr uint8_t MAX_TARGETS = 4;
   String _targets[MAX_TARGETS];
@@ -50,7 +52,7 @@ private:
   String _startIpSub;
   String _endIpSub;
 
-  static constexpr uint8_t MAX_CONFIG_ITEMS = 7;
+  static constexpr uint8_t MAX_CONFIG_ITEMS = 8;
   static constexpr uint8_t MAX_FOUND_HOSTS  = 64;
   static constexpr uint8_t MAX_FOUND        = 32;
 

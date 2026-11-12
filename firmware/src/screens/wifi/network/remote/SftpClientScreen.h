@@ -21,6 +21,12 @@ public:
   void onBack() override;
 
 private:
+  // Setup rows, in display order. ROW_SECRET is Password or Key File; Connect
+  // follows it (or takes its place before an auth method is chosen), see
+  // _connectRow(). Used for the switch, the list and every place that restores
+  // the highlight, so a row can't drift out of sync.
+  enum ConfigRow : uint8_t { ROW_HOST, ROW_PORT, ROW_USER, ROW_AUTH, ROW_SECRET };
+
   enum State : uint8_t {
     STATE_ACTION,
     STATE_CONFIG,
@@ -97,7 +103,7 @@ private:
     {"Download", nullptr},
     {"Upload", nullptr},
   };
-  ListItem _configItems[6];
+  ListItem _configItems[ROW_SECRET + 2];  // + Password/Key File + Connect
   ListItem _authItems[2] = {
     {"Password", nullptr},
     {"Private Key", nullptr},
@@ -151,6 +157,8 @@ private:
 
   void _updateLabels();
   void _rebuildConfig();
+  uint8_t _connectRow() const;
+  void _returnToConfig(uint8_t row);
   void _showActions();
   void _beginDownload();
   void _beginUpload();

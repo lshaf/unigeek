@@ -33,6 +33,12 @@ public:
     bool     used;
   };
 
+  // Restrict the attack to specific hosts (MITM "Targeted" mode): only these
+  // IPs are swept and poisoned, instead of the whole subnet. Call before
+  // begin(); pass 1-4 host-order-agnostic dotted addresses (parsed here). An
+  // empty list keeps the default full-subnet sweep.
+  void setTargets(const uint32_t* ipsNetworkOrder, uint8_t count);
+
   // Snapshots our IP/MAC, the gateway and the subnet. Returns false when not
   // associated or when the subnet is unusable.
   bool begin();
@@ -74,6 +80,13 @@ public:
   void restore();
 
   int  targetCount() const { return _count; }
+  // Targeted (MITM "Targets") mode: a short explicit host list is set.
+  bool hasExplicitTargets() const { return _explicitCount > 0; }
+  // True if ip (network order) is one of the explicit targets.
+  bool isExplicitTarget(uint32_t ip) const {
+    for (uint8_t i = 0; i < _explicitCount; ++i) if (_explicit[i] == ip) return true;
+    return false;
+  }
   bool gatewayKnown() const { return _gwKnown; }
 
   // ARP frames the driver accepted / refused. Without these a failing
@@ -165,6 +178,11 @@ private:
 
   uint32_t _netBase   = 0;   // first host address
   uint32_t _hostCount = 0;   // usable hosts in the subnet, capped
+  // Targeted mode: a short explicit list the sweep uses instead of the subnet.
+  static constexpr int MAX_EXPLICIT = 4;
+  uint32_t _explicit[MAX_EXPLICIT] = {};  // network order
+  uint8_t  _explicitCount = 0;
+  uint8_t  _peerIdx = 0;     // cycles through peer pairs in targeted mode
   uint32_t _netH      = 0;   // network address, host byte order
   uint32_t _maskH     = 0;   // subnet mask, host byte order
   uint32_t _sweepIdx  = 0;
@@ -195,4 +213,6 @@ private:
   void _queueRetry(const uint8_t* frame);
   int  _indexOf(uint32_t ip) const;
   void _add(uint32_t ip, const uint8_t* mac);
+  bool _isExplicit(uint32_t ip) const;
+  void _poisonPeers();
 };
