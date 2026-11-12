@@ -1,9 +1,9 @@
 # UART Terminal
 
-A serial terminal that communicates with external hardware over configurable GPIO pins. Set baud rate and RX/TX GPIOs, send commands in text or raw hex, receive incoming data in the background while you type, and optionally save the full session log to storage.
+A serial terminal that communicates with external hardware over configurable GPIO pins. Set baud rate and RX/TX GPIOs, send text or raw hex, receive incoming data in the background while you type, and optionally log the session to a file or stream it over WiFi.
 
 > [!note]
-> Requires external hardware wired to the device's GPIO pins. Default pins are taken from the **Pin Configuration** settings (Grove SDA/SCL). Change them in the setup screen before starting.
+> Requires external hardware wired to the device's GPIO pins. Default pins are taken from the **Pin Configuration** settings (Grove SCL/SDA). Change them in the setup screen before starting.
 
 ## Setup
 
@@ -12,52 +12,47 @@ Open **Utilities → UART Terminal** and configure:
 | Field | Default | Notes |
 |-------|---------|-------|
 | Baud Rate | 115200 | 9600 / 19200 / 38400 / 57600 / 115200 / 230400 |
-| RX GPIO | Grove SDA pin | Enter `0` to disable RX |
-| TX GPIO | Grove SCL pin | Enter `0` to disable TX |
-| Log Mode | Off | Off / File / Stream AP / Stream Network |
-| (mode-specific) | — | Filename, AP name, or scan-and-pick a known network — depends on Log Mode |
+| RX GPIO | Grove SCL pin | Enter `0` to disable RX |
+| TX GPIO | Grove SDA pin | Enter `0` to disable TX |
+| Log Mode | None | None / File / Stream AP / Stream Network |
+| (mode-specific) | — | Filename, AP name, or scan-and-pick a network — depends on Log Mode |
+| Line Ending | CRLF | CR / LF / CRLF — appended to every line you send in text mode |
+| Display | Text | Text / Hex — how data is shown and how your input is sent |
 
 Select **Start** to open the terminal.
 
 ### Log Mode
 
-The terminal can persist or stream the running session. Pick one in **Log Mode**:
-
 | Mode | What it does |
 |------|--------------|
-| **Off** | No logging — terminal output is on-screen only. |
-| **File** | Buffer up to 200 lines in memory; on exit, flush to `/unigeek/utility/uart/<filename>.log`. Filename auto-suggests `YYYYMMDD_HHMMSS` when NTP time is synced. |
-| **Stream AP** | Bring up a SoftAP (default SSID `UartStream`) and a Telnet server on TCP port 23. Every connected client (up to 4) receives every received and sent line in real time. Connect with `nc <ap-ip> 23` or any Telnet client. |
-| **Stream Network** | Join a known WiFi network and run the same TCP-23 server on the device's LAN address. Useful when you want the host you're already on (laptop, lab PC) to scrape the stream. |
+| **None** | No logging — output is on-screen only. |
+| **File** | Writes every line to `/unigeek/utility/uart/<filename>.log` as it arrives. Filename suggests `YYYYMMDD_HHMMSS` when the clock is set; if left empty, the same default is used. An existing file with the same name is overwritten. |
+| **Stream AP** | Brings up a SoftAP (default SSID `UartStream`) and a TCP server on port 23. Every connected client (up to 4) receives every received and sent line in real time. Connect with `nc <ap-ip> 23`. |
+| **Stream Network** | Joins a WiFi network picked from a scan and runs the same TCP-23 server on the device's LAN address. |
 
-The selected Log Mode and connection details are printed to the on-screen log when the terminal starts (e.g. `Log Mode: Stream AP` then `Stream: nc 192.168.4.1:23`) so you don't need to memorise them up front.
+When the terminal starts, the log details are printed on screen (e.g. `Filename: 20260101_120000.log` or `Stream: nc 192.168.4.1:23`). These status lines are not written to the log.
 
-## Terminal Controls
+## Terminal
 
-| Input | Action |
-|-------|--------|
-| Press (Select) | Open send-command dialog |
-| UP or DOWN | Toggle hex / string send mode |
-| Back | Exit terminal (saves log if enabled) |
+The terminal uses the same layout as the TCP / Telnet / SSH clients: a status line at the top (`RX:1 TX:2  115200 baud`, plus `HEX` in hex mode), the scrolling output, and the input line at the bottom.
 
-### Send Modes
+| Input | Keyboard devices | Other devices |
+|-------|------------------|---------------|
+| Type | Directly in the input line | **Press** opens the terminal keyboard |
+| Send | Enter | Enter on the terminal keyboard |
+| Scroll output | Fn + `;` `.` `,` `/` | Up / Down / Left / Right |
+| Control keys (sent immediately) | Ctrl + key (Ctrl+C, Ctrl+D, ...); Fn + `` ` `` for Esc | Ctrl / Esc on the terminal keyboard |
+| Leave | Backspace on an empty line | Back |
 
-**String mode** (default) — type a text command, the terminal sends it followed by `\r\n`. Incoming and outgoing lines are shown as readable text.
+Leaving asks for confirmation (if confirmations are enabled in Settings) and returns to the setup screen.
 
-**Hex mode** — enter pairs of hex digits separated by spaces (e.g. `A5 3F 00`). The bytes are sent as raw binary. Echo is prefixed with `[H]`. Useful for binary protocols, AT commands with control bytes, or low-level hardware debugging.
+### Text and hex
 
-The bottom status bar shows two badges at all times: send mode (`HEX` yellow / `STR` grey) and log mode (`STRM` green when Stream AP/Network is up, `LOG` when File logging is active, blank when Off).
+**Text** (default) — what you type is sent followed by the selected line ending. Received data gets minimal ANSI handling: colors and screen-control sequences are stripped, carriage return / backspace / erase-line edit the current line, and lines wrap to the screen width.
 
-## Receiving Data
+**Hex** — enter pairs of hex digits (e.g. `A5 3F 00`); the bytes are sent as raw binary with no line ending. Received bytes are shown as hex, 8 per line.
 
-Incoming bytes are buffered line by line (split on `\n` or at 58 characters). Each line appears in the scrolling log in white. The screen refreshes every 200 ms.
-
-## Session Logging
-
-See **Log Mode** above. **File** mode buffers up to 200 lines in memory and writes them to `/unigeek/utility/uart/<filename>.log` on exit. **Stream AP** / **Stream Network** push every line out over TCP-23 in real time without writing to flash.
-
-> [!tip]
-> If you set a filename when NTP time is synced, the default suggestion is a timestamp (`YYYYMMDD_HHMMSS`) so each session gets a unique name automatically.
+Every line you send is echoed locally as `> text` (or `> [H] A5 3F 00` in hex mode) and is included in the log.
 
 ## Achievements
 
@@ -67,3 +62,5 @@ See **Log Mode** above. **File** mode buffers up to 200 lines in memory and writ
 | Signal Caught | Silver |
 | Terminal Logger | Bronze |
 | Terminal Operator | Bronze |
+| Air Terminal | Bronze |
+| Wire Tap Pro | Bronze |

@@ -1,3 +1,4 @@
+#include "ui/actions/ConfirmAction.h"
 #include "RfCaptureScreen.h"
 #include "core/AchievementManager.h"
 #include "core/Device.h"
@@ -336,6 +337,7 @@ void RfCaptureScreen::_handleCaptureSelection(uint8_t index) {
     render();
 
   } else if (strcmp(choice, "delete") == 0) {
+    if (!ConfirmAction::popup("Remove capture?", "This action cannot be undone")) { _showReceiveList(); return; }
     for (uint8_t i = index; i + 1 < _capturedCount; i++) {
       _capturedSignals[i] = _capturedSignals[i + 1];
       _capturedTimes[i]   = _capturedTimes[i + 1];
@@ -601,6 +603,8 @@ void RfCaptureScreen::_showBrowseOptions(uint8_t index) {
     }
 
   } else if (strcmp(choice, "delete") == 0) {
+    if (!ConfirmAction::popup("Delete capture file?", "This action cannot be undone")) { render(); return; }
+    render();
     if (Uni.Storage->deleteFile(_browser.entry(index).path.c_str())) {
       ShowStatusAction::show("Deleted", 1000);
       _loadBrowseDir(_browsePath);

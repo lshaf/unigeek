@@ -4,7 +4,6 @@
 #include "screens/ble/BLEDetectorScreen.h"
 #include "screens/ble/BLEWatchdogScreen.h"
 #include "screens/ble/BLEWatchcatScreen.h"
-#include "screens/ble/BLEFoxHuntScreen.h"
 
 void BLEMonitoringDetectionMenuScreen::onInit()
 {
@@ -18,7 +17,6 @@ void BLEMonitoringDetectionMenuScreen::onItemSelected(uint8_t index)
     case 1: Screen.push(new BLEDetectorScreen()); break;
     case 2: Screen.push(new BLEWatchdogScreen()); break;
     case 3: Screen.push(new BLEWatchcatScreen()); break;
-    case 4: Screen.push(new BLEFoxHuntScreen());  break;
   }
 }
 

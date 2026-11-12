@@ -14,7 +14,7 @@ public:
 
 private:
   static constexpr uint8_t kItemCount =
-      13
+      14
 #ifndef DEVICE_HAS_WEBAUTHN
       - 1
 #endif
@@ -24,6 +24,7 @@ private:
       ;
   ListItem _items[kItemCount] = {
     {"File Manager"},
+    {"IMG File Manager"},
 #ifndef BOARD_4MB
     {"NFC/RFID Tools"},
 #endif

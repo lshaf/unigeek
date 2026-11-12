@@ -8,7 +8,7 @@
 
 class USBKeyboardUtil final : public USBHIDDevice, public HIDKeyboardUtil {
 public:
-  USBKeyboardUtil();
+  explicit USBKeyboardUtil(bool bootIsoComposite = false);
 
   void begin()                            override;
   void end()                              override;

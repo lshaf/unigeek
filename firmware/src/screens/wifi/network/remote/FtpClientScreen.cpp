@@ -1,3 +1,4 @@
+#include "ui/actions/ConfirmAction.h"
 #include "FtpClientScreen.h"
 
 #include "core/Device.h"
@@ -231,6 +232,10 @@ void FtpClientScreen::onItemSelected(uint8_t index) {
 
 void FtpClientScreen::onBack() {
   if (_state == STATE_ACTION) {
+    if (!ConfirmAction::popup("Disconnect from server?")) {
+      render();
+      return;
+    }
     _closeConnection(false);
     Screen.goBack();
     return;
@@ -597,13 +602,8 @@ void FtpClientScreen::_chooseUploadDestination(const String& remoteDir) {
 }
 
 bool FtpClientScreen::_confirmTransfer(const char* title) {
-  InputSelectAction::Option opts[] = {
-    {"Yes", "yes"},
-    {"No", "no"},
-  };
   Uni.Lcd.setTextFont(1);
-  const char* result = InputSelectAction::popup(title, opts, 2, "yes");
-  return result && strcmp(result, "yes") == 0;
+  return ConfirmAction::popup(title);
 }
 
 void FtpClientScreen::_requestDownload(const String& remotePath, bool directory) {

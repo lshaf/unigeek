@@ -2,9 +2,9 @@
 
 #include <Arduino.h>
 
-#ifdef DEVICE_HAS_WEBAUTHN
+#ifdef DEVICE_HAS_USB_HID
 
-namespace webauthn {
+namespace usb {
 
 namespace {
 UsbProfile g_active = UsbProfile::NONE;
@@ -21,6 +21,6 @@ bool claimUsbProfile(UsbProfile p)
   return g_active == p;
 }
 
-}  // namespace webauthn
+}  // namespace usb
 
-#endif  // DEVICE_HAS_WEBAUTHN
+#endif  // DEVICE_HAS_USB_HID

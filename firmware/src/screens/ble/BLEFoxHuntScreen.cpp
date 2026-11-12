@@ -5,6 +5,8 @@
 #include "ui/actions/ShowStatusAction.h"
 
 static NimBLEAddress _foxBleTarget;
+static BLEFoxHuntScreen::Matcher _foxBleMatcher = nullptr;  // signature target
+static const void*               _foxBleMatcherCtx = nullptr;
 static volatile int _foxBleRssi = 0;
 static volatile uint32_t _foxBleSeenMs = 0;
 
@@ -12,7 +14,8 @@ class FoxHuntBleWatcher : public NimBLEAdvertisedDeviceCallbacks {
 public:
   void onResult(NimBLEAdvertisedDevice* dev) override
   {
-    if (dev->getAddress() != _foxBleTarget) return;
+    if (_foxBleMatcher ? !_foxBleMatcher(dev, _foxBleMatcherCtx)
+                       : dev->getAddress() != _foxBleTarget) return;
     _foxBleRssi = dev->getRSSI();
     _foxBleSeenMs = millis();
   }
@@ -24,16 +27,38 @@ BLEFoxHuntScreen::~BLEFoxHuntScreen()
   if (_bleScan != nullptr) {
     _stopTracking();
     _bleScan->stop();
-    NimBLEDevice::deinit(true);
+    if (!_externalTarget) NimBLEDevice::deinit(true);
     _bleScan = nullptr;
   }
+}
+
+void BLEFoxHuntScreen::configureTarget(NimBLEAdvertisedDevice& device)
+{
+  _externalTarget = true;
+  _devices[0] = device;
+  _devCount = 1;
+  std::string name = device.getName();
+  String address = device.getAddress().toString().c_str();
+  _labels[0] = name.empty() ? address : String(name.c_str());
+  _subs[0] = name.empty() ? "" : address;
+}
+
+void BLEFoxHuntScreen::configureSignatureTarget(NimBLEAdvertisedDevice& sample, const char* label,
+                                                Matcher match, const void* ctx)
+{
+  configureTarget(sample);
+  _labels[0]  = label ? label : "";
+  _subs[0]    = "";
+  _matcher    = match;
+  _matcherCtx = ctx;
 }
 
 void BLEFoxHuntScreen::onInit()
 {
   NimBLEDevice::init("");
   _bleScan = NimBLEDevice::getScan();
-  _doScan();
+  if (_externalTarget) _startTracking(0);
+  else _doScan();
 }
 
 void BLEFoxHuntScreen::onUpdate()
@@ -47,7 +72,8 @@ void BLEFoxHuntScreen::onUpdate()
     auto dir = Uni.Nav->readDirection();
     if (dir == INavigation::DIR_BACK || dir == INavigation::DIR_PRESS) {
       _stopTracking();
-      _showList();
+      if (_externalTarget) Screen.goBack();
+      else _showList();
       return;
     }
   }
@@ -80,7 +106,8 @@ void BLEFoxHuntScreen::onBack()
 {
   if (_state == STATE_TRACK) {
     _stopTracking();
-    _showList();
+    if (_externalTarget) Screen.goBack();
+    else _showList();
   } else {
     if (_bleScan) _bleScan->stop();
     Screen.goBack();
@@ -150,6 +177,8 @@ void BLEFoxHuntScreen::_startTracking(int index)
   _state = STATE_TRACK;
 
   _foxBleTarget = _selDev.getAddress();
+  _foxBleMatcherCtx = _matcherCtx;
+  _foxBleMatcher = _matcher;
   _foxBleRssi = 0;
   _foxBleSeenMs = 0;
   _lastRawRssi = 0;
@@ -182,6 +211,8 @@ void BLEFoxHuntScreen::_stopTracking()
     _bleScan->setMaxResults(0xFF);
     _watching = false;
   }
+  _foxBleMatcher = nullptr;
+  _foxBleMatcherCtx = nullptr;
   if (Uni.Speaker) Uni.Speaker->noTone();
   _continuousTone = false;
   _destroyTrackingUi();

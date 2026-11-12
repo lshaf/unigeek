@@ -1,6 +1,8 @@
 #include "BLEAnalyzerScreen.h"
-#include "core/Device.h"
+#include "BLEFoxHuntScreen.h"
+#include "ui/actions/InputSelectAction.h"
 #include "core/ScreenManager.h"
+#include "core/Device.h"
 #include "core/AchievementManager.h"
 #include "screens/ble/BLEMenuScreen.h"
 #include "ui/actions/ShowStatusAction.h"
@@ -15,8 +17,6 @@ static String _toHex(const std::string& data)
   return result;
 }
 
-// Bluetooth SIG company identifier → human-readable vendor.
-// Short list of common consumer-electronics CIDs only.
 static String _vendorFromCID(uint16_t cid)
 {
   switch (cid) {
@@ -47,7 +47,6 @@ static String _vendorFromCID(uint16_t cid)
   }
 }
 
-// Apple Continuity protocol subtype byte (offset 2 of mfr data).
 static String _appleSubtype(uint8_t st)
 {
   switch (st) {
@@ -70,8 +69,6 @@ static String _appleSubtype(uint8_t st)
   }
 }
 
-// Best-effort vendor/product label from the first manufacturer-data record.
-// Empty string if no usable manufacturer data is present.
 static String _vendorString(NimBLEAdvertisedDevice& dev)
 {
   for (size_t i = 0; i < dev.getManufacturerDataCount(); i++) {
@@ -91,8 +88,6 @@ static String _vendorString(NimBLEAdvertisedDevice& dev)
   return "";
 }
 
-// Resolved display name: advertised local name if present, otherwise
-// inferred vendor / Apple-Continuity subtype, otherwise empty.
 static String _resolveName(NimBLEAdvertisedDevice& dev)
 {
   std::string n = dev.getName();
@@ -100,7 +95,6 @@ static String _resolveName(NimBLEAdvertisedDevice& dev)
   return _vendorString(dev);
 }
 
-// Common 16-bit BT SIG service UUID short names.
 static String _serviceUUIDName(uint16_t uuid)
 {
   switch (uuid) {
@@ -127,7 +121,6 @@ static String _serviceUUIDName(uint16_t uuid)
   }
 }
 
-// 16-bit UUIDs print as "0xabcd" — extract and label, otherwise return full form.
 static String _serviceUUIDLabel(NimBLEUUID uuid)
 {
   String full = String(uuid.toString().c_str());
@@ -139,7 +132,6 @@ static String _serviceUUIDLabel(NimBLEUUID uuid)
   return full;
 }
 
-// BT appearance high 10 bits = category.
 static String _appearanceName(uint16_t app)
 {
   switch (app >> 6) {
@@ -199,8 +191,6 @@ static String _advFlagsString(uint8_t f)
   return s;
 }
 
-// Path-loss distance estimate (n=2 free-space). TxPower from adv is current
-// TX level, not calibrated @1m, so the result is approximate.
 static String _distanceEstimate(int rssi, int8_t txPower, bool haveTx)
 {
   if (!haveTx || txPower == 0 || rssi == 0) return String();
@@ -213,7 +203,6 @@ static String _distanceEstimate(int rssi, int8_t txPower, bool haveTx)
   return String(buf);
 }
 
-// Format 16 raw bytes as a standard 8-4-4-4-12 UUID string.
 static String _formatUUID16Bytes(const uint8_t* b)
 {
   char buf[40];
@@ -223,10 +212,6 @@ static String _formatUUID16Bytes(const uint8_t* b)
            b[8],b[9], b[10],b[11],b[12],b[13],b[14],b[15]);
   return String(buf);
 }
-
-// ── Detail-text builders ────────────────────────────────────────────────────
-// Each returns a single string with \n line separators; TextScrollView
-// word-wraps and scrolls.
 
 static String _buildServiceUUIDText(NimBLEAdvertisedDevice& dev)
 {
@@ -310,18 +295,8 @@ static String _buildPayloadText(NimBLEAdvertisedDevice& dev)
   return s;
 }
 
-// ── Live RSSI watcher ───────────────────────────────────────────────────────
-//
-// While a device is selected we keep an indefinite, duplicate-passing scan
-// running and record the RSSI of every advertisement from the picked address.
-// setMaxResults(0) makes NimBLEScan drop each result right after the callback,
-// so the scan's results vector never grows behind our back — but it also
-// invalidates _scanResults, which is why the info view reads _selDev instead.
-// The callback runs on the NimBLE host task; _selRssi is a single aligned word,
-// so volatile is enough.
-
 static NimBLEAddress _rssiTarget;
-static volatile int  _selRssi = 0;   // 0 = no advertisement seen yet
+static volatile int  _selRssi = 0;
 
 class RssiWatcher : public NimBLEAdvertisedDeviceCallbacks {
 public:
@@ -332,23 +307,35 @@ public:
 };
 static RssiWatcher _rssiWatcher;
 
-// ── Lifecycle ──────────────────────────────────────────────────────────────
-
 BLEAnalyzerScreen::~BLEAnalyzerScreen()
 {
   if (_bleScan != nullptr) {
-    _stopRssiWatch();   // unregister the callback before the scan object goes away
+    _stopRssiWatch();
     _bleScan->stop();
-    NimBLEDevice::deinit(true);
+    if (!_externalTarget) NimBLEDevice::deinit(true);
     _bleScan = nullptr;
   }
+}
+
+void BLEAnalyzerScreen::configureTarget(NimBLEAdvertisedDevice& device)
+{
+  _externalTarget = true;
+  _selDev = device;
+  _devices[0] = device;
+  _devCount = 1;
+  _selectedDeviceIdx = 0;
 }
 
 void BLEAnalyzerScreen::onInit()
 {
   NimBLEDevice::init("");
   _bleScan = NimBLEDevice::getScan();
-  _doScan();
+  if (_externalTarget) {
+    _showInfo();
+    _startRssiWatch();
+  } else {
+    _doScan();
+  }
 }
 
 void BLEAnalyzerScreen::onItemSelected(uint8_t index)
@@ -362,8 +349,7 @@ void BLEAnalyzerScreen::onItemSelected(uint8_t index)
     if (devIndex >= 0 && devIndex < _devCount) {
       _selectedDeviceIdx = devIndex;
       _selDev            = _devices[devIndex];
-      _showInfo();
-      _startRssiWatch();
+      _showOptions();
     }
   } else if (_state == STATE_INFO) {
     if (index == 11 && _selDev.getServiceUUIDCount() > 0)
@@ -383,23 +369,20 @@ void BLEAnalyzerScreen::onBack()
     _showInfo();
   } else if (_state == STATE_INFO) {
     _stopRssiWatch();
-    _selectedDeviceIdx = -1;
-    _showList();
+    if (_externalTarget) { Screen.goBack(); return; }
+    uint8_t listIdx = (_selectedDeviceIdx >= 0) ? (_selectedDeviceIdx + 1) : 0;
+    _showList(listIdx);
   } else {
     _bleScan->stop();
     Screen.goBack();
   }
 }
 
-// In STATE_DETAIL we drive a TextScrollView directly instead of letting
-// ListScreen render rows; in every other state we delegate to ListScreen.
 void BLEAnalyzerScreen::onUpdate()
 {
   if (_state != STATE_DETAIL) {
     ListScreen::onUpdate();
 
-    // Only the RSSI row of a selected device tracks in real time — the device
-    // list itself is a static snapshot of the last scan.
     if (_state == STATE_INFO && millis() - _lastRssiRefresh >= 500) {
       _lastRssiRefresh = millis();
       _refreshRssiRow();
@@ -432,15 +415,6 @@ void BLEAnalyzerScreen::_showDetail(const char* titleText, const String& content
   render();
 }
 
-// ── Private ────────────────────────────────────────────────────────────────
-
-// ── Scan ─────────────────────────────────────────────────────────────────────
-//
-// One blocking sweep, same as every other BLE module (Whisper Pair, Chameleon
-// Scan): the list is a snapshot, not a live radar. BACK from a device info view
-// returns to that cached snapshot; only the explicit Rescan item starts another
-// sweep.
-
 void BLEAnalyzerScreen::_doScan()
 {
   _state             = STATE_SCAN;
@@ -448,7 +422,6 @@ void BLEAnalyzerScreen::_doScan()
   render();
   ShowStatusAction::show("Scanning...", 0);
 
-  // Undo the watcher's scan config before a storing scan.
   _bleScan->setAdvertisedDeviceCallbacks(nullptr, false);
   _bleScan->setMaxResults(0xFF);
   _bleScan->clearResults();
@@ -458,8 +431,6 @@ void BLEAnalyzerScreen::_doScan()
   _devCount = min((int)_scanResults.getCount(), (int)kMaxDevices);
   for (int i = 0; i < _devCount; i++) _devices[i] = _scanResults.getDevice(i);
 
-  // Present the one-shot scan snapshot from strongest to weakest signal.
-  // Insertion sort keeps equal-RSSI devices in their original scan order.
   for (int i = 1; i < _devCount; ++i) {
     NimBLEAdvertisedDevice dev = _devices[i];
     int j = i;
@@ -482,8 +453,6 @@ void BLEAnalyzerScreen::_doScan()
   _showList();
 }
 
-// ── Live RSSI of the selected device ────────────────────────────────────────
-
 void BLEAnalyzerScreen::_startRssiWatch()
 {
   _rssiTarget      = _selDev.getAddress();
@@ -491,9 +460,9 @@ void BLEAnalyzerScreen::_startRssiWatch()
   _lastRssiShown   = 1;
   _lastRssiRefresh = millis();
 
-  _bleScan->setMaxResults(0);                              // don't store results
-  _bleScan->setAdvertisedDeviceCallbacks(&_rssiWatcher, true);  // pass duplicates
-  _bleScan->start(0, nullptr, false);                      // 0 = scan indefinitely
+  _bleScan->setMaxResults(0);
+  _bleScan->setAdvertisedDeviceCallbacks(&_rssiWatcher, true);
+  _bleScan->start(0, nullptr, false);
   _rssiWatching = true;
 }
 
@@ -515,7 +484,6 @@ void BLEAnalyzerScreen::_refreshRssiRow()
   _infoVal[5]   = String(rssi) + " dBm";
   _infoItems[5] = {"RSSI", _infoVal[5].c_str()};
 
-  // Distance is derived from RSSI, so it has to follow along.
   bool   haveTx = _selDev.haveTXPower();
   int8_t tx     = haveTx ? _selDev.getTXPower() : 0;
   _infoVal[7]   = _distanceEstimate(rssi, tx, haveTx);
@@ -542,14 +510,34 @@ void BLEAnalyzerScreen::_rebuildDevItems()
                                  _devSub[i].length() > 0 ? _devSub[i].c_str() : nullptr};
     _devItems[i + 1].rssi    = (int16_t)dev.getRSSI();
     _devItems[i + 1].hasRssi = true;
+    _devItems[i + 1].sublabelMarquee = _devSub[i].length() > 0;
   }
 }
 
-void BLEAnalyzerScreen::_showList()
+void BLEAnalyzerScreen::_showOptions()
+{
+  static const InputSelectAction::Option options[] = {
+    {"Details", "details", nullptr, 0, false},
+    {"Fox Hunt", "fox", nullptr, 0, false},
+  };
+  const char* choice = InputSelectAction::popup("Options", options, 2);
+  if (!choice) return;
+  if (strcmp(choice, "details") == 0) {
+    _showInfo();
+    _startRssiWatch();
+  } else if (strcmp(choice, "fox") == 0) {
+    _stopRssiWatch();
+    auto* fox = new BLEFoxHuntScreen();
+    fox->configureTarget(_selDev);
+    Screen.push(fox);
+  }
+}
+
+void BLEAnalyzerScreen::_showList(uint8_t selectedIndex)
 {
   _state = STATE_LIST;
   _rebuildDevItems();
-  setItems(_devItems, _devCount + 1);
+  setItems(_devItems, _devCount + 1, selectedIndex);
 }
 
 void BLEAnalyzerScreen::_showInfo()
@@ -592,8 +580,6 @@ void BLEAnalyzerScreen::_showInfo()
     _infoVal[4] = "";
   }
 
-  // Prefer the live sample (BACK out of a detail view returns here mid-watch);
-  // _lastRssiShown tracks the raw watcher value so the next sample always draws.
   const int rssi = (_selRssi != 0) ? (int)_selRssi : (int)dev.getRSSI();
   _lastRssiShown = _selRssi;
   _infoVal[5]    = String(rssi) + " dBm";
@@ -628,4 +614,3 @@ void BLEAnalyzerScreen::_showInfo()
   }
   setItems(_infoItems, kInfoRows);
 }
-

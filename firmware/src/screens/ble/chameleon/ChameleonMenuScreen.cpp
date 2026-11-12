@@ -9,6 +9,7 @@
 #include "core/Device.h"
 #include "core/ScreenManager.h"
 #include "screens/ble/BLEMenuScreen.h"
+#include "ui/actions/ConfirmAction.h"
 #include "ui/components/StatusBar.h"
 #include "utils/ble/ChameleonClient.h"
 #include <NimBLEDevice.h>
@@ -34,7 +35,7 @@ void ChameleonMenuScreen::onUpdate()
 {
   if (_toScan) {
     _toScan = false;
-    Screen.push(new ChameleonScanScreen());
+    Screen.replace(new ChameleonScanScreen());
     return;
   }
   ListScreen::onUpdate();
@@ -61,6 +62,11 @@ void ChameleonMenuScreen::onItemSelected(uint8_t index)
 
 void ChameleonMenuScreen::onBack()
 {
+  if (!ConfirmAction::popup("Disconnect device?")) {
+    render();
+    return;
+  }
+
   ChameleonClient::get().disconnect();
   StatusBar::bleConnected() = false;
   NimBLEDevice::deinit(true);
