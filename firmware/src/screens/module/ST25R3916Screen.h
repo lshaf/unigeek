@@ -41,7 +41,7 @@ public:
       case STATE_MFU_NDEF_READING: return "Read NDEF";
       case STATE_MFU_NDEF_WRITING: return "Write NDEF";
       case STATE_MFU_NDEF_DETAILS: return "NDEF Details";
-      case STATE_EMULATING: return _emuReturnMfc ? "Emulate UID" : "Emulate Tag";
+      case STATE_EMULATING: return _emuIsFullTag ? "Emulate Tag" : "Emulate UID";
       case STATE_MFC_TAG_MENU: return "Tag Operations";
       case STATE_MFC_ADVANCED_MENU: return "Advanced";
       case STATE_MFC_MEMORY: return "Read Memory";
@@ -82,6 +82,7 @@ public:
       case STATE_MFC_UID_WRITE_PREVIEW: return "Write UID to Tag";
       case STATE_MFC_UID_WRITING: return "Write UID to Tag";
       case STATE_MFC_UID_EMULATE_PREVIEW: return "Emulate UID";
+      case STATE_MFC_DUMP_EMULATE_PREVIEW: return "Emulate Tag";
       case STATE_MFC_ERASING: return "Erase Tag";
       default: return "ST25R3916";
     }
@@ -131,6 +132,7 @@ private:
     STATE_MFC_UID_WRITE_PREVIEW,
     STATE_MFC_UID_WRITING,
     STATE_MFC_UID_EMULATE_PREVIEW,
+    STATE_MFC_DUMP_EMULATE_PREVIEW,
     STATE_MFC_WRITING,
     STATE_MFC_ERASING,
     STATE_MFU_MENU,
@@ -214,13 +216,14 @@ private:
     {"Check Known Keys"},
     {"Dictionaries"},
   };
-  ListItem _mfcTagItems[7] = {
+  ListItem _mfcTagItems[8] = {
     {"Detect Magic"},
     {"Read Tag"},
     {"Write UID to Tag"},
     {"Write Dump to Tag"},
     {"Erase Tag"},
     {"Emulate UID"},
+    {"Emulate Tag"},
     {"Advanced"},
   };
   ListItem _mfcAdvancedItems[3] = {
@@ -310,6 +313,7 @@ private:
   bool _mfuWritePreviewFromFile = false;
   bool _mfuDumpPickerForEmulation = false;
   bool _mfcUidPickerForEmulation = false;
+  bool _mfcDumpPickerForEmulation = false;
   bool _mfcDumpFromCompleteRead = false;
   uint8_t _writeSourceUid[4] = {};
   static constexpr size_t kMaxNdefBytes = 254;
@@ -339,6 +343,7 @@ private:
   String _dictViewTitle;
   ST25R3916Backend* _emuDev = nullptr;
   bool _emuReturnMfc = false;
+  bool _emuIsFullTag = false;
   bool _resumeMfcReadAfterDict = false;
   bool _mfcReadAfterDict = false;
   bool _mfcKnownKeysOnlyRead = false;
@@ -359,13 +364,14 @@ private:
   void _genericReadTag();
   bool _matchesGenericReadTag(const uint8_t* uid, uint8_t uidLen) const;
   void _readMfcTag();
-  void _emulateMfcTag();
+  void _emulateMfcTag(bool fullDump);
   void _openMfcUidEmulatePicker();
   void _showMfcUidEmulatePreview();
+  void _showMfcDumpEmulatePreview();
   void _emulateMfuTag();
   void _stopEmulation();
   void _showMfcDumpActions();
-  void _openMfcDumpPicker();
+  void _openMfcDumpPicker(bool forEmulation = false);
   void _openMfcDumpFile(uint8_t index);
   void _showMfcWritePreview(const uint8_t* dump, size_t len, bool fromFile);
   void _chooseMfcUidSource();

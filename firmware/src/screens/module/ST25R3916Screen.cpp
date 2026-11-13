@@ -584,7 +584,11 @@ void ST25R3916Screen::onUpdate() {
     return;
   }
   if (dir == INavigation::DIR_PRESS && _state == STATE_MFC_UID_EMULATE_PREVIEW) {
-    _emulateMfcTag();
+    _emulateMfcTag(false);
+    return;
+  }
+  if (dir == INavigation::DIR_PRESS && _state == STATE_MFC_DUMP_EMULATE_PREVIEW) {
+    _emulateMfcTag(true);
     return;
   }
   if (dir == INavigation::DIR_PRESS && _state == STATE_MFC_DETAILS) {
@@ -734,6 +738,7 @@ void ST25R3916Screen::onBack() {
     _rebuildMfcUidWriteForm(1); return;
   }
   if (_state == STATE_MFC_UID_EMULATE_PREVIEW) { _showMfcTagMenu(); return; }
+  if (_state == STATE_MFC_DUMP_EMULATE_PREVIEW) { _showMfcTagMenu(); return; }
   if (_state == STATE_MFC_WRITE_PREVIEW || _state == STATE_MFC_DUMP_SELECT || _state == STATE_MFC_UID_SOURCE_FORM ||
       _state == STATE_MFC_UID_WRITING || _state == STATE_MFC_WRITING || _state == STATE_MFC_ERASING) {
     _showMfcTagMenu();
@@ -926,7 +931,8 @@ void ST25R3916Screen::onItemSelected(uint8_t index) {
     else if (index == 3) _openMfcDumpPicker();
     else if (index == 4) _eraseMfcTag();
     else if (index == 5) _openMfcUidEmulatePicker();
-    else if (index == 6) _showMfcAdvancedMenu();
+    else if (index == 6) _openMfcDumpPicker(true);
+    else if (index == 7) _showMfcAdvancedMenu();
     return;
   }
   if (_state == STATE_MFC_DUMP_SELECT) { _openMfcDumpFile(index); return; }
@@ -1085,7 +1091,7 @@ void ST25R3916Screen::_showMfcMenu() {
 void ST25R3916Screen::_showMfcTagMenu() {
   if (_genericReadActive) { _genericReadActive = false; _showMenu(); return; }
   _state = STATE_MFC_TAG_MENU;
-  setItems(_mfcTagItems, 7, _selMfcTag);
+  setItems(_mfcTagItems, 8, _selMfcTag);
   render();
 }
 
@@ -1652,8 +1658,9 @@ void ST25R3916Screen::_showMfcDumpActions() {
     {"Write UID to Tag", "writeuid"},
     {"Write Dump to Tag", "write"},
     {"Emulate UID", "emulate"},
+    {"Emulate Tag", "emulatetag"},
   };
-  const char* r = InputSelectAction::popup("Dump Actions", opts, 6, nullptr);
+  const char* r = InputSelectAction::popup("Dump Actions", opts, 7, nullptr);
   if (!r) { render(); return; }
 
   render();
@@ -1672,16 +1679,24 @@ void ST25R3916Screen::_showMfcDumpActions() {
   } else if (strcmp(r, "write") == 0) {
     _showMfcWritePreview(_mfcDump, _mfcDumpLen, false);
   } else if (strcmp(r, "emulate") == 0) {
-    _emulateMfcTag();
+    _emulateMfcTag(false);
+  } else if (strcmp(r, "emulatetag") == 0) {
+    _emulateMfcTag(true);
   }
 }
 
-void ST25R3916Screen::_emulateMfcTag() {
+void ST25R3916Screen::_emulateMfcTag(bool fullDump) {
 #if defined(DEVICE_HAS_ST25R3916)
-  // UID-only emulation (from a .uid file) does not need a dump. The dump path
-  // still supplies the UID when one was read or loaded earlier.
+  // fullDump=true  -> full MIFARE Classic emulation (Crypto1 + encrypted
+  //                   READ/WRITE, plus mfkey32 nonce capture) from a 1K/4K dump.
+  // fullDump=false -> UID-only emulation; needs just a UID.
   const bool haveUid = (_mfcUidLen == 4 || _mfcUidLen == 7);
-  if (!_mfcDumpLen && !haveUid) {
+  if (fullDump && _mfcDumpLen < 1024) {
+    ShowStatusAction::show("Load a 1K/4K dump first", 1500);
+    _showMfcTagMenu();
+    return;
+  }
+  if (!fullDump && !_mfcDumpLen && !haveUid) {
     ShowStatusAction::show("Read or load a tag first", 1500);
     _showMfcTagMenu();
     return;
@@ -1707,14 +1722,14 @@ void ST25R3916Screen::_emulateMfcTag() {
 
   // With a full 1K dump loaded, emulate the card for real (Crypto1 handshake +
   // encrypted READ/WRITE, plus mfkey32 nonce capture). Otherwise UID-only.
-  const bool ok = (_mfcDumpLen >= 1024)
-      ? _emuDev->startMfcDumpEmulation(id, _mfcDump, _mfcDumpLen)
-      : _emuDev->startMfcUidEmulation(id);
+  const bool ok = fullDump ? _emuDev->startMfcDumpEmulation(id, _mfcDump, _mfcDumpLen)
+                           : _emuDev->startMfcUidEmulation(id);
   if (!ok) {
     delete _emuDev; _emuDev = nullptr;
     ShowStatusAction::show("Failed", 1600); _showMfcTagMenu(); return;
   }
   _emuReturnMfc = true;
+  _emuIsFullTag = fullDump;
   _state = STATE_EMULATING;
   render();
 #else
@@ -1760,6 +1775,30 @@ void ST25R3916Screen::_showMfcUidEmulatePreview() {
   render();
 }
 
+void ST25R3916Screen::_showMfcDumpEmulatePreview() {
+  if (_mfcDumpLen < 1024) {
+    ShowStatusAction::show("Invalid dump", 1600);
+    _showMfcTagMenu();
+    return;
+  }
+  _rowCount = 0;
+  auto add = [&](const char* l, const String& v) {
+    if (_rowCount >= kMaxRows) return;
+    _rowLabels[_rowCount] = l; _rowValues[_rowCount] = v;
+    _rows[_rowCount] = {_rowLabels[_rowCount].c_str(), _rowValues[_rowCount]}; ++_rowCount;
+  };
+  String t;
+  for (uint8_t i = 0; i < _mfcUidLen; ++i) { char b[4]; snprintf(b, sizeof(b), "%s%02X", i ? ":" : "", _mfcUid[i]); t += b; }
+  add("Source", "File");
+  add("Type", _mfcDumpLen == 4096 ? "MF Classic 4K" : "MF Classic 1K");
+  add("UID", t);
+  add("Blocks", String((unsigned)(_mfcDumpLen / 16U)));
+  add("[Press]", "Emulate Tag");
+  _scrollView.resetScroll(); _scrollView.setRows(_rows, _rowCount);
+  _state = STATE_MFC_DUMP_EMULATE_PREVIEW;
+  render();
+}
+
 void ST25R3916Screen::_emulateMfuTag() {
 #if defined(DEVICE_HAS_ST25R3916)
   if (!_mfuDumpLen || !_mfuPages) {
@@ -1795,6 +1834,7 @@ void ST25R3916Screen::_emulateMfuTag() {
     ShowStatusAction::show("Failed", 1600); _showMfuTagMenu(); return;
   }
   _emuReturnMfc = false;
+  _emuIsFullTag = true;   // NTAG/Type2 is always a full-tag emulation
   _state = STATE_EMULATING;
   render();
 #else
@@ -1916,7 +1956,8 @@ bool ST25R3916Screen::_writeMfcUidToTag() {
 #endif
 }
 
-void ST25R3916Screen::_openMfcDumpPicker() {
+void ST25R3916Screen::_openMfcDumpPicker(bool forEmulation) {
+  _mfcDumpPickerForEmulation = forEmulation;
   _state = STATE_MFC_DUMP_SELECT;
   if (_dumpPickDir.length() == 0) _dumpPickDir = "/unigeek/nfc/dumps";
   _browser.root = "/unigeek/nfc/dumps";
@@ -1954,6 +1995,20 @@ void ST25R3916Screen::_openMfcDumpFile(uint8_t index) {
   _mfcDumpLen = len;
   _mfcDumpBlocks = (uint16_t)(len / 16U);
   _mfcDumpFromCompleteRead = false;
+  if (_mfcDumpPickerForEmulation) {
+    _mfcDumpPickerForEmulation = false;
+    if (len < 1024) {
+      ShowStatusAction::show("Mini not supported for emulation", 1600);
+      _showMfcTagMenu();
+      return;
+    }
+    // Identity comes from the dump itself: UID in block 0, default SAK/ATQA.
+    _mfcUidLen = 4; memcpy(_mfcUid, _mfcDump, 4);
+    _mfcSak = (len == 4096) ? 0x18 : 0x08;
+    _mfcAtqa[0] = 0x04; _mfcAtqa[1] = 0x00;
+    _showMfcDumpEmulatePreview();
+    return;
+  }
   _showMfcWritePreview(_mfcDump, len, true);
 }
 
