@@ -41,7 +41,7 @@ public:
       case STATE_MFU_NDEF_READING: return "Read NDEF";
       case STATE_MFU_NDEF_WRITING: return "Write NDEF";
       case STATE_MFU_NDEF_DETAILS: return "NDEF Details";
-      case STATE_EMULATING: return "Emulate Tag";
+      case STATE_EMULATING: return _emuReturnMfc ? "Emulate UID" : "Emulate Tag";
       case STATE_MFC_TAG_MENU: return "Tag Operations";
       case STATE_MFC_ADVANCED_MENU: return "Advanced";
       case STATE_MFC_MEMORY: return "Read Memory";
@@ -77,10 +77,11 @@ public:
       case STATE_MFC_WRITE_PREVIEW: return "Write Dump to Tag";
       case STATE_MFC_WRITING: return "Write Dump to Tag";
       case STATE_MFC_UID_SOURCE_FORM: return "Write UID to Tag";
-      case STATE_MFC_UID_FILE_SELECT: return "Saved UIDs";
+      case STATE_MFC_UID_FILE_SELECT: return _mfcUidPickerForEmulation ? "Emulate UID" : "Saved UIDs";
       case STATE_MFC_UID_DUMP_SELECT: return "Saved Dumps";
       case STATE_MFC_UID_WRITE_PREVIEW: return "Write UID to Tag";
       case STATE_MFC_UID_WRITING: return "Write UID to Tag";
+      case STATE_MFC_UID_EMULATE_PREVIEW: return "Emulate UID";
       case STATE_MFC_ERASING: return "Erase Tag";
       default: return "ST25R3916";
     }
@@ -129,6 +130,7 @@ private:
     STATE_MFC_UID_DUMP_SELECT,
     STATE_MFC_UID_WRITE_PREVIEW,
     STATE_MFC_UID_WRITING,
+    STATE_MFC_UID_EMULATE_PREVIEW,
     STATE_MFC_WRITING,
     STATE_MFC_ERASING,
     STATE_MFU_MENU,
@@ -307,6 +309,7 @@ private:
   bool _writePreviewFromFile = false;
   bool _mfuWritePreviewFromFile = false;
   bool _mfuDumpPickerForEmulation = false;
+  bool _mfcUidPickerForEmulation = false;
   bool _mfcDumpFromCompleteRead = false;
   uint8_t _writeSourceUid[4] = {};
   static constexpr size_t kMaxNdefBytes = 254;
@@ -357,6 +360,8 @@ private:
   bool _matchesGenericReadTag(const uint8_t* uid, uint8_t uidLen) const;
   void _readMfcTag();
   void _emulateMfcTag();
+  void _openMfcUidEmulatePicker();
+  void _showMfcUidEmulatePreview();
   void _emulateMfuTag();
   void _stopEmulation();
   void _showMfcDumpActions();

@@ -583,6 +583,10 @@ void ST25R3916Screen::onUpdate() {
     _writeMfcUidToTag();
     return;
   }
+  if (dir == INavigation::DIR_PRESS && _state == STATE_MFC_UID_EMULATE_PREVIEW) {
+    _emulateMfcTag();
+    return;
+  }
   if (dir == INavigation::DIR_PRESS && _state == STATE_MFC_DETAILS) {
     _genericReadActive = false;
     _showMfcDumpActions();
@@ -725,7 +729,11 @@ void ST25R3916Screen::onBack() {
     _showMfcAdvancedMenu();
     return;
   }
-  if (_state == STATE_MFC_UID_FILE_SELECT || _state == STATE_MFC_UID_DUMP_SELECT || _state == STATE_MFC_UID_WRITE_PREVIEW) { _rebuildMfcUidWriteForm(1); return; }
+  if (_state == STATE_MFC_UID_FILE_SELECT || _state == STATE_MFC_UID_DUMP_SELECT || _state == STATE_MFC_UID_WRITE_PREVIEW) {
+    if (_mfcUidPickerForEmulation) { _mfcUidPickerForEmulation = false; _showMfcTagMenu(); return; }
+    _rebuildMfcUidWriteForm(1); return;
+  }
+  if (_state == STATE_MFC_UID_EMULATE_PREVIEW) { _showMfcTagMenu(); return; }
   if (_state == STATE_MFC_WRITE_PREVIEW || _state == STATE_MFC_DUMP_SELECT || _state == STATE_MFC_UID_SOURCE_FORM ||
       _state == STATE_MFC_UID_WRITING || _state == STATE_MFC_WRITING || _state == STATE_MFC_ERASING) {
     _showMfcTagMenu();
@@ -917,7 +925,7 @@ void ST25R3916Screen::onItemSelected(uint8_t index) {
     else if (index == 2) _chooseMfcUidSource();
     else if (index == 3) _openMfcDumpPicker();
     else if (index == 4) _eraseMfcTag();
-    else if (index == 5) _emulateMfcTag();
+    else if (index == 5) _openMfcUidEmulatePicker();
     else if (index == 6) _showMfcAdvancedMenu();
     return;
   }
@@ -1670,7 +1678,10 @@ void ST25R3916Screen::_showMfcDumpActions() {
 
 void ST25R3916Screen::_emulateMfcTag() {
 #if defined(DEVICE_HAS_ST25R3916)
-  if (!_mfcDumpLen || !_mfcDumpBlocks) {
+  // UID-only emulation (from a .uid file) does not need a dump. The dump path
+  // still supplies the UID when one was read or loaded earlier.
+  const bool haveUid = (_mfcUidLen == 4 || _mfcUidLen == 7);
+  if (!_mfcDumpLen && !haveUid) {
     ShowStatusAction::show("Read or load a tag first", 1500);
     _showMfcTagMenu();
     return;
@@ -1683,8 +1694,8 @@ void ST25R3916Screen::_emulateMfcTag() {
 
   ST25R3916Backend::ScanResult id;
   id.technology = ST25R3916Backend::Technology::NFC_A;
-  if (_mfcUidLen >= 4) {
-    id.nfcidLen = _mfcUidLen > 7 ? 7 : _mfcUidLen;
+  if (haveUid) {
+    id.nfcidLen = _mfcUidLen;
     memcpy(id.nfcid, _mfcUid, id.nfcidLen);
   } else {
     id.nfcidLen = 4;
@@ -1704,6 +1715,44 @@ void ST25R3916Screen::_emulateMfcTag() {
 #else
   ShowStatusAction::show("ST25R3916 not supported");
 #endif
+}
+
+void ST25R3916Screen::_openMfcUidEmulatePicker() {
+  _mfcUidPickerForEmulation = true;
+  _state = STATE_MFC_UID_FILE_SELECT;
+  _browser.root = "/unigeek/nfc/uids";
+  if (!_uidPickDir.startsWith(_browser.root)) _uidPickDir = _browser.root;
+  uint8_t n = _browser.load(this, _uidPickDir, BrowseFileView::Mode(".uid"));
+  if (n == 0 && _uidPickDir == _browser.root) {
+    _mfcUidPickerForEmulation = false;
+    ShowStatusAction::show("No saved UIDs", 1600);
+    _showMfcTagMenu();
+    return;
+  }
+  setItems(_browser.items(), n);
+}
+
+void ST25R3916Screen::_showMfcUidEmulatePreview() {
+  if (_mfcUidLen != 4 && _mfcUidLen != 7) {
+    ShowStatusAction::show("Invalid UID file", 1600);
+    _showMfcTagMenu();
+    return;
+  }
+  _rowCount = 0;
+  auto add = [&](const char* l, const String& v) {
+    if (_rowCount >= kMaxRows) return;
+    _rowLabels[_rowCount] = l; _rowValues[_rowCount] = v;
+    _rows[_rowCount] = {_rowLabels[_rowCount].c_str(), _rowValues[_rowCount]}; ++_rowCount;
+  };
+  String t;
+  for (uint8_t i = 0; i < _mfcUidLen; ++i) { char b[4]; snprintf(b, sizeof(b), "%s%02X", i ? ":" : "", _mfcUid[i]); t += b; }
+  add("Source", "File");
+  add("UID", t);
+  add("Length", _mfcUidLen == 7 ? "7 bytes" : "4 bytes");
+  add("[Press]", "Emulate UID");
+  _scrollView.resetScroll(); _scrollView.setRows(_rows, _rowCount);
+  _state = STATE_MFC_UID_EMULATE_PREVIEW;
+  render();
 }
 
 void ST25R3916Screen::_emulateMfuTag() {
@@ -1830,8 +1879,16 @@ void ST25R3916Screen::_openMfcUidDumpPicker() {
   if(n==0&&_uidDumpPickDir==_browser.root){_rebuildMfcUidWriteForm(1);ShowStatusAction::show("No saved dumps",1600);return;} setItems(_browser.items(),n);
 }
 void ST25R3916Screen::_openMfcUidFile(uint8_t index) {
-  if(index>=_browser.count())return; const auto&e=_browser.entry(index); if(e.isDir){_uidPickDir=e.path;_openMfcUidPicker();return;}
-  uint8_t uid[7]={};size_t n=0;if(!IdentityFile::loadNfcUid(e.path,uid,sizeof(uid),n)||(n!=4&&n!=7)){ShowStatusAction::show("Invalid UID file",1600);return;}memcpy(_uidWriteValue,uid,n);_uidWriteLen=(uint8_t)n;_uidWriteFilePath=e.path;_rebuildMfcUidWriteForm(1);
+  if(index>=_browser.count())return; const auto&e=_browser.entry(index); if(e.isDir){_uidPickDir=e.path; if(_mfcUidPickerForEmulation)_openMfcUidEmulatePicker(); else _openMfcUidPicker(); return;}
+  uint8_t uid[7]={};size_t n=0;if(!IdentityFile::loadNfcUid(e.path,uid,sizeof(uid),n)||(n!=4&&n!=7)){ShowStatusAction::show("Invalid UID file",1600);return;}
+  if (_mfcUidPickerForEmulation) {
+    memcpy(_mfcUid, uid, n); _mfcUidLen = (uint8_t)n;
+    _mfcSak = 0; _mfcAtqa[0] = 0; _mfcAtqa[1] = 0;
+    _mfcUidPickerForEmulation = false;
+    _showMfcUidEmulatePreview();
+    return;
+  }
+  memcpy(_uidWriteValue,uid,n);_uidWriteLen=(uint8_t)n;_uidWriteFilePath=e.path;_rebuildMfcUidWriteForm(1);
 }
 void ST25R3916Screen::_openMfcUidDumpFile(uint8_t index) {
   if(index>=_browser.count())return;const auto&e=_browser.entry(index);if(e.isDir){_uidDumpPickDir=e.path;_openMfcUidDumpPicker();return;}
@@ -2993,7 +3050,7 @@ void ST25R3916Screen::_openMfuDumpFile(uint8_t index) {
   if (_mfuDumpPickerForEmulation) {
     const HfDumpParser::Info info = HfDumpParser::inspect(_mfuDump, _mfuDumpLen);
     if (info.type != HfDumpParser::TYPE_NTAG215 || !info.uidValid || info.uidLen == 0) {
-      ShowStatusAction::show("Invalid NTAG215 dump", 1500);
+      ShowStatusAction::show("Invalid NTAG215 dump", 1600);
       _showMfuTagMenu();
       return;
     }
@@ -3044,7 +3101,7 @@ void ST25R3916Screen::_showMfuEmulatePreview() {
   const HfDumpParser::Info info = HfDumpParser::inspect(_mfuDump, _mfuDumpLen);
   if (info.type != HfDumpParser::TYPE_NTAG215 || !info.uidValid || info.uidLen == 0 ||
       _mfuPages != 135 || _mfuDumpLen != 540) {
-    ShowStatusAction::show("Invalid NTAG215 dump", 1500);
+    ShowStatusAction::show("Invalid NTAG215 dump", 1600);
     _showMfuTagMenu();
     return;
   }
