@@ -1705,7 +1705,12 @@ void ST25R3916Screen::_emulateMfcTag() {
   id.atqa[0] = _mfcAtqa[0]; id.atqa[1] = _mfcAtqa[1];
   if (id.atqa[0] == 0 && id.atqa[1] == 0) id.atqa[0] = 0x04;
 
-  if (!_emuDev->startMfcUidEmulation(id)) {
+  // With a full 1K dump loaded, emulate the card for real (Crypto1 handshake +
+  // encrypted READ/WRITE, plus mfkey32 nonce capture). Otherwise UID-only.
+  const bool ok = (_mfcDumpLen >= 1024)
+      ? _emuDev->startMfcDumpEmulation(id, _mfcDump, _mfcDumpLen)
+      : _emuDev->startMfcUidEmulation(id);
+  if (!ok) {
     delete _emuDev; _emuDev = nullptr;
     ShowStatusAction::show("Failed", 1600); _showMfcTagMenu(); return;
   }

@@ -70,9 +70,27 @@ public:
 
   bool startType2Emulation(const ScanResult& identity, uint8_t* dump, size_t dumpLen);
   bool startMfcUidEmulation(const ScanResult& identity);
+  // Full MIFARE Classic 1K emulation from a 1024-byte dump: completes the
+  // Crypto1 handshake and serves encrypted READ/WRITE. Sector keys are taken
+  // from each trailer. With no key for a sector it still captures the reader's
+  // {nr,ar} (mfkey32) via the same path. `dump` must outlive the emulation.
+  bool startMfcDumpEmulation(const ScanResult& identity, uint8_t* dump, size_t dumpLen);
   bool emulationWorker();
   void stopEmulation();
   bool emulationActive() const { return _emulating; }
+
+  // Captured reader nonces (mfkey32). One tuple per distinct {block,keytype,nr,ar}.
+  struct MfcNonce {
+    uint8_t  block;
+    uint8_t  keytype;   // 0x60 KeyA / 0x61 KeyB
+    uint32_t nt;        // tag nonce we presented (plaintext, static)
+    uint32_t nr;        // reader nonce, encrypted as received
+    uint32_t ar;        // reader answer, encrypted as received
+    uint32_t uid;       // emulated UID, big-endian
+  };
+  uint8_t mfcNonceCount() const { return _emuNonceCount; }
+  const MfcNonce& mfcNonce(uint8_t i) const { return _emuNonces[i]; }
+  void mfcClearNonces() { _emuNonceCount = 0; }
 
   bool startReaderScan();
   bool readerScanDetected();
@@ -126,12 +144,44 @@ private:
   bool _startNfcaListen(const ScanResult& identity);
   bool _listenRespond(const uint8_t* data, uint16_t len, bool withCrc = true);
 
+  // --- MIFARE Classic Crypto1 emulation (synchronous) ---
+  // Fixed tag nonce: a constant nt is ideal for mfkey32 and keeps nonce
+  // generation out of the ISO14443-A frame-delay budget.
+  static const uint32_t MFC_STATIC_NT = 0x01200145UL;
+  // Entry point from emulationWorker() when an AUTH frame arrives. Runs the
+  // whole nt -> {nr,ar} -> at handshake synchronously (never returning to the
+  // worker between nt and at) and then serves the encrypted session.
+  void _mfcHandleAuth(const uint8_t* frame, uint16_t len);
+  // Blocking inner loop: serve encrypted READ (0x30) / WRITE (0xA0) until
+  // HALT, field-off (EOF) or an idle timeout. Assumes _crypto is live and
+  // no_rx_par is set.
+  void _mfcServeSession();
+  // Send an encrypted frame (data already XORed with keystream, parity =
+  // encrypted parity), 9-bit packed, no_tx_par, no CRC, waits for TXE.
+  bool _mfcTxEnc(const uint8_t* data, const uint8_t* parity, uint8_t len);
+  // Blocking raw RX under no_rx_par: unpack 9-bit units, strip parity. Returns
+  // true once at least `wantBytes` data bytes were received within timeoutMs.
+  bool _mfcRxRaw(uint8_t* out, uint8_t wantBytes, uint32_t timeoutMs);
+  const uint8_t* _mfcSectorKey(uint8_t block, uint8_t keytype) const;
+
   bool _emulating = false;
   bool _readerScanning = false;
-  bool _emuMfc = false;
+  bool _emuMfc = false;       // MFC identity emulation (UID or dump)
+  bool _emuMfcDump = false;   // full Crypto1 emulation from a loaded dump
   uint8_t* _emuDump = nullptr;
   size_t _emuDumpLen = 0;
   ScanResult _emuIdentity;
+
+  // 1K sector keys parsed from the dump trailers.
+  uint8_t _mfcSectorCount = 0;
+  uint8_t _mfcKeyA[16][6] = {};
+  uint8_t _mfcKeyB[16][6] = {};
+  bool _mfcHaveKeyA[16] = {};
+  bool _mfcHaveKeyB[16] = {};
+
+  static const uint8_t MFC_MAX_NONCES = 24;
+  MfcNonce _emuNonces[MFC_MAX_NONCES] = {};
+  uint8_t _emuNonceCount = 0;
 };
 
 #endif
