@@ -5,6 +5,7 @@
 #include "screens/utility/QRCodeScreen.h"
 #include "screens/utility/BarcodeScreen.h"
 #include "screens/utility/FileManagerScreen.h"
+#include "screens/utility/ImgFileManagerScreen.h"
 #ifndef BOARD_4MB
 #include "screens/utility/NfcScreen.h"
 #endif
@@ -30,6 +31,7 @@ void UtilityMenuScreen::onBack() {
 void UtilityMenuScreen::onItemSelected(uint8_t index) {
   uint8_t i = 0;
   if (index == i++) { Screen.push(new FileManagerScreen());       return; }
+  if (index == i++) { Screen.push(new ImgFileManagerScreen());    return; }
 #ifndef BOARD_4MB
   if (index == i++) { Screen.push(new NfcScreen());               return; }
 #endif

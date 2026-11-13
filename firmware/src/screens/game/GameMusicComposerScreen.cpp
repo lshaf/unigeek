@@ -1,3 +1,4 @@
+#include "ui/actions/ConfirmAction.h"
 #include "GameMusicComposerScreen.h"
 
 #include <math.h>
@@ -388,7 +389,11 @@ void GameMusicComposerScreen::_openActionMenu() {
   }
   if (!strcmp(pick, "ren"))   { _rename(); return; }
   if (!strcmp(pick, "save"))  { _save(); return; }
-  if (!strcmp(pick, "clear")) { _clearAll(); return; }
+  if (!strcmp(pick, "clear")) {
+    if (ConfirmAction::popup("Clear composition?", "This action cannot be undone")) _clearAll();
+    render();
+    return;
+  }
 }
 
 void GameMusicComposerScreen::_rename() {

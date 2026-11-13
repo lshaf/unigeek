@@ -1,3 +1,4 @@
+#include "ui/actions/ConfirmAction.h"
 #include "ChameleonMagicScreen.h"
 #include "ChameleonMfcAdvancedScreen.h"
 #include "ChameleonMfcScreen.h"
@@ -183,6 +184,7 @@ void ChameleonMfcToolsScreen::_writeTag() {
 }
 
 void ChameleonMfcToolsScreen::_eraseTag() {
+  if (!ConfirmAction::popup("Erase tag?", "This action cannot be undone")) { render(); return; }
   Header header;
   header.render("Erase Tag");
 

@@ -1,3 +1,4 @@
+#include "ui/actions/ConfirmAction.h"
 #include "WebFileManagerScreen.h"
 #include "core/ScreenManager.h"
 #include "core/Device.h"
@@ -18,6 +19,10 @@ void WebFileManagerScreen::onInit() {
 
 void WebFileManagerScreen::onBack() {
   if (_state == STATE_RUNNING) {
+    if (!ConfirmAction::popup("Stop Web File Manager?")) {
+      render();
+      return;
+    }
     _stop();
   } else {
     Screen.goBack();

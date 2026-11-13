@@ -1,3 +1,4 @@
+#include "ui/actions/ConfirmAction.h"
 #include "TotpScreen.h"
 #include "core/Device.h"
 #include "core/INavigation.h"
@@ -260,6 +261,8 @@ void TotpScreen::_showAccountMenu(uint8_t index) {
 }
 
 void TotpScreen::_deleteAccount(uint8_t index) {
+  if (!ConfirmAction::popup("Delete TOTP account?", "This action cannot be undone")) { render(); return; }
+  render();
   String path = String(DIR) + "/" + _accounts[index].name + ".key";
   bool ok = Uni.Storage->deleteFile(path.c_str());
   ShowStatusAction::show(ok ? "Deleted" : "Failed", 1000);
