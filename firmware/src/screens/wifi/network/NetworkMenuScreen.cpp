@@ -7,6 +7,8 @@
 #include "core/AchievementManager.h"
 #include "screens/wifi/WifiMenuScreen.h"
 #include "screens/wifi/network/NetworkInformationScreen.h"
+#include "screens/wifi/network/NetworkWatchdogScreen.h"
+#include "screens/wifi/network/NetworkWatchcatScreen.h"
 #include "screens/wifi/network/NetworkScannersScreen.h"
 #include "screens/wifi/network/toolbox/NetworkToolboxScreen.h"
 #include "screens/wifi/network/NetworkAttacksScreen.h"
@@ -52,13 +54,15 @@ void NetworkMenuScreen::onItemSelected(uint8_t index) {
   } else if (_state == STATE_MENU) {
     switch (index) {
       case 0: Screen.push(new NetworkScannersScreen()); break;
-      case 1: Screen.push(new NetworkToolboxScreen());  break;
-      case 2: Screen.push(new NetworkAttacksScreen());  break;
-      case 3: Screen.push(new NetworkPranksScreen());   break;
-      case 4: Screen.push(new RemoteAccessScreen());    break;
-      case 5: Screen.push(new NetworkServicesScreen()); break;
-      case 6: Screen.push(new NetworkInternetScreen()); break;
-      case 7: Screen.push(new NetworkInformationScreen()); break;
+      case 1: Screen.push(new NetworkWatchdogScreen()); break;
+      case 2: Screen.push(new NetworkWatchcatScreen()); break;
+      case 3: Screen.push(new NetworkToolboxScreen());  break;
+      case 4: Screen.push(new NetworkAttacksScreen());  break;
+      case 5: Screen.push(new NetworkPranksScreen());   break;
+      case 6: Screen.push(new RemoteAccessScreen());    break;
+      case 7: Screen.push(new NetworkServicesScreen()); break;
+      case 8: Screen.push(new NetworkInternetScreen()); break;
+      case 9: Screen.push(new NetworkInformationScreen()); break;
     }
   }
 }

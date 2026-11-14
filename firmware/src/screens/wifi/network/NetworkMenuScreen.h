@@ -42,8 +42,10 @@ private:
   // this array no longer needs a conditional size or shifted switch indices.
   // Ends with Network Info, so the connection details sit in the same last
   // slot every module keeps for its "... Info".
-  ListItem _menuItems[8] = {
+  ListItem _menuItems[10] = {
     {"Scanners"},
+    {"Watchdog"},
+    {"Watchcat"},
     {"Toolbox"},
     {"Attacks"},
     {"Pranks"},
