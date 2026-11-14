@@ -2,8 +2,8 @@
 
 #include "ui/templates/ListScreen.h"
 
-// Interference tools for the joined network. Kept one level down so the
-// Network menu matches the other modules: observation first, then this.
+// Attacks first, pranks after. One list so the Network menu does not need a
+// second hop just to choose between the two.
 class NetworkAttacksPranksMenuScreen : public ListScreen {
 public:
   const char* title() override { return "Attacks & Pranks"; }
@@ -13,8 +13,18 @@ public:
   void onBack() override;
 
 private:
-  ListItem _items[2] = {
-    {"Attacks"},
-    {"Pranks"},
+#ifdef HAS_NET_TOOLS
+  ListItem _items[6] = {
+#else
+  ListItem _items[5] = {
+#endif
+    {"MITM Attack"},
+    {"DHCP Attack"},
+#ifdef HAS_NET_TOOLS
+    {"Responder"},
+#endif
+    {"Cast Bomb"},
+    {"Bonjour Spam"},
+    {"Printer Prank"},
   };
 };
