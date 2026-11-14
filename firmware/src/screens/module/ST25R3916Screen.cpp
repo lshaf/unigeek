@@ -772,7 +772,18 @@ void ST25R3916Screen::onBack() {
   }
   if (_state == STATE_MFC_ADVANCED_MENU) { _showMfcTagMenu(); return; }
   if (_state == STATE_MFC_ATTACKS_MENU || _state == STATE_MFC_KEYS_MENU) { _showMfcMenu(); return; }
-  if (_state == STATE_MFC_DICT_SELECT || _state == STATE_MFC_DICT_VIEW) { _openMfcDictionaries(false); return; }
+  if (_state == STATE_MFC_DICT_VIEW) { _openMfcDictionaries(false); return; }
+  if (_state == STATE_MFC_DICT_SELECT) {
+    if (_dictPickDir.length() && _dictPickDir != _dictPath) {
+      int slash = _dictPickDir.lastIndexOf('/');
+      _dictPickDir = (slash > 0) ? _dictPickDir.substring(0, slash) : String(_dictPath);
+      _openMfcDictionaries(false);
+    } else {
+      _dictPickDir = "";
+      _showMfcKeysMenu();
+    }
+    return;
+  }
   if (_state == STATE_MFC_KEYS_VIEW) { _showMfcKeysMenu(); return; }
   if (_state == STATE_MFC_DICT_ATTACK_SELECT) {
     if (_resumeMfcReadAfterDict) { _resumeMfcReadAfterDict = false; _showMfcTagMenu(); }
