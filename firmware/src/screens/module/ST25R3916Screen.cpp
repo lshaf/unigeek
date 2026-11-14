@@ -563,7 +563,6 @@ void ST25R3916Screen::onUpdate() {
     return;
   }
   if (dir == INavigation::DIR_PRESS && _state == STATE_MFU_DETAILS) {
-    _genericReadActive = false;
     _showMfuDumpActions();
     return;
   }
@@ -592,7 +591,6 @@ void ST25R3916Screen::onUpdate() {
     return;
   }
   if (dir == INavigation::DIR_PRESS && _state == STATE_MFC_DETAILS) {
-    _genericReadActive = false;
     _showMfcDumpActions();
     return;
   }
@@ -682,7 +680,11 @@ void ST25R3916Screen::onBack() {
     if (_state == STATE_MFC_DETAILS || _state == STATE_MFU_DETAILS ||
         _state == STATE_EXP_DETAILS || _state == STATE_EXP_RESULT ||
         _state == STATE_MFC_READING || _state == STATE_MFU_READING ||
-        _state == STATE_EXP_WORKING) {
+        _state == STATE_EXP_WORKING ||
+        _state == STATE_MFC_WRITE_PREVIEW || _state == STATE_MFC_UID_WRITE_PREVIEW ||
+        _state == STATE_MFC_UID_EMULATE_PREVIEW || _state == STATE_MFC_DUMP_EMULATE_PREVIEW ||
+        _state == STATE_MFU_WRITE_PREVIEW || _state == STATE_MFU_EMULATE_PREVIEW ||
+        _state == STATE_EMULATING) {
       _genericReadActive = false;
       _showMenu();
       return;
