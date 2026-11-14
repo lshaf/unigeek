@@ -241,18 +241,28 @@ void NetworkWatchdogScreen::onBack() {
 
 void NetworkWatchdogScreen::_drawCell(int idx, int count) {
   static constexpr const char* kNames[] = {"ARP Poison", "DHCP Rogue", "GW Hijack", "DNS Spoof"};
+#ifdef DEVICE_HAS_TOUCH_NAV
+  const int backW = bodyW() / 6;
+  const int gw    = bodyW() - backW;
+  const int cellW = gw / 2;
+  const int cellH = bodyH() / 2;
+  const int px    = bodyX() + backW + (idx % 2) * cellW;
+  const int py    = bodyY() + (idx / 2) * cellH;
+  const bool held = (idx == _holdCell);
+#else
   const int cellW = bodyW() / 2;
   const int cellH = bodyH() / 2;
-  const int px = bodyX() + (idx % 2) * cellW;
-  const int py = bodyY() + (idx / 2) * cellH;
-  const bool sel = idx == (int)_gridSel;
+  const int px    = bodyX() + (idx % 2) * cellW;
+  const int py    = bodyY() + (idx / 2) * cellH;
+  const bool held = (idx == (int)_gridSel);
+#endif
   Sprite sp(&Uni.Lcd);
   sp.createSprite(cellW, cellH);
   sp.fillSprite(TFT_BLACK);
-  sp.drawRoundRect(2, 2, cellW - 4, cellH - 4, 4, sel ? Config.getThemeColor() : 0x2104);
+  sp.drawRoundRect(2, 2, cellW - 4, cellH - 4, 4, held ? Config.getThemeColor() : 0x2104);
   sp.setTextSize(1);
   sp.setTextDatum(TC_DATUM);
-  sp.setTextColor(sel ? TFT_WHITE : TFT_LIGHTGREY, TFT_BLACK);
+  sp.setTextColor(held ? TFT_WHITE : TFT_LIGHTGREY, TFT_BLACK);
   sp.drawString(kNames[idx], cellW / 2, 8);
   char buf[8];
   snprintf(buf, sizeof(buf), "%d", count);
@@ -260,8 +270,25 @@ void NetworkWatchdogScreen::_drawCell(int idx, int count) {
   sp.setTextDatum(MC_DATUM);
   sp.setTextColor(count > 0 ? TFT_RED : TFT_DARKGREY, TFT_BLACK);
   sp.drawString(buf, cellW / 2, cellH / 2 + 4);
+  sp.setTextSize(1);
   sp.pushSprite(px, py);
   sp.deleteSprite();
+}
+
+void NetworkWatchdogScreen::_drawBackButton() {
+#ifdef DEVICE_HAS_TOUCH_NAV
+  const int backW = bodyW() / 6;
+  const bool held = (_holdCell == 4);
+  Sprite back(&Uni.Lcd);
+  back.createSprite(backW, bodyH());
+  back.fillSprite(TFT_BLACK);
+  back.drawRoundRect(2, 2, backW - 4, bodyH() - 4, 6, held ? Config.getThemeColor() : 0x2104);
+  back.setTextDatum(MC_DATUM);
+  back.setTextColor(held ? TFT_WHITE : TFT_DARKGREY, TFT_BLACK);
+  back.drawString("<", backW / 2, bodyH() / 2);
+  back.pushSprite(bodyX(), bodyY());
+  back.deleteSprite();
+#endif
 }
 
 void NetworkWatchdogScreen::_renderOverall() {
@@ -289,7 +316,7 @@ void NetworkWatchdogScreen::_renderList(const std::vector<Hit>& list) {
   if (n == 0) {
     Uni.Lcd.setTextDatum(MC_DATUM);
     Uni.Lcd.setTextColor(TFT_DARKGREY, TFT_BLACK);
-    Uni.Lcd.drawString("No events", bodyX() + bodyW() / 2, bodyY() + bodyH() / 2);
+    Uni.Lcd.drawString("Monitoring...", bodyX() + bodyW() / 2, bodyY() + bodyH() / 2);
   }
 }
 
@@ -306,6 +333,25 @@ void NetworkWatchdogScreen::onUpdate() {
   if (_view == VIEW_OVERALL) {
     if (Uni.Nav->wasPressed()) {
       auto dir = Uni.Nav->readDirection();
+#ifdef DEVICE_HAS_TOUCH_NAV
+      const int16_t tx = Uni.Nav->lastTouchX();
+      const int16_t ty = Uni.Nav->lastTouchY();
+      const int backW = bodyW() / 6;
+      if (dir == INavigation::DIR_BACK || (tx >= 0 && (int)tx < (int)bodyX() + backW)) {
+        onBack(); return;
+      }
+      if (tx >= 0) {
+        const int gx = (int)tx - (int)bodyX() - backW;
+        const int gw = bodyW() - backW;
+        const int col = gx / (gw / 2);
+        const int row = ((int)ty - (int)bodyY()) / (bodyH() / 2);
+        if (col >= 0 && col < 2 && row >= 0 && row < 2) {
+          static const View map[] = {VIEW_ARP, VIEW_DHCP, VIEW_GW, VIEW_DNS};
+          _enter(map[row * 2 + col]);
+          return;
+        }
+      }
+#else
       if (dir == INavigation::DIR_UP || dir == INavigation::DIR_DOWN) _gridSel ^= 2;
       else if (dir == INavigation::DIR_LEFT || dir == INavigation::DIR_RIGHT) _gridSel ^= 1;
       else if (dir == INavigation::DIR_PRESS) {
@@ -314,6 +360,7 @@ void NetworkWatchdogScreen::onUpdate() {
         return;
       } else if (dir == INavigation::DIR_BACK) { onBack(); return; }
       _renderOverall();
+#endif
     } else {
       static unsigned long last = 0;
       if (millis() - last > 800) { last = millis(); _renderOverall(); }
@@ -332,6 +379,7 @@ void NetworkWatchdogScreen::onRender() {
   if (_view == VIEW_OVERALL) {
     Uni.Lcd.fillRect(bodyX(), bodyY(), bodyW(), bodyH(), TFT_BLACK);
     _prevGridSel = -1;
+    _drawBackButton();
     _renderOverall();
     return;
   }

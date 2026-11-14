@@ -78,7 +78,9 @@ private:
   void _noteName(const char* name, uint32_t ip);
   void _pushHit(std::vector<Hit>& list, const Hit& h);
   void _renderOverall();
+  int      _holdCell = -1;
   void _drawCell(int idx, int count);
+  void _drawBackButton();
   void _enter(View v);
   void _renderList(const std::vector<Hit>& list);
   static void _promiscuousCb(void* buf, wifi_promiscuous_pkt_type_t type);
