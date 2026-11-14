@@ -902,8 +902,8 @@ void ST25R3916Screen::onItemSelected(uint8_t index) {
     else if (index == 1) _openMfcDictionaries(false);
     return;
   }
-  if (_state == STATE_MFC_DICT_SELECT) { _openMfcDictionary(index, false); return; }
-  if (_state == STATE_MFC_DICT_ATTACK_SELECT) { _openMfcDictionary(index, true); return; }
+  if (_state == STATE_MFC_DICT_SELECT) { _selMfcDict = _selectedIndex; _openMfcDictionary(index, false); return; }
+  if (_state == STATE_MFC_DICT_ATTACK_SELECT) { _selMfcDict = _selectedIndex; _openMfcDictionary(index, true); return; }
   if (_state == STATE_MFU_ADVANCED_MENU) {
     _selMfuAdvanced = index;
     if (index == 0) _readMfuMemory();
@@ -4385,10 +4385,27 @@ void ST25R3916Screen::_formatMfuNdef() {
 
 void ST25R3916Screen::_showMfcKnownKeys() {
 #if defined(DEVICE_HAS_ST25R3916)
+  _state = STATE_MFC_READING;
+  render();
   ST25R3916Backend dev;
-  if(!st25Begin(dev, _interface)){ShowStatusAction::show("ST25R3916 not detected");return;}
+  if (!st25Begin(dev, _interface)) {
+    ShowStatusAction::show("ST25R3916 not detected");
+    _showMfcKeysMenu();
+    return;
+  }
   ST25R3916Backend::ScanResult tag;
-  if(!dev.scan(ST25R3916Backend::TECH_A,tag,5000,true)||!isMifareClassic(tag.sak)){dev.deactivate();ShowStatusAction::show("Tag not supported");return;}
+  const auto waitResult = st25WaitForTag(dev, ST25R3916Backend::TECH_A, tag, 5000, true);
+  if (waitResult != St25WaitResult::FOUND) {
+    if (waitResult == St25WaitResult::TIMEOUT) ShowStatusAction::show("Tag not detected", 1200);
+    _showMfcKeysMenu();
+    return;
+  }
+  if (!isMifareClassic(tag.sak)) {
+    dev.deactivate();
+    ShowStatusAction::show("Tag not supported", 1200);
+    _showMfcKeysMenu();
+    return;
+  }
   dev.deactivate();
   size_t sectors=0,blocks=0;mfcDimensions(tag.sak,sectors,blocks);
   String uidDisplay,uidFile;
@@ -4410,8 +4427,10 @@ void ST25R3916Screen::_openMfcDictionaries(bool attackMode) {
   if(!_dictPickDir.length())_dictPickDir=_dictPath; _browser.root=_dictPath;
   uint8_t n=_browser.load(this,_dictPickDir,".txt",nullptr,BrowseFileView::NAME,nullptr);
   _state=attackMode?STATE_MFC_DICT_ATTACK_SELECT:STATE_MFC_DICT_SELECT;
-  if(_dictPickDir==_dictPath){uint8_t out=0;_dictItems[out++]={"Default"};_dictItems[out++]={"Discovered"};_dictItems[out++]={"Extended"};for(uint8_t i=0;i<n;++i)if(_browser.entry(i).path!=MfcKeyStore::kDiscoveredDictionary)_dictItems[out++]=_browser.items()[i];setItems(_dictItems,out);}
-  else setItems(_browser.items(),n); render();
+  uint8_t out=n;
+  if(_dictPickDir==_dictPath){out=0;_dictItems[out++]={"Default"};_dictItems[out++]={"Discovered"};_dictItems[out++]={"Extended"};for(uint8_t i=0;i<n;++i)if(_browser.entry(i).path!=MfcKeyStore::kDiscoveredDictionary)_dictItems[out++]=_browser.items()[i];setItems(_dictItems,out,_selMfcDict);}
+  else setItems(_browser.items(),n,_selMfcDict);
+  render();
 }
 
 void ST25R3916Screen::_openMfcDictionary(uint8_t index,bool attackMode) {
@@ -4476,7 +4495,10 @@ void ST25R3916Screen::_runMfcDictionaryAttack(const String& path) {
     tag.nfcidLen = _mfcRecoverTagUidLen;
     memcpy(tag.nfcid, _mfcRecoverTagUid, _mfcRecoverTagUidLen);
   } else {
-    if (!dev.scan(ST25R3916Backend::TECH_A, tag, 5000, true) || !isMifareClassic(tag.sak)) {
+    _state = STATE_MFC_READING;
+    render();
+    const auto waitResult = st25WaitForTag(dev, ST25R3916Backend::TECH_A, tag, 5000, true);
+    if (waitResult != St25WaitResult::FOUND || !isMifareClassic(tag.sak)) {
       dev.deactivate();
       if (_mfcRecoverChainActive) {
         _mfcRecoverChainActive = false;
@@ -4485,7 +4507,10 @@ void ST25R3916Screen::_runMfcDictionaryAttack(const String& path) {
         _mfcReadAfterDict = false;
         _mfcRecoverTagUidLen = 0;
       }
-      ShowStatusAction::show("Tag not supported");
+      if (waitResult == St25WaitResult::TIMEOUT) ShowStatusAction::show("Tag not detected", 1200);
+      else if (waitResult == St25WaitResult::FOUND) ShowStatusAction::show("Tag not supported", 1200);
+      if (_resumeMfcReadAfterDict) _showMfcTagMenu();
+      else _openMfcDictionaries(true);
       return;
     }
     if (_mfcRecoverChainActive) {
@@ -4502,10 +4527,12 @@ void ST25R3916Screen::_runMfcDictionaryAttack(const String& path) {
     char h[3]; snprintf(h, sizeof(h), "%02X", tag.nfcid[i]); uidFile += h;
   }
 
-  String savedA[40], savedB[40];
+  char savedA[40][13] = {};
+  char savedB[40][13] = {};
   if (!_mfcRecoverChainActive) _mfcRecoverySummary.reset();
   String keyPath = String("/unigeek/nfc/keys/") + uidFile + ".txt";
-  String persisted = Uni.Storage->readFile(keyPath.c_str());
+  String persisted = (Uni.Storage && Uni.Storage->isAvailable())
+      ? Uni.Storage->readFile(keyPath.c_str()) : String();
   int pos = 0;
   while (pos < (int)persisted.length()) {
     int nl = persisted.indexOf('\n', pos);
@@ -4515,8 +4542,8 @@ void ST25R3916Screen::_runMfcDictionaryAttack(const String& path) {
     if (sscanf(line.c_str(), "S%d %c %12s", &sec, &kt, hex) == 3 &&
         sec >= 0 && sec < (int)sectors) {
       String key(hex); key.toUpperCase();
-      if (kt == 'A' || kt == 'a') savedA[sec] = key;
-      else if (kt == 'B' || kt == 'b') savedB[sec] = key;
+      if (kt == 'A' || kt == 'a') strncpy(savedA[sec], key.c_str(), 12);
+      else if (kt == 'B' || kt == 'b') strncpy(savedB[sec], key.c_str(), 12);
     }
     pos = nl + 1;
   }
@@ -4525,9 +4552,9 @@ void ST25R3916Screen::_runMfcDictionaryAttack(const String& path) {
   auto formatSummary = [&](char* out, size_t capacity) {
     unsigned covered = 0;
     for (size_t sec = 0; sec < sectors; ++sec)
-      if (savedA[sec].length() || savedB[sec].length()) ++covered;
+      if (savedA[sec][0] || savedB[sec][0]) ++covered;
     unsigned found = 0;
-    for (size_t sec = 0; sec < sectors; ++sec) { if (savedA[sec].length()) ++found; if (savedB[sec].length()) ++found; }
+    for (size_t sec = 0; sec < sectors; ++sec) { if (savedA[sec][0]) ++found; if (savedB[sec][0]) ++found; }
     _mfcRecoverySummary.format(out, capacity, (unsigned)_mfcRecoverySummary.count, (unsigned)_mfcRecoverySummary.count, covered, (unsigned)sectors);
   };
 
@@ -4588,16 +4615,16 @@ void ST25R3916Screen::_runMfcDictionaryAttack(const String& path) {
     for (size_t sec = 0; sec < sectors; ++sec) {
       const uint8_t trailer = (uint8_t)(sectorFirstBlock(sec) + sectorBlockCount(sec) - 1U);
       for (uint8_t kt = 0; kt < 2; ++kt) {
-        String& slot = kt ? savedB[sec] : savedA[sec];
-        if (!slot.length()) continue;
+        char* slot = kt ? savedB[sec] : savedA[sec];
+        if (!slot[0]) continue;
         uint8_t key[6];
-        if (!MfcKeyStore::parseDictionaryKey(slot, key)) { slot = ""; continue; }
+        if (!MfcKeyStore::parseDictionaryKey(slot, key)) { slot[0] = 0; continue; }
         Uni.update();
         if (Uni.Nav && Uni.Nav->wasPressed() && Uni.Nav->readDirection() == INavigation::DIR_BACK) {
           dev.deactivate(); ShowStatusAction::show("Cancelled",1000); _openMfcDictionaries(true); return;
         }
-        if (!dev.hasActiveTag()) { ST25R3916Backend::ScanResult current; if (!dev.scan(ST25R3916Backend::TECH_A,current,500,true) || !sameTag(tag,current)) { slot=""; continue; } }
-        if (!dev.mifareClassicAuthenticate(trailer,key,kt==1)) slot="";
+        if (!dev.hasActiveTag()) { ST25R3916Backend::ScanResult current; if (!dev.scan(ST25R3916Backend::TECH_A,current,500,true) || !sameTag(tag,current)) { slot[0] = 0; continue; } }
+        if (!dev.mifareClassicAuthenticate(trailer,key,kt==1)) slot[0] = 0;
         dev.deactivate();
       }
     }
@@ -4618,11 +4645,11 @@ void ST25R3916Screen::_runMfcDictionaryAttack(const String& path) {
     if(!dev.hasActiveTag()){ST25R3916Backend::ScanResult current;if(!dev.scan(ST25R3916Backend::TECH_A,current,500,true)||!sameTag(tag,current))return false;}
     const bool ok=dev.mifareClassicAuthenticate(trailer,key,kt==1); dev.deactivate(); return ok;
   };
-  auto storeKey=[&](String& slot,const uint8_t key[6]){char hex[13];snprintf(hex,sizeof(hex),"%02X%02X%02X%02X%02X%02X",key[0],key[1],key[2],key[3],key[4],key[5]);slot=hex;++recovered;_mfcRecoverySummary.add(key);};
+  auto storeKey=[&](char* slot,const uint8_t key[6]){char hex[13];snprintf(hex,sizeof(hex),"%02X%02X%02X%02X%02X%02X",key[0],key[1],key[2],key[3],key[4],key[5]);strncpy(slot,hex,12);slot[12]=0;++recovered;_mfcRecoverySummary.add(key);};
   auto propagate=[&](const uint8_t key[6],size_t originSec,uint8_t originKt){
     size_t pending=0,done=0;
     for(size_t s=0;s<sectors;++s)for(uint8_t kt=0;kt<2;++kt)
-      if(!(s==originSec&&kt==originKt)&&!(kt?savedB[s].length():savedA[s].length()))++pending;
+      if(!(s==originSec&&kt==originKt)&&!(kt?savedB[s][0]:savedA[s][0]))++pending;
 
     char keyHex[13];
     snprintf(keyHex,sizeof(keyHex),"%02X%02X%02X%02X%02X%02X",
@@ -4636,8 +4663,8 @@ void ST25R3916Screen::_runMfcDictionaryAttack(const String& path) {
 
     for(size_t s=0;s<sectors&&!cancelled;++s)for(uint8_t kt=0;kt<2;++kt){
       if(s==originSec&&kt==originKt)continue;
-      String& slot=kt?savedB[s]:savedA[s];
-      if(slot.length())continue;
+      char* slot=kt?savedB[s]:savedA[s];
+      if(slot[0])continue;
       Uni.update();
       if(Uni.Nav&&Uni.Nav->wasPressed()&&Uni.Nav->readDirection()==INavigation::DIR_BACK){
         cancelled=true;break;
@@ -4659,7 +4686,7 @@ void ST25R3916Screen::_runMfcDictionaryAttack(const String& path) {
     }
   };
   DictionaryKeyProgressView::begin(liveStatus, sourceKeyCount, _mfcRecoverChainActive ? (uint8_t)(_mfcRecoverChainIndex + 1U) : 0);
-  for(size_t sec=0;sec<sectors&&!cancelled&&!objectiveMet;++sec)for(uint8_t kt=0;kt<2&&!cancelled&&!objectiveMet;++kt){String& slot=kt?savedB[sec]:savedA[sec];if(slot.length())continue;
+  for(size_t sec=0;sec<sectors&&!cancelled&&!objectiveMet;++sec)for(uint8_t kt=0;kt<2&&!cancelled&&!objectiveMet;++kt){char* slot=kt?savedB[sec]:savedA[sec];if(slot[0])continue;
     MfcKeyStore::forEachDictionaryKey(Uni.Storage,path,[&](const uint8_t key[6],size_t keyIndex,size_t){Uni.update();if(Uni.Nav&&Uni.Nav->wasPressed()&&Uni.Nav->readDirection()==INavigation::DIR_BACK){cancelled=true;return false;}
       ui.keyIndex=keyIndex+1U; ui.keyTotal=sourceKeyCount;
       DictionaryKeyProgressView::draw(liveStatus,(uint8_t)sec,kt?'B':'A',key,keyIndex+1U,sourceKeyCount,sec*2U+kt+1U,totalSlots,false,true);
@@ -4673,15 +4700,15 @@ void ST25R3916Screen::_runMfcDictionaryAttack(const String& path) {
       discoveredKeys.note(key,kt?'B':'A');
       bool allAccessible=true, allKeysKnown=true;
       for(size_t x=0;x<sectors;++x){
-        if(!savedA[x].length()&&!savedB[x].length())allAccessible=false;
-        if(!savedA[x].length()||!savedB[x].length())allKeysKnown=false;
+        if(!savedA[x][0]&&!savedB[x][0])allAccessible=false;
+        if(!savedA[x][0]||!savedB[x][0])allKeysKnown=false;
       }
       const bool canStop=allAccessible && !allKeysKnown;
       const bool finished=allKeysKnown;
       discoveredKeys.render(actionLog,sectors,[&](const String& hex)->size_t{
         size_t n=0;
         for(size_t x=0;x<sectors;++x)
-          if(savedA[x].equalsIgnoreCase(hex)||savedB[x].equalsIgnoreCase(hex))++n;
+          if(strcasecmp(savedA[x],hex.c_str())==0||strcasecmp(savedB[x],hex.c_str())==0)++n;
         return n;
       },canStop,finished);
       ui.attempt="";
@@ -4717,15 +4744,15 @@ void ST25R3916Screen::_runMfcDictionaryAttack(const String& path) {
       return false;});
   }
   if(cancelled){dev.deactivate();if(_mfcRecoverChainActive){_mfcRecoverChainActive=false;_mfcRecoverTagUidLen=0;_resumeMfcReadAfterDict=false;_mfcRecoveryNext=false;_mfcReadAfterDict=false;ShowStatusAction::show("Cancelled",1000);_showMfcTagMenu();return;}ShowStatusAction::show("Cancelled",1000);_openMfcDictionaries(true);return;}
-  if(!_mfcRecoverChainActive)for(size_t sec=0;sec<sectors;++sec)for(uint8_t kt=0;kt<2;++kt){const String& slot=kt?savedB[sec]:savedA[sec];if(!slot.length()){char nf[32];snprintf(nf,sizeof(nf),"S%u %c: not found",(unsigned)sec,kt?'B':'A');actionLog.addLine(nf,TFT_RED);}}
+  if(!_mfcRecoverChainActive)for(size_t sec=0;sec<sectors;++sec)for(uint8_t kt=0;kt<2;++kt){const char* slot=kt?savedB[sec]:savedA[sec];if(!slot[0]){char nf[32];snprintf(nf,sizeof(nf),"S%u %c: not found",(unsigned)sec,kt?'B':'A');actionLog.addLine(nf,TFT_RED);}}
   dev.deactivate();
 
   if (recovered > 0) {
     Uni.Storage->makeDir("/unigeek/nfc/keys");
     String out;
     for (size_t sec = 0; sec < sectors; ++sec) {
-      if (savedA[sec].length()) out += String("S") + (sec < 10 ? "0" : "") + String((unsigned)sec) + " A " + savedA[sec] + "\n";
-      if (savedB[sec].length()) out += String("S") + (sec < 10 ? "0" : "") + String((unsigned)sec) + " B " + savedB[sec] + "\n";
+      if (savedA[sec][0]) out += String("S") + (sec < 10 ? "0" : "") + String((unsigned)sec) + " A " + savedA[sec] + "\n";
+      if (savedB[sec][0]) out += String("S") + (sec < 10 ? "0" : "") + String((unsigned)sec) + " B " + savedB[sec] + "\n";
     }
     Uni.Storage->writeFile(keyPath.c_str(), out.c_str());
     MfcKeyStore::updateDiscoveredDictionary(Uni.Storage, out);
@@ -4740,8 +4767,8 @@ void ST25R3916Screen::_runMfcDictionaryAttack(const String& path) {
     bool covered = true;
     bool allKeys = true;
     for (size_t sec = 0; sec < sectors; ++sec) {
-      if (!savedA[sec].length() && !savedB[sec].length()) covered = false;
-      if (!savedA[sec].length() || !savedB[sec].length()) allKeys = false;
+      if (!savedA[sec][0] && !savedB[sec][0]) covered = false;
+      if (!savedA[sec][0] || !savedB[sec][0]) allKeys = false;
     }
     ++_mfcRecoverChainIndex;
     if ((!covered || (_mfcRecoverContinueMissing && !allKeys && !_mfcRecoverStopRequested)) && _mfcRecoverChainIndex < 3) {
