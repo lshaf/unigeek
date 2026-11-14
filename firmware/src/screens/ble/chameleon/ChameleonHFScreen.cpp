@@ -174,6 +174,8 @@ void ChameleonHFScreen::onRestore() {
     Screen.goBack();
   }
 }
+
+void ChameleonHFScreen::onInit() {
   _state     = STATE_IDLE;
   _needsDraw = true;
   _doScan();
