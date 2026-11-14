@@ -1,0 +1,54 @@
+//
+// Created by L Shaf on 2026-02-23.
+//
+
+#pragma once
+
+#include "ui/templates/ListScreen.h"
+#include "ui/views/ScrollListView.h"
+#include "utils/network/WifiUtility.h"
+
+class NetworkMenuScreen : public ListScreen
+{
+public:
+  NetworkMenuScreen();
+
+  const char* title()        override { return "Network"; }
+  bool inhibitPowerOff()     override { return _scanning; }
+
+  void onInit() override;
+  void onBack() override;
+  void onUpdate() override;
+  void onItemSelected(uint8_t index) override;
+
+private:
+  enum State {
+    STATE_SELECT_WIFI,
+    STATE_MENU
+  };
+
+  State      _state       = STATE_SELECT_WIFI;
+  bool       _scanning    = false;
+
+  WifiUtility::ScannedWifi _scanned[WifiUtility::MAX_WIFI];
+  uint8_t     _scannedCount = 0;
+  ListItem    _scannedItems[WifiUtility::MAX_WIFI + 1];
+
+  // Observation lives under Monitoring & Detection (Scanners, Watchdog,
+  // Watchcat), matching Wi-Fi and BLE. Attacks and Pranks follow it. Services
+  // is what this device offers. Network Info keeps the last slot; Toolbox sits
+  // just before it.
+  ListItem _menuItems[7] = {
+    {"Monitoring & Detection"},
+    {"Attacks & Pranks"},
+    {"Remote Access"},
+    {"Services"},
+    {"Internet"},
+    {"Toolbox"},
+    {"Network Info"},
+  };
+
+  void   _showMenu();
+  void   _showWifiList();
+  void   _connectToSelected(uint8_t index);
+};
