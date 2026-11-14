@@ -283,7 +283,7 @@ void NetworkWatchcatScreen::_renderList(const std::vector<Hit>& list) {
   if (n == 0) {
     Uni.Lcd.setTextDatum(MC_DATUM);
     Uni.Lcd.setTextColor(TFT_DARKGREY, TFT_BLACK);
-    Uni.Lcd.drawString("Monitoring...", bodyX() + bodyW() / 2, bodyY() + bodyH() / 2);
+    Uni.Lcd.drawString("Scanning...", bodyX() + bodyW() / 2, bodyY() + bodyH() / 2);
   }
 }
 
