@@ -13,7 +13,7 @@
 class NetworkWatchdogScreen : public BaseScreen {
 public:
   const char* title() override {
-    return _view == VIEW_OVERALL ? "Network Watchdog" : _viewTitle;
+    return _view == VIEW_OVERALL ? "Watchdog" : _viewTitle;
   }
   bool inhibitPowerOff() override { return true; }
 

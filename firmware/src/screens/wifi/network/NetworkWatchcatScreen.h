@@ -12,7 +12,7 @@
 class NetworkWatchcatScreen : public BaseScreen {
 public:
   const char* title() override {
-    return _view == VIEW_OVERALL ? "Network Watchcat" : _viewTitle;
+    return _view == VIEW_OVERALL ? "Watchcat" : _viewTitle;
   }
   bool inhibitPowerOff() override { return true; }
 
