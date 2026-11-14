@@ -245,10 +245,10 @@ void WebDavClientScreen::onItemSelected(uint8_t index) {
   if (_state != STATE_CONFIG) return;
 
   switch (index) {
-    case 0: _configUrl(); break;
-    case 1: _configUsername(); break;
-    case 2: _configPassword(); break;
-    case 3: _connect(); break;
+    case ROW_URL:      _configUrl();      break;
+    case ROW_USER:     _configUsername(); break;
+    case ROW_PASSWORD: _configPassword(); break;
+    case ROW_CONNECT:  _connect();        break;
     default: break;
   }
 }
@@ -286,6 +286,8 @@ void WebDavClientScreen::onBack() {
   }
 
   if (_state == STATE_ACTION) {
+    // The action list's row index must not leak into setup.
+    _selectedIndex = ROW_CONNECT;
     _state = STATE_CONFIG;
     _updateLabels();
     _rebuildConfig();
@@ -309,12 +311,12 @@ void WebDavClientScreen::_updateLabels() {
 }
 
 void WebDavClientScreen::_rebuildConfig() {
-  uint8_t sel = min<uint8_t>(_selectedIndex, 3);
-  _configItems[0] = {"Server URL", _urlLabel};
-  _configItems[1] = {"Username", _userLabel};
-  _configItems[2] = {"Password", _passwordLabel};
-  _configItems[3] = {"Connect", nullptr};
-  setItems(_configItems, 4, sel);
+  uint8_t sel = min<uint8_t>(_selectedIndex, CONFIG_ROWS - 1);
+  _configItems[ROW_URL]      = {"Server URL", _urlLabel};
+  _configItems[ROW_USER]     = {"Username", _userLabel};
+  _configItems[ROW_PASSWORD] = {"Password", _passwordLabel};
+  _configItems[ROW_CONNECT]  = {"Connect", nullptr};
+  setItems(_configItems, CONFIG_ROWS, sel);
 }
 
 void WebDavClientScreen::_showActions() {
@@ -328,7 +330,7 @@ void WebDavClientScreen::_configUrl() {
   String value = InputTextAction::popup("Server URL", initial.c_str());
   if (!InputTextAction::wasCancelled() && value.length())
     _baseUrl = _normalizeBase(value);
-  _selectedIndex = 0;
+  _selectedIndex = ROW_URL;
   _updateLabels();
   _rebuildConfig();
   render();
@@ -337,7 +339,7 @@ void WebDavClientScreen::_configUrl() {
 void WebDavClientScreen::_configUsername() {
   String value = InputTextAction::popup("Username", _username.c_str());
   if (!InputTextAction::wasCancelled()) _username = value;
-  _selectedIndex = 1;
+  _selectedIndex = ROW_USER;
   _updateLabels();
   _rebuildConfig();
   render();
@@ -346,7 +348,7 @@ void WebDavClientScreen::_configUsername() {
 void WebDavClientScreen::_configPassword() {
   String value = InputTextAction::popup("Password", "");
   if (!InputTextAction::wasCancelled()) _password = value;
-  _selectedIndex = 2;
+  _selectedIndex = ROW_PASSWORD;
   _updateLabels();
   _rebuildConfig();
   render();

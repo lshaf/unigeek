@@ -58,9 +58,7 @@ void FtpClientScreen::onUpdate() {
         xSemaphoreGive(_mutex);
       }
       _workerState = WORKER_IDLE;
-      _state = STATE_CONFIG;
-      _updateLabels();
-      _rebuildConfig();
+      _returnToConfig(ROW_CONNECT);
       ShowStatusAction::show(err.c_str(), 1700);
       render();
       return;
@@ -220,11 +218,11 @@ void FtpClientScreen::onItemSelected(uint8_t index) {
   if (_state != STATE_CONFIG) return;
 
   switch (index) {
-    case 0: _configHost(); break;
-    case 1: _configPort(); break;
-    case 2: _configUsername(); break;
-    case 3: _configPassword(); break;
-    case 4: _connect(); break;
+    case ROW_HOST:     _configHost();     break;
+    case ROW_PORT:     _configPort();     break;
+    case ROW_USER:     _configUsername(); break;
+    case ROW_PASSWORD: _configPassword(); break;
+    case ROW_CONNECT:  _connect();        break;
     default: break;
   }
 }
@@ -279,13 +277,22 @@ void FtpClientScreen::_updateLabels() {
 }
 
 void FtpClientScreen::_rebuildConfig() {
-  uint8_t sel = min<uint8_t>(_selectedIndex, 4);
-  _configItems[0] = {"Host", _hostLabel};
-  _configItems[1] = {"Port", _portLabel};
-  _configItems[2] = {"Username", _userLabel};
-  _configItems[3] = {"Password", _passwordLabel};
-  _configItems[4] = {"Connect", nullptr};
-  setItems(_configItems, 5, sel);
+  uint8_t sel = min<uint8_t>(_selectedIndex, CONFIG_ROWS - 1);
+  _configItems[ROW_HOST]     = {"Host", _hostLabel};
+  _configItems[ROW_PORT]     = {"Port", _portLabel};
+  _configItems[ROW_USER]     = {"Username", _userLabel};
+  _configItems[ROW_PASSWORD] = {"Password", _passwordLabel};
+  _configItems[ROW_CONNECT]  = {"Connect", nullptr};
+  setItems(_configItems, CONFIG_ROWS, sel);
+}
+
+// Back to the setup list with `row` highlighted. Needed whenever another list
+// (actions, browsers) was shown, since its row index would leak into setup.
+void FtpClientScreen::_returnToConfig(uint8_t row) {
+  _selectedIndex = row;
+  _state = STATE_CONFIG;
+  _updateLabels();
+  _rebuildConfig();
 }
 
 void FtpClientScreen::_showActions() {
@@ -335,7 +342,7 @@ void FtpClientScreen::_configPassword() {
   String value = InputTextAction::popup(
     "Password", "", InputTextAction::INPUT_TEXT);
   if (!InputTextAction::wasCancelled()) _password = value;
-  _selectedIndex = 3;
+  _selectedIndex = ROW_PASSWORD;
   _updateLabels();
   _rebuildConfig();
   render();
@@ -371,9 +378,7 @@ void FtpClientScreen::_closeConnection(bool returnToConfig) {
   while (_ftpTask && millis() - start < 800) delay(5);
 
   if (returnToConfig) {
-    _state = STATE_CONFIG;
-    _updateLabels();
-    _rebuildConfig();
+    _returnToConfig(ROW_CONNECT);
     render();
   }
 }

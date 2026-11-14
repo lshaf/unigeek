@@ -1,12 +1,62 @@
 #include "IPScannerScreen.h"
+#include "IPScannerDetailsScreen.h"
+#include "PortScannerScreen.h"
+#include "screens/wifi/WifiFoxHuntScreen.h"
 #include <WiFi.h>
+#include <lwip/etharp.h>
+#include <lwip/ip4_addr.h>
+#include <lwip/netif.h>
 #include "core/ScreenManager.h"
 #include "core/AchievementManager.h"
 #include "screens/wifi/network/NetworkMenuScreen.h"
 #include "ui/actions/InputNumberAction.h"
+#include "ui/actions/InputSelectAction.h"
 #include "ui/actions/ShowStatusAction.h"
 #include "ui/views/ProgressView.h"
 #include "utils/network/ScanCancelUtil.h"
+
+// ARP cache entries are not guaranteed to survive the complete IP scan.
+// Refresh the neighbor entry for the selected host before reading it.
+static bool lookupHostMac(const char* ip, uint8_t mac[6]) {
+  ip4_addr_t target;
+  if (!ip4addr_aton(ip, &target)) return false;
+
+  auto readCache = [&]() -> bool {
+    for (int i = 0; i < ARP_TABLE_SIZE; ++i) {
+      ip4_addr_t* cachedIp = nullptr;
+      struct netif* netif = nullptr;
+      struct eth_addr* cachedMac = nullptr;
+      if (!etharp_get_entry(i, &cachedIp, &netif, &cachedMac)) continue;
+      if (!cachedIp || !cachedMac || !ip4_addr_cmp(cachedIp, &target)) continue;
+      memcpy(mac, cachedMac->addr, 6);
+      return true;
+    }
+    return false;
+  };
+
+  if (readCache()) return true;
+
+  // Only same-subnet peers can be resolved to their own MAC via ARP.
+  // The gateway MAC would be misleading for off-subnet destinations.
+  IPAddress local = WiFi.localIP();
+  IPAddress mask = WiFi.subnetMask();
+  IPAddress remote;
+  if (!remote.fromString(ip)) {
+    return false;
+  }
+  for (int i = 0; i < 4; ++i) {
+    if ((local[i] & mask[i]) != (remote[i] & mask[i])) return false;
+  }
+
+  struct netif* iface = netif_default;
+  if (!iface) return false;
+  if (etharp_request(iface, &target) != ERR_OK) return false;
+  for (int attempt = 0; attempt < 40; ++attempt) {
+    delay(25);
+    if (readCache()) return true;
+  }
+  return false;
+}
 
 // ── screen methods ─────────────────────────────────────
 
@@ -27,7 +77,7 @@ void IPScannerScreen::onBack() {
     case STATE_RESULT_PORT:
       _state = STATE_RESULT_IP;
       setPreferSublabel(true);
-      setItems(_foundItems, (_foundCount == 0) ? 1 : _foundCount);
+      setItems(_foundItems, (_foundCount == 0) ? 1 : _foundCount, _selectedHost);
       break;
     case STATE_RESULT_IP:
       _showConfiguration();
@@ -58,6 +108,10 @@ void IPScannerScreen::onItemSelected(uint8_t index) {
         _showConfiguration(index);
         break;
       case 3:
+        _aggressive = !_aggressive;
+        _showConfiguration(index);
+        break;
+      case 4:
         _scanIP();
         break;
     }
@@ -65,12 +119,71 @@ void IPScannerScreen::onItemSelected(uint8_t index) {
     if (_foundCount == 0 || _foundIPs[index].ip[0] == '\0') {
       _showConfiguration();
     } else {
-      _scanPort(_foundIPs[index].ip);
+      _selectedHost = index;
+      static const InputSelectAction::Option options[] = {
+        {"Details", "details"},
+        {"Port Scan", "ports"},
+        {"Fox Hunt", "fox"},
+      };
+      const char* choice = InputSelectAction::popup("Options", options, 3);
+      // The popup clears its rectangle but does not restore the underlying UI.
+      // Redraw the screen chrome and list before opening Details or ProgressView.
+      render();
+      if (choice && strcmp(choice, "details") == 0) _showDetails(index);
+      else if (choice && strcmp(choice, "ports") == 0) {
+        auto* scanner = new PortScannerScreen();
+        scanner->configureTarget(_foundIPs[index].ip);
+        Screen.push(scanner);
+      } else if (choice && strcmp(choice, "fox") == 0) {
+        uint8_t mac[6] = {};
+        if (!lookupHostMac(_foundIPs[index].ip, mac)) {
+          ShowStatusAction::show("MAC unavailable");
+          return;
+        }
+        // IP discovery cannot distinguish APs from clients. Use station
+        // tracking for hosts on the connected WiFi network.
+        const uint8_t channel = WiFi.channel();
+        if (channel < 1 || channel > 14) {
+          ShowStatusAction::show("Channel unavailable");
+          return;
+        }
+        auto* hunt = new WifiFoxHuntScreen();
+        const uint8_t* connectedAp = WiFi.BSSID();
+        const bool validAp = connectedAp &&
+            memcmp(connectedAp, "\0\0\0\0\0\0", 6) != 0;
+        // The gateway's ARP MAC can be the router's LAN interface MAC,
+        // which differs from the BSSID used to transmit WiFi frames.
+        // For the gateway, prefer the associated AP's BSSID as a heuristic.
+        // This assumes the gateway and associated AP are the same device;
+        // on networks with a separate gateway/AP this may track the AP instead.
+        IPAddress selectedIp;
+        const bool isGateway = selectedIp.fromString(_foundIPs[index].ip) &&
+                               selectedIp == WiFi.gatewayIP();
+        if (validAp && (isGateway || memcmp(mac, connectedAp, 6) == 0)) {
+          hunt->configureTarget(false, connectedAp, channel,
+                                _foundIPs[index].hostname);
+        } else {
+          hunt->configureTransmitterTarget(mac, channel,
+                                           _foundIPs[index].hostname);
+        }
+        Screen.push(hunt);
+      }
     }
   }
 }
 
 // ── private ────────────────────────────────────────────
+
+void IPScannerScreen::_showDetails(uint8_t index) {
+  if (index >= _foundCount) return;
+  _selectedHost = index;
+  uint8_t mac[6] = {};
+  const bool hasMac = lookupHostMac(_foundIPs[index].ip, mac);
+  auto* details = new IPScannerDetailsScreen();
+  details->configure(_foundIPs[index].ip, _foundIPs[index].hostname,
+                     hasMac ? mac : nullptr);
+  Screen.push(details);
+}
 
 void IPScannerScreen::_showConfiguration(uint8_t selectedIndex) {
   _state = STATE_CONFIGURATION;
@@ -80,8 +193,9 @@ void IPScannerScreen::_showConfiguration(uint8_t selectedIndex) {
   _configItems[0] = {"Start IP", _startIpSub.c_str()};
   _configItems[1] = {"End IP", _endIpSub.c_str()};
   _configItems[2] = {"Resolve Name", _resolveName ? "On" : "Off"};
-  _configItems[3] = {"Start Scan"};
-  setItems(_configItems, 4, selectedIndex);
+  _configItems[3] = {"Profile", _aggressive ? "Aggressive" : "Fast"};
+  _configItems[4] = {"Start"};
+  setItems(_configItems, 5, selectedIndex);
 }
 
 void IPScannerScreen::_scanIP() {
@@ -105,7 +219,8 @@ void IPScannerScreen::_scanIP() {
     (uint8_t)_startIp, (uint8_t)_endIp,
     _foundIPs, MAX_FOUND, _resolveName,
     [](uint8_t pct) { ProgressView::progress("Scanning...", pct); },
-    []() { return ScanCancelUtil::poll(); }
+    []() { return ScanCancelUtil::poll(); },
+    _aggressive ? IpScanUtil::Profile::Aggressive : IpScanUtil::Profile::Fast
   );
 
   ProgressView::finish();
@@ -153,7 +268,7 @@ void IPScannerScreen::_scanPort(const char* ip) {
   if (ScanCancelUtil::wasCancelled()) {
     _state = STATE_RESULT_IP;
     setPreferSublabel(true);
-    setItems(_foundItems, _foundCount);
+    setItems(_foundItems, _foundCount, _selectedHost);
     return;
   }
 

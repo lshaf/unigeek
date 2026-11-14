@@ -18,7 +18,6 @@
 const char* SftpClientScreen::title() {
   switch (_state) {
     case STATE_CONFIG:
-    case STATE_SELECT_AUTH:
     case STATE_SELECT_KEY:
     case STATE_CONNECTING:
     case STATE_HOSTKEY_CONFIRM:
@@ -51,8 +50,6 @@ SftpClientScreen::~SftpClientScreen() {
 void SftpClientScreen::onInit() {
   if (!_mutex) _mutex = xSemaphoreCreateMutex();
 
-  // A new SFTP session starts at connection configuration. The action hub is
-  // shown only after the SSH/SFTP session is established successfully.
   _state = STATE_CONFIG;
   _updateLabels();
   _rebuildConfig();
@@ -89,9 +86,6 @@ void SftpClientScreen::onUpdate() {
     }
 
     if (_workerState == WORKER_READY) {
-      // Keep the configured credential/session data available while the user
-      // moves between Download and Upload. Sensitive worker-local copies are
-      // still cleared by the worker immediately after authentication.
       _showActions();
       return;
     }
@@ -105,9 +99,7 @@ void SftpClientScreen::onUpdate() {
       _password = "";
       _keyData = "";
       _workerState = WORKER_IDLE;
-      _state = STATE_CONFIG;
-      _updateLabels();
-      _rebuildConfig();
+      _returnToConfig(_connectRow());
       ShowStatusAction::show(err.c_str(), 1800);
       render();
       return;
@@ -244,7 +236,6 @@ void SftpClientScreen::onRender() {
     return;
   }
   if (_state == STATE_TRANSFER) {
-    // ProgressView owns the body while a transfer is running.
     return;
   }
   if (_state == STATE_REMOTE_BROWSER) {
@@ -270,11 +261,6 @@ void SftpClientScreen::onItemSelected(uint8_t index) {
     return;
   }
 
-  if (_state == STATE_SELECT_AUTH) {
-    _selectAuth(index);
-    return;
-  }
-
   if (_state == STATE_SELECT_KEY) {
     _selectKey(index);
     return;
@@ -292,24 +278,25 @@ void SftpClientScreen::onItemSelected(uint8_t index) {
 
   if (_state != STATE_CONFIG) return;
 
+  if (index == _connectRow()) {
+    _connect();
+    return;
+  }
   switch (index) {
-    case 0: _configHost();     break;
-    case 1: _configPort();     break;
-    case 2: _configUsername(); break;
-    case 3: _selectAuthMenu(); break;
-    case 4:
+    case ROW_HOST: _configHost();     break;
+    case ROW_PORT: _configPort();     break;
+    case ROW_USER: _configUsername(); break;
+    case ROW_AUTH: _toggleAuthMode(); break;
+    case ROW_SECRET:
       if (_authMode == AUTH_PASSWORD) _configPassword();
-      else if (_authMode == AUTH_PRIVATE_KEY) _openKeyPicker();
-      else _connect();
+      else                            _openKeyPicker();
       break;
-    case 5: _connect(); break;
     default: break;
   }
 }
 
 void SftpClientScreen::onBack() {
   if (_state == STATE_ACTION) {
-    // Leaving the Download/Upload hub ends the SFTP session.
     _closeConnection(false);
     Screen.goBack();
     return;
@@ -338,19 +325,9 @@ void SftpClientScreen::onBack() {
       String parent = (slash > 0) ? _localBrowsePath.substring(0, slash) : _localBrowser.root;
       _loadKeyDir(parent, child);
     } else {
-      _state = STATE_CONFIG;
-      _updateLabels();
-      _rebuildConfig();
+      _returnToConfig(ROW_SECRET);
       render();
     }
-    return;
-  }
-
-  if (_state == STATE_SELECT_AUTH) {
-    _state = STATE_CONFIG;
-    _updateLabels();
-    _rebuildConfig();
-    render();
     return;
   }
 
@@ -359,11 +336,9 @@ void SftpClientScreen::onBack() {
       _remoteRestoreName = _baseName(_remotePath);
       _requestList(_parentRemotePath(_remotePath));
     } else if (_remoteMode == REMOTE_UPLOAD_DEST) {
-      // Cancel destination selection and return to the local upload browser.
       _state = STATE_LOCAL_BROWSER;
       render();
     } else {
-      // BACK from Download returns to the action hub while keeping the session.
       _showActions();
     }
     return;
@@ -381,7 +356,6 @@ void SftpClientScreen::onBack() {
     return;
   }
 
-  // Before a connection exists, BACK from CONFIG returns to the parent menu.
   Screen.goBack();
 }
 
@@ -393,19 +367,13 @@ void SftpClientScreen::_showActions() {
 
 void SftpClientScreen::_beginDownload() {
   _remoteMode = REMOTE_DOWNLOAD;
-
-  // Used only when no live SFTP session exists yet.
-  _state = STATE_CONFIG;
-  _updateLabels();
-  _rebuildConfig();
+  _returnToConfig(_connectRow());
   render();
 }
 
 void SftpClientScreen::_beginUpload() {
   if (_workerState != WORKER_READY) {
-    _state = STATE_CONFIG;
-    _updateLabels();
-    _rebuildConfig();
+    _returnToConfig(_connectRow());
     render();
     return;
   }
@@ -448,28 +416,28 @@ void SftpClientScreen::_updateLabels() {
   }
 }
 
-void SftpClientScreen::_rebuildConfig() {
-  uint8_t sel = _selectedIndex;
-  _configItems[0] = {"Host", _hostLabel};
-  _configItems[1] = {"Port", _portLabel};
-  _configItems[2] = {"Username", _userLabel};
-  _configItems[3] = {"Auth Method", _authLabel};
+uint8_t SftpClientScreen::_connectRow() const {
+  return (_authMode == AUTH_PASSWORD || _authMode == AUTH_PRIVATE_KEY) ? ROW_SECRET + 1 : ROW_SECRET;
+}
 
-  if (_authMode == AUTH_PASSWORD) {
-    _configItems[4] = {"Password", _passwordLabel};
-    _configItems[5] = {"Connect", nullptr};
-    if (sel > 5) sel = 5;
-    setItems(_configItems, 6, sel);
-  } else if (_authMode == AUTH_PRIVATE_KEY) {
-    _configItems[4] = {"Key File", _keyLabel};
-    _configItems[5] = {"Connect", nullptr};
-    if (sel > 5) sel = 5;
-    setItems(_configItems, 6, sel);
-  } else {
-    _configItems[4] = {"Connect", nullptr};
-    if (sel > 4) sel = 4;
-    setItems(_configItems, 5, sel);
-  }
+void SftpClientScreen::_rebuildConfig() {
+  const uint8_t connectRow = _connectRow();
+  uint8_t sel = min<uint8_t>(_selectedIndex, connectRow);
+  _configItems[ROW_HOST] = {"Host", _hostLabel};
+  _configItems[ROW_PORT] = {"Port", _portLabel};
+  _configItems[ROW_USER] = {"Username", _userLabel};
+  _configItems[ROW_AUTH] = {"Auth Method", _authLabel};
+  if (_authMode == AUTH_PASSWORD)    _configItems[ROW_SECRET] = {"Password", _passwordLabel};
+  if (_authMode == AUTH_PRIVATE_KEY) _configItems[ROW_SECRET] = {"Key File", _keyLabel};
+  _configItems[connectRow] = {"Connect", nullptr};
+  setItems(_configItems, connectRow + 1, sel);
+}
+
+void SftpClientScreen::_returnToConfig(uint8_t row) {
+  _selectedIndex = row;
+  _state = STATE_CONFIG;
+  _updateLabels();
+  _rebuildConfig();
 }
 
 void SftpClientScreen::_configHost() {
@@ -515,28 +483,20 @@ void SftpClientScreen::_configPassword() {
   String value = InputTextAction::popup(
     "Password", "", InputTextAction::INPUT_TEXT);
   if (!InputTextAction::wasCancelled()) _password = value;
-  _selectedIndex = 4;
+  _selectedIndex = ROW_SECRET;
   _updateLabels();
   _rebuildConfig();
   render();
 }
 
-void SftpClientScreen::_selectAuthMenu() {
-  _state = STATE_SELECT_AUTH;
-  uint8_t selected = (_authMode == AUTH_PRIVATE_KEY) ? 1 : 0;
-  setItems(_authItems, 2, selected);
-  render();
-}
-
-void SftpClientScreen::_selectAuth(uint8_t index) {
-  if (index > 1) return;
-
-  _authMode = index == 0 ? AUTH_PASSWORD : AUTH_PRIVATE_KEY;
-  if (_authMode == AUTH_PASSWORD) _keyData = "";
-  else _password = "";
-
-  _selectedIndex = 3;
-  _state = STATE_CONFIG;
+void SftpClientScreen::_toggleAuthMode() {
+  if (_authMode == AUTH_PASSWORD) {
+    _authMode = AUTH_PRIVATE_KEY;
+    _keyData = "";
+  } else {
+    _authMode = AUTH_PASSWORD;
+    _password = "";
+  }
   _updateLabels();
   _rebuildConfig();
   render();
@@ -588,13 +548,9 @@ void SftpClientScreen::_selectKey(uint8_t index) {
   }
 
   _keyPath = e.path;
-  _selectedIndex = 4;
-  _state = STATE_CONFIG;
-  _updateLabels();
-  _rebuildConfig();
+  _returnToConfig(ROW_SECRET);
   render();
 }
-
 
 void SftpClientScreen::_loadLocalUploadDir(const String& path, const String& restoreName) {
   _localBrowsePath = path;
@@ -660,7 +616,6 @@ void SftpClientScreen::_chooseUploadDestinationMode() {
   }
 
   if (strcmp(result, "downloads") == 0) {
-    // Relative SFTP paths resolve from the connected user's home directory.
     _chooseUploadDestination("Downloads");
     return;
   }
@@ -788,7 +743,6 @@ void SftpClientScreen::_worker() {
     goto cleanup;
   }
 
-  // Fingerprint confirmation occurs before any user credential is sent.
   {
     ssh_key serverKey = nullptr;
     unsigned char* hash = nullptr;
@@ -1052,7 +1006,6 @@ bool SftpClientScreen::_workerList(void* sftpOpaque, const String& path) {
 
   sftp_closedir(dir);
 
-  // Directories first, then case-insensitive alphabetical order.
   for (uint8_t i = 1; i < count; ++i) {
     SharedRemoteEntry key = temp[i];
     int j = i - 1;
@@ -1150,8 +1103,6 @@ void SftpClientScreen::_selectRemote(uint8_t index) {
   if (index >= _remoteCount) return;
 
   if (_remoteMode == REMOTE_UPLOAD_DEST) {
-    // "." is the synthetic UPLOAD HERE action for the current directory.
-    // PRESS executes it directly; PRESS on a real directory still navigates.
     if (_remoteNames[index] == ".") {
       _chooseUploadDestination(_remotePaths[index]);
     } else if (_remoteIsDir[index]) {
@@ -1212,11 +1163,6 @@ bool SftpClientScreen::_confirmTransfer(const char* title, const String& name) {
     {"No", "no"},
   };
 
-  // InputSelectAction renders its title as a single-line overlay heading.
-  // Do not embed the selected filename/directory with a newline here; doing so
-  // produces visual artifacts on the UG display.
-  // File-browser screens may leave a different LCD font selected. Normalize it
-  // before opening the popup so its title/options render consistently.
   Uni.Lcd.setTextFont(1);
   Uni.Lcd.setTextSize(1);
   Uni.Lcd.setTextDatum(TL_DATUM);
@@ -1261,7 +1207,6 @@ void SftpClientScreen::_requestDownload(const String& remotePath, bool directory
   ProgressView::progress(
     directory ? "Preparing..." : (_transferIsUpload ? "Uploading..." : "Downloading..."), 0);
 }
-
 
 void SftpClientScreen::_requestUpload(const String& remoteDir) {
   if (!_uploadLocalPath.length()) {
@@ -1520,7 +1465,6 @@ bool SftpClientScreen::_workerDownloadDir(void* sftpOpaque,
   return _workerDownloadTree(sftpOpaque, remotePath, localPath, 0);
 }
 
-
 bool SftpClientScreen::_workerEnsureRemoteDir(void* sftpOpaque,
                                                const String& remotePath) {
   sftp_session sftp = (sftp_session)sftpOpaque;
@@ -1533,7 +1477,6 @@ bool SftpClientScreen::_workerEnsureRemoteDir(void* sftpOpaque,
 
   if (sftp_mkdir(sftp, remotePath.c_str(), 0755) == SSH_OK) return true;
 
-  // Some servers return failure when the path appeared concurrently. Recheck.
   a = sftp_stat(sftp, remotePath.c_str());
   if (!a) return false;
   bool isDir = (a->type == SSH_FILEXFER_TYPE_DIRECTORY);
@@ -1783,8 +1726,6 @@ String SftpClientScreen::_baseName(const String& path) const {
 
 void SftpClientScreen::_acceptHostKey(bool trust) {
   _hostKeyDecision = trust ? 1 : -1;
-  // Leave WAIT_HOSTKEY immediately on the UI side. Otherwise onUpdate() can
-  // re-open the Trust prompt before the worker observes the decision.
   _workerState = WORKER_CONNECTING;
   if (trust) {
     _state = STATE_CONNECTING;
@@ -1862,8 +1803,6 @@ void SftpClientScreen::_renderHostKeyConfirm() {
 }
 
 void SftpClientScreen::_renderRemoteBrowser() {
-  // Let ListScreen use the full browser body. A manually painted footer here
-  // obscures the last visible rows.
   ListScreen::onRender();
 }
 
