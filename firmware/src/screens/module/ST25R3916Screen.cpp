@@ -4791,7 +4791,7 @@ void ST25R3916Screen::_runMfcDictionaryAttack(const String& path) {
     _resumeMfcReadAfterDict = false;
     _mfcReadAfterDict = true;
   } else {
-    ShowStatusAction::show(msg, 1400);
+    ShowStatusAction::show(msg);
     _openMfcDictionaries(true);
   }
 #endif
