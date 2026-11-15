@@ -4527,8 +4527,11 @@ void ST25R3916Screen::_runMfcDictionaryAttack(const String& path) {
     char h[3]; snprintf(h, sizeof(h), "%02X", tag.nfcid[i]); uidFile += h;
   }
 
-  char savedA[40][13] = {};
-  char savedB[40][13] = {};
+  // Off the stack: these locals overflow the ESP32 task and crash the attack.
+  static char savedA[40][13];
+  static char savedB[40][13];
+  memset(savedA, 0, sizeof(savedA));
+  memset(savedB, 0, sizeof(savedB));
   if (!_mfcRecoverChainActive) _mfcRecoverySummary.reset();
   String keyPath = String("/unigeek/nfc/keys/") + uidFile + ".txt";
   String persisted = (Uni.Storage && Uni.Storage->isAvailable())
@@ -4577,7 +4580,7 @@ void ST25R3916Screen::_runMfcDictionaryAttack(const String& path) {
     return;
   }
 
-  LogView actionLog;
+  static LogView actionLog;
   actionLog.clear();
   struct DictUiCtx { const char* status; const char* attempt; int pct; size_t keyIndex; size_t keyTotal; uint8_t stage; } ui = {"Starting...", "", 0, 0, sourceKeyCount, 0};
   auto statusCb = [](Sprite& sp, int barY, int width, void* userData) {
@@ -4637,7 +4640,8 @@ void ST25R3916Screen::_runMfcDictionaryAttack(const String& path) {
 
   bool objectiveMet = false;
   bool accessPromptShown = false;
-  DictionaryDiscoverySummary discoveredKeys;
+  static DictionaryDiscoverySummary discoveredKeys;
+  discoveredKeys = DictionaryDiscoverySummary();
   const size_t totalSlots=sectors*2U;
   bool cancelled=false;
   auto authenticate=[&](size_t sec,uint8_t kt,const uint8_t key[6])->bool{
@@ -4780,7 +4784,7 @@ void ST25R3916Screen::_runMfcDictionaryAttack(const String& path) {
       _resumeMfcReadAfterDict = false;
       char finalMsg[80];
       formatSummary(finalMsg, sizeof(finalMsg));
-      ShowStatusAction::show(finalMsg, 1400);
+      ShowStatusAction::show(finalMsg);
       _mfcReadAfterDict = true;
     }
   } else if (_resumeMfcReadAfterDict) {
