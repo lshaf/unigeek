@@ -4568,7 +4568,7 @@ void ST25R3916Screen::_runMfcDictionaryAttack(const String& path) {
         _resumeMfcReadAfterDict = false;
         char finalMsg[80];
         formatSummary(finalMsg, sizeof(finalMsg));
-        ShowStatusAction::show(finalMsg, 1400);
+        ShowStatusAction::show(finalMsg);
         _mfcReadAfterDict = true;
       }
       return;
