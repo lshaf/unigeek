@@ -5,6 +5,7 @@
 #include "core/ConfigManager.h"
 #include "ui/actions/InputSelectAction.h"
 #include "ui/actions/ShowStatusAction.h"
+#include "screens/wifi/network/IPScannerDetailsScreen.h"
 #include "screens/wifi/network/PortScannerScreen.h"
 #include "screens/wifi/WifiFoxHuntScreen.h"
 
@@ -54,12 +55,6 @@ void fmtIp(uint32_t ip, char* out, size_t n) {
            (unsigned)((ip >> 16) & 0xFF), (unsigned)((ip >> 24) & 0xFF));
 }
 
-void fmtMac(const uint8_t mac[6], char* out, size_t n, bool full) {
-  if (full) snprintf(out, n, "%02X:%02X:%02X:%02X:%02X:%02X",
-                     mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
-  else snprintf(out, n, "%02X:%02X:..", mac[0], mac[1]);
-}
-
 const char* ageText(uint32_t lastSeen, uint32_t now) {
   static char buf[8];
   const uint32_t s = (now - lastSeen) / 1000U;
@@ -81,31 +76,30 @@ void NetworkHostMonitorScreen::onInit() {
 void NetworkHostMonitorScreen::onItemSelected(uint8_t) {}
 
 void NetworkHostMonitorScreen::onBack() {
-  if (_state == STATE_DETAILS) { _state = STATE_PAUSED; render(); return; }
-  if (_state == STATE_PAUSED) { _state = STATE_RUNNING; render(); return; }
+  if (_state == STATE_PAUSED) { _state = STATE_RUNNING; _dirty = true; _drawList(); return; }
   Screen.goBack();
 }
 
 void NetworkHostMonitorScreen::onUpdate() {
-  if (_state == STATE_DETAILS) return;
-
   if (Uni.Nav && Uni.Nav->wasPressed()) {
     const auto dir = Uni.Nav->readDirection();
+    if (dir == INavigation::DIR_BACK) { onBack(); return; }
     if (_state == STATE_RUNNING && dir == INavigation::DIR_PRESS) {
       _state = STATE_PAUSED;
       if (_selected >= _count) _selected = _count ? _count - 1 : 0;
-      render();
+      _dirty = true;
+      _drawList();
       return;
     }
     if (_state == STATE_PAUSED) {
       if (dir == INavigation::DIR_UP && _count) {
         _selected = _selected == 0 ? _count - 1 : _selected - 1;
-        render();
+        _drawList();
         return;
       }
       if (dir == INavigation::DIR_DOWN && _count) {
         _selected = (_selected + 1) % _count;
-        render();
+        _drawList();
         return;
       }
       if (dir == INavigation::DIR_PRESS && _count) { _openOptions(); return; }
@@ -113,10 +107,11 @@ void NetworkHostMonitorScreen::onUpdate() {
   }
 
   if (_state != STATE_RUNNING) return;
-  if (millis() - _lastProbeMs < 40) return;
-  _lastProbeMs = millis();
-  _probeNext();
-  render();
+  if (millis() - _lastProbeMs >= 40) {
+    _lastProbeMs = millis();
+    _probeNext();
+  }
+  if (_dirty || millis() - _lastDrawMs >= 1000) _drawList();
 }
 
 void NetworkHostMonitorScreen::_probeNext() {
@@ -140,6 +135,7 @@ void NetworkHostMonitorScreen::_note(uint32_t ip, const uint8_t* mac) {
   const uint32_t now = millis();
   for (uint8_t i = 0; i < _count; ++i) {
     if (_hosts[i].ip == ip) {
+      if (!_hosts[i].hasMac || memcmp(_hosts[i].mac, mac, 6) != 0) _dirty = true;
       memcpy(_hosts[i].mac, mac, 6);
       _hosts[i].hasMac = true;
       _hosts[i].lastSeen = now;
@@ -153,6 +149,7 @@ void NetworkHostMonitorScreen::_note(uint32_t ip, const uint8_t* mac) {
   h.hasMac = true;
   h.gateway = ip == _gateway;
   h.firstSeen = h.lastSeen = now;
+  _dirty = true;
   _sort();
 }
 
@@ -166,7 +163,6 @@ void NetworkHostMonitorScreen::_sort() {
 }
 
 void NetworkHostMonitorScreen::onRender() {
-  if (_state == STATE_DETAILS) { _drawDetails(); return; }
   _drawList();
 }
 
@@ -177,7 +173,7 @@ void NetworkHostMonitorScreen::_drawList() {
   lcd.setTextSize(1);
   const int fh = lcd.fontHeight();
   const int lineH = fh + 3;
-  const int footerH = fh * 2 + 8;
+  const int footerH = fh + 6;
   const int slots = (bh - footerH) / lineH;
   const int listH = slots > 0 ? slots * lineH : 0;
 
@@ -196,18 +192,13 @@ void NetworkHostMonitorScreen::_drawList() {
     const uint16_t bg = selected ? Config.getThemeColor() : TFT_BLACK;
     if (selected) lcd.fillRect(bx, y, bw, lineH, bg);
 
-    char ip[16], mac[10], right[8];
+    char ip[16], right[8];
     fmtIp(h.ip, ip, sizeof(ip));
-    if (h.hasMac) fmtMac(h.mac, mac, sizeof(mac), false);
-    else snprintf(mac, sizeof(mac), "--");
     snprintf(right, sizeof(right), "%s", h.gateway ? "gw" : ageText(h.lastSeen, millis()));
 
     lcd.setTextColor(TFT_WHITE, bg);
     lcd.setTextDatum(TL_DATUM);
     lcd.drawString(ip, bx + 2, y + 1);
-    lcd.setTextDatum(TC_DATUM);
-    lcd.setTextColor(selected ? TFT_WHITE : TFT_DARKGREY, bg);
-    lcd.drawString(mac, bx + bw / 2, y + 1);
     lcd.setTextDatum(TR_DATUM);
     lcd.setTextColor(selected || h.gateway ? TFT_WHITE : TFT_LIGHTGREY, bg);
     lcd.drawString(right, bx + bw - 2, y + 1);
@@ -221,18 +212,19 @@ void NetworkHostMonitorScreen::_drawList() {
 
   const int footerTop = by + bh - footerH;
   lcd.drawFastHLine(bx, footerTop, bw, TFT_DARKGREY);
-  _drawHints(footerTop, fh);
-}
-
-void NetworkHostMonitorScreen::_drawHints(int footerTop, int fh) {
-  auto& lcd = Uni.Lcd;
   lcd.setTextSize(1);
-  lcd.setTextDatum(TL_DATUM);
   lcd.setTextColor(TFT_LIGHTGREY, TFT_BLACK);
-  const char* line1 = _state == STATE_RUNNING ? "[Press] Pause" : "[Press] Options";
-  lcd.drawString(line1, bodyX() + 2, footerTop + 3);
-  if (_state == STATE_PAUSED)
-    lcd.drawString("[Back] Resume scan", bodyX() + 2, footerTop + 3 + fh + 2);
+  if (_state == STATE_RUNNING) {
+    lcd.setTextDatum(TC_DATUM);
+    lcd.drawString("[Press] Pause", bx + bw / 2, footerTop + 3);
+  } else {
+    lcd.setTextDatum(TL_DATUM);
+    lcd.drawString("[Press] Options", bx + 2, footerTop + 3);
+    lcd.setTextDatum(TR_DATUM);
+    lcd.drawString("[Back] Resume", bx + bw - 2, footerTop + 3);
+  }
+  _dirty = false;
+  _lastDrawMs = millis();
 }
 
 void NetworkHostMonitorScreen::_openOptions() {
@@ -247,12 +239,12 @@ void NetworkHostMonitorScreen::_openOptions() {
     {"Fox Hunt", "fox"},
   };
   const char* choice = InputSelectAction::popup("Options", opts, 3);
-  render();
-  if (!choice) return;
+  if (!choice) { _drawList(); return; }
 
   if (strcmp(choice, "details") == 0) {
-    _state = STATE_DETAILS;
-    render();
+    auto* details = new IPScannerDetailsScreen();
+    details->configure(ip, nullptr, h.hasMac ? h.mac : nullptr);
+    Screen.push(details);
     return;
   }
   if (strcmp(choice, "ports") == 0) {
@@ -276,22 +268,3 @@ void NetworkHostMonitorScreen::_openOptions() {
   }
 }
 
-void NetworkHostMonitorScreen::_drawDetails() {
-  if (_selected >= _count) { _state = STATE_PAUSED; _drawList(); return; }
-  const Host& h = _hosts[_selected];
-  auto& lcd = Uni.Lcd;
-  lcd.fillRect(bodyX(), bodyY(), bodyW(), bodyH(), TFT_BLACK);
-  lcd.setTextDatum(TL_DATUM);
-  lcd.setTextSize(1);
-  lcd.setTextColor(TFT_WHITE, TFT_BLACK);
-  const int fh = lcd.fontHeight() + 3;
-  int y = bodyY() + 2;
-  char ip[16], mac[20], line[40];
-  fmtIp(h.ip, ip, sizeof(ip));
-  if (h.hasMac) fmtMac(h.mac, mac, sizeof(mac), true);
-  else snprintf(mac, sizeof(mac), "--");
-  snprintf(line, sizeof(line), "IP    %s", ip); lcd.drawString(line, bodyX() + 2, y); y += fh;
-  snprintf(line, sizeof(line), "MAC   %s", mac); lcd.drawString(line, bodyX() + 2, y); y += fh;
-  snprintf(line, sizeof(line), "Role  %s", h.gateway ? "Gateway" : "Host"); lcd.drawString(line, bodyX() + 2, y); y += fh;
-  snprintf(line, sizeof(line), "Seen  %s", ageText(h.lastSeen, millis())); lcd.drawString(line, bodyX() + 2, y);
-}
