@@ -512,6 +512,10 @@ void ST25R3916Screen::onUpdate() {
   if (_state == STATE_EMULATING) {
 #if defined(DEVICE_HAS_ST25R3916)
     if (_emuDev) _emuDev->emulationWorker();
+    // Refresh the live view only when the reader-auth count actually changes.
+    if (_emuShowAuths && _emuDev && _emuDev->mfcNonceCount() != _emuAuthsShown) {
+      _showEmulationScreen();
+    }
 #endif
     if (Uni.Nav->wasPressed() && Uni.Nav->readDirection() == INavigation::DIR_BACK) _stopEmulation();
     return;
@@ -632,15 +636,6 @@ void ST25R3916Screen::onRender() {
       lcd.setTextColor(TFT_WHITE, TFT_BLACK);
       lcd.drawString(_magicResult, bodyX() + bodyW() / 2, bodyY() + bodyH() / 2);
     }
-    return;
-  }
-  if (_state == STATE_EMULATING) {
-    auto& lcd = Uni.Lcd;
-    const int bx = bodyX(), by = bodyY(), bw = bodyW(), bh = bodyH();
-    lcd.fillRect(bx, by, bw, bh, TFT_BLACK);
-    lcd.setTextDatum(MC_DATUM); lcd.setTextSize(1);
-    lcd.setTextColor(TFT_WHITE, TFT_BLACK);
-    lcd.drawString("Emulating tag...", bx + bw / 2, by + bh / 2);
     return;
   }
   if (_state == STATE_MENU || _state == STATE_FAMILIES_MENU || _state == STATE_MFC_MENU || _state == STATE_MFC_TAG_MENU || _state == STATE_MFC_ADVANCED_MENU ||
@@ -1743,8 +1738,14 @@ void ST25R3916Screen::_emulateMfcTag(bool fullDump) {
   }
   _emuReturnMfc = true;
   _emuIsFullTag = fullDump;
-  _state = STATE_EMULATING;
-  render();
+  _emuShowAuths = fullDump;             // full-tag path authenticates; count reads
+  _emuUidStr = "";
+  for (uint8_t i = 0; i < id.nfcidLen; ++i) {
+    char b[4]; snprintf(b, sizeof(b), "%s%02X", i ? ":" : "", id.nfcid[i]); _emuUidStr += b;
+  }
+  _emuTypeStr = fullDump ? (_mfcDumpLen == 4096 ? "MF Classic 4K" : "MF Classic 1K")
+                         : "MF Classic (UID)";
+  _showEmulationScreen();
 #else
   ShowStatusAction::show("ST25R3916 not supported");
 #endif
@@ -1848,11 +1849,40 @@ void ST25R3916Screen::_emulateMfuTag() {
   }
   _emuReturnMfc = false;
   _emuIsFullTag = true;   // NTAG/Type2 is always a full-tag emulation
-  _state = STATE_EMULATING;
-  render();
+  _emuShowAuths = false;  // no Crypto1 auth on Type 2
+  _emuUidStr = "";
+  for (uint8_t i = 0; i < id.nfcidLen; ++i) {
+    char b[4]; snprintf(b, sizeof(b), "%s%02X", i ? ":" : "", id.nfcid[i]); _emuUidStr += b;
+  }
+  _emuTypeStr = _mfuType.length() ? _mfuType : String("NTAG / Type 2");
+  _showEmulationScreen();
 #else
   ShowStatusAction::show("ST25R3916 not supported");
 #endif
+}
+
+void ST25R3916Screen::_showEmulationScreen() {
+  // Live emulation view, styled like the Read/Write detail screens (label/value
+  // rows) rather than a bare status line.
+  _rowCount = 0;
+  auto add = [&](const char* l, const String& v) {
+    if (_rowCount >= kMaxRows) return;
+    _rowLabels[_rowCount] = l; _rowValues[_rowCount] = v;
+    _rows[_rowCount] = {_rowLabels[_rowCount].c_str(), _rowValues[_rowCount]}; ++_rowCount;
+  };
+  add("Status", "Emulating");
+  add("UID", _emuUidStr.length() ? _emuUidStr : String("-"));
+  add("Type", _emuTypeStr.length() ? _emuTypeStr : String("-"));
+#if defined(DEVICE_HAS_ST25R3916)
+  if (_emuShowAuths) {
+    _emuAuthsShown = _emuDev ? _emuDev->mfcNonceCount() : 0;
+    add("Reader auths", String((unsigned)_emuAuthsShown));
+  }
+#endif
+  add("[Back]", "Stop");
+  _scrollView.resetScroll(); _scrollView.setRows(_rows, _rowCount);
+  _state = STATE_EMULATING;
+  render();
 }
 
 void ST25R3916Screen::_stopEmulation() {

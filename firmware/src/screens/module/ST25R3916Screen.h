@@ -344,6 +344,10 @@ private:
   ST25R3916Backend* _emuDev = nullptr;
   bool _emuReturnMfc = false;
   bool _emuIsFullTag = false;
+  String _emuUidStr;
+  String _emuTypeStr;
+  bool _emuShowAuths = false;   // MFC full-tag: show live reader-auth count
+  uint8_t _emuAuthsShown = 0;
   bool _resumeMfcReadAfterDict = false;
   bool _mfcReadAfterDict = false;
   bool _mfcKnownKeysOnlyRead = false;
@@ -369,6 +373,7 @@ private:
   void _showMfcUidEmulatePreview();
   void _showMfcDumpEmulatePreview();
   void _emulateMfuTag();
+  void _showEmulationScreen();
   void _stopEmulation();
   void _showMfcDumpActions();
   void _openMfcDumpPicker(bool forEmulation = false);

@@ -153,9 +153,9 @@ private:
   // worker between nt and at) and then serves the encrypted session.
   void _mfcHandleAuth(const uint8_t* frame, uint16_t len);
   // Blocking inner loop: serve encrypted READ (0x30) / WRITE (0xA0) until
-  // HALT, field-off (EOF) or an idle timeout. Assumes _crypto is live and
-  // no_rx_par is set.
-  void _mfcServeSession();
+  // HALT, field-off (EOF) or an idle timeout. The live Crypto1 cipher is passed
+  // in (stack-allocated by _mfcHandleAuth); no_rx_par must be set.
+  void _mfcServeSession(Crypto1State* cs);
   // Send an encrypted frame (data already XORed with keystream, parity =
   // encrypted parity), 9-bit packed, no_tx_par, no CRC, waits for TXE.
   bool _mfcTxEnc(const uint8_t* data, const uint8_t* parity, uint8_t len);
@@ -163,6 +163,9 @@ private:
   // true once at least `wantBytes` data bytes were received within timeoutMs.
   bool _mfcRxRaw(uint8_t* out, uint8_t wantBytes, uint32_t timeoutMs);
   const uint8_t* _mfcSectorKey(uint8_t block, uint8_t keytype) const;
+  // Record one reader {nr,ar} tuple (mfkey32 material), de-duplicated.
+  void _mfcRecordNonce(uint8_t block, uint8_t keytype, uint32_t nt,
+                       uint32_t nr, uint32_t ar, uint32_t uid);
 
   bool _emulating = false;
   bool _readerScanning = false;

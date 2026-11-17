@@ -8,16 +8,6 @@
 
 #include "utils/crypto/crapto1.h"
 
-// MIFARE Classic emulation trace. Set to 0 to compile the prints out.
-#ifndef MFC_EMU_TRACE
-#define MFC_EMU_TRACE 1
-#endif
-#if MFC_EMU_TRACE
-#define MFCT(...) Serial.printf(__VA_ARGS__)
-#else
-#define MFCT(...) ((void)0)
-#endif
-
 namespace {
 uint32_t bytesToU32(const uint8_t* p) {
   return ((uint32_t)p[0] << 24) | ((uint32_t)p[1] << 16) |
@@ -59,6 +49,19 @@ uint8_t mfcUnpackBits(const uint8_t* in, uint16_t nbits, uint8_t* out, uint8_t m
 bool mfcRxOk(ReturnCode rc) {
   return rc == ST_ERR_NONE ||
          (rc >= ST_ERR_INCOMPLETE_BYTE && rc <= ST_ERR_INCOMPLETE_BYTE_07);
+}
+
+// In-place Crypto1 key load (same as crypto1_create, minus the malloc). The
+// emulation runs this inside the ISO14443-A frame-delay window, where a heap
+// allocation costs ~100 us and makes the reader drop the at response — evil
+// keeps the cipher in a static struct for exactly this reason.
+void mfcCipherInit(Crypto1State* s, uint64_t key) {
+  s->odd = 0;
+  s->even = 0;
+  for (int i = 47; i > 0; i -= 2) {
+    s->odd  = (s->odd  << 1) | BIT(key, (i - 1) ^ 7);
+    s->even = (s->even << 1) | BIT(key, i ^ 7);
+  }
 }
 }
 
@@ -817,10 +820,10 @@ const uint8_t* ST25R3916Backend::_mfcSectorKey(uint8_t block, uint8_t keytype) c
 }
 
 bool ST25R3916Backend::_mfcTxEnc(const uint8_t* data, const uint8_t* parity, uint8_t len) {
+  // Caller must have no_tx_par already set (done once per handshake, off the
+  // frame-delay path). Keeping a register write out of here shaves SPI latency.
   uint8_t packed[27] = {};
   const uint16_t bits = mfcPackBits(data, parity, len, packed);  // 9 bits per byte
-  _hw->st25r3916SetRegisterBits(ST25R3916_REG_ISO14443A_NFC,
-                                ST25R3916_REG_ISO14443A_NFC_no_tx_par);
   _hw->st25r3916ExecuteCommand(ST25R3916_CMD_CLEAR_FIFO);
   _hw->st25r3916WriteFifo(packed, (uint16_t)((bits + 7U) / 8U));
   _hw->st25r3916SetNumTxBits(bits);
@@ -847,114 +850,107 @@ void ST25R3916Backend::_mfcHandleAuth(const uint8_t* frame, uint16_t len) {
   const uint8_t block   = frame[1];
   const uint32_t nt  = MFC_STATIC_NT;
   const uint32_t uid = _uid32(_emuIdentity);
-  MFCT("[MFE] AUTH kt=%02X blk=%u uid=%08lX\n", keytype, block, (unsigned long)uid);
+  // suc(nt,64)/suc(nt,96) are constant for a static nt: compute them here, out
+  // of the frame-delay window, so only the nr-dependent cipher runs in-window.
+  const uint32_t arExp = prng_successor(nt, 64);
+  const uint32_t at    = prng_successor(nt, 96);
+  const uint8_t* key = _mfcSectorKey(block, keytype);
+  Crypto1State cs;
 
-  // 1) Answer nt immediately: plaintext, hardware (standard) parity, no CRC.
-  //    _listenRespond clears no_tx_par, so the hardware appends the parity bit.
+  // 1) Answer nt as fast as possible: the AUTH->nt frame delay is what a strict
+  //    reader checks, so nothing heavy runs before it. Plaintext, hardware
+  //    parity, no CRC.
   uint8_t ntb[4] = {(uint8_t)(nt >> 24), (uint8_t)(nt >> 16),
                     (uint8_t)(nt >> 8),  (uint8_t)nt};
-  if (!_listenRespond(ntb, 4, /*withCrc=*/false)) { MFCT("[MFE] nt TX fail\n"); return; }
+  if (!_listenRespond(ntb, 4, /*withCrc=*/false)) return;
 
-  // 2) Capture the reader's {nr,ar} (encrypted) under no_rx_par, blocking.
-  _hw->st25r3916SetRegisterBits(ST25R3916_REG_ISO14443A_NFC,
-                                ST25R3916_REG_ISO14443A_NFC_no_rx_par);
+  // 2) Raw RX (no_rx_par) + no_tx_par set now, so the in-window at TX needs no
+  //    register write of its own. Both are cleared together at the end.
+  _hw->st25r3916SetRegisterBits(
+      ST25R3916_REG_ISO14443A_NFC,
+      ST25R3916_REG_ISO14443A_NFC_no_rx_par | ST25R3916_REG_ISO14443A_NFC_no_tx_par);
+
+  // Build the Crypto1 base state (key load + absorb uid^nt) while the reader is
+  // computing {nr}{ar} — free time, still before the FDT window.
+  if (key) {
+    mfcCipherInit(&cs, _key48(key));
+    crypto1_word(&cs, uid ^ nt, 0);
+  }
+
   uint8_t na[8] = {};
   if (!_mfcRxRaw(na, 8, 40)) {                   // nr(4) + ar(4)
-    MFCT("[MFE] no {nr}{ar} after nt (reader gave up -> FDT?)\n");
-    _hw->st25r3916ClrRegisterBits(ST25R3916_REG_ISO14443A_NFC,
-                                  ST25R3916_REG_ISO14443A_NFC_no_rx_par);
+    _hw->st25r3916ClrRegisterBits(
+        ST25R3916_REG_ISO14443A_NFC,
+        ST25R3916_REG_ISO14443A_NFC_no_rx_par | ST25R3916_REG_ISO14443A_NFC_no_tx_par);
     return;                                      // AUTH seen, {nr,ar} incomplete
   }
   const uint32_t nr = bytesToU32(na);
   const uint32_t ar = bytesToU32(na + 4);
-  MFCT("[MFE] got nr=%08lX ar=%08lX\n", (unsigned long)nr, (unsigned long)ar);
+  _mfcRecordNonce(block, keytype, nt, nr, ar, uid);
 
-  // 3) Record the tuple for mfkey32 (dedup identical repeats).
-  if (_emuNonceCount < MFC_MAX_NONCES) {
-    bool dup = false;
-    for (uint8_t i = 0; i < _emuNonceCount; ++i)
-      if (_emuNonces[i].nr == nr && _emuNonces[i].ar == ar &&
-          _emuNonces[i].block == block && _emuNonces[i].keytype == keytype) { dup = true; break; }
-    if (!dup) {
-      MfcNonce& e = _emuNonces[_emuNonceCount++];
-      e.block = block; e.keytype = keytype; e.nt = nt; e.nr = nr; e.ar = ar; e.uid = uid;
-    }
-  }
-
-  // 4) Complete the handshake only if the sector key is known.
-  const uint8_t* key = _mfcSectorKey(block, keytype);
-  if (key) {
-    MFCT("[MFE] key sec=%u %s=%02X%02X%02X%02X%02X%02X\n", block >> 2,
-         keytype == 0x60 ? "A" : "B", key[0], key[1], key[2], key[3], key[4], key[5]);
-  } else {
-    MFCT("[MFE] key sec=%u %s ABSENT -> capture-only\n", block >> 2,
-         keytype == 0x60 ? "A" : "B");
-  }
+  // Complete the handshake only if the sector key is known (else capture-only).
   if (!key) {
-    _hw->st25r3916ClrRegisterBits(ST25R3916_REG_ISO14443A_NFC,
-                                  ST25R3916_REG_ISO14443A_NFC_no_rx_par);
-    return;                                      // capture-only (mode 1)
-  }
-
-  if (_crypto) { crypto1_destroy(_crypto); _crypto = nullptr; }
-  _crypto = crypto1_create(_key48(key));
-  if (!_crypto) {
-    _hw->st25r3916ClrRegisterBits(ST25R3916_REG_ISO14443A_NFC,
-                                  ST25R3916_REG_ISO14443A_NFC_no_rx_par);
+    _hw->st25r3916ClrRegisterBits(
+        ST25R3916_REG_ISO14443A_NFC,
+        ST25R3916_REG_ISO14443A_NFC_no_rx_par | ST25R3916_REG_ISO14443A_NFC_no_tx_par);
     return;
   }
 
-  // Same convention as the proven reader path (mifareClassicAuthenticate):
-  //   absorb uid^nt, then absorb the reader nonce. Card side differs from the
-  //   reader in one point only: we receive nr ENCRYPTED, so we feed the
-  //   ciphertext with is_encrypted=1 and the LFSR absorbs the plaintext nr.
-  crypto1_word(_crypto, uid ^ nt, 0);
-  for (uint8_t i = 0; i < 4; ++i) crypto1_byte(_crypto, na[i], 1);
+  // --- in-window cipher: cs already holds key ^ (uid^nt) ---
+  // Absorb the reader nonce. We receive nr ENCRYPTED, so feed the ciphertext
+  // with is_encrypted=1 and the LFSR absorbs the plaintext nr (dual of reader).
+  for (uint8_t i = 0; i < 4; ++i) crypto1_byte(&cs, na[i], 1);
 
-  // Verify ar == suc(nt,64), decrypting the reader's 4 ar bytes MSB-first
-  // (same decomposition the reader expects: (ar >> (24-8i)) & 0xFF).
-  const uint32_t arExp = prng_successor(nt, 64);
+  // Verify ar == suc(nt,64) (arExp precomputed), reader bytes MSB-first.
   bool ok = true;
   for (uint8_t i = 0; i < 4; ++i) {
-    const uint8_t ks   = crypto1_byte(_crypto, 0, 0);
+    const uint8_t ks   = crypto1_byte(&cs, 0, 0);
     const uint8_t got  = (uint8_t)(ks ^ na[4 + i]);
     const uint8_t want = (uint8_t)(arExp >> (24U - 8U * i));
     if (got != want) ok = false;
   }
   if (!ok) {
-    MFCT("[MFE] ar MISMATCH (wrong key or desync) exp=%08lX\n", (unsigned long)arExp);
-    crypto1_destroy(_crypto); _crypto = nullptr;
-    _hw->st25r3916ClrRegisterBits(ST25R3916_REG_ISO14443A_NFC,
-                                  ST25R3916_REG_ISO14443A_NFC_no_rx_par);
+    _hw->st25r3916ClrRegisterBits(
+        ST25R3916_REG_ISO14443A_NFC,
+        ST25R3916_REG_ISO14443A_NFC_no_rx_par | ST25R3916_REG_ISO14443A_NFC_no_tx_par);
     return;
   }
-  MFCT("[MFE] ar OK -> sending at, entering session\n");
 
-  // Answer at = suc(nt,96), encrypted (encrypted parity), no CRC, no_tx_par.
-  const uint32_t at = prng_successor(nt, 96);
+  // Answer at = suc(nt,96) (precomputed), encrypted parity, no CRC. no_tx_par is
+  // already set, so _mfcTxEnc does no register write here.
   uint8_t atb[4] = {}, atp[4] = {};
   for (uint8_t i = 0; i < 4; ++i) {
     const uint8_t b = (uint8_t)(at >> (24U - 8U * i));
-    atb[i] = (uint8_t)(crypto1_byte(_crypto, 0, 0) ^ b);
-    atp[i] = (uint8_t)(filter(_crypto->odd) ^ _oddParity(b));
+    atb[i] = (uint8_t)(crypto1_byte(&cs, 0, 0) ^ b);
+    atp[i] = (uint8_t)(filter(cs.odd) ^ _oddParity(b));
   }
   _mfcTxEnc(atb, atp, 4);
 
-  // 5) Serve the encrypted session synchronously (no return to the worker).
-  _mfcServeSession();
+  // Serve the encrypted session synchronously (no return to the worker).
+  _mfcServeSession(&cs);
 
-  if (_crypto) { crypto1_destroy(_crypto); _crypto = nullptr; }
-  _hw->st25r3916ClrRegisterBits(ST25R3916_REG_ISO14443A_NFC,
-                                ST25R3916_REG_ISO14443A_NFC_no_rx_par);
+  _hw->st25r3916ClrRegisterBits(
+      ST25R3916_REG_ISO14443A_NFC,
+      ST25R3916_REG_ISO14443A_NFC_no_rx_par | ST25R3916_REG_ISO14443A_NFC_no_tx_par);
 }
 
-void ST25R3916Backend::_mfcServeSession() {
+void ST25R3916Backend::_mfcRecordNonce(uint8_t block, uint8_t keytype, uint32_t nt,
+                                       uint32_t nr, uint32_t ar, uint32_t uid) {
+  if (_emuNonceCount >= MFC_MAX_NONCES) return;
+  for (uint8_t i = 0; i < _emuNonceCount; ++i)
+    if (_emuNonces[i].nr == nr && _emuNonces[i].ar == ar &&
+        _emuNonces[i].block == block && _emuNonces[i].keytype == keytype) return;  // dup
+  MfcNonce& e = _emuNonces[_emuNonceCount++];
+  e.block = block; e.keytype = keytype; e.nt = nt; e.nr = nr; e.ar = ar; e.uid = uid;
+}
+
+void ST25R3916Backend::_mfcServeSession(Crypto1State* cs) {
   const uint32_t deadline = millis() + 500U;     // hard cap on a reader session
   while (millis() < deadline) {
     const uint32_t irq = _hw->st25r3916WaitForInterruptsTimed(
         ST25R3916_IRQ_MASK_RXE | ST25R3916_IRQ_MASK_EOF, 80);
-    if (irq & ST25R3916_IRQ_MASK_EOF) { MFCT("[MFE] sess EOF (field off)\n"); break; }
-    if (!(irq & ST25R3916_IRQ_MASK_RXE)) { MFCT("[MFE] sess idle timeout\n"); break; }
+    if (irq & ST25R3916_IRQ_MASK_EOF) break;        // field off / deselect
+    if (!(irq & ST25R3916_IRQ_MASK_RXE)) break;     // idle -> end session
 
     const uint16_t n = _hw->st25r3916GetNumFIFOBytes();
     if (!n || n > 40) break;
@@ -963,11 +959,10 @@ void ST25R3916Backend::_mfcServeSession() {
     uint8_t enc[8] = {};
     if (mfcUnpackBits(raw, (uint16_t)(n * 8U), enc, 8) < 2) continue;
 
-    const uint8_t c0 = (uint8_t)(crypto1_byte(_crypto, 0, 0) ^ enc[0]);
-    const uint8_t c1 = (uint8_t)(crypto1_byte(_crypto, 0, 0) ^ enc[1]);
-    crypto1_byte(_crypto, 0, 0);                 // consume the 2 CRC-byte
-    crypto1_byte(_crypto, 0, 0);                 // keystream to stay in sync
-    MFCT("[MFE] sess cmd=%02X arg=%02X\n", c0, c1);
+    const uint8_t c0 = (uint8_t)(crypto1_byte(cs, 0, 0) ^ enc[0]);
+    const uint8_t c1 = (uint8_t)(crypto1_byte(cs, 0, 0) ^ enc[1]);
+    crypto1_byte(cs, 0, 0);                       // consume the 2 CRC-byte
+    crypto1_byte(cs, 0, 0);                       // keystream to stay in sync
 
     if (c0 == 0x30) {                            // READ block c1
       const uint8_t blk = c1 & 0x3F;
@@ -977,13 +972,13 @@ void ST25R3916Backend::_mfcServeSession() {
       resp[16] = (uint8_t)(crc & 0xFF); resp[17] = (uint8_t)(crc >> 8);
       uint8_t eb[18] = {}, ep[18] = {};
       for (uint8_t i = 0; i < 18; ++i) {
-        eb[i] = (uint8_t)(crypto1_byte(_crypto, 0, 0) ^ resp[i]);
-        ep[i] = (uint8_t)(filter(_crypto->odd) ^ _oddParity(resp[i]));
+        eb[i] = (uint8_t)(crypto1_byte(cs, 0, 0) ^ resp[i]);
+        ep[i] = (uint8_t)(filter(cs->odd) ^ _oddParity(resp[i]));
       }
       _mfcTxEnc(eb, ep, 18);
     } else if (c0 == 0xA0) {                     // WRITE block c1: 4-bit ACK then data
       uint8_t ks = 0;
-      for (uint8_t i = 0; i < 4; ++i) ks |= (uint8_t)((crypto1_bit(_crypto, 0, 0) & 1U) << i);
+      for (uint8_t i = 0; i < 4; ++i) ks |= (uint8_t)((crypto1_bit(cs, 0, 0) & 1U) << i);
       uint8_t ackEnc = (uint8_t)((ks ^ 0x0A) & 0x0F);
       _hw->st25r3916SetRegisterBits(ST25R3916_REG_ISO14443A_NFC,
                                     ST25R3916_REG_ISO14443A_NFC_no_tx_par);
@@ -996,16 +991,14 @@ void ST25R3916Backend::_mfcServeSession() {
       if (_mfcRxRaw(wn, 16, 40)) {
         const uint8_t blk = c1 & 0x3F;
         for (uint8_t i = 0; i < 16; ++i) {
-          const uint8_t k = crypto1_byte(_crypto, 0, 0);
+          const uint8_t k = crypto1_byte(cs, 0, 0);
           _emuDump[(size_t)blk * 16U + i] = (uint8_t)(k ^ wn[i]);
         }
-        crypto1_byte(_crypto, 0, 0);             // consume data-CRC keystream
-        crypto1_byte(_crypto, 0, 0);
+        crypto1_byte(cs, 0, 0);                   // consume data-CRC keystream
+        crypto1_byte(cs, 0, 0);
       }
     } else {                                     // HALT (0x50), nested AUTH, or other
-      MFCT("[MFE] sess END cmd=%02X%s\n", c0,
-           (c0 == 0x60 || c0 == 0x61) ? " = NESTED AUTH (not handled yet)" : "");
-      break;
+      break;                                     // nested auth (0x60/0x61) not handled yet
     }
   }
 }
