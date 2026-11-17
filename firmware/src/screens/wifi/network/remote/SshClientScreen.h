@@ -46,9 +46,9 @@ private:
   enum AnsiParseState : uint8_t { ANSI_DATA, ANSI_ESC, ANSI_CSI, ANSI_OSC, ANSI_OSC_ESC };
 
   static constexpr int MAX_PARTIAL_LEN       = 160;
-  static constexpr int MAX_TRANSCRIPT_CHARS  = 4096;
-  static constexpr int MAX_SHARED_RX_CHARS   = 4096;
-  static constexpr int MAX_SHARED_TX_CHARS   = 4096;
+  static constexpr int MAX_TRANSCRIPT_CHARS  = 2048;
+  static constexpr int MAX_SHARED_RX_CHARS   = 2048;
+  static constexpr int MAX_SHARED_TX_CHARS   = 512;
   static constexpr int MAX_RX_PER_WORKER_LOOP = 2048;
   static constexpr uint32_t WRITE_STALL_TIMEOUT_MS = 2000;
   static constexpr int PAD                   = 4;

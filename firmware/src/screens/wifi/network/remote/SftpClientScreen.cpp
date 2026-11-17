@@ -13,6 +13,7 @@
 #include <WiFi.h>
 #include <FS.h>
 #include <fcntl.h>
+#include <new>
 #include <libssh/libssh.h>
 #include <libssh/sftp.h>
 
@@ -153,6 +154,7 @@ void SftpClientScreen::onUpdate() {
       _copyRemoteListing();
       _state = STATE_REMOTE_BROWSER;
       render();
+      return;
     }
 
     if (Uni.Nav->wasPressed() &&
@@ -327,6 +329,9 @@ void SftpClientScreen::loadSaved(const SavedHost& host) {
   _keyPath  = host.get("key");
   _password = host.get("password");
   _saved.loadFrom(host);
+
+  _updateLabels();
+  _rebuildConfig();
 }
 
 void SftpClientScreen::onBack() {
@@ -413,6 +418,7 @@ void SftpClientScreen::onBack() {
 
 void SftpClientScreen::_showActions() {
   _state = STATE_ACTION;
+  Uni.Lcd.fillRect(bodyX(), bodyY(), bodyW(), bodyH(), TFT_BLACK);
   setItems(_actionItems, 2, 0);
   render();
 }
@@ -614,7 +620,6 @@ void SftpClientScreen::_selectKey(uint8_t index) {
   render();
 }
 
-
 void SftpClientScreen::_loadLocalUploadDir(const String& path, const String& restoreName) {
   _localBrowsePath = path;
   uint8_t n = _localBrowser.load(this, path, {}, "SD");
@@ -802,6 +807,7 @@ void SftpClientScreen::_worker() {
   String keyData = _keyData;
   AuthMode authMode = _authMode;
   int port = _port;
+  long timeoutSec = 10;
 
   session = ssh_new();
   if (!session) {
@@ -811,7 +817,8 @@ void SftpClientScreen::_worker() {
 
   if (ssh_options_set(session, SSH_OPTIONS_HOST, host.c_str()) != SSH_OK ||
       ssh_options_set(session, SSH_OPTIONS_USER, user.c_str()) != SSH_OK ||
-      ssh_options_set(session, SSH_OPTIONS_PORT, &port) != SSH_OK) {
+      ssh_options_set(session, SSH_OPTIONS_PORT, &port) != SSH_OK ||
+      ssh_options_set(session, SSH_OPTIONS_TIMEOUT, &timeoutSec) != SSH_OK) {
     _setWorkerError("Failed to configure SSH session");
     goto cleanup;
   }
@@ -819,7 +826,8 @@ void SftpClientScreen::_worker() {
   if (_stopRequested) goto cleanup;
 
   if (ssh_connect(session) != SSH_OK) {
-    _setWorkerError("Failed to connect");
+    const char* sshErr = ssh_get_error(session);
+    _setWorkerError((sshErr && sshErr[0]) ? sshErr : "Failed to connect");
     goto cleanup;
   }
 
@@ -1062,7 +1070,16 @@ bool SftpClientScreen::_workerList(void* sftpOpaque, const String& path) {
     return false;
   }
 
-  SharedRemoteEntry temp[MAX_REMOTE_ENTRIES];
+  SharedRemoteEntry* temp = new (std::nothrow) SharedRemoteEntry[MAX_REMOTE_ENTRIES];
+  if (!temp) {
+    sftp_closedir(dir);
+    if (_mutex && xSemaphoreTake(_mutex, pdMS_TO_TICKS(50)) == pdTRUE) {
+      _commandError = "Out of memory";
+      xSemaphoreGive(_mutex);
+    }
+    return false;
+  }
+
   uint8_t count = 0;
 
   while (!_stopRequested && count < MAX_REMOTE_ENTRIES) {
@@ -1109,13 +1126,17 @@ bool SftpClientScreen::_workerList(void* sftpOpaque, const String& path) {
     for (uint8_t i = 0; i < count; ++i) _sharedEntries[i] = temp[i];
     xSemaphoreGive(_mutex);
   }
+
+  delete[] temp;
   return true;
 }
 
 void SftpClientScreen::_copyRemoteListing() {
   if (!_mutex) return;
 
-  SharedRemoteEntry temp[MAX_REMOTE_ENTRIES];
+  SharedRemoteEntry* temp = new (std::nothrow) SharedRemoteEntry[MAX_REMOTE_ENTRIES];
+  if (!temp) return;
+
   uint8_t count = 0;
 
   if (xSemaphoreTake(_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
@@ -1169,6 +1190,8 @@ void SftpClientScreen::_copyRemoteListing() {
       _remoteSubs[out].c_str()
     };
   }
+
+  delete[] temp;
 
   _remoteCount = out;
   uint8_t selected = 0;
@@ -1280,7 +1303,6 @@ void SftpClientScreen::_requestDownload(const String& remotePath, bool directory
   ProgressView::progress(
     directory ? "Preparing..." : (_transferIsUpload ? "Uploading..." : "Downloading..."), 0);
 }
-
 
 void SftpClientScreen::_requestUpload(const String& remoteDir) {
   if (!_uploadLocalPath.length()) {
@@ -1538,7 +1560,6 @@ bool SftpClientScreen::_workerDownloadDir(void* sftpOpaque,
 
   return _workerDownloadTree(sftpOpaque, remotePath, localPath, 0);
 }
-
 
 bool SftpClientScreen::_workerEnsureRemoteDir(void* sftpOpaque,
                                                const String& remotePath) {
