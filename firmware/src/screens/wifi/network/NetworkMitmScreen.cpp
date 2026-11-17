@@ -177,8 +177,8 @@ void NetworkMitmScreen::configureSniff(uint32_t hostIpNet, uint32_t gatewayIpNet
     snprintf(_targetText[slot], sizeof(_targetText[slot]), "%s",
              IPAddress(ipNet).toString().c_str());
   };
-  fill(0, hostIpNet);
-  fill(1, gatewayIpNet);
+  fill(0, gatewayIpNet);  // Target 1 shows the gateway
+  fill(1, hostIpNet);     // Target 2 shows the selected host
 }
 
 void NetworkMitmScreen::onItemSelected(uint8_t index) {
