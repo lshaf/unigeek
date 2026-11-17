@@ -8,6 +8,7 @@
 #include "screens/wifi/network/IPScannerDetailsScreen.h"
 #include "screens/wifi/network/PortScannerScreen.h"
 #include "screens/wifi/WifiFoxHuntScreen.h"
+#include "screens/wifi/network/NetworkMitmScreen.h"
 
 #include <WiFi.h>
 #include <lwip/etharp.h>
@@ -236,9 +237,10 @@ void NetworkHostMonitorScreen::_openOptions() {
   static const InputSelectAction::Option opts[] = {
     {"Details", "details"},
     {"Port Scan", "ports"},
+    {"Sniff", "sniff"},
     {"Fox Hunt", "fox"},
   };
-  const char* choice = InputSelectAction::popup("Options", opts, 3);
+  const char* choice = InputSelectAction::popup("Options", opts, 4);
   if (!choice) { _drawList(); return; }
 
   if (strcmp(choice, "details") == 0) {
@@ -251,6 +253,14 @@ void NetworkHostMonitorScreen::_openOptions() {
     auto* scanner = new PortScannerScreen();
     scanner->configureTarget(ip);
     Screen.push(scanner);
+    return;
+  }
+  if (strcmp(choice, "sniff") == 0) {
+    if (!_gateway) { ShowStatusAction::show("No gateway"); return; }
+    if (h.ip == _gateway) { ShowStatusAction::show("Host is the gateway"); return; }
+    auto* mitm = new NetworkMitmScreen();
+    mitm->configureSniff(h.ip, _gateway);
+    Screen.push(mitm);
     return;
   }
   if (strcmp(choice, "fox") == 0) {

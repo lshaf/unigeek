@@ -58,6 +58,11 @@ public:
 
   ~NetworkMitmScreen();
 
+  // Pre-fill a two-target capture (host + gateway) and open the setup menu
+  // ready to Start. Used by the "Sniff" action in IP Scan and Monitor Hosts.
+  // Both IPs are network byte order (as from IPAddress / WiFi.gatewayIP()).
+  void configureSniff(uint32_t hostIpNet, uint32_t gatewayIpNet);
+
   void onInit() override;
   void onUpdate() override;
   void onRender() override;

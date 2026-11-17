@@ -166,6 +166,21 @@ void NetworkMitmScreen::_editTarget(uint8_t i) {
   snprintf(_targetText[i], sizeof(_targetText[i]), "%s", v.c_str());
 }
 
+void NetworkMitmScreen::configureSniff(uint32_t hostIpNet, uint32_t gatewayIpNet) {
+  // Two-target ARP capture: the host and the gateway. The engine poisons each
+  // against the other, so the host's upstream traffic is diverted through us.
+  _mode = MODE_TARGETS;
+  for (uint8_t i = 0; i < 4; ++i) { _targets[i] = 0; _targetText[i][0] = '\0'; }
+  auto fill = [&](uint8_t slot, uint32_t ipNet) {
+    if (!ipNet) return;
+    _targets[slot] = ipNet;
+    snprintf(_targetText[slot], sizeof(_targetText[slot]), "%s",
+             IPAddress(ipNet).toString().c_str());
+  };
+  fill(0, hostIpNet);
+  fill(1, gatewayIpNet);
+}
+
 void NetworkMitmScreen::onItemSelected(uint8_t index) {
   if (_state == STATE_FILTERS) {
     uint32_t& mask = _editingPreview ? _previewMask : _captureMask;
