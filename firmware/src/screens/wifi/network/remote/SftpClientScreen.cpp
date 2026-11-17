@@ -1369,7 +1369,7 @@ bool SftpClientScreen::_workerDownloadFile(void* sftpOpaque,
     xSemaphoreGive(_mutex);
   }
 
-  uint8_t buf[4096];
+  uint8_t buf[2048];
   bool ok = true;
   uint64_t received = 0;
 
@@ -1592,7 +1592,7 @@ bool SftpClientScreen::_workerUploadFile(void* sftpOpaque,
     xSemaphoreGive(_mutex);
   }
 
-  uint8_t buf[4096];
+  uint8_t buf[2048];
   bool ok = true;
   uint64_t sentTotal = 0;
   uint32_t lastProgress = millis();

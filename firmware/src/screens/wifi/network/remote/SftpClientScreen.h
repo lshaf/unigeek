@@ -75,7 +75,7 @@ private:
   };
 
   static constexpr uint8_t MAX_REMOTE_ENTRIES = 96;
-  static constexpr uint32_t SFTP_TASK_STACK_SIZE = 28672;
+  static constexpr uint32_t SFTP_TASK_STACK_SIZE = 18432;
   static constexpr uint32_t HOLD_MS = 900;
   static constexpr uint32_t WRITE_STALL_TIMEOUT_MS = 12000;
   static constexpr const char* DOWNLOAD_DIR = "/unigeek/wifi/remote/sftp/downloads";

@@ -53,7 +53,7 @@ private:
   static constexpr uint32_t WRITE_STALL_TIMEOUT_MS = 2000;
   static constexpr int PAD                   = 4;
   static constexpr int INPUT_H               = 14;
-  static constexpr uint32_t SSH_TASK_STACK_SIZE = 24576;
+  static constexpr uint32_t SSH_TASK_STACK_SIZE = 16384;
 
   State _state = STATE_CONFIG;
 
