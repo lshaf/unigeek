@@ -154,6 +154,7 @@ private:
   bool _prepLogged[4] = {};
   void _showPreviewOptions();  // paused preview: Details / DNS Lookup
   void _drawCapturing();
+  void _drawCutting();   // NetCut running view: setup log + "Cutting..."
   void _drawStats(int x, int y, int w);
   void _drawDetails();
   static void _previewSink(const MitmRelay::PacketMeta& m);

@@ -511,7 +511,7 @@ void NetworkMitmScreen::_pollPrepare() {
   for (uint8_t i = 0; i < 4; ++i) if (_targets[i] && !_prepLogged[i]) allResolved = false;
   if (allResolved) {
     statusLog("Poisoning started");
-    statusLog("Capturing...");
+    statusLog(_cut ? "Cutting..." : "Capturing...");
     s_prepDone = true;
   } else if (_arp.sweepDone()) {
     // Sweep finished but some target never answered — flag it, then proceed.
@@ -520,7 +520,7 @@ void NetworkMitmScreen::_pollPrepare() {
         char l[40]; snprintf(l, sizeof(l), "T%u not responding", i + 1);
         statusLog(l); _prepLogged[i] = true;
       }
-    statusLog("Capturing...");
+    statusLog(_cut ? "Cutting..." : "Capturing...");
     s_prepDone = true;
   }
 }
@@ -687,6 +687,7 @@ bool NetworkMitmScreen::_checkFreeSpace() {
 void NetworkMitmScreen::onRender() {
   if (_state == STATE_DETAILS) { _drawDetails(); return; }
   if (_state == STATE_RUNNING) {
+    if (_cut) { _drawCutting(); return; }
     if (_arpEnabled && _livePreview == PREVIEW_COUNTER) { _drawCounters(); return; }
     if (_arpEnabled && _livePreview == PREVIEW_TRAFFIC) { _drawPreview(); return; }
     _drawCapturing();
@@ -734,6 +735,37 @@ void NetworkMitmScreen::_drawCapturing() {
   const int sepY = bodyY() + bodyH() - footerH;
   lcd.drawFastHLine(bodyX(), sepY, bodyW(), TFT_DARKGREY);
   _drawStats(bodyX(), sepY + 2, bodyW());
+}
+
+void NetworkMitmScreen::_drawCutting() {
+  // NetCut does not capture: show only the setup log (targets resolved, poison
+  // started) with a "Cutting..." footer. No counters, no packet stats.
+  auto& lcd = Uni.Lcd;
+  lcd.setTextSize(1);
+  const int fh = lcd.fontHeight();
+  const int lineH = fh + 3;
+  const int footerH = fh + 6;
+  const int bh = bodyH();
+  const int listH = bh - footerH;
+
+  lcd.fillRect(bodyX(), bodyY(), bodyW(), bh, TFT_BLACK);
+  lcd.setTextColor(TFT_DARKGREY, TFT_BLACK);
+  lcd.setTextDatum(TL_DATUM);
+  int yy = bodyY() + 2;
+  for (uint8_t i = 0; i < s_statusCount && yy + fh < bodyY() + listH; ++i) {
+    lcd.drawString(s_status[i], bodyX() + 2, yy);
+    yy += lineH;
+  }
+
+  const int sepY = bodyY() + bh - footerH;
+  lcd.drawFastHLine(bodyX(), sepY, bodyW(), TFT_DARKGREY);
+  const uint32_t seconds = (millis() - _sessionStartMs) / 1000;
+  char foot[28];
+  snprintf(foot, sizeof(foot), "Cutting... %02lu:%02lu",
+           (unsigned long)(seconds / 60), (unsigned long)(seconds % 60));
+  lcd.setTextColor(TFT_LIGHTGREY, TFT_BLACK);
+  lcd.setTextDatum(TL_DATUM);
+  lcd.drawString(foot, bodyX() + 2, sepY + 3);
 }
 
 void NetworkMitmScreen::_drawPreview() {
