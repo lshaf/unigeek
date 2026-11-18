@@ -24,16 +24,28 @@ BLEFoxHuntScreen::~BLEFoxHuntScreen()
   if (_bleScan != nullptr) {
     _stopTracking();
     _bleScan->stop();
-    NimBLEDevice::deinit(true);
+    if (!_externalTarget) NimBLEDevice::deinit(true);
     _bleScan = nullptr;
   }
+}
+
+void BLEFoxHuntScreen::configureTarget(NimBLEAdvertisedDevice& device)
+{
+  _externalTarget = true;
+  _devices[0] = device;
+  _devCount = 1;
+  std::string name = device.getName();
+  String address = device.getAddress().toString().c_str();
+  _labels[0] = name.empty() ? address : String(name.c_str());
+  _subs[0] = name.empty() ? "" : address;
 }
 
 void BLEFoxHuntScreen::onInit()
 {
   NimBLEDevice::init("");
   _bleScan = NimBLEDevice::getScan();
-  _doScan();
+  if (_externalTarget) _startTracking(0);
+  else _doScan();
 }
 
 void BLEFoxHuntScreen::onUpdate()
@@ -47,7 +59,8 @@ void BLEFoxHuntScreen::onUpdate()
     auto dir = Uni.Nav->readDirection();
     if (dir == INavigation::DIR_BACK || dir == INavigation::DIR_PRESS) {
       _stopTracking();
-      _showList();
+      if (_externalTarget) Screen.goBack();
+      else _showList();
       return;
     }
   }
@@ -80,7 +93,8 @@ void BLEFoxHuntScreen::onBack()
 {
   if (_state == STATE_TRACK) {
     _stopTracking();
-    _showList();
+    if (_externalTarget) Screen.goBack();
+    else _showList();
   } else {
     if (_bleScan) _bleScan->stop();
     Screen.goBack();

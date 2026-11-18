@@ -1,3 +1,4 @@
+#include "ui/actions/ConfirmAction.h"
 #ifdef HAS_NET_TOOLS
 #include "Socks4ProxyScreen.h"
 #include "core/Device.h"
@@ -53,6 +54,10 @@ void Socks4ProxyScreen::onUpdate() {
   if (Uni.Nav->wasPressed()) {
     auto dir = Uni.Nav->readDirection();
     if (dir == INavigation::DIR_BACK || dir == INavigation::DIR_PRESS) {
+      if (_running && !ConfirmAction::popup("Stop SOCKS4 Proxy?")) {
+        render();
+        return;
+      }
       _proxy.stop();
       Screen.goBack();
       return;

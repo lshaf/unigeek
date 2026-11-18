@@ -1,3 +1,4 @@
+#include "ui/actions/ConfirmAction.h"
 #include "SshClientScreen.h"
 
 #include "core/Device.h"
@@ -156,7 +157,7 @@ void SshClientScreen::onUpdate() {
   auto dir = Uni.Nav->readDirection();
 
   if (dir == INavigation::DIR_BACK) {
-    _closeConnection(true);
+    _requestDisconnect();
     return;
   }
 
@@ -200,6 +201,18 @@ void SshClientScreen::onItemSelected(uint8_t index) {
     return;
   }
 
+  if (index >= _fieldCount) {
+    switch (_kinds[index]) {
+      case SavedHostRows::CONNECT: _connect(); break;
+      default:
+        _saved.select(_kinds[index]);
+        _rebuildItems();
+        render();
+        break;
+    }
+    return;
+  }
+
   switch (index) {
     case 0: _configHost();     break;
     case 1: _configPort();     break;
@@ -208,11 +221,20 @@ void SshClientScreen::onItemSelected(uint8_t index) {
     case 4:
       if (_authMode == AUTH_PASSWORD)          _configPassword();
       else if (_authMode == AUTH_PRIVATE_KEY)  _openKeyPicker();
-      else                                     _connect();
       break;
-    case 5: _connect();        break;
     default: break;
   }
+}
+
+void SshClientScreen::loadSaved(const SavedHost& host) {
+  _host     = host.get("host");
+  _port     = host.getInt("port", 22);
+  _username = host.get("user");
+  const String auth = host.get("auth");
+  _authMode = auth == "key" ? AUTH_PRIVATE_KEY : auth == "password" ? AUTH_PASSWORD : AUTH_NONE;
+  _keyPath  = host.get("key");
+  _password = host.get("password");
+  _saved.loadFrom(host);
 }
 
 void SshClientScreen::onBack() {
@@ -234,8 +256,25 @@ void SshClientScreen::onBack() {
     return;
   }
 
-  if (_state == STATE_OUTPUT) _closeConnection(true);
-  else Screen.goBack();
+  if (_state == STATE_OUTPUT) _requestDisconnect();
+  else                        Screen.goBack();
+}
+
+// Every way out of a running session asks first (ConfirmAction honours the
+// global confirmation setting). The answer is read through navigation, which
+// is suppressed while a keyboard board types into the terminal.
+void SshClientScreen::_requestDisconnect() {
+#ifdef DEVICE_HAS_KEYBOARD
+  if (Uni.Nav) Uni.Nav->setSuppressKeys(false);
+#endif
+  if (!ConfirmAction::popup("Disconnect from server?")) {
+#ifdef DEVICE_HAS_KEYBOARD
+    if (Uni.Nav) Uni.Nav->setSuppressKeys(true);
+#endif
+    render();
+    return;
+  }
+  _closeConnection(true);
 }
 
 void SshClientScreen::_updateLabels() {
@@ -269,23 +308,18 @@ void SshClientScreen::_updateLabels() {
 
 void SshClientScreen::_rebuildItems() {
   uint8_t sel = _selectedIndex;
-  _items[0] = {"Host", _hostLabel};
-  _items[1] = {"Port", _portLabel};
-  _items[2] = {"Username", _userLabel};
-  _items[3] = {"Auth Method", _authLabel};
-
-  if (_authMode == AUTH_PASSWORD) {
-    _items[4] = {"Password", _passwordLabel};
-    _items[5] = {"Connect", nullptr};
-    setItems(_items, 6, min<uint8_t>(sel, 5));
-  } else if (_authMode == AUTH_PRIVATE_KEY) {
-    _items[4] = {"Key File", _keyLabel};
-    _items[5] = {"Connect", nullptr};
-    setItems(_items, 6, min<uint8_t>(sel, 5));
-  } else {
-    _items[4] = {"Connect", nullptr};
-    setItems(_items, 5, min<uint8_t>(sel, 4));
-  }
+  uint8_t n = 0;
+  _items[n++] = {"Host", _hostLabel};
+  _items[n++] = {"Port", _portLabel};
+  _items[n++] = {"Username", _userLabel};
+  _items[n++] = {"Auth Method", _authLabel};
+  if (_authMode == AUTH_PASSWORD)         _items[n++] = {"Password", _passwordLabel};
+  else if (_authMode == AUTH_PRIVATE_KEY) _items[n++] = {"Key File", _keyLabel};
+  for (uint8_t i = 0; i < n; ++i) _kinds[i] = SavedHostRows::NONE;
+  _fieldCount = n;
+  _saved.setPasswordApplies(_authMode == AUTH_PASSWORD);
+  n = _saved.tail(_items, _kinds, n, MAX_CONFIG_ROWS, "Connect");
+  setItems(_items, n, min<uint8_t>(sel, n - 1));
 }
 
 void SshClientScreen::_configHost() {
@@ -438,6 +472,11 @@ void SshClientScreen::_connect() {
     render();
     return;
   }
+  if (!_saved.prepare()) {  // a host being saved needs a name
+    _rebuildItems();
+    render();
+    return;
+  }
 
   if (_authMode == AUTH_NONE) {
     ShowStatusAction::show("Authentication method not set", 1500);
@@ -447,12 +486,9 @@ void SshClientScreen::_connect() {
 
   if (_authMode == AUTH_PASSWORD) {
     if (_password.length() == 0) {
-      String value = InputTextAction::popup("Password", "", InputTextAction::INPUT_TEXT);
-      if (InputTextAction::wasCancelled()) {
-        render();
-        return;
-      }
-      _password = value;
+      ShowStatusAction::show("Password not set", 1200);
+      render();
+      return;
     }
   } else {
     if (_keyPath.length() == 0) {
@@ -471,6 +507,19 @@ void SshClientScreen::_connect() {
       render();
       return;
     }
+  }
+
+  // Saved when connecting, whether or not the server answers.
+  if (_saved.saving()) {
+    SavedHost host;
+    host.set("host", _host);
+    host.set("port", String(_port));
+    host.set("user", _username);
+    host.set("auth", _authMode == AUTH_PRIVATE_KEY ? "key" : "password");
+    if (_authMode == AUTH_PRIVATE_KEY) host.set("key", _keyPath);
+    else                               host.set("password", _password);
+    _saved.persist(host);
+    _rebuildItems();
   }
 
   if (!_ioMutex) _ioMutex = xSemaphoreCreateMutex();
@@ -838,7 +887,7 @@ void SshClientScreen::_handleTerminalInput() {
   auto action = _inputLine.consume(Uni.Keyboard);
   switch (action) {
     case TerminalCommandLine::ACTION_EXIT:
-      _closeConnection(true);
+      _requestDisconnect();
       return;
     case TerminalCommandLine::ACTION_SUBMIT:
       if (!_remoteClosed) {
@@ -860,6 +909,15 @@ void SshClientScreen::_handleTerminalInput() {
       return;
     case TerminalCommandLine::ACTION_SCROLL_RIGHT:
       if (_outputView.onNav(INavigation::DIR_RIGHT)) _followOutput = _outputView.isAtBottom();
+      return;
+    case TerminalCommandLine::ACTION_CONTROL:
+      // Ctrl combos go out immediately; the server echoes them.
+      if (!_remoteClosed) {
+        const uint8_t byte = _inputLine.controlByte();
+        _sendTerminalBytes(&byte, 1);
+        _followOutput = true;
+      }
+      render();
       return;
     case TerminalCommandLine::ACTION_CHANGED:
       render();
@@ -1230,7 +1288,6 @@ void SshClientScreen::_renderOutput() {
 
   String display = _transcript;
   if (_partialLine.length() > 0) display += _partialLine;
-  if (display.length() == 0 && !_remoteClosed) display = "Waiting for data...";
 
   _outputView.updateContent(display, _followOutput);
   _outputView.render(x, cy, w, max(1, outputBottom - cy));

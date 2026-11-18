@@ -56,10 +56,10 @@ BLEWatchScreenBase::~BLEWatchScreenBase()
 const char* BLEWatchScreenBase::title()
 {
   static constexpr const char* kDogTitles[] = {
-    "BLE Watchdog", "BLE Spam", "Suspicious Advertisers", "ESP32 Devices", "Flipper Zero"
+    "Watchdog", "BLE Spam", "Suspicious Advertisers", "ESP32 Devices", "Flipper Zero"
   };
   static constexpr const char* kCatTitles[] = {
-    "BLE Watchcat", "Find My", "SmartTag", "Tile", "iBeacon"
+    "Watchcat", "Find My", "SmartTag", "Tile", "iBeacon"
   };
   return (_mode == Mode::Watchdog ? kDogTitles : kCatTitles)[_view];
 }

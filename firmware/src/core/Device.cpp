@@ -44,7 +44,7 @@ void Device::initStorage() {
   else     SPI.begin(SPI_SCK_PIN, SPI_MISO_PIN, SPI_MOSI_PIN, SD_CS);
 
   // StorageDcPin: set by board (e.g. CoreS3) when DC and MISO share the same GPIO.
-  _sd.begin(SD_CS, Spi ? *Spi : SPI, 4000000, StorageDcPin);
+  _sd.begin(SD_CS, Spi ? *Spi : SPI, 20000000, StorageDcPin);
   StorageSD = &_sd;
   if (_sd.isAvailable()) { Storage = StorageSD; return; }
 #endif

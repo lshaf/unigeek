@@ -3,6 +3,7 @@
 #include "core/AchievementManager.h"
 #include "core/Device.h"
 #include "core/ScreenManager.h"
+#include "ui/actions/ConfirmAction.h"
 #include "ui/actions/InputSelectAction.h"
 #include "ui/actions/ShowStatusAction.h"
 #include "utils/ble/ChameleonClient.h"
@@ -146,8 +147,15 @@ void ChameleonSettingsScreen::_reset() {
   };
   const char* r = InputSelectAction::popup("Maintenance", opts, 2, nullptr);
   if (!r) { render(); return; }
+  const bool resetting = strcmp(r, "reset") == 0;
+  if (!ConfirmAction::popup(resetting ? "Reset settings?" : "Clear BLE bonds?",
+                            "This action cannot be undone")) {
+    render();
+    return;
+  }
+  render();
   auto& c = ChameleonClient::get();
-  if (strcmp(r, "reset") == 0) {
+  if (resetting) {
     bool ok = c.resetSettings();
     ShowStatusAction::show(ok ? "Defaults restored" : "Reset failed", 1200);
     if (ok) _load();

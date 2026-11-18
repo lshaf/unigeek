@@ -24,6 +24,8 @@ public:
       else if (c == '\b') dir = DIR_BACK;
       else if (c == ',')  dir = DIR_LEFT;
       else if (c == '/')  dir = DIR_RIGHT;
+      // ` (and Fn+` / Esc) act as Back in menus.
+      else if (c == '`' || c == '~') dir = DIR_BACK;
 
       if (dir != DIR_NONE) {
         _kb->getKey();

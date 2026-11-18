@@ -25,7 +25,7 @@ private:
     ACT_COPY, ACT_CUT, ACT_PASTE, ACT_CANCEL_CLIP, ACT_CLOSE_MENU, ACT_EXIT,
   };
 
-  static constexpr uint8_t kMaxMenu      = 13;
+  static constexpr uint8_t kMaxMenu      = 18;
   static constexpr uint8_t kMaxPathDepth = 8;
 
   // File browser

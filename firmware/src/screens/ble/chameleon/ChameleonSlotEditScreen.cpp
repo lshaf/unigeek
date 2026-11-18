@@ -1,3 +1,4 @@
+#include "ui/actions/ConfirmAction.h"
 #include "ChameleonMfcWriteScreen.h"
 #include "ChameleonMfuWriteScreen.h"
 #include "ChameleonSlotContentScreen.h"
@@ -201,6 +202,9 @@ void ChameleonSlotEditScreen::_loadDefault() {
     render();
     return;
   }
+  render();
+  if (!ConfirmAction::popup("Reset selected slot?", "This action cannot be undone")) { render(); return; }
+  render();
   bool ok = ChameleonClient::get().setSlotDataDefault(_slot, t);
   render();
   ShowStatusAction::show(ok ? "Data reset" : "Failed", 1200);
@@ -215,6 +219,9 @@ void ChameleonSlotEditScreen::_deleteSlot(bool) {
   const char* r = InputSelectAction::popup("Delete Slot Data", opts, 2, nullptr);
   if (!r) { render(); return; }
   bool lf = (strcmp(r, "lf") == 0);
+  render();
+  if (!ConfirmAction::popup("Delete slot data?", "This action cannot be undone")) { render(); return; }
+  render();
   uint8_t freq = lf ? 1 : 2;
   bool ok = ChameleonClient::get().deleteSlot(_slot, freq);
   if (ok) {

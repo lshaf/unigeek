@@ -2,6 +2,7 @@
 #include "ChameleonMfuNdefScreen.h"
 #include "core/Device.h"
 #include "core/ScreenManager.h"
+#include "ui/actions/ConfirmAction.h"
 #include "ui/actions/InputTextAction.h"
 #include "ui/actions/ShowStatusAction.h"
 #include "ui/components/Header.h"
@@ -356,11 +357,21 @@ bool ChameleonMfuNdefScreen::writeRecord(const uint8_t* ndef, size_t nl, const c
 }
 
 void ChameleonMfuNdefScreen::erase() {
+  if (!ConfirmAction::popup("Erase NDEF record?", "This action cannot be undone")) {
+    goMenu();
+    return;
+  }
+  render();
   writeRecord(nullptr, 0, "Erase NDEF");
   goMenu();
 }
 
 void ChameleonMfuNdefScreen::format() {
+  if (!ConfirmAction::popup("Format tag as NDEF?", "This action cannot be undone")) {
+    goMenu();
+    return;
+  }
+  render();
   operationTitle("Format NDEF");
   _running = true;
 

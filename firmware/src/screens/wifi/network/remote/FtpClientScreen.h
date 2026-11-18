@@ -2,6 +2,7 @@
 
 #include "ui/templates/ListScreen.h"
 #include "ui/views/BrowseFileView.h"
+#include "screens/wifi/network/remote/SavedHostRows.h"
 
 class FtpClientScreen : public ListScreen
 {
@@ -19,6 +20,9 @@ public:
   void onRender() override;
   void onItemSelected(uint8_t index) override;
   void onBack() override;
+
+  // Opened from Saved Hosts: fields filled in.
+  void loadSaved(const SavedHost& host);
 
 private:
   enum State : uint8_t {
@@ -81,7 +85,12 @@ private:
   char _userLabel[32] = {};
   char _passwordLabel[16] = "-";
 
-  ListItem _configItems[5];
+  static constexpr uint8_t MAX_CONFIG_ROWS = 9;
+  ListItem _configItems[MAX_CONFIG_ROWS];
+  SavedHostRows::Kind _kinds[MAX_CONFIG_ROWS] = {};
+  static constexpr uint8_t FIELD_COUNT = 4;  // Host, Port, Username, Password
+  bool     _askPassword = false;             // saved without its password
+  SavedHostRows _saved{"/unigeek/wifi/remote/ftp", true};
   ListItem _actionItems[2] = {
     {"Download", nullptr},
     {"Upload", nullptr},

@@ -49,6 +49,7 @@ void SettingScreen::_refresh() {
 #endif
   _kbdSub      = Config.get(APP_CONFIG_KEYBOARD_STYLE,       APP_CONFIG_KEYBOARD_STYLE_DEFAULT) == "classic"
                    ? "Classic" : "Full";
+  _confirmActionsSub = Config.get(APP_CONFIG_CONFIRM_ACTIONS, APP_CONFIG_CONFIRM_ACTIONS_DEFAULT).toInt() ? "On" : "Off";
   _colorSub    = Config.get(APP_CONFIG_PRIMARY_COLOR,        APP_CONFIG_PRIMARY_COLOR_DEFAULT);
   _mascotSub   = Mascot::current().label;
 #ifdef DEVICE_HAS_LED_RING
@@ -86,6 +87,7 @@ void SettingScreen::_refresh() {
   _items[SETT_NAV_SOUND].sublabel = _navSndSub.c_str();
 #endif
   _items[SETT_KEYBOARD].sublabel     = _kbdSub.c_str();
+  _items[SETT_CONFIRM_ACTIONS].sublabel = _confirmActionsSub.c_str();
   _items[SETT_COLOR].sublabel        = _colorSub.c_str();
   _items[SETT_MASCOT].sublabel       = _mascotSub.c_str();
 #ifdef DEVICE_HAS_LED_RING
@@ -194,6 +196,14 @@ void SettingScreen::onItemSelected(uint8_t index) {
       bool classic = Config.get(APP_CONFIG_KEYBOARD_STYLE,
                                 APP_CONFIG_KEYBOARD_STYLE_DEFAULT) == "classic";
       Config.set(APP_CONFIG_KEYBOARD_STYLE, classic ? "full" : "classic");
+      Config.save(Uni.Storage);
+      _refresh();
+      break;
+    }
+
+    case SETT_CONFIRM_ACTIONS: {
+      bool enabled = Config.get(APP_CONFIG_CONFIRM_ACTIONS, APP_CONFIG_CONFIRM_ACTIONS_DEFAULT).toInt();
+      Config.set(APP_CONFIG_CONFIRM_ACTIONS, enabled ? "0" : "1");
       Config.save(Uni.Storage);
       _refresh();
       break;

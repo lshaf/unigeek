@@ -110,6 +110,7 @@ static const uint8_t SCL = 15;
 #define DEVICE_HAS_SOUND          // speaker attached — enables audio paths and sound settings
 #define DEVICE_HAS_VOLUME_CONTROL // I2S amp + ES8311 codec support setVolume() — shows Volume slider in Settings
 #define DEVICE_HAS_USB_HID        // ESP32-S3 native USB OTG — enables USB HID keyboard
+#define DEVICE_SUPPORTS_BOOT_ISO  // Experimental: physical keyboard adaptation pending
 #define DEVICE_HAS_WEBAUTHN       // FIDO2 / WebAuthn USB security key (CTAP2 + U2F)
 #define DEVICE_HAS_LIGHT_SLEEP    // Light sleep with wake via shoulder / boot button (GPIO0)
 #define DEVICE_HAS_DEEP_SLEEP     // Deep sleep with wake via shoulder / boot button (GPIO0)

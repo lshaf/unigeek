@@ -2,6 +2,7 @@
 
 #include "ui/templates/ListScreen.h"
 #include "ui/views/BrowseFileView.h"
+#include "screens/wifi/network/remote/SavedHostRows.h"
 
 class SftpClientScreen : public ListScreen
 {
@@ -19,6 +20,9 @@ public:
   void onRender() override;
   void onItemSelected(uint8_t index) override;
   void onBack() override;
+
+  // Opened from Saved Hosts: fields filled in.
+  void loadSaved(const SavedHost& host);
 
 private:
   enum State : uint8_t {
@@ -70,8 +74,8 @@ private:
     REMOTE_UPLOAD_DEST
   };
 
-  static constexpr uint8_t MAX_REMOTE_ENTRIES = 96;
-  static constexpr uint32_t SFTP_TASK_STACK_SIZE = 28672;
+  static constexpr uint8_t MAX_REMOTE_ENTRIES = 48;
+  static constexpr uint32_t SFTP_TASK_STACK_SIZE = 24576;
   static constexpr uint32_t HOLD_MS = 900;
   static constexpr uint32_t WRITE_STALL_TIMEOUT_MS = 12000;
   static constexpr const char* DOWNLOAD_DIR = "/unigeek/wifi/remote/sftp/downloads";
@@ -97,7 +101,11 @@ private:
     {"Download", nullptr},
     {"Upload", nullptr},
   };
-  ListItem _configItems[6];
+  static constexpr uint8_t MAX_CONFIG_ROWS = 10;
+  ListItem _configItems[MAX_CONFIG_ROWS];
+  SavedHostRows::Kind _kinds[MAX_CONFIG_ROWS] = {};
+  uint8_t  _fieldCount = 0;           // service fields before Save host
+  SavedHostRows _saved{"/unigeek/wifi/remote/ssh", true};  // shared with SSH
   ListItem _authItems[2] = {
     {"Password", nullptr},
     {"Private Key", nullptr},

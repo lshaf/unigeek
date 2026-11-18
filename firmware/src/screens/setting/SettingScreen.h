@@ -51,6 +51,7 @@ private:
     SETT_TOUCH_CAL,
 #endif
     SETT_KEYBOARD,
+    SETT_CONFIRM_ACTIONS,
 #ifdef DEVICE_HAS_NAV_MODE_SWITCH
     SETT_NAV_MODE,
 #endif
@@ -76,6 +77,7 @@ private:
   String _navSndSub;
 #endif
   String _kbdSub;
+  String _confirmActionsSub;
   String _colorSub;
   String _mascotSub;
 #ifdef DEVICE_HAS_LED_RING
@@ -125,6 +127,7 @@ private:
     {"Touch Calibration"},
 #endif
     {"Keyboard",         ""},
+    {"Confirm Actions",  ""},
 #ifdef DEVICE_HAS_NAV_MODE_SWITCH
     {"Navigation Mode",  ""},
 #endif

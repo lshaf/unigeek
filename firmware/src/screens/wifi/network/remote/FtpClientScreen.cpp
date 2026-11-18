@@ -1,3 +1,4 @@
+#include "ui/actions/ConfirmAction.h"
 #include "FtpClientScreen.h"
 
 #include "core/Device.h"
@@ -219,18 +220,42 @@ void FtpClientScreen::onItemSelected(uint8_t index) {
 
   if (_state != STATE_CONFIG) return;
 
+  if (index >= FIELD_COUNT) {
+    switch (_kinds[index]) {
+      case SavedHostRows::CONNECT: _connect(); break;
+      default:
+        _saved.select(_kinds[index]);
+        _rebuildConfig();
+        render();
+        break;
+    }
+    return;
+  }
+
   switch (index) {
     case 0: _configHost(); break;
     case 1: _configPort(); break;
     case 2: _configUsername(); break;
     case 3: _configPassword(); break;
-    case 4: _connect(); break;
     default: break;
   }
 }
 
+void FtpClientScreen::loadSaved(const SavedHost& host) {
+  _host     = host.get("host");
+  _port     = host.getInt("port", 21);
+  _username = host.get("user");
+  _password = host.get("password");
+  _askPassword = !host.has("password");
+  _saved.loadFrom(host);
+}
+
 void FtpClientScreen::onBack() {
   if (_state == STATE_ACTION) {
+    if (!ConfirmAction::popup("Disconnect from server?")) {
+      render();
+      return;
+    }
     _closeConnection(false);
     Screen.goBack();
     return;
@@ -279,13 +304,15 @@ void FtpClientScreen::_updateLabels() {
 }
 
 void FtpClientScreen::_rebuildConfig() {
-  uint8_t sel = min<uint8_t>(_selectedIndex, 4);
-  _configItems[0] = {"Host", _hostLabel};
-  _configItems[1] = {"Port", _portLabel};
-  _configItems[2] = {"Username", _userLabel};
-  _configItems[3] = {"Password", _passwordLabel};
-  _configItems[4] = {"Connect", nullptr};
-  setItems(_configItems, 5, sel);
+  uint8_t sel = _selectedIndex;
+  uint8_t n = 0;
+  _configItems[n++] = {"Host", _hostLabel};
+  _configItems[n++] = {"Port", _portLabel};
+  _configItems[n++] = {"Username", _userLabel};
+  _configItems[n++] = {"Password", _passwordLabel};
+  for (uint8_t i = 0; i < n; ++i) _kinds[i] = SavedHostRows::NONE;
+  n = _saved.tail(_configItems, _kinds, n, MAX_CONFIG_ROWS, "Connect");
+  setItems(_configItems, n, min<uint8_t>(sel, n - 1));
 }
 
 void FtpClientScreen::_showActions() {
@@ -334,7 +361,7 @@ void FtpClientScreen::_configUsername() {
 void FtpClientScreen::_configPassword() {
   String value = InputTextAction::popup(
     "Password", "", InputTextAction::INPUT_TEXT);
-  if (!InputTextAction::wasCancelled()) _password = value;
+  if (!InputTextAction::wasCancelled()) { _password = value; _askPassword = false; }
   _selectedIndex = 3;
   _updateLabels();
   _rebuildConfig();
@@ -350,6 +377,25 @@ void FtpClientScreen::_connect() {
   }
   if (WiFi.status() != WL_CONNECTED) {
     ShowStatusAction::show("Not connected", 1500); render(); return;
+  }
+  if (!_saved.prepare()) {  // a host being saved needs a name
+    _rebuildConfig(); render(); return;
+  }
+  // A saved host without its password needs it filled in (anonymous logins
+  // excepted), like any other unset field.
+  if (_askPassword && !_password.length() && !_username.equalsIgnoreCase("anonymous")) {
+    ShowStatusAction::show("Password not set", 1200); render(); return;
+  }
+
+  // Saved when connecting, whether or not the server answers.
+  if (_saved.saving()) {
+    SavedHost host;
+    host.set("host", _host);
+    host.set("port", String(_port));
+    host.set("user", _username);
+    host.set("password", _password);
+    _saved.persist(host);
+    _rebuildConfig();
   }
 
   if (!_mutex) _mutex = xSemaphoreCreateMutex();
@@ -597,13 +643,8 @@ void FtpClientScreen::_chooseUploadDestination(const String& remoteDir) {
 }
 
 bool FtpClientScreen::_confirmTransfer(const char* title) {
-  InputSelectAction::Option opts[] = {
-    {"Yes", "yes"},
-    {"No", "no"},
-  };
   Uni.Lcd.setTextFont(1);
-  const char* result = InputSelectAction::popup(title, opts, 2, "yes");
-  return result && strcmp(result, "yes") == 0;
+  return ConfirmAction::popup(title);
 }
 
 void FtpClientScreen::_requestDownload(const String& remotePath, bool directory) {

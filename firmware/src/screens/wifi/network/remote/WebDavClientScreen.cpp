@@ -1,3 +1,4 @@
+#include "ui/actions/ConfirmAction.h"
 #include "WebDavClientScreen.h"
 
 #include "core/Device.h"
@@ -244,13 +245,32 @@ void WebDavClientScreen::onItemSelected(uint8_t index) {
 
   if (_state != STATE_CONFIG) return;
 
+  if (index >= FIELD_COUNT) {
+    switch (_kinds[index]) {
+      case SavedHostRows::CONNECT: _connect(); break;
+      default:
+        _saved.select(_kinds[index]);
+        _rebuildConfig();
+        render();
+        break;
+    }
+    return;
+  }
+
   switch (index) {
     case 0: _configUrl(); break;
     case 1: _configUsername(); break;
     case 2: _configPassword(); break;
-    case 3: _connect(); break;
     default: break;
   }
+}
+
+void WebDavClientScreen::loadSaved(const SavedHost& host) {
+  _baseUrl  = host.get("url");
+  _username = host.get("user");
+  _password = host.get("password");
+  _askPassword = _username.length() && !host.has("password");
+  _saved.loadFrom(host);
 }
 
 void WebDavClientScreen::onBack() {
@@ -309,12 +329,14 @@ void WebDavClientScreen::_updateLabels() {
 }
 
 void WebDavClientScreen::_rebuildConfig() {
-  uint8_t sel = min<uint8_t>(_selectedIndex, 3);
-  _configItems[0] = {"Server URL", _urlLabel};
-  _configItems[1] = {"Username", _userLabel};
-  _configItems[2] = {"Password", _passwordLabel};
-  _configItems[3] = {"Connect", nullptr};
-  setItems(_configItems, 4, sel);
+  uint8_t sel = _selectedIndex;
+  uint8_t n = 0;
+  _configItems[n++] = {"Server URL", _urlLabel};
+  _configItems[n++] = {"Username", _userLabel};
+  _configItems[n++] = {"Password", _passwordLabel};
+  for (uint8_t i = 0; i < n; ++i) _kinds[i] = SavedHostRows::NONE;
+  n = _saved.tail(_configItems, _kinds, n, MAX_CONFIG_ROWS, "Connect");
+  setItems(_configItems, n, min<uint8_t>(sel, n - 1));
 }
 
 void WebDavClientScreen::_showActions() {
@@ -345,7 +367,7 @@ void WebDavClientScreen::_configUsername() {
 
 void WebDavClientScreen::_configPassword() {
   String value = InputTextAction::popup("Password", "");
-  if (!InputTextAction::wasCancelled()) _password = value;
+  if (!InputTextAction::wasCancelled()) { _password = value; _askPassword = false; }
   _selectedIndex = 2;
   _updateLabels();
   _rebuildConfig();
@@ -367,6 +389,28 @@ void WebDavClientScreen::_connect() {
     ShowStatusAction::show("Not connected", 1500);
     render();
     return;
+  }
+  if (!_saved.prepare()) {  // a host being saved needs a name
+    _rebuildConfig();
+    render();
+    return;
+  }
+  // A saved host with a user but without its password needs it filled in,
+  // like any other unset field.
+  if (_askPassword && !_password.length()) {
+    ShowStatusAction::show("Password not set", 1200);
+    render();
+    return;
+  }
+
+  // Saved when connecting, whether or not the server answers.
+  if (_saved.saving()) {
+    SavedHost host;
+    host.set("url", _baseUrl);
+    host.set("user", _username);
+    host.set("password", _password);
+    _saved.persist(host);
+    _rebuildConfig();
   }
 
   uint8_t count = 0;
@@ -674,13 +718,8 @@ void WebDavClientScreen::_chooseUploadDestination(const String& path) {
 }
 
 bool WebDavClientScreen::_confirm(const char* title) {
-  static constexpr InputSelectAction::Option opts[] = {
-    {"Yes", "yes"},
-    {"No", "no"},
-  };
   Uni.Lcd.setTextFont(1);
-  const char* result = InputSelectAction::popup(title, opts, 2, "yes");
-  return result && !strcmp(result, "yes");
+  return ConfirmAction::popup(title);
 }
 
 bool WebDavClientScreen::_propfind(const String& path,

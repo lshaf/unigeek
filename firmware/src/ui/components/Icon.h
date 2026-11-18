@@ -37,7 +37,7 @@ public:
   }
 
   template<typename T>
-  static void drawKeyboard(T& lcd, int16_t x, int16_t y, uint16_t color) {
+  static void drawUsb(T& lcd, int16_t x, int16_t y, uint16_t color) {
     static constexpr uint8_t bmp[] = {0x7E, 0x81, 0xDB, 0xDB, 0xBD, 0x81, 0x7E, 0x00};
     _draw(lcd, x, y, bmp, color);
   }

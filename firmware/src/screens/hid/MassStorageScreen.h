@@ -15,7 +15,7 @@
 // FAT block device to expose, so the screen shows an "unsupported" message.
 class MassStorageScreen : public BaseScreen {
 public:
-  const char* title()    override { return "USB MSC"; }
+  const char* title()    override { return "Mass Storage"; }
   bool inhibitPowerOff() override { return true; }  // don't auto power-off while a drive is mounted
 
   void onInit()   override;

@@ -1,3 +1,4 @@
+#include "ui/actions/ConfirmAction.h"
 #include <new>
 #include "ChameleonMfcAdvancedScreen.h"
 #include "screens/utility/NfcMemoryViewScreen.h"
@@ -129,10 +130,9 @@ void ChameleonMfcAdvancedScreen::_lockUidGen3(){
     restore(); render(); ShowStatusAction::show("Tag is not Gen3", 1600); return;
   }
 
-  static const InputSelectAction::Option opts[] = {{"Lock UID permanently", "lock"}};
-  const char* choice = InputSelectAction::popup("Permanent UID lock", opts, 1, nullptr);
+  const bool confirmed = ConfirmAction::popup("Lock UID permanently?", "This action cannot be undone");
   render();
-  if (!choice || strcmp(choice, "lock") != 0) { restore(); return; }
+  if (!confirmed) { restore(); return; }
 
   const uint8_t cmd[] = {0x90, 0xFD, 0x11, 0x11, 0x00};
   uint8_t resp[16] = {};

@@ -4,10 +4,9 @@
 
 #include <USB.h>
 #include <USBMSC.h>
+#include <stdlib.h>
 
-#ifdef DEVICE_HAS_WEBAUTHN
-#include "utils/webauthn/UsbProfile.h"
-#endif
+#include "utils/usb/UsbProfile.h"
 
 // The arduino-esp32 USBMSC device. Function-local static so its constructor
 // (which registers the MSC interface via tinyusb_enable_interface) runs the
@@ -40,16 +39,16 @@ bool UsbMscUtil::begin(IStorage* storage)
     return false;
   }
 
-#ifdef DEVICE_HAS_WEBAUTHN
   // Claim USB for the boot before constructing USBMSC. If keyboard/mouse or
   // WebAuthn already started USB this boot, the MSC interface can't be added
   // anymore — bail out without constructing the device.
-  if (!webauthn::claimUsbProfile(webauthn::UsbProfile::MASS_STORAGE)) {
+  if (!usb::claimUsbProfile(usb::UsbProfile::MASS_STORAGE)) {
     _failReason = FAIL_USB_BUSY;
     return false;
   }
-#endif
 
+  _isoMode = false;
+  _imgMode = false;
   _storage     = storage;
   _blockCount  = count;
   _blockSize   = size;
@@ -72,6 +71,109 @@ bool UsbMscUtil::begin(IStorage* storage)
   return true;
 }
 
+bool UsbMscUtil::beginIso(IStorage* storage, const char* path)
+{
+  if (_active || !storage || !storage->isAvailable() || !path) {
+    _failReason = FAIL_NOT_BLOCK_DEVICE;
+    return false;
+  }
+  if (!usb::claimUsbProfile(usb::UsbProfile::MSC_HID)) {
+    _failReason = FAIL_USB_BUSY;
+    return false;
+  }
+  fs::File file = storage->open(path, "r");
+  if (!file || file.isDirectory()) {
+    if (file) file.close();
+    _failReason = FAIL_NOT_BLOCK_DEVICE;
+    return false;
+  }
+  const uint64_t bytes = file.size();
+  // Arduino FS seek() and USBMSC LBA use 32-bit offsets/counts.
+  if (bytes < 512 || (bytes % 512) != 0 || bytes > 0xFFFFFE00ULL) {
+    file.close();
+    _failReason = FAIL_NOT_BLOCK_DEVICE;
+    return false;
+  }
+  // Reserve the 64 KiB cache only for the duration of an ISO session.
+  // Allocation must succeed before the USB MSC interface is exposed.
+  uint8_t* cache = static_cast<uint8_t*>(malloc(ISO_CACHE_BYTES));
+  if (!cache) {
+    file.close();
+    _failReason = FAIL_NOT_BLOCK_DEVICE;
+    return false;
+  }
+  _isoCache = cache;
+  _isoFile = file;
+  _isoMode = true;
+  _imgMode = false;
+  _storage = storage;
+  _blockSize = 512;
+  _blockCount = (uint32_t)(bytes / 512);
+  _hostEjected = false;
+  _reads = _writes = 0;
+  _isoCacheValid = 0;
+  USBMSC& m = msc();
+  m.vendorID("Unigeek");
+  m.productID("Boot ISO");
+  m.productRevision("1.0");
+  m.onStartStop(&UsbMscUtil::_onStartStop);
+  m.onRead(&UsbMscUtil::_onRead);
+  m.onWrite(&UsbMscUtil::_onWrite);
+  m.mediaPresent(true);
+  m.begin(_blockCount, _blockSize);
+  USB.begin();
+  _active = true;
+  _failReason = FAIL_NONE;
+  return true;
+}
+
+bool UsbMscUtil::beginImg(IStorage* storage, const char* path)
+{
+  if (_active || !storage || !storage->isAvailable() || !path) {
+    _failReason = FAIL_NOT_BLOCK_DEVICE;
+    return false;
+  }
+  if (!usb::claimUsbProfile(usb::UsbProfile::MSC_HID)) {
+    _failReason = FAIL_USB_BUSY;
+    return false;
+  }
+  // r+ opens an existing image for updates without truncating it.
+  fs::File file = storage->open(path, "r+");
+  if (!file || file.isDirectory()) {
+    if (file) file.close();
+    _failReason = FAIL_NOT_BLOCK_DEVICE;
+    return false;
+  }
+  const uint64_t bytes = file.size();
+  if (bytes < 512 || (bytes % 512) != 0 || bytes > 0xFFFFFE00ULL) {
+    file.close();
+    _failReason = FAIL_NOT_BLOCK_DEVICE;
+    return false;
+  }
+  _isoFile = file;  // Shared file handle, with mode-specific I/O below.
+  _isoMode = false;
+  _imgMode = true;
+  _storage = storage;
+  _blockSize = 512;
+  _blockCount = (uint32_t)(bytes / 512);
+  _hostEjected = false;
+  _reads = _writes = 0;
+  _isoCacheValid = 0;
+  USBMSC& m = msc();
+  m.vendorID("Unigeek");
+  m.productID("Boot IMG");
+  m.productRevision("1.0");
+  m.onStartStop(&UsbMscUtil::_onStartStop);
+  m.onRead(&UsbMscUtil::_onRead);
+  m.onWrite(&UsbMscUtil::_onWrite);
+  m.mediaPresent(true);
+  m.begin(_blockCount, _blockSize);
+  USB.begin();
+  _active = true;
+  _failReason = FAIL_NONE;
+  return true;
+}
+
 void UsbMscUtil::end()
 {
   if (!_active) return;
@@ -79,7 +181,16 @@ void UsbMscUtil::end()
   m.mediaPresent(false);  // host sees the drive ejected
   m.end();                // clear callbacks + capacity (interface stays registered)
   _active  = false;
+  if (_isoFile) {
+    if (_imgMode) _isoFile.flush();
+    _isoFile.close();
+  }
+  _imgMode = false;
+  _isoMode = false;
+  _isoCacheValid = 0;
   _storage = nullptr;
+  free(_isoCache);
+  _isoCache = nullptr;
 }
 
 int32_t UsbMscUtil::_onRead(uint32_t lba, uint32_t offset, void* buffer, uint32_t bufsize)
@@ -90,6 +201,45 @@ int32_t UsbMscUtil::_onRead(uint32_t lba, uint32_t offset, void* buffer, uint32_
   const uint16_t bs = self._blockSize;
   if (bs == 0) return -1;
 
+  if (self._imgMode) {
+    const uint64_t start = (uint64_t)lba * bs + offset;
+    if (!self._isoFile || start + bufsize > (uint64_t)self._blockCount * bs) return -1;
+    if (!self._isoFile.seek((uint32_t)start)) return -1;
+    if (self._isoFile.read(static_cast<uint8_t*>(buffer), bufsize) != bufsize) return -1;
+    self._reads += (bufsize + bs - 1) / bs;
+    return (int32_t)bufsize;
+  }
+  if (self._isoMode) {
+    const uint64_t start = (uint64_t)lba * bs + offset;
+    const uint64_t end = start + bufsize;
+    if (!self._isoFile || !self._isoCache || end > (uint64_t)self._blockCount * bs) return -1;
+
+    // Read-ahead cache: 64 KiB windows aligned to 512-byte sectors.
+    // Keep USB callbacks bounded and never serve bytes from a failed fill.
+    uint8_t* dst = static_cast<uint8_t*>(buffer);
+    uint32_t copied = 0;
+    while (copied < bufsize) {
+      const uint32_t pos = (uint32_t)(start + copied);
+      if (self._isoCacheValid == 0 || pos < self._isoCacheStart ||
+          (uint64_t)pos >= (uint64_t)self._isoCacheStart + self._isoCacheValid) {
+        const uint32_t window = pos & ~(ISO_CACHE_BYTES - 1u);
+        const uint32_t remaining = (uint32_t)((uint64_t)self._blockCount * bs - window);
+        const uint32_t toRead = remaining < ISO_CACHE_BYTES ? remaining : ISO_CACHE_BYTES;
+        self._isoCacheValid = 0;
+        if (!self._isoFile.seek(window)) return -1;
+        if (self._isoFile.read(self._isoCache, toRead) != toRead) return -1;
+        self._isoCacheStart = window;
+        self._isoCacheValid = toRead;
+      }
+      const uint32_t within = pos - self._isoCacheStart;
+      uint32_t chunk = self._isoCacheValid - within;
+      if (chunk > bufsize - copied) chunk = bufsize - copied;
+      memcpy(dst + copied, self._isoCache + within, chunk);
+      copied += chunk;
+    }
+    self._reads += (bufsize + bs - 1) / bs;
+    return (int32_t)bufsize;
+  }
   uint8_t* dst = static_cast<uint8_t*>(buffer);
 
   // Fast path: TinyUSB's EP buffer (4096) >= block size (512), so reads are
@@ -123,6 +273,17 @@ int32_t UsbMscUtil::_onRead(uint32_t lba, uint32_t offset, void* buffer, uint32_
 int32_t UsbMscUtil::_onWrite(uint32_t lba, uint32_t offset, uint8_t* buffer, uint32_t bufsize)
 {
   UsbMscUtil& self = instance();
+  if (self._isoMode) return -1;  // Never write into the ISO file.
+  if (self._imgMode) {
+    const uint64_t start = (uint64_t)lba * self._blockSize + offset;
+    if (!self._isoFile || !buffer || start + bufsize > (uint64_t)self._blockCount * self._blockSize) return -1;
+    if (!self._isoFile.seek((uint32_t)start)) return -1;
+    if (self._isoFile.write(buffer, bufsize) != bufsize) return -1;
+    // Durability first: no unflushed write-back cache for IMG mode.
+    self._isoFile.flush();
+    self._writes += (bufsize + self._blockSize - 1) / self._blockSize;
+    return (int32_t)bufsize;
+  }
   IStorage* st = self._storage;
   if (!st || !buffer) return -1;
   const uint16_t bs = self._blockSize;
