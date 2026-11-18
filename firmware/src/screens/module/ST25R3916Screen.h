@@ -6,6 +6,19 @@
 #include "utils/nfc/MagicCard.h"
 #include "utils/nfc/MfcRecoverySummary.h"
 
+// --- MIFARE Classic full-tag (Crypto1) emulation --------------------------
+// The ST25R3916 backend can emulate a full MIFARE Classic dump (Crypto1
+// handshake + encrypted READ/WRITE + mfkey32 nonce capture). The code is kept
+// in the tree for future work, but is NOT exposed in the UI by default: on the
+// ST25R3916 the card-side response timing (nt FDT and encrypted parity) cannot
+// be met reliably from software, so real readers other than a Proxmark reject
+// the emulated card. UID-only MFC emulation and NTAG/Type-2 emulation are
+// unaffected and remain available.
+//
+// To re-expose the "Emulate Tag" menu entries for MIFARE Classic, define
+// ENABLE_MFC_EMULATION (here or via a -DENABLE_MFC_EMULATION build flag).
+// #define ENABLE_MFC_EMULATION
+
 class ST25R3916Backend;
 
 class ST25R3916Screen : public ListScreen {
@@ -41,7 +54,7 @@ public:
       case STATE_MFU_NDEF_READING: return "Read NDEF";
       case STATE_MFU_NDEF_WRITING: return "Write NDEF";
       case STATE_MFU_NDEF_DETAILS: return "NDEF Details";
-      case STATE_EMULATING: return "Emulate Tag";
+      case STATE_EMULATING: return _emuIsFullTag ? "Emulate Tag" : "Emulate UID";
       case STATE_MFC_TAG_MENU: return "Tag Operations";
       case STATE_MFC_ADVANCED_MENU: return "Advanced";
       case STATE_MFC_MEMORY: return "Read Memory";
@@ -77,10 +90,12 @@ public:
       case STATE_MFC_WRITE_PREVIEW: return "Write Dump to Tag";
       case STATE_MFC_WRITING: return "Write Dump to Tag";
       case STATE_MFC_UID_SOURCE_FORM: return "Write UID to Tag";
-      case STATE_MFC_UID_FILE_SELECT: return "Saved UIDs";
+      case STATE_MFC_UID_FILE_SELECT: return _mfcUidPickerForEmulation ? "Emulate UID" : "Saved UIDs";
       case STATE_MFC_UID_DUMP_SELECT: return "Saved Dumps";
       case STATE_MFC_UID_WRITE_PREVIEW: return "Write UID to Tag";
       case STATE_MFC_UID_WRITING: return "Write UID to Tag";
+      case STATE_MFC_UID_EMULATE_PREVIEW: return "Emulate UID";
+      case STATE_MFC_DUMP_EMULATE_PREVIEW: return "Emulate Tag";
       case STATE_MFC_ERASING: return "Erase Tag";
       default: return "ST25R3916";
     }
@@ -129,6 +144,8 @@ private:
     STATE_MFC_UID_DUMP_SELECT,
     STATE_MFC_UID_WRITE_PREVIEW,
     STATE_MFC_UID_WRITING,
+    STATE_MFC_UID_EMULATE_PREVIEW,
+    STATE_MFC_DUMP_EMULATE_PREVIEW,
     STATE_MFC_WRITING,
     STATE_MFC_ERASING,
     STATE_MFU_MENU,
@@ -173,7 +190,7 @@ private:
   uint8_t _scanFamily = 0xFF;
   uint8_t _selFamilies = 0;
   uint8_t _selMain = 0, _selMfc = 0, _selMfcTag = 0, _selMfcAdvanced = 0, _selMfcNdef = 0, _selMfcNdefWrite = 0;
-  uint8_t _selMfcAttacks = 0, _selMfcKeys = 0;
+  uint8_t _selMfcAttacks = 0, _selMfcKeys = 0, _selMfcDict = 0;
   uint8_t _selMfu = 0, _selMfuTag = 0, _selMfuNdef = 0, _selMfuAdvanced = 0, _selMfuNdefWrite = 0;
   uint8_t _selExp = 0, _selExpTag = 0, _selExpAdvanced = 0, _selExpSub1 = 0, _selExpSub2 = 0, _selExpNdef = 0, _selExpNdefWrite = 0;
 
@@ -212,13 +229,22 @@ private:
     {"Check Known Keys"},
     {"Dictionaries"},
   };
-  ListItem _mfcTagItems[7] = {
+  ListItem _mfcTagItems[
+#if defined(ENABLE_MFC_EMULATION)
+      8
+#else
+      7
+#endif
+  ] = {
     {"Detect Magic"},
     {"Read Tag"},
     {"Write UID to Tag"},
     {"Write Dump to Tag"},
     {"Erase Tag"},
     {"Emulate UID"},
+#if defined(ENABLE_MFC_EMULATION)
+    {"Emulate Tag"},   // full MIFARE Classic Crypto1 emulation (see flag above)
+#endif
     {"Advanced"},
   };
   ListItem _mfcAdvancedItems[3] = {
@@ -307,6 +333,8 @@ private:
   bool _writePreviewFromFile = false;
   bool _mfuWritePreviewFromFile = false;
   bool _mfuDumpPickerForEmulation = false;
+  bool _mfcUidPickerForEmulation = false;
+  bool _mfcDumpPickerForEmulation = false;
   bool _mfcDumpFromCompleteRead = false;
   uint8_t _writeSourceUid[4] = {};
   static constexpr size_t kMaxNdefBytes = 254;
@@ -336,6 +364,11 @@ private:
   String _dictViewTitle;
   ST25R3916Backend* _emuDev = nullptr;
   bool _emuReturnMfc = false;
+  bool _emuIsFullTag = false;
+  String _emuUidStr;
+  String _emuTypeStr;
+  bool _emuShowAuths = false;   // MFC full-tag: show live reader-auth count
+  uint8_t _emuAuthsShown = 0;
   bool _resumeMfcReadAfterDict = false;
   bool _mfcReadAfterDict = false;
   bool _mfcKnownKeysOnlyRead = false;
@@ -356,11 +389,15 @@ private:
   void _genericReadTag();
   bool _matchesGenericReadTag(const uint8_t* uid, uint8_t uidLen) const;
   void _readMfcTag();
-  void _emulateMfcTag();
+  void _emulateMfcTag(bool fullDump);
+  void _openMfcUidEmulatePicker();
+  void _showMfcUidEmulatePreview();
+  void _showMfcDumpEmulatePreview();
   void _emulateMfuTag();
+  void _showEmulationScreen();
   void _stopEmulation();
   void _showMfcDumpActions();
-  void _openMfcDumpPicker();
+  void _openMfcDumpPicker(bool forEmulation = false);
   void _openMfcDumpFile(uint8_t index);
   void _showMfcWritePreview(const uint8_t* dump, size_t len, bool fromFile);
   void _chooseMfcUidSource();

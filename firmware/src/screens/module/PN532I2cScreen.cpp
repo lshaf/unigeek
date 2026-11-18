@@ -1143,6 +1143,9 @@ void PN532I2cScreen::onBack() {
       case STATE_TYPE4A_RESULT:
       case STATE_FELICA_RESULT:
       case STATE_TYPE1_RESULT:
+      case STATE_MIFARE_WRITE_PREVIEW:
+      case STATE_MIFARE_UID_WRITE_PREVIEW:
+      case STATE_MIFARE_UID_SOURCE_FORM:
         _goMain();
         return;
       default: break;

@@ -512,6 +512,10 @@ void ST25R3916Screen::onUpdate() {
   if (_state == STATE_EMULATING) {
 #if defined(DEVICE_HAS_ST25R3916)
     if (_emuDev) _emuDev->emulationWorker();
+    // Refresh the live view only when the reader-auth count actually changes.
+    if (_emuShowAuths && _emuDev && _emuDev->mfcNonceCount() != _emuAuthsShown) {
+      _showEmulationScreen();
+    }
 #endif
     if (Uni.Nav->wasPressed() && Uni.Nav->readDirection() == INavigation::DIR_BACK) _stopEmulation();
     return;
@@ -563,7 +567,6 @@ void ST25R3916Screen::onUpdate() {
     return;
   }
   if (dir == INavigation::DIR_PRESS && _state == STATE_MFU_DETAILS) {
-    _genericReadActive = false;
     _showMfuDumpActions();
     return;
   }
@@ -583,8 +586,15 @@ void ST25R3916Screen::onUpdate() {
     _writeMfcUidToTag();
     return;
   }
+  if (dir == INavigation::DIR_PRESS && _state == STATE_MFC_UID_EMULATE_PREVIEW) {
+    _emulateMfcTag(false);
+    return;
+  }
+  if (dir == INavigation::DIR_PRESS && _state == STATE_MFC_DUMP_EMULATE_PREVIEW) {
+    _emulateMfcTag(true);
+    return;
+  }
   if (dir == INavigation::DIR_PRESS && _state == STATE_MFC_DETAILS) {
-    _genericReadActive = false;
     _showMfcDumpActions();
     return;
   }
@@ -628,15 +638,6 @@ void ST25R3916Screen::onRender() {
     }
     return;
   }
-  if (_state == STATE_EMULATING) {
-    auto& lcd = Uni.Lcd;
-    const int bx = bodyX(), by = bodyY(), bw = bodyW(), bh = bodyH();
-    lcd.fillRect(bx, by, bw, bh, TFT_BLACK);
-    lcd.setTextDatum(MC_DATUM); lcd.setTextSize(1);
-    lcd.setTextColor(TFT_WHITE, TFT_BLACK);
-    lcd.drawString("Emulating tag...", bx + bw / 2, by + bh / 2);
-    return;
-  }
   if (_state == STATE_MENU || _state == STATE_FAMILIES_MENU || _state == STATE_MFC_MENU || _state == STATE_MFC_TAG_MENU || _state == STATE_MFC_ADVANCED_MENU ||
       _state == STATE_MFC_ATTACKS_MENU || _state == STATE_MFC_KEYS_MENU ||
       _state == STATE_MFC_DICT_SELECT || _state == STATE_MFC_DICT_ATTACK_SELECT ||
@@ -674,7 +675,11 @@ void ST25R3916Screen::onBack() {
     if (_state == STATE_MFC_DETAILS || _state == STATE_MFU_DETAILS ||
         _state == STATE_EXP_DETAILS || _state == STATE_EXP_RESULT ||
         _state == STATE_MFC_READING || _state == STATE_MFU_READING ||
-        _state == STATE_EXP_WORKING) {
+        _state == STATE_EXP_WORKING ||
+        _state == STATE_MFC_WRITE_PREVIEW || _state == STATE_MFC_UID_WRITE_PREVIEW ||
+        _state == STATE_MFC_UID_EMULATE_PREVIEW || _state == STATE_MFC_DUMP_EMULATE_PREVIEW ||
+        _state == STATE_MFU_WRITE_PREVIEW || _state == STATE_MFU_EMULATE_PREVIEW ||
+        _state == STATE_EMULATING) {
       _genericReadActive = false;
       _showMenu();
       return;
@@ -725,7 +730,12 @@ void ST25R3916Screen::onBack() {
     _showMfcAdvancedMenu();
     return;
   }
-  if (_state == STATE_MFC_UID_FILE_SELECT || _state == STATE_MFC_UID_DUMP_SELECT || _state == STATE_MFC_UID_WRITE_PREVIEW) { _rebuildMfcUidWriteForm(1); return; }
+  if (_state == STATE_MFC_UID_FILE_SELECT || _state == STATE_MFC_UID_DUMP_SELECT || _state == STATE_MFC_UID_WRITE_PREVIEW) {
+    if (_mfcUidPickerForEmulation) { _mfcUidPickerForEmulation = false; _showMfcTagMenu(); return; }
+    _rebuildMfcUidWriteForm(1); return;
+  }
+  if (_state == STATE_MFC_UID_EMULATE_PREVIEW) { _showMfcTagMenu(); return; }
+  if (_state == STATE_MFC_DUMP_EMULATE_PREVIEW) { _showMfcTagMenu(); return; }
   if (_state == STATE_MFC_WRITE_PREVIEW || _state == STATE_MFC_DUMP_SELECT || _state == STATE_MFC_UID_SOURCE_FORM ||
       _state == STATE_MFC_UID_WRITING || _state == STATE_MFC_WRITING || _state == STATE_MFC_ERASING) {
     _showMfcTagMenu();
@@ -759,7 +769,18 @@ void ST25R3916Screen::onBack() {
   }
   if (_state == STATE_MFC_ADVANCED_MENU) { _showMfcTagMenu(); return; }
   if (_state == STATE_MFC_ATTACKS_MENU || _state == STATE_MFC_KEYS_MENU) { _showMfcMenu(); return; }
-  if (_state == STATE_MFC_DICT_SELECT || _state == STATE_MFC_DICT_VIEW) { _openMfcDictionaries(false); return; }
+  if (_state == STATE_MFC_DICT_VIEW) { _openMfcDictionaries(false); return; }
+  if (_state == STATE_MFC_DICT_SELECT) {
+    if (_dictPickDir.length() && _dictPickDir != _dictPath) {
+      int slash = _dictPickDir.lastIndexOf('/');
+      _dictPickDir = (slash > 0) ? _dictPickDir.substring(0, slash) : String(_dictPath);
+      _openMfcDictionaries(false);
+    } else {
+      _dictPickDir = "";
+      _showMfcKeysMenu();
+    }
+    return;
+  }
   if (_state == STATE_MFC_KEYS_VIEW) { _showMfcKeysMenu(); return; }
   if (_state == STATE_MFC_DICT_ATTACK_SELECT) {
     if (_resumeMfcReadAfterDict) { _resumeMfcReadAfterDict = false; _showMfcTagMenu(); }
@@ -876,8 +897,8 @@ void ST25R3916Screen::onItemSelected(uint8_t index) {
     else if (index == 1) _openMfcDictionaries(false);
     return;
   }
-  if (_state == STATE_MFC_DICT_SELECT) { _openMfcDictionary(index, false); return; }
-  if (_state == STATE_MFC_DICT_ATTACK_SELECT) { _openMfcDictionary(index, true); return; }
+  if (_state == STATE_MFC_DICT_SELECT) { _selMfcDict = _selectedIndex; _openMfcDictionary(index, false); return; }
+  if (_state == STATE_MFC_DICT_ATTACK_SELECT) { _selMfcDict = _selectedIndex; _openMfcDictionary(index, true); return; }
   if (_state == STATE_MFU_ADVANCED_MENU) {
     _selMfuAdvanced = index;
     if (index == 0) _readMfuMemory();
@@ -917,8 +938,13 @@ void ST25R3916Screen::onItemSelected(uint8_t index) {
     else if (index == 2) _chooseMfcUidSource();
     else if (index == 3) _openMfcDumpPicker();
     else if (index == 4) _eraseMfcTag();
-    else if (index == 5) _emulateMfcTag();
+    else if (index == 5) _openMfcUidEmulatePicker();
+#if defined(ENABLE_MFC_EMULATION)
+    else if (index == 6) _openMfcDumpPicker(true);
+    else if (index == 7) _showMfcAdvancedMenu();
+#else
     else if (index == 6) _showMfcAdvancedMenu();
+#endif
     return;
   }
   if (_state == STATE_MFC_DUMP_SELECT) { _openMfcDumpFile(index); return; }
@@ -1077,7 +1103,7 @@ void ST25R3916Screen::_showMfcMenu() {
 void ST25R3916Screen::_showMfcTagMenu() {
   if (_genericReadActive) { _genericReadActive = false; _showMenu(); return; }
   _state = STATE_MFC_TAG_MENU;
-  setItems(_mfcTagItems, 7, _selMfcTag);
+  setItems(_mfcTagItems, sizeof(_mfcTagItems) / sizeof(_mfcTagItems[0]), _selMfcTag);
   render();
 }
 
@@ -1644,8 +1670,12 @@ void ST25R3916Screen::_showMfcDumpActions() {
     {"Write UID to Tag", "writeuid"},
     {"Write Dump to Tag", "write"},
     {"Emulate UID", "emulate"},
+#if defined(ENABLE_MFC_EMULATION)
+    {"Emulate Tag", "emulatetag"},   // full Crypto1 emulation (see flag in header)
+#endif
   };
-  const char* r = InputSelectAction::popup("Dump Actions", opts, 6, nullptr);
+  const char* r = InputSelectAction::popup("Dump Actions", opts,
+                                           sizeof(opts) / sizeof(opts[0]), nullptr);
   if (!r) { render(); return; }
 
   render();
@@ -1664,13 +1694,26 @@ void ST25R3916Screen::_showMfcDumpActions() {
   } else if (strcmp(r, "write") == 0) {
     _showMfcWritePreview(_mfcDump, _mfcDumpLen, false);
   } else if (strcmp(r, "emulate") == 0) {
-    _emulateMfcTag();
+    _emulateMfcTag(false);
+#if defined(ENABLE_MFC_EMULATION)
+  } else if (strcmp(r, "emulatetag") == 0) {
+    _emulateMfcTag(true);
+#endif
   }
 }
 
-void ST25R3916Screen::_emulateMfcTag() {
+void ST25R3916Screen::_emulateMfcTag(bool fullDump) {
 #if defined(DEVICE_HAS_ST25R3916)
-  if (!_mfcDumpLen || !_mfcDumpBlocks) {
+  // fullDump=true  -> full MIFARE Classic emulation (Crypto1 + encrypted
+  //                   READ/WRITE, plus mfkey32 nonce capture) from a 1K/4K dump.
+  // fullDump=false -> UID-only emulation; needs just a UID.
+  const bool haveUid = (_mfcUidLen == 4 || _mfcUidLen == 7);
+  if (fullDump && _mfcDumpLen < 1024) {
+    ShowStatusAction::show("Load a 1K/4K dump first", 1500);
+    _showMfcTagMenu();
+    return;
+  }
+  if (!fullDump && !_mfcDumpLen && !haveUid) {
     ShowStatusAction::show("Read or load a tag first", 1500);
     _showMfcTagMenu();
     return;
@@ -1683,8 +1726,8 @@ void ST25R3916Screen::_emulateMfcTag() {
 
   ST25R3916Backend::ScanResult id;
   id.technology = ST25R3916Backend::Technology::NFC_A;
-  if (_mfcUidLen >= 4) {
-    id.nfcidLen = _mfcUidLen > 7 ? 7 : _mfcUidLen;
+  if (haveUid) {
+    id.nfcidLen = _mfcUidLen;
     memcpy(id.nfcid, _mfcUid, id.nfcidLen);
   } else {
     id.nfcidLen = 4;
@@ -1694,16 +1737,89 @@ void ST25R3916Screen::_emulateMfcTag() {
   id.atqa[0] = _mfcAtqa[0]; id.atqa[1] = _mfcAtqa[1];
   if (id.atqa[0] == 0 && id.atqa[1] == 0) id.atqa[0] = 0x04;
 
-  if (!_emuDev->startMfcUidEmulation(id)) {
+  // With a full 1K dump loaded, emulate the card for real (Crypto1 handshake +
+  // encrypted READ/WRITE, plus mfkey32 nonce capture). Otherwise UID-only.
+  const bool ok = fullDump ? _emuDev->startMfcDumpEmulation(id, _mfcDump, _mfcDumpLen)
+                           : _emuDev->startMfcUidEmulation(id);
+  if (!ok) {
     delete _emuDev; _emuDev = nullptr;
     ShowStatusAction::show("Failed", 1600); _showMfcTagMenu(); return;
   }
   _emuReturnMfc = true;
-  _state = STATE_EMULATING;
-  render();
+  _emuIsFullTag = fullDump;
+  _emuShowAuths = fullDump;             // full-tag path authenticates; count reads
+  _emuUidStr = "";
+  for (uint8_t i = 0; i < id.nfcidLen; ++i) {
+    char b[4]; snprintf(b, sizeof(b), "%s%02X", i ? ":" : "", id.nfcid[i]); _emuUidStr += b;
+  }
+  _emuTypeStr = fullDump ? (_mfcDumpLen == 4096 ? "MF Classic 4K" : "MF Classic 1K")
+                         : "MF Classic (UID)";
+  _showEmulationScreen();
 #else
   ShowStatusAction::show("ST25R3916 not supported");
 #endif
+}
+
+void ST25R3916Screen::_openMfcUidEmulatePicker() {
+  _mfcUidPickerForEmulation = true;
+  _state = STATE_MFC_UID_FILE_SELECT;
+  _browser.root = "/unigeek/nfc/uids";
+  if (!_uidPickDir.startsWith(_browser.root)) _uidPickDir = _browser.root;
+  uint8_t n = _browser.load(this, _uidPickDir, BrowseFileView::Mode(".uid"));
+  if (n == 0 && _uidPickDir == _browser.root) {
+    _mfcUidPickerForEmulation = false;
+    ShowStatusAction::show("No saved UIDs", 1600);
+    _showMfcTagMenu();
+    return;
+  }
+  setItems(_browser.items(), n);
+}
+
+void ST25R3916Screen::_showMfcUidEmulatePreview() {
+  if (_mfcUidLen != 4 && _mfcUidLen != 7) {
+    ShowStatusAction::show("Invalid UID file", 1600);
+    _showMfcTagMenu();
+    return;
+  }
+  _rowCount = 0;
+  auto add = [&](const char* l, const String& v) {
+    if (_rowCount >= kMaxRows) return;
+    _rowLabels[_rowCount] = l; _rowValues[_rowCount] = v;
+    _rows[_rowCount] = {_rowLabels[_rowCount].c_str(), _rowValues[_rowCount]}; ++_rowCount;
+  };
+  String t;
+  for (uint8_t i = 0; i < _mfcUidLen; ++i) { char b[4]; snprintf(b, sizeof(b), "%s%02X", i ? ":" : "", _mfcUid[i]); t += b; }
+  add("Source", "File");
+  add("UID", t);
+  add("Length", _mfcUidLen == 7 ? "7 bytes" : "4 bytes");
+  add("[Press]", "Emulate UID");
+  _scrollView.resetScroll(); _scrollView.setRows(_rows, _rowCount);
+  _state = STATE_MFC_UID_EMULATE_PREVIEW;
+  render();
+}
+
+void ST25R3916Screen::_showMfcDumpEmulatePreview() {
+  if (_mfcDumpLen < 1024) {
+    ShowStatusAction::show("Invalid dump", 1600);
+    _showMfcTagMenu();
+    return;
+  }
+  _rowCount = 0;
+  auto add = [&](const char* l, const String& v) {
+    if (_rowCount >= kMaxRows) return;
+    _rowLabels[_rowCount] = l; _rowValues[_rowCount] = v;
+    _rows[_rowCount] = {_rowLabels[_rowCount].c_str(), _rowValues[_rowCount]}; ++_rowCount;
+  };
+  String t;
+  for (uint8_t i = 0; i < _mfcUidLen; ++i) { char b[4]; snprintf(b, sizeof(b), "%s%02X", i ? ":" : "", _mfcUid[i]); t += b; }
+  add("Source", "File");
+  add("Type", _mfcDumpLen == 4096 ? "MF Classic 4K" : "MF Classic 1K");
+  add("UID", t);
+  add("Blocks", String((unsigned)(_mfcDumpLen / 16U)));
+  add("[Press]", "Emulate Tag");
+  _scrollView.resetScroll(); _scrollView.setRows(_rows, _rowCount);
+  _state = STATE_MFC_DUMP_EMULATE_PREVIEW;
+  render();
 }
 
 void ST25R3916Screen::_emulateMfuTag() {
@@ -1733,17 +1849,49 @@ void ST25R3916Screen::_emulateMfuTag() {
   }
   id.sak = 0x00;
   id.atqa[0] = _mfuAtqa[0]; id.atqa[1] = _mfuAtqa[1];
-  if (id.atqa[0] == 0 && id.atqa[1] == 0) id.atqa[1] = 0x44;
+  // ATQA order matches RFAL sensRes: [0]=anticollisionInfo, [1]=platformInfo.
+  // NTAG21x answers 0x0044, i.e. {0x44, 0x00}.
+  if (id.atqa[0] == 0 && id.atqa[1] == 0) { id.atqa[0] = 0x44; id.atqa[1] = 0x00; }
   if (!_emuDev->startType2Emulation(id, _mfuDump, _mfuDumpLen)) {
     delete _emuDev; _emuDev = nullptr;
     ShowStatusAction::show("Failed", 1600); _showMfuTagMenu(); return;
   }
   _emuReturnMfc = false;
-  _state = STATE_EMULATING;
-  render();
+  _emuIsFullTag = true;   // NTAG/Type2 is always a full-tag emulation
+  _emuShowAuths = false;  // no Crypto1 auth on Type 2
+  _emuUidStr = "";
+  for (uint8_t i = 0; i < id.nfcidLen; ++i) {
+    char b[4]; snprintf(b, sizeof(b), "%s%02X", i ? ":" : "", id.nfcid[i]); _emuUidStr += b;
+  }
+  _emuTypeStr = _mfuType.length() ? _mfuType : String("NTAG / Type 2");
+  _showEmulationScreen();
 #else
   ShowStatusAction::show("ST25R3916 not supported");
 #endif
+}
+
+void ST25R3916Screen::_showEmulationScreen() {
+  // Live emulation view, styled like the Read/Write detail screens (label/value
+  // rows) rather than a bare status line.
+  _rowCount = 0;
+  auto add = [&](const char* l, const String& v) {
+    if (_rowCount >= kMaxRows) return;
+    _rowLabels[_rowCount] = l; _rowValues[_rowCount] = v;
+    _rows[_rowCount] = {_rowLabels[_rowCount].c_str(), _rowValues[_rowCount]}; ++_rowCount;
+  };
+  add("Status", "Emulating");
+  add("UID", _emuUidStr.length() ? _emuUidStr : String("-"));
+  add("Type", _emuTypeStr.length() ? _emuTypeStr : String("-"));
+#if defined(DEVICE_HAS_ST25R3916)
+  if (_emuShowAuths) {
+    _emuAuthsShown = _emuDev ? _emuDev->mfcNonceCount() : 0;
+    add("Reader auths", String((unsigned)_emuAuthsShown));
+  }
+#endif
+  add("[Back]", "Stop");
+  _scrollView.resetScroll(); _scrollView.setRows(_rows, _rowCount);
+  _state = STATE_EMULATING;
+  render();
 }
 
 void ST25R3916Screen::_stopEmulation() {
@@ -1828,8 +1976,16 @@ void ST25R3916Screen::_openMfcUidDumpPicker() {
   if(n==0&&_uidDumpPickDir==_browser.root){_rebuildMfcUidWriteForm(1);ShowStatusAction::show("No saved dumps",1600);return;} setItems(_browser.items(),n);
 }
 void ST25R3916Screen::_openMfcUidFile(uint8_t index) {
-  if(index>=_browser.count())return; const auto&e=_browser.entry(index); if(e.isDir){_uidPickDir=e.path;_openMfcUidPicker();return;}
-  uint8_t uid[7]={};size_t n=0;if(!IdentityFile::loadNfcUid(e.path,uid,sizeof(uid),n)||(n!=4&&n!=7)){ShowStatusAction::show("Invalid UID file",1600);return;}memcpy(_uidWriteValue,uid,n);_uidWriteLen=(uint8_t)n;_uidWriteFilePath=e.path;_rebuildMfcUidWriteForm(1);
+  if(index>=_browser.count())return; const auto&e=_browser.entry(index); if(e.isDir){_uidPickDir=e.path; if(_mfcUidPickerForEmulation)_openMfcUidEmulatePicker(); else _openMfcUidPicker(); return;}
+  uint8_t uid[7]={};size_t n=0;if(!IdentityFile::loadNfcUid(e.path,uid,sizeof(uid),n)||(n!=4&&n!=7)){ShowStatusAction::show("Invalid UID file",1600);return;}
+  if (_mfcUidPickerForEmulation) {
+    memcpy(_mfcUid, uid, n); _mfcUidLen = (uint8_t)n;
+    _mfcSak = 0; _mfcAtqa[0] = 0; _mfcAtqa[1] = 0;
+    _mfcUidPickerForEmulation = false;
+    _showMfcUidEmulatePreview();
+    return;
+  }
+  memcpy(_uidWriteValue,uid,n);_uidWriteLen=(uint8_t)n;_uidWriteFilePath=e.path;_rebuildMfcUidWriteForm(1);
 }
 void ST25R3916Screen::_openMfcUidDumpFile(uint8_t index) {
   if(index>=_browser.count())return;const auto&e=_browser.entry(index);if(e.isDir){_uidDumpPickDir=e.path;_openMfcUidDumpPicker();return;}
@@ -1852,7 +2008,8 @@ bool ST25R3916Screen::_writeMfcUidToTag() {
 #endif
 }
 
-void ST25R3916Screen::_openMfcDumpPicker() {
+void ST25R3916Screen::_openMfcDumpPicker(bool forEmulation) {
+  _mfcDumpPickerForEmulation = forEmulation;
   _state = STATE_MFC_DUMP_SELECT;
   if (_dumpPickDir.length() == 0) _dumpPickDir = "/unigeek/nfc/dumps";
   _browser.root = "/unigeek/nfc/dumps";
@@ -1890,6 +2047,20 @@ void ST25R3916Screen::_openMfcDumpFile(uint8_t index) {
   _mfcDumpLen = len;
   _mfcDumpBlocks = (uint16_t)(len / 16U);
   _mfcDumpFromCompleteRead = false;
+  if (_mfcDumpPickerForEmulation) {
+    _mfcDumpPickerForEmulation = false;
+    if (len < 1024) {
+      ShowStatusAction::show("Mini not supported for emulation", 1600);
+      _showMfcTagMenu();
+      return;
+    }
+    // Identity comes from the dump itself: UID in block 0, default SAK/ATQA.
+    _mfcUidLen = 4; memcpy(_mfcUid, _mfcDump, 4);
+    _mfcSak = (len == 4096) ? 0x18 : 0x08;
+    _mfcAtqa[0] = 0x04; _mfcAtqa[1] = 0x00;
+    _showMfcDumpEmulatePreview();
+    return;
+  }
   _showMfcWritePreview(_mfcDump, len, true);
 }
 
@@ -2984,13 +3155,14 @@ void ST25R3916Screen::_openMfuDumpFile(uint8_t index) {
   _mfuDumpLen = 540; _mfuPages = 135; _mfuType = "NTAG215";
   _mfuUidLen = 0;
   memset(_mfuUid, 0, sizeof(_mfuUid));
-  memset(_mfuAtqa, 0, sizeof(_mfuAtqa));
+  // .bin dumps carry no ATQA; use the NTAG215 default in RFAL byte order.
+  _mfuAtqa[0] = 0x44; _mfuAtqa[1] = 0x00;
   _mfuSak = 0;
 
   if (_mfuDumpPickerForEmulation) {
     const HfDumpParser::Info info = HfDumpParser::inspect(_mfuDump, _mfuDumpLen);
     if (info.type != HfDumpParser::TYPE_NTAG215 || !info.uidValid || info.uidLen == 0) {
-      ShowStatusAction::show("Invalid NTAG215 dump", 1500);
+      ShowStatusAction::show("Invalid NTAG215 dump", 1600);
       _showMfuTagMenu();
       return;
     }
@@ -3041,7 +3213,7 @@ void ST25R3916Screen::_showMfuEmulatePreview() {
   const HfDumpParser::Info info = HfDumpParser::inspect(_mfuDump, _mfuDumpLen);
   if (info.type != HfDumpParser::TYPE_NTAG215 || !info.uidValid || info.uidLen == 0 ||
       _mfuPages != 135 || _mfuDumpLen != 540) {
-    ShowStatusAction::show("Invalid NTAG215 dump", 1500);
+    ShowStatusAction::show("Invalid NTAG215 dump", 1600);
     _showMfuTagMenu();
     return;
   }
@@ -4252,10 +4424,27 @@ void ST25R3916Screen::_formatMfuNdef() {
 
 void ST25R3916Screen::_showMfcKnownKeys() {
 #if defined(DEVICE_HAS_ST25R3916)
+  _state = STATE_MFC_READING;
+  render();
   ST25R3916Backend dev;
-  if(!st25Begin(dev, _interface)){ShowStatusAction::show("ST25R3916 not detected");return;}
+  if (!st25Begin(dev, _interface)) {
+    ShowStatusAction::show("ST25R3916 not detected");
+    _showMfcKeysMenu();
+    return;
+  }
   ST25R3916Backend::ScanResult tag;
-  if(!dev.scan(ST25R3916Backend::TECH_A,tag,5000,true)||!isMifareClassic(tag.sak)){dev.deactivate();ShowStatusAction::show("Tag not supported");return;}
+  const auto waitResult = st25WaitForTag(dev, ST25R3916Backend::TECH_A, tag, 5000, true);
+  if (waitResult != St25WaitResult::FOUND) {
+    if (waitResult == St25WaitResult::TIMEOUT) ShowStatusAction::show("Tag not detected", 1200);
+    _showMfcKeysMenu();
+    return;
+  }
+  if (!isMifareClassic(tag.sak)) {
+    dev.deactivate();
+    ShowStatusAction::show("Tag not supported", 1200);
+    _showMfcKeysMenu();
+    return;
+  }
   dev.deactivate();
   size_t sectors=0,blocks=0;mfcDimensions(tag.sak,sectors,blocks);
   String uidDisplay,uidFile;
@@ -4277,8 +4466,10 @@ void ST25R3916Screen::_openMfcDictionaries(bool attackMode) {
   if(!_dictPickDir.length())_dictPickDir=_dictPath; _browser.root=_dictPath;
   uint8_t n=_browser.load(this,_dictPickDir,".txt",nullptr,BrowseFileView::NAME,nullptr);
   _state=attackMode?STATE_MFC_DICT_ATTACK_SELECT:STATE_MFC_DICT_SELECT;
-  if(_dictPickDir==_dictPath){uint8_t out=0;_dictItems[out++]={"Default"};_dictItems[out++]={"Discovered"};_dictItems[out++]={"Extended"};for(uint8_t i=0;i<n;++i)if(_browser.entry(i).path!=MfcKeyStore::kDiscoveredDictionary)_dictItems[out++]=_browser.items()[i];setItems(_dictItems,out);}
-  else setItems(_browser.items(),n); render();
+  uint8_t out=n;
+  if(_dictPickDir==_dictPath){out=0;_dictItems[out++]={"Default"};_dictItems[out++]={"Discovered"};_dictItems[out++]={"Extended"};for(uint8_t i=0;i<n;++i)if(_browser.entry(i).path!=MfcKeyStore::kDiscoveredDictionary)_dictItems[out++]=_browser.items()[i];setItems(_dictItems,out,_selMfcDict);}
+  else setItems(_browser.items(),n,_selMfcDict);
+  render();
 }
 
 void ST25R3916Screen::_openMfcDictionary(uint8_t index,bool attackMode) {
@@ -4343,7 +4534,10 @@ void ST25R3916Screen::_runMfcDictionaryAttack(const String& path) {
     tag.nfcidLen = _mfcRecoverTagUidLen;
     memcpy(tag.nfcid, _mfcRecoverTagUid, _mfcRecoverTagUidLen);
   } else {
-    if (!dev.scan(ST25R3916Backend::TECH_A, tag, 5000, true) || !isMifareClassic(tag.sak)) {
+    _state = STATE_MFC_READING;
+    render();
+    const auto waitResult = st25WaitForTag(dev, ST25R3916Backend::TECH_A, tag, 5000, true);
+    if (waitResult != St25WaitResult::FOUND || !isMifareClassic(tag.sak)) {
       dev.deactivate();
       if (_mfcRecoverChainActive) {
         _mfcRecoverChainActive = false;
@@ -4352,7 +4546,10 @@ void ST25R3916Screen::_runMfcDictionaryAttack(const String& path) {
         _mfcReadAfterDict = false;
         _mfcRecoverTagUidLen = 0;
       }
-      ShowStatusAction::show("Tag not supported");
+      if (waitResult == St25WaitResult::TIMEOUT) ShowStatusAction::show("Tag not detected", 1200);
+      else if (waitResult == St25WaitResult::FOUND) ShowStatusAction::show("Tag not supported", 1200);
+      if (_resumeMfcReadAfterDict) _showMfcTagMenu();
+      else _openMfcDictionaries(true);
       return;
     }
     if (_mfcRecoverChainActive) {
@@ -4369,10 +4566,15 @@ void ST25R3916Screen::_runMfcDictionaryAttack(const String& path) {
     char h[3]; snprintf(h, sizeof(h), "%02X", tag.nfcid[i]); uidFile += h;
   }
 
-  String savedA[40], savedB[40];
+  // Off the stack: these locals overflow the ESP32 task and crash the attack.
+  static char savedA[40][13];
+  static char savedB[40][13];
+  memset(savedA, 0, sizeof(savedA));
+  memset(savedB, 0, sizeof(savedB));
   if (!_mfcRecoverChainActive) _mfcRecoverySummary.reset();
   String keyPath = String("/unigeek/nfc/keys/") + uidFile + ".txt";
-  String persisted = Uni.Storage->readFile(keyPath.c_str());
+  String persisted = (Uni.Storage && Uni.Storage->isAvailable())
+      ? Uni.Storage->readFile(keyPath.c_str()) : String();
   int pos = 0;
   while (pos < (int)persisted.length()) {
     int nl = persisted.indexOf('\n', pos);
@@ -4382,8 +4584,8 @@ void ST25R3916Screen::_runMfcDictionaryAttack(const String& path) {
     if (sscanf(line.c_str(), "S%d %c %12s", &sec, &kt, hex) == 3 &&
         sec >= 0 && sec < (int)sectors) {
       String key(hex); key.toUpperCase();
-      if (kt == 'A' || kt == 'a') savedA[sec] = key;
-      else if (kt == 'B' || kt == 'b') savedB[sec] = key;
+      if (kt == 'A' || kt == 'a') strncpy(savedA[sec], key.c_str(), 12);
+      else if (kt == 'B' || kt == 'b') strncpy(savedB[sec], key.c_str(), 12);
     }
     pos = nl + 1;
   }
@@ -4392,9 +4594,9 @@ void ST25R3916Screen::_runMfcDictionaryAttack(const String& path) {
   auto formatSummary = [&](char* out, size_t capacity) {
     unsigned covered = 0;
     for (size_t sec = 0; sec < sectors; ++sec)
-      if (savedA[sec].length() || savedB[sec].length()) ++covered;
+      if (savedA[sec][0] || savedB[sec][0]) ++covered;
     unsigned found = 0;
-    for (size_t sec = 0; sec < sectors; ++sec) { if (savedA[sec].length()) ++found; if (savedB[sec].length()) ++found; }
+    for (size_t sec = 0; sec < sectors; ++sec) { if (savedA[sec][0]) ++found; if (savedB[sec][0]) ++found; }
     _mfcRecoverySummary.format(out, capacity, (unsigned)_mfcRecoverySummary.count, (unsigned)_mfcRecoverySummary.count, covered, (unsigned)sectors);
   };
 
@@ -4408,7 +4610,7 @@ void ST25R3916Screen::_runMfcDictionaryAttack(const String& path) {
         _resumeMfcReadAfterDict = false;
         char finalMsg[80];
         formatSummary(finalMsg, sizeof(finalMsg));
-        ShowStatusAction::show(finalMsg, 1400);
+        ShowStatusAction::show(finalMsg);
         _mfcReadAfterDict = true;
       }
       return;
@@ -4417,7 +4619,7 @@ void ST25R3916Screen::_runMfcDictionaryAttack(const String& path) {
     return;
   }
 
-  LogView actionLog;
+  static LogView actionLog;
   actionLog.clear();
   struct DictUiCtx { const char* status; const char* attempt; int pct; size_t keyIndex; size_t keyTotal; uint8_t stage; } ui = {"Starting...", "", 0, 0, sourceKeyCount, 0};
   auto statusCb = [](Sprite& sp, int barY, int width, void* userData) {
@@ -4455,16 +4657,16 @@ void ST25R3916Screen::_runMfcDictionaryAttack(const String& path) {
     for (size_t sec = 0; sec < sectors; ++sec) {
       const uint8_t trailer = (uint8_t)(sectorFirstBlock(sec) + sectorBlockCount(sec) - 1U);
       for (uint8_t kt = 0; kt < 2; ++kt) {
-        String& slot = kt ? savedB[sec] : savedA[sec];
-        if (!slot.length()) continue;
+        char* slot = kt ? savedB[sec] : savedA[sec];
+        if (!slot[0]) continue;
         uint8_t key[6];
-        if (!MfcKeyStore::parseDictionaryKey(slot, key)) { slot = ""; continue; }
+        if (!MfcKeyStore::parseDictionaryKey(slot, key)) { slot[0] = 0; continue; }
         Uni.update();
         if (Uni.Nav && Uni.Nav->wasPressed() && Uni.Nav->readDirection() == INavigation::DIR_BACK) {
           dev.deactivate(); ShowStatusAction::show("Cancelled",1000); _openMfcDictionaries(true); return;
         }
-        if (!dev.hasActiveTag()) { ST25R3916Backend::ScanResult current; if (!dev.scan(ST25R3916Backend::TECH_A,current,500,true) || !sameTag(tag,current)) { slot=""; continue; } }
-        if (!dev.mifareClassicAuthenticate(trailer,key,kt==1)) slot="";
+        if (!dev.hasActiveTag()) { ST25R3916Backend::ScanResult current; if (!dev.scan(ST25R3916Backend::TECH_A,current,500,true) || !sameTag(tag,current)) { slot[0] = 0; continue; } }
+        if (!dev.mifareClassicAuthenticate(trailer,key,kt==1)) slot[0] = 0;
         dev.deactivate();
       }
     }
@@ -4477,7 +4679,8 @@ void ST25R3916Screen::_runMfcDictionaryAttack(const String& path) {
 
   bool objectiveMet = false;
   bool accessPromptShown = false;
-  DictionaryDiscoverySummary discoveredKeys;
+  static DictionaryDiscoverySummary discoveredKeys;
+  discoveredKeys = DictionaryDiscoverySummary();
   const size_t totalSlots=sectors*2U;
   bool cancelled=false;
   auto authenticate=[&](size_t sec,uint8_t kt,const uint8_t key[6])->bool{
@@ -4485,11 +4688,11 @@ void ST25R3916Screen::_runMfcDictionaryAttack(const String& path) {
     if(!dev.hasActiveTag()){ST25R3916Backend::ScanResult current;if(!dev.scan(ST25R3916Backend::TECH_A,current,500,true)||!sameTag(tag,current))return false;}
     const bool ok=dev.mifareClassicAuthenticate(trailer,key,kt==1); dev.deactivate(); return ok;
   };
-  auto storeKey=[&](String& slot,const uint8_t key[6]){char hex[13];snprintf(hex,sizeof(hex),"%02X%02X%02X%02X%02X%02X",key[0],key[1],key[2],key[3],key[4],key[5]);slot=hex;++recovered;_mfcRecoverySummary.add(key);};
+  auto storeKey=[&](char* slot,const uint8_t key[6]){char hex[13];snprintf(hex,sizeof(hex),"%02X%02X%02X%02X%02X%02X",key[0],key[1],key[2],key[3],key[4],key[5]);strncpy(slot,hex,12);slot[12]=0;++recovered;_mfcRecoverySummary.add(key);};
   auto propagate=[&](const uint8_t key[6],size_t originSec,uint8_t originKt){
     size_t pending=0,done=0;
     for(size_t s=0;s<sectors;++s)for(uint8_t kt=0;kt<2;++kt)
-      if(!(s==originSec&&kt==originKt)&&!(kt?savedB[s].length():savedA[s].length()))++pending;
+      if(!(s==originSec&&kt==originKt)&&!(kt?savedB[s][0]:savedA[s][0]))++pending;
 
     char keyHex[13];
     snprintf(keyHex,sizeof(keyHex),"%02X%02X%02X%02X%02X%02X",
@@ -4503,8 +4706,8 @@ void ST25R3916Screen::_runMfcDictionaryAttack(const String& path) {
 
     for(size_t s=0;s<sectors&&!cancelled;++s)for(uint8_t kt=0;kt<2;++kt){
       if(s==originSec&&kt==originKt)continue;
-      String& slot=kt?savedB[s]:savedA[s];
-      if(slot.length())continue;
+      char* slot=kt?savedB[s]:savedA[s];
+      if(slot[0])continue;
       Uni.update();
       if(Uni.Nav&&Uni.Nav->wasPressed()&&Uni.Nav->readDirection()==INavigation::DIR_BACK){
         cancelled=true;break;
@@ -4526,7 +4729,7 @@ void ST25R3916Screen::_runMfcDictionaryAttack(const String& path) {
     }
   };
   DictionaryKeyProgressView::begin(liveStatus, sourceKeyCount, _mfcRecoverChainActive ? (uint8_t)(_mfcRecoverChainIndex + 1U) : 0);
-  for(size_t sec=0;sec<sectors&&!cancelled&&!objectiveMet;++sec)for(uint8_t kt=0;kt<2&&!cancelled&&!objectiveMet;++kt){String& slot=kt?savedB[sec]:savedA[sec];if(slot.length())continue;
+  for(size_t sec=0;sec<sectors&&!cancelled&&!objectiveMet;++sec)for(uint8_t kt=0;kt<2&&!cancelled&&!objectiveMet;++kt){char* slot=kt?savedB[sec]:savedA[sec];if(slot[0])continue;
     MfcKeyStore::forEachDictionaryKey(Uni.Storage,path,[&](const uint8_t key[6],size_t keyIndex,size_t){Uni.update();if(Uni.Nav&&Uni.Nav->wasPressed()&&Uni.Nav->readDirection()==INavigation::DIR_BACK){cancelled=true;return false;}
       ui.keyIndex=keyIndex+1U; ui.keyTotal=sourceKeyCount;
       DictionaryKeyProgressView::draw(liveStatus,(uint8_t)sec,kt?'B':'A',key,keyIndex+1U,sourceKeyCount,sec*2U+kt+1U,totalSlots,false,true);
@@ -4540,15 +4743,15 @@ void ST25R3916Screen::_runMfcDictionaryAttack(const String& path) {
       discoveredKeys.note(key,kt?'B':'A');
       bool allAccessible=true, allKeysKnown=true;
       for(size_t x=0;x<sectors;++x){
-        if(!savedA[x].length()&&!savedB[x].length())allAccessible=false;
-        if(!savedA[x].length()||!savedB[x].length())allKeysKnown=false;
+        if(!savedA[x][0]&&!savedB[x][0])allAccessible=false;
+        if(!savedA[x][0]||!savedB[x][0])allKeysKnown=false;
       }
       const bool canStop=allAccessible && !allKeysKnown;
       const bool finished=allKeysKnown;
       discoveredKeys.render(actionLog,sectors,[&](const String& hex)->size_t{
         size_t n=0;
         for(size_t x=0;x<sectors;++x)
-          if(savedA[x].equalsIgnoreCase(hex)||savedB[x].equalsIgnoreCase(hex))++n;
+          if(strcasecmp(savedA[x],hex.c_str())==0||strcasecmp(savedB[x],hex.c_str())==0)++n;
         return n;
       },canStop,finished);
       ui.attempt="";
@@ -4584,15 +4787,15 @@ void ST25R3916Screen::_runMfcDictionaryAttack(const String& path) {
       return false;});
   }
   if(cancelled){dev.deactivate();if(_mfcRecoverChainActive){_mfcRecoverChainActive=false;_mfcRecoverTagUidLen=0;_resumeMfcReadAfterDict=false;_mfcRecoveryNext=false;_mfcReadAfterDict=false;ShowStatusAction::show("Cancelled",1000);_showMfcTagMenu();return;}ShowStatusAction::show("Cancelled",1000);_openMfcDictionaries(true);return;}
-  if(!_mfcRecoverChainActive)for(size_t sec=0;sec<sectors;++sec)for(uint8_t kt=0;kt<2;++kt){const String& slot=kt?savedB[sec]:savedA[sec];if(!slot.length()){char nf[32];snprintf(nf,sizeof(nf),"S%u %c: not found",(unsigned)sec,kt?'B':'A');actionLog.addLine(nf,TFT_RED);}}
+  if(!_mfcRecoverChainActive)for(size_t sec=0;sec<sectors;++sec)for(uint8_t kt=0;kt<2;++kt){const char* slot=kt?savedB[sec]:savedA[sec];if(!slot[0]){char nf[32];snprintf(nf,sizeof(nf),"S%u %c: not found",(unsigned)sec,kt?'B':'A');actionLog.addLine(nf,TFT_RED);}}
   dev.deactivate();
 
   if (recovered > 0) {
     Uni.Storage->makeDir("/unigeek/nfc/keys");
     String out;
     for (size_t sec = 0; sec < sectors; ++sec) {
-      if (savedA[sec].length()) out += String("S") + (sec < 10 ? "0" : "") + String((unsigned)sec) + " A " + savedA[sec] + "\n";
-      if (savedB[sec].length()) out += String("S") + (sec < 10 ? "0" : "") + String((unsigned)sec) + " B " + savedB[sec] + "\n";
+      if (savedA[sec][0]) out += String("S") + (sec < 10 ? "0" : "") + String((unsigned)sec) + " A " + savedA[sec] + "\n";
+      if (savedB[sec][0]) out += String("S") + (sec < 10 ? "0" : "") + String((unsigned)sec) + " B " + savedB[sec] + "\n";
     }
     Uni.Storage->writeFile(keyPath.c_str(), out.c_str());
     MfcKeyStore::updateDiscoveredDictionary(Uni.Storage, out);
@@ -4607,8 +4810,8 @@ void ST25R3916Screen::_runMfcDictionaryAttack(const String& path) {
     bool covered = true;
     bool allKeys = true;
     for (size_t sec = 0; sec < sectors; ++sec) {
-      if (!savedA[sec].length() && !savedB[sec].length()) covered = false;
-      if (!savedA[sec].length() || !savedB[sec].length()) allKeys = false;
+      if (!savedA[sec][0] && !savedB[sec][0]) covered = false;
+      if (!savedA[sec][0] || !savedB[sec][0]) allKeys = false;
     }
     ++_mfcRecoverChainIndex;
     if ((!covered || (_mfcRecoverContinueMissing && !allKeys && !_mfcRecoverStopRequested)) && _mfcRecoverChainIndex < 3) {
@@ -4620,14 +4823,14 @@ void ST25R3916Screen::_runMfcDictionaryAttack(const String& path) {
       _resumeMfcReadAfterDict = false;
       char finalMsg[80];
       formatSummary(finalMsg, sizeof(finalMsg));
-      ShowStatusAction::show(finalMsg, 1400);
+      ShowStatusAction::show(finalMsg);
       _mfcReadAfterDict = true;
     }
   } else if (_resumeMfcReadAfterDict) {
     _resumeMfcReadAfterDict = false;
     _mfcReadAfterDict = true;
   } else {
-    ShowStatusAction::show(msg, 1400);
+    ShowStatusAction::show(msg);
     _openMfcDictionaries(true);
   }
 #endif
@@ -4960,6 +5163,13 @@ const char* ST25R3916Screen::_expSub2Title() const {
 }
 
 void ST25R3916Screen::_showExperimentalMenu(ExperimentalFamily family) {
+  // The experimental families share these selection indices, and this entry
+  // point is also used for back-navigation (same family), so reset the
+  // highlight only when switching to a different family.
+  if (family != _expFamily) {
+    _selExp = _selExpTag = _selExpAdvanced =
+    _selExpSub1 = _selExpSub2 = _selExpNdef = 0;
+  }
   _expFamily = family;
   _ndefExperimentalTarget = false;
   _state = STATE_EXP_MENU;

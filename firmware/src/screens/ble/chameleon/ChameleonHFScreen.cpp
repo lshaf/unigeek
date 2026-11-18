@@ -168,6 +168,13 @@ void ChameleonHFScreen::_doScan() {
   render();
 }
 
+void ChameleonHFScreen::onRestore() {
+  if (_returnToMenu) {
+    _returnToMenu = false;
+    Screen.goBack();
+  }
+}
+
 void ChameleonHFScreen::onInit() {
   _state     = STATE_IDLE;
   _needsDraw = true;
@@ -178,8 +185,9 @@ void ChameleonHFScreen::onUpdate() {
   if (_scanning) return;
   if (_dispatchRead) {
     _dispatchRead = false;
-    if (_sak == 0x00) Screen.replace(new ChameleonMfuScreen(_uid, _uidLen));
-    else Screen.replace(new ChameleonMfcScreen(ChameleonMfcScreen::ACTION_READ_TAG, _uid, _uidLen));
+    if (_sak == 0x00) Screen.push(new ChameleonMfuScreen(_uid, _uidLen));
+    else Screen.push(new ChameleonMfcScreen(ChameleonMfcScreen::ACTION_READ_TAG, _uid, _uidLen));
+    _returnToMenu = true;
     return;
   }
 

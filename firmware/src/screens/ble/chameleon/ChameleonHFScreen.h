@@ -11,12 +11,14 @@ public:
   void onInit()   override;
   void onUpdate() override;
   void onRender() override;
+  void onRestore() override;
 
 private:
   enum State { STATE_IDLE, STATE_RESULT };
 
   bool _readMode = false;
   bool _dispatchRead = false;
+  bool _returnToMenu = false;
   State _state     = STATE_IDLE;
   bool  _scanning  = false;
   bool  _needsDraw = true;
