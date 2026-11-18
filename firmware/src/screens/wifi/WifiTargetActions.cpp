@@ -92,6 +92,10 @@ void open(Action action, const WifiTarget& t) {
       break;
     }
     case DEAUTH: {
+      // Deauth targets the AP-client pair, so a station needs a known AP. From a
+      // scan a client's AP may not have been observed yet (hasAp=false); say so
+      // plainly instead of dead-ending on "Access Point not set".
+      if (t.client && !t.hasAp) { ShowStatusAction::show("Client's AP unknown", 1500); break; }
       auto* deauth = new WifiDeauthDisassocScreen();
       deauth->configureFromChannel(t.channel, apFilter, clientFilter, ssid);
       Screen.push(deauth);
