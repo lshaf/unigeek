@@ -511,7 +511,7 @@ void NetworkMitmScreen::_pollPrepare() {
   for (uint8_t i = 0; i < 4; ++i) if (_targets[i] && !_prepLogged[i]) allResolved = false;
   if (allResolved) {
     statusLog("Poisoning started");
-    statusLog(_cut ? "Cutting..." : "Capturing...");
+    statusLog(_cut ? "Cutting..." : "Sniffing...");
     s_prepDone = true;
   } else if (_arp.sweepDone()) {
     // Sweep finished but some target never answered — flag it, then proceed.
@@ -520,7 +520,7 @@ void NetworkMitmScreen::_pollPrepare() {
         char l[40]; snprintf(l, sizeof(l), "T%u not responding", i + 1);
         statusLog(l); _prepLogged[i] = true;
       }
-    statusLog(_cut ? "Cutting..." : "Capturing...");
+    statusLog(_cut ? "Cutting..." : "Sniffing...");
     s_prepDone = true;
   }
 }
