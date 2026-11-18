@@ -6,6 +6,19 @@
 #include "utils/nfc/MagicCard.h"
 #include "utils/nfc/MfcRecoverySummary.h"
 
+// --- MIFARE Classic full-tag (Crypto1) emulation --------------------------
+// The ST25R3916 backend can emulate a full MIFARE Classic dump (Crypto1
+// handshake + encrypted READ/WRITE + mfkey32 nonce capture). The code is kept
+// in the tree for future work, but is NOT exposed in the UI by default: on the
+// ST25R3916 the card-side response timing (nt FDT and encrypted parity) cannot
+// be met reliably from software, so real readers other than a Proxmark reject
+// the emulated card. UID-only MFC emulation and NTAG/Type-2 emulation are
+// unaffected and remain available.
+//
+// To re-expose the "Emulate Tag" menu entries for MIFARE Classic, define
+// ENABLE_MFC_EMULATION (here or via a -DENABLE_MFC_EMULATION build flag).
+// #define ENABLE_MFC_EMULATION
+
 class ST25R3916Backend;
 
 class ST25R3916Screen : public ListScreen {
@@ -216,14 +229,22 @@ private:
     {"Check Known Keys"},
     {"Dictionaries"},
   };
-  ListItem _mfcTagItems[8] = {
+  ListItem _mfcTagItems[
+#if defined(ENABLE_MFC_EMULATION)
+      8
+#else
+      7
+#endif
+  ] = {
     {"Detect Magic"},
     {"Read Tag"},
     {"Write UID to Tag"},
     {"Write Dump to Tag"},
     {"Erase Tag"},
     {"Emulate UID"},
-    {"Emulate Tag"},
+#if defined(ENABLE_MFC_EMULATION)
+    {"Emulate Tag"},   // full MIFARE Classic Crypto1 emulation (see flag above)
+#endif
     {"Advanced"},
   };
   ListItem _mfcAdvancedItems[3] = {

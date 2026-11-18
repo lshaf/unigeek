@@ -939,8 +939,12 @@ void ST25R3916Screen::onItemSelected(uint8_t index) {
     else if (index == 3) _openMfcDumpPicker();
     else if (index == 4) _eraseMfcTag();
     else if (index == 5) _openMfcUidEmulatePicker();
+#if defined(ENABLE_MFC_EMULATION)
     else if (index == 6) _openMfcDumpPicker(true);
     else if (index == 7) _showMfcAdvancedMenu();
+#else
+    else if (index == 6) _showMfcAdvancedMenu();
+#endif
     return;
   }
   if (_state == STATE_MFC_DUMP_SELECT) { _openMfcDumpFile(index); return; }
@@ -1099,7 +1103,7 @@ void ST25R3916Screen::_showMfcMenu() {
 void ST25R3916Screen::_showMfcTagMenu() {
   if (_genericReadActive) { _genericReadActive = false; _showMenu(); return; }
   _state = STATE_MFC_TAG_MENU;
-  setItems(_mfcTagItems, 8, _selMfcTag);
+  setItems(_mfcTagItems, sizeof(_mfcTagItems) / sizeof(_mfcTagItems[0]), _selMfcTag);
   render();
 }
 
@@ -1666,9 +1670,12 @@ void ST25R3916Screen::_showMfcDumpActions() {
     {"Write UID to Tag", "writeuid"},
     {"Write Dump to Tag", "write"},
     {"Emulate UID", "emulate"},
-    {"Emulate Tag", "emulatetag"},
+#if defined(ENABLE_MFC_EMULATION)
+    {"Emulate Tag", "emulatetag"},   // full Crypto1 emulation (see flag in header)
+#endif
   };
-  const char* r = InputSelectAction::popup("Dump Actions", opts, 7, nullptr);
+  const char* r = InputSelectAction::popup("Dump Actions", opts,
+                                           sizeof(opts) / sizeof(opts[0]), nullptr);
   if (!r) { render(); return; }
 
   render();
@@ -1688,8 +1695,10 @@ void ST25R3916Screen::_showMfcDumpActions() {
     _showMfcWritePreview(_mfcDump, _mfcDumpLen, false);
   } else if (strcmp(r, "emulate") == 0) {
     _emulateMfcTag(false);
+#if defined(ENABLE_MFC_EMULATION)
   } else if (strcmp(r, "emulatetag") == 0) {
     _emulateMfcTag(true);
+#endif
   }
 }
 
