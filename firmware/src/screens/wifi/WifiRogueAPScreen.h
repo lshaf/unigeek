@@ -19,6 +19,10 @@ public:
   void logPost(const char* msg);
 
 private:
+  // Menu rows, in display order. The menu is rebuilt with the row to keep
+  // highlighted, so an edit doesn't send the highlight back to the top.
+  enum MenuRow : uint8_t { ROW_SSID, ROW_PORTAL, ROW_DNS_SPOOF, ROW_START, MENU_ROWS };
+
   enum State { STATE_MENU, STATE_LOG };
   State _state = STATE_MENU;
   String _ssid;
@@ -26,13 +30,13 @@ private:
   bool _captiveEnabled = false;
   String _captiveSub = "Off";
   String _captivePath;
-  ListItem _menuItems[4];
+  ListItem _menuItems[MENU_ROWS];
   BrowseFileView _browser;
   DnsSpoofServer _dnsSpoofServer;
   LogView _log;
   unsigned long _lastDraw = 0;
 
-  void _showMenu();
+  void _showMenu(uint8_t row);
   void _showLog();
   void _startAP();
   void _stopAP();

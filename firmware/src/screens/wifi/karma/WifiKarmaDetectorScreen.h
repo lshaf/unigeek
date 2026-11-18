@@ -14,12 +14,12 @@ public:
   void onInit() override;
   void onUpdate() override;
   void onRender() override;
+  void onRestore() override;
   void onBack();
 
 private:
   static constexpr int          PROBE_WAIT_MS = 700;
   static constexpr int          CHANNELS      = 13;
-  static constexpr unsigned long LINGER_MS    = 15000UL;
 
   enum State { STATE_SCANNING, STATE_DETECTED };
 
@@ -44,4 +44,6 @@ private:
   void _stopScan();
   void _sendProbe();
   void _onHit();
+  void _resume();
+  void _openOptions();
 };

@@ -11,6 +11,7 @@ public:
     char bssid[18];
     char ssid[33];
     int16_t rssi = 0;
+    uint8_t channel = 0;
   };
 
   // Scan

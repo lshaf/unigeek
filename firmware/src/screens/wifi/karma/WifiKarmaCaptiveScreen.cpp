@@ -64,14 +64,14 @@ void WifiKarmaCaptiveScreen::onItemSelected(uint8_t index)
   if (_state != STATE_MENU) return;
   _menuIndex = index;
   switch (index) {
-    case 0: { // Save WiFi List
+    case 1: { // Save SSIDs
       _saveList = !_saveList;
       _saveListSub = _saveList ? "On" : "Off";
-      _menuItems[0].sublabel = _saveListSub.c_str();
+      _menuItems[1].sublabel = _saveListSub.c_str();
       render();
       break;
     }
-    case 1: { // Captive Portal selection
+    case 0: { // Captive Portal selection
       _state = STATE_SELECT_PORTAL;
       uint8_t n = _browser.load(this, CaptivePortalServer::PORTALS_DIR,
                                 BrowseFileView::Mode::DIRECTORY);
@@ -84,14 +84,14 @@ void WifiKarmaCaptiveScreen::onItemSelected(uint8_t index)
       setItems(_browser.items(), n);
       break;
     }
-    case 2: { // Waiting Time
-      int val = InputNumberAction::popup("Wait Connect (s)", 5, 120, _waitConnect);
+    case 2: { // Connection Timeout
+      int val = InputNumberAction::popup("Connection Timeout (s)", 5, 120, _waitConnect);
       if (val >= 5) _waitConnect = val;
       _showMenu();
       break;
     }
-    case 3: { // Wait Input
-      int val = InputNumberAction::popup("Captive Wait Input (s)", 10, 600, _waitInput);
+    case 3: { // Input Timeout
+      int val = InputNumberAction::popup("Captive Input Timeout (s)", 10, 600, _waitInput);
       if (val >= 10) _waitInput = val;
       _showMenu();
       break;
@@ -201,10 +201,10 @@ void WifiKarmaCaptiveScreen::_showMenu()
   _waitConnectSub = String(_waitConnect) + "s";
   _waitInputSub   = String(_waitInput) + "s";
 
-  _menuItems[0] = {"Save WiFi List", _saveListSub.c_str()};
-  _menuItems[1] = {"Captive Portal", _portalSub.c_str()};
-  _menuItems[2] = {"Waiting Time",   _waitConnectSub.c_str()};
-  _menuItems[3] = {"Wait Input",     _waitInputSub.c_str()};
+  _menuItems[0] = {"Portal", _portalSub.c_str()};
+  _menuItems[1] = {"Save SSIDs", _saveListSub.c_str()};
+  _menuItems[2] = {"Connection Timeout",   _waitConnectSub.c_str()};
+  _menuItems[3] = {"Input Timeout",     _waitInputSub.c_str()};
   _menuItems[4] = {"Start"};
   setItems(_menuItems, 5, _menuIndex);
 }
@@ -323,7 +323,7 @@ void WifiKarmaCaptiveScreen::_teardownAP()
 void WifiKarmaCaptiveScreen::_startAttack()
 {
   if (_portal.portalFolder().isEmpty()) {
-    ShowStatusAction::show("Portal not selected");
+    ShowStatusAction::show("Portal not set");
     return;
   }
   if (!StorageUtil::hasSpace()) {

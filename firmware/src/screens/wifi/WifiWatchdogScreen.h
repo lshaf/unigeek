@@ -4,11 +4,14 @@
 #include <string>
 #include <unordered_map>
 #include <vector>
+#include <bitset>
 #include <WiFi.h>
 #include <esp_wifi.h>
 
 #include "ui/templates/BaseScreen.h"
 #include "ui/views/ScrollListView.h"
+
+struct WifiTarget;
 
 class WifiWatchdogScreen : public BaseScreen
 {
@@ -50,27 +53,62 @@ public:
     }
   };
 
+  // The source address of deauth frames is easily forged: when it matches a
+  // beaconing AP (ssid known), it is most likely spoofed. target = address 1
+  // (FF:FF:FF:FF:FF:FF = every client).
   struct DeauthEntry {
     std::string   ssid;
     unsigned long timestamp  = 0;
     int           counter    = 0;
     bool          isDisassoc = false;
+    MacAddr       target     = {};
+    int8_t        rssi       = 0;
+    uint8_t       channel    = 0;
   };
 
   struct BeaconWindow {
     char     ssid[33] = {};
     uint16_t count    = 0;
+    int8_t   rssi     = 0;
+    uint8_t  channel  = 0;
   };
 
   struct BeaconEntry {
     char          ssid[33]   = {};
     int           ratePerSec = 0;
     unsigned long lastSeen   = 0;
+    int8_t        rssi       = 0;
+    uint8_t       channel    = 0;
+  };
+
+  // Beacon spam: a network announced from many throwaway BSSIDs (random,
+  // locally administered addresses, each sending a single beacon), as the
+  // Beacon Spam attack does. bssids counts how many were seen.
+  // Names that differ only by a " NN" suffix (the Flood mode's "Name 00".."Name
+  // 31") share one entry, keyed "Name ##"; variants marks the suffixes seen.
+  struct SpamEntry {
+    int           bssids   = 0;
+    std::bitset<100> variants;
+    unsigned long lastSeen = 0;
+    int8_t        rssi     = 0;
+    uint8_t       channel  = 0;
+  };
+
+  // One Beacon Flood row: a BSSID above the flood rate, or a spammed network.
+  struct FloodRow {
+    bool        spam    = false;
+    MacAddr     bssid   = {};     // flood only
+    std::string ssid;
+    int         amount  = 0;      // flood: beacons/s; spam: BSSIDs seen
+    int         variants = 0;     // spam: name variants grouped (0 = one name)
+    uint8_t     channel = 0;
+    int8_t      rssi    = 0;
   };
 
   struct BssidInfo {
     MacAddr bssid;
     uint8_t channel;
+    int8_t  rssi;
   };
 
   static std::unordered_map<MacAddr, std::string,                MacHash, MacEqual> _ssidMap;
@@ -78,6 +116,10 @@ public:
   static std::unordered_map<MacAddr, DeauthEntry,   MacHash, MacEqual> _deauthMap;
   static std::unordered_map<MacAddr, BeaconWindow,  MacHash, MacEqual> _beaconWindow;
   static std::unordered_map<MacAddr, BeaconEntry,   MacHash, MacEqual> _beaconMap;
+  static std::unordered_map<std::string, SpamEntry> _spamMap;
+  // Per second: network of each locally administered BSSID heard (for spam).
+  static std::unordered_map<MacAddr, std::string, MacHash, MacEqual> _laaSsids;
+  static unsigned long _lastSpamMs;
 
   static void _promiscuousCb(void* buf, wifi_promiscuous_pkt_type_t type);
 
@@ -88,28 +130,41 @@ private:
   static constexpr int           MAX_RING        = 64;
   static constexpr int           MAX_BEACON_RING = 128;
   static constexpr int           FLOOD_THRESHOLD = 50;
+  // Beacon spam: at least SPAM_MIN_BSSIDS locally administered BSSIDs in one
+  // second, each heard at most SPAM_MAX_BEACONS times. Spam tools send a short
+  // burst per throwaway address (UniGeek: 1 frame in Flood mode, 3 in Spam
+  // mode); a real AP beacons ~10 times per second from a stable address.
+  static constexpr int           SPAM_MIN_BSSIDS  = 10;
+  static constexpr int           SPAM_MAX_BEACONS = 3;
   // Hard cap on distinct MACs/SSIDs tracked at once. Beacon/deauth spam
   // tools commonly randomize the source MAC per frame, which would otherwise
   // grow these maps without bound (and past WINDOW_MS pruning, since a live
   // flood keeps refreshing "last seen") until the heap is exhausted.
   static constexpr size_t        MAX_TRACKED_MAC = 256;
 
-  enum View  { VIEW_OVERALL, VIEW_DEAUTH, VIEW_FLOOD, VIEW_EVILTWIN };
+  // VIEW_TWIN_APS: the APs of the network picked in the paused Evil Twin list.
+  enum View  { VIEW_OVERALL, VIEW_DEAUTH, VIEW_FLOOD, VIEW_EVILTWIN, VIEW_TWIN_APS };
 
   struct DeauthEvent {
     MacAddr       mac;
+    MacAddr       target;
     unsigned long timestamp;
     bool          isDisassoc;
+    int8_t        rssi;
+    uint8_t       channel;
   };
 
   struct SsidEvent {
     MacAddr bssid;
     char    ssid[33];
     uint8_t channel;
+    int8_t  rssi;
   };
 
   struct BeaconEvent {
     MacAddr bssid;
+    int8_t  rssi;
+    uint8_t channel;
   };
 
   static DeauthEvent     _ring[MAX_RING];
@@ -136,7 +191,25 @@ private:
   int                 _holdCell         = -1;
   int                 _prevCounts[4]    = {-1, -1, -1, -1};
   int                 _karmaBaseline    = 0;
+  // Karma detection is active and only runs inside Karma Detector: its tile
+  // is always dimmed, and shows "-" until Karma Detector has been opened from
+  // this Watchdog.
+  bool                _karmaRan         = false;
   ScrollListView      _scroll;
+
+  // Paused lists (Traffic Analyzer style): frozen snapshots, so the selection
+  // can't move while the live maps change.
+  using DeauthItem = std::pair<MacAddr, DeauthEntry>;
+  using FloodItem  = FloodRow;
+  using TwinItem   = std::pair<std::string, std::vector<BssidInfo>>;
+  bool                    _paused      = false;
+  bool                    _holdHandled = false;
+  bool                    _actionOpen  = false;  // a tool was pushed from a list
+  int                     _twinSel     = 0;      // network row to return to
+  std::vector<DeauthItem> _deauthSnap;
+  std::vector<FloodItem>  _floodSnap;
+  std::vector<TwinItem>   _twinSnap;
+  TwinItem                _twinAps;              // network shown in VIEW_TWIN_APS
   ScrollListView::Row _rows[MAX_ROWS]          = {};
   char                _labels[MAX_ROWS][64]    = {};
   char                _sublabels[MAX_ITEMS][64] = {};
@@ -150,6 +223,19 @@ private:
   void _renderDeauth();
   void _renderFlood();
   void _renderEviltwin();
+  void _renderTwinAps();
   void _setListState(int newCount);
   void _drawBackButton();
+  void _collectDeauth(std::vector<DeauthItem>& out) const;
+  void _collectFlood(std::vector<FloodItem>& out) const;
+  void _collectTwins(std::vector<TwinItem>& out) const;
+  int  _listHeight();
+  void _renderFooter();
+  void _pause();
+  void _resume();
+  void _leaveList();
+  bool _selectedTarget(WifiTarget& target) const;
+  void _openSelectedDetails();
+  void _openOptions();
+  void _releaseRadio();
 };

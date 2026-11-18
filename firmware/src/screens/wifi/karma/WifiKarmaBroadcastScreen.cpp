@@ -465,8 +465,8 @@ void WifiKarmaBroadcastScreen::_openOptions()
       {pauseLbl.c_str(),    "pause"},
       {"Set Mode",          "mode"},
       {"Channel Control",   "channel"},
-      {"Attack Settings",   "attack"},
-      {"Attack Strategy",   "strategy"},
+      {"Settings",   "attack"},
+      {"Strategy",   "strategy"},
       {"Broadcast Control", "broadcast"},
       {"Evil AP (Real)",    "evilap"},
       {"Show Stats",        "stats"},
@@ -581,7 +581,7 @@ void WifiKarmaBroadcastScreen::_optAttackSettings()
     InputSelectAction::Option o[] = {
       {ak.c_str(), "ak"}, {bc.c_str(), "bc"}, {da.c_str(), "da"}, {se.c_str(), "se"},
     };
-    const char* r = InputSelectAction::popup("Attack Settings", o, 4, def);
+    const char* r = InputSelectAction::popup("Settings", o, 4, def);
     if (!r) return;
     def = r;
 
@@ -611,7 +611,7 @@ void WifiKarmaBroadcastScreen::_optAttackStrategy()
     InputSelectAction::Option o[] = {
       {pr.c_str(), "pr"}, {sp.c_str(), "spd"},
     };
-    const char* r = InputSelectAction::popup("Attack Strategy", o, 2, def);
+    const char* r = InputSelectAction::popup("Strategy", o, 2, def);
     if (!r) return;
     def = r;
 

@@ -100,8 +100,8 @@ void WifiEapolBruteForceScreen::_showMenu() {
   const char* pcapName = pcapBase ? pcapBase + 1 : _selectedPcap;
   const char* wlName   = wlBase   ? wlBase   + 1 : _selectedWordlist;
 
-  _pcapSub     = _selectedPcap[0]     ? _truncSub(pcapName) : "(not selected)";
-  _wordlistSub = _selectedWordlist[0] ? _truncSub(wlName)   : "(not selected)";
+  _pcapSub     = _selectedPcap[0]     ? _truncSub(pcapName) : "-";
+  _wordlistSub = _selectedWordlist[0] ? _truncSub(wlName)   : "-";
 
   _menuItems[0] = {"PCAP File", _pcapSub.c_str()};
   _menuItems[1] = {"Wordlist",  _wordlistSub.c_str()};
@@ -214,12 +214,12 @@ void WifiEapolBruteForceScreen::onItemSelected(uint8_t index) {
     } else if (index == 2) {
       // Start — require both selected
       if (_selectedPcap[0] == '\0') {
-        ShowStatusAction::show("PCAP not selected");
+        ShowStatusAction::show("PCAP not set");
         render();
         return;
       }
       if (_selectedWordlist[0] == '\0') {
-        ShowStatusAction::show("Wordlist not selected");
+        ShowStatusAction::show("Wordlist not set");
         render();
         return;
       }
