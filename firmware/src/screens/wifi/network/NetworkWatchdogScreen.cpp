@@ -342,7 +342,7 @@ void NetworkWatchdogScreen::_renderList(const std::vector<Hit>& list) {
   if (!count) {
     lcd.setTextDatum(MC_DATUM);
     lcd.setTextColor(TFT_DARKGREY, TFT_BLACK);
-    lcd.drawString("Monitoring...", bx + bw / 2, by + (listH > 0 ? listH : bh) / 2);
+    lcd.drawString("Scanning...", bx + bw / 2, by + (listH > 0 ? listH : bh) / 2);
   }
 
   // Footer hints, laid out like Monitor Hosts: action on the left, back on the
