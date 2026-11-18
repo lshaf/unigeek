@@ -45,8 +45,6 @@ private:
   ListItem _configItems[5];
   uint8_t _selectedHost = 0;
 
-  void _showDetails(uint8_t index);
-
   void _showConfiguration(uint8_t selectedIndex = 0);
   void _scanIP();
   void _scanPort(const char* ip);

@@ -2,6 +2,7 @@
 #include "core/ScreenManager.h"
 #include "core/ConfigManager.h"
 #include "ui/actions/ShowStatusAction.h"
+#include "screens/wifi/network/NetworkHostActions.h"
 #include <algorithm>
 #include <cstring>
 
@@ -306,23 +307,63 @@ void NetworkWatchdogScreen::_renderOverall() {
 }
 
 void NetworkWatchdogScreen::_renderList(const std::vector<Hit>& list) {
-  const int n = std::min((int)list.size(), MAX_LIST);
-  for (int i = 0; i < n; ++i) {
-    _rowLabels[i] = list[i].text;
-    _rows[i] = {_rowLabels[i].c_str(), ""};
+  // Selectable list with a footer hint, mirroring Monitor Hosts' _drawList:
+  // the screen owns the selection (_sel) and highlights the chosen row.
+  auto& lcd = Uni.Lcd;
+  const int bx = bodyX(), by = bodyY(), bw = bodyW(), bh = bodyH();
+  lcd.fillRect(bx, by, bw, bh, TFT_BLACK);
+  lcd.setTextSize(1);
+  const int fh = lcd.fontHeight();
+  const int lineH = fh + 3;
+  const int footerH = fh + 6;
+  const int slots = (bh - footerH) / lineH;
+  const int listH = slots > 0 ? slots * lineH : 0;
+  const int count = (int)list.size();
+
+  if (_sel >= count) _sel = count ? count - 1 : 0;
+
+  int first = 0;
+  if (count > slots) first = _sel - slots / 2;
+  if (first < 0) first = 0;
+  if (count > slots && first > count - slots) first = count - slots;
+
+  for (int row = 0; row < slots; ++row) {
+    const int idx = first + row;
+    if (idx >= count) break;
+    const bool sel = idx == _sel;
+    const int y = by + row * lineH;
+    const uint16_t bg = sel ? Config.getThemeColor() : TFT_BLACK;
+    if (sel) lcd.fillRect(bx, y, bw, lineH, bg);
+    lcd.setTextColor(TFT_WHITE, bg);   // selection shown by background, like Monitor Hosts
+    lcd.setTextDatum(TL_DATUM);
+    lcd.drawString(list[idx].text, bx + 2, y + 1);
   }
-  _scroll.setRows(_rows, n);
-  _scroll.render(bodyX(), bodyY(), bodyW(), bodyH());
-  if (n == 0) {
-    Uni.Lcd.setTextDatum(MC_DATUM);
-    Uni.Lcd.setTextColor(TFT_DARKGREY, TFT_BLACK);
-    Uni.Lcd.drawString("Scanning...", bodyX() + bodyW() / 2, bodyY() + bodyH() / 2);
+
+  if (!count) {
+    lcd.setTextDatum(MC_DATUM);
+    lcd.setTextColor(TFT_DARKGREY, TFT_BLACK);
+    lcd.drawString("Monitoring...", bx + bw / 2, by + (listH > 0 ? listH : bh) / 2);
+  }
+
+  // Footer hints, laid out like Monitor Hosts: action on the left, back on the
+  // right. Back returns to the grid (the watches have no pause/resume state).
+  const int footerTop = by + bh - footerH;
+  lcd.drawFastHLine(bx, footerTop, bw, TFT_DARKGREY);
+  lcd.setTextColor(TFT_LIGHTGREY, TFT_BLACK);
+  if (count) {
+    lcd.setTextDatum(TL_DATUM);
+    lcd.drawString("[Press] Options", bx + 2, footerTop + 3);
+    lcd.setTextDatum(TR_DATUM);
+    lcd.drawString("[Back] Grid", bx + bw - 2, footerTop + 3);
+  } else {
+    lcd.setTextDatum(TC_DATUM);
+    lcd.drawString("[Back] Grid", bx + bw / 2, footerTop + 3);
   }
 }
 
 void NetworkWatchdogScreen::_enter(View v) {
   _view = v;
-  _scroll.resetScroll();
+  _sel = 0;
   static const char* titles[] = {"", "ARP Poison", "DHCP Rogue", "GW Hijack", "DNS Spoof"};
   _viewTitle = titles[v];
   render();
@@ -370,9 +411,37 @@ void NetworkWatchdogScreen::onUpdate() {
   if (Uni.Nav->wasPressed()) {
     auto dir = Uni.Nav->readDirection();
     if (dir == INavigation::DIR_BACK) { onBack(); return; }
-    _scroll.onNav(dir);
+    if (dir == INavigation::DIR_PRESS) { _openOptions(); return; }
+    const int count = (int)_currentList().size();
+    if (dir == INavigation::DIR_UP)        { if (_sel > 0) _sel--; }
+    else if (dir == INavigation::DIR_DOWN) { if (_sel < count - 1) _sel++; }
     onRender();
   }
+}
+
+const std::vector<NetworkWatchdogScreen::Hit>&
+NetworkWatchdogScreen::_currentList() const {
+  switch (_view) {
+    case VIEW_DHCP: return _dhcpHits;
+    case VIEW_GW:   return _gwHits;
+    case VIEW_DNS:  return _dnsHits;
+    default:        return _arpHits;   // VIEW_ARP
+  }
+}
+
+void NetworkWatchdogScreen::_openOptions() {
+  const std::vector<Hit>& list = _currentList();
+  const int sel = _sel;
+  if (sel < 0 || sel >= (int)list.size()) return;
+  const uint32_t ip = list[sel].ip;
+  if (!ip || ip == _selfIp) return;
+
+  HostTarget t;
+  t.ip = ip;  // the helper resolves the MAC from the ARP cache
+  // Promiscuous must be off for the socket-based actions; onRestore() re-arms it
+  // when the pushed screen is closed.
+  if (!NetworkHostActions::openOptions(t, [this] { _stopRadio(); }))
+    onRender();  // popup cancelled or guarded away: redraw the list
 }
 
 void NetworkWatchdogScreen::onRender() {
@@ -383,7 +452,7 @@ void NetworkWatchdogScreen::onRender() {
     _renderOverall();
     return;
   }
-  Uni.Lcd.fillRect(bodyX(), bodyY(), bodyW(), bodyH(), TFT_BLACK);
+  // _renderList clears the body itself; no extra fill here (avoids a double paint).
   if (_view == VIEW_ARP) _renderList(_arpHits);
   else if (_view == VIEW_DHCP) _renderList(_dhcpHits);
   else if (_view == VIEW_GW) _renderList(_gwHits);

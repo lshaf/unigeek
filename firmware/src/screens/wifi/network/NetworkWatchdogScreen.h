@@ -76,9 +76,7 @@ private:
   std::vector<Hit> _dnsHits;
   std::vector<Hit> _dnsBase;
 
-  ScrollListView _scroll;
-  ScrollListView::Row _rows[MAX_LIST];
-  String _rowLabels[MAX_LIST];
+  int _sel = 0;   // selected row in the active detail view
 
   void _startRadio();
   void _stopRadio();
@@ -92,6 +90,8 @@ private:
   void _drawCell(int idx, int count);
   void _drawBackButton();
   void _enter(View v);
+  void _openOptions();
+  const std::vector<Hit>& _currentList() const;
   void _renderList(const std::vector<Hit>& list);
   static void _promiscuousCb(void* buf, wifi_promiscuous_pkt_type_t type);
   static const char* _ipStr(uint32_t ip, char* out, size_t n);

@@ -9,6 +9,7 @@
 #include "screens/wifi/network/PortScannerScreen.h"
 #include "screens/wifi/WifiFoxHuntScreen.h"
 #include "screens/wifi/network/NetworkMitmScreen.h"
+#include "screens/wifi/network/NetworkHostActions.h"
 
 #include <WiFi.h>
 #include <lwip/etharp.h>
@@ -231,59 +232,13 @@ void NetworkHostMonitorScreen::_drawList() {
 void NetworkHostMonitorScreen::_openOptions() {
   if (_selected >= _count) return;
   const Host& h = _hosts[_selected];
-  char ip[16];
-  fmtIp(h.ip, ip, sizeof(ip));
 
-  static const InputSelectAction::Option opts[] = {
-    {"Details", "details"},
-    {"Port Scan", "ports"},
-    {"Sniff", "sniff"},
-    {"NetCut", "netcut"},
-    {"Fox Hunt", "fox"},
-  };
-  const char* choice = InputSelectAction::popup("Options", opts, 5);
-  if (!choice) { _drawList(); return; }
-
-  if (strcmp(choice, "details") == 0) {
-    auto* details = new IPScannerDetailsScreen();
-    details->configure(ip, nullptr, h.hasMac ? h.mac : nullptr);
-    Screen.push(details);
-    return;
-  }
-  if (strcmp(choice, "ports") == 0) {
-    auto* scanner = new PortScannerScreen();
-    scanner->configureTarget(ip);
-    Screen.push(scanner);
-    return;
-  }
-  if (strcmp(choice, "sniff") == 0) {
-    if (!_gateway) { ShowStatusAction::show("No gateway"); return; }
-    if (h.ip == _gateway) { ShowStatusAction::show("Host is the gateway"); return; }
-    auto* mitm = new NetworkMitmScreen();
-    mitm->configureSniff(h.ip, _gateway);
-    Screen.push(mitm);
-    return;
-  }
-  if (strcmp(choice, "netcut") == 0) {
-    if (!_gateway) { ShowStatusAction::show("No gateway"); return; }
-    if (h.ip == _gateway) { ShowStatusAction::show("Host is the gateway"); return; }
-    auto* cut = new NetworkMitmScreen();
-    cut->configureCut(h.ip);
-    Screen.push(cut);
-    return;
-  }
-  if (strcmp(choice, "fox") == 0) {
-    if (!h.hasMac) { ShowStatusAction::show("MAC unavailable"); return; }
-    const uint8_t channel = WiFi.channel();
-    if (channel < 1 || channel > 14) { ShowStatusAction::show("Channel unavailable"); return; }
-    auto* hunt = new WifiFoxHuntScreen();
-    const uint8_t* ap = WiFi.BSSID();
-    const bool validAp = ap && memcmp(ap, "\0\0\0\0\0\0", 6) != 0;
-    if (validAp && (h.gateway || memcmp(h.mac, ap, 6) == 0))
-      hunt->configureTarget(false, ap, channel, ip);
-    else
-      hunt->configureTransmitterTarget(h.mac, channel, ip);
-    Screen.push(hunt);
-  }
+  HostTarget t;
+  t.ip     = h.ip;
+  t.hasMac = h.hasMac;
+  if (h.hasMac) memcpy(t.mac, h.mac, 6);
+  // Monitor Hosts runs an active (STA) discovery, so there is no capture to
+  // pause before launching a child action.
+  if (!NetworkHostActions::openOptions(t)) _drawList();
 }
 

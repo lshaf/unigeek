@@ -1,6 +1,7 @@
 #include "IPScannerScreen.h"
 #include "IPScannerDetailsScreen.h"
 #include "PortScannerScreen.h"
+#include "NetworkHostActions.h"
 #include "screens/wifi/WifiFoxHuntScreen.h"
 #include "screens/wifi/network/NetworkMitmScreen.h"
 #include <WiFi.h>
@@ -15,49 +16,6 @@
 #include "ui/actions/ShowStatusAction.h"
 #include "ui/views/ProgressView.h"
 #include "utils/network/ScanCancelUtil.h"
-
-// ARP cache entries are not guaranteed to survive the complete IP scan.
-// Refresh the neighbor entry for the selected host before reading it.
-static bool lookupHostMac(const char* ip, uint8_t mac[6]) {
-  ip4_addr_t target;
-  if (!ip4addr_aton(ip, &target)) return false;
-
-  auto readCache = [&]() -> bool {
-    for (int i = 0; i < ARP_TABLE_SIZE; ++i) {
-      ip4_addr_t* cachedIp = nullptr;
-      struct netif* netif = nullptr;
-      struct eth_addr* cachedMac = nullptr;
-      if (!etharp_get_entry(i, &cachedIp, &netif, &cachedMac)) continue;
-      if (!cachedIp || !cachedMac || !ip4_addr_cmp(cachedIp, &target)) continue;
-      memcpy(mac, cachedMac->addr, 6);
-      return true;
-    }
-    return false;
-  };
-
-  if (readCache()) return true;
-
-  // Only same-subnet peers can be resolved to their own MAC via ARP.
-  // The gateway MAC would be misleading for off-subnet destinations.
-  IPAddress local = WiFi.localIP();
-  IPAddress mask = WiFi.subnetMask();
-  IPAddress remote;
-  if (!remote.fromString(ip)) {
-    return false;
-  }
-  for (int i = 0; i < 4; ++i) {
-    if ((local[i] & mask[i]) != (remote[i] & mask[i])) return false;
-  }
-
-  struct netif* iface = netif_default;
-  if (!iface) return false;
-  if (etharp_request(iface, &target) != ERR_OK) return false;
-  for (int attempt = 0; attempt < 40; ++attempt) {
-    delay(25);
-    if (readCache()) return true;
-  }
-  return false;
-}
 
 // ── screen methods ─────────────────────────────────────
 
@@ -121,100 +79,21 @@ void IPScannerScreen::onItemSelected(uint8_t index) {
       _showConfiguration();
     } else {
       _selectedHost = index;
-      static const InputSelectAction::Option options[] = {
-        {"Details", "details"},
-        {"Port Scan", "ports"},
-        {"Sniff", "sniff"},
-        {"NetCut", "netcut"},
-        {"Fox Hunt", "fox"},
-      };
-      const char* choice = InputSelectAction::popup("Options", options, 5);
-      // The popup clears its rectangle but does not restore the underlying UI.
-      // Redraw the screen chrome and list before opening Details or ProgressView.
-      render();
-      if (choice && strcmp(choice, "details") == 0) _showDetails(index);
-      else if (choice && strcmp(choice, "ports") == 0) {
-        auto* scanner = new PortScannerScreen();
-        scanner->configureTarget(_foundIPs[index].ip);
-        Screen.push(scanner);
-      } else if (choice && strcmp(choice, "sniff") == 0) {
-        IPAddress hostIp;
-        const uint32_t gw = (uint32_t)WiFi.gatewayIP();
-        if (!hostIp.fromString(_foundIPs[index].ip)) {
-          ShowStatusAction::show("Invalid IP");
-        } else if (!gw) {
-          ShowStatusAction::show("No gateway");
-        } else if ((uint32_t)hostIp == gw) {
-          ShowStatusAction::show("Host is the gateway");
-        } else {
-          auto* mitm = new NetworkMitmScreen();
-          mitm->configureSniff((uint32_t)hostIp, gw);
-          Screen.push(mitm);
-        }
-      } else if (choice && strcmp(choice, "netcut") == 0) {
-        IPAddress hostIp;
-        const uint32_t gw = (uint32_t)WiFi.gatewayIP();
-        if (!hostIp.fromString(_foundIPs[index].ip)) {
-          ShowStatusAction::show("Invalid IP");
-        } else if (!gw) {
-          ShowStatusAction::show("No gateway");
-        } else if ((uint32_t)hostIp == gw) {
-          ShowStatusAction::show("Host is the gateway");
-        } else {
-          auto* cut = new NetworkMitmScreen();
-          cut->configureCut((uint32_t)hostIp);
-          Screen.push(cut);
-        }
-      } else if (choice && strcmp(choice, "fox") == 0) {
-        uint8_t mac[6] = {};
-        if (!lookupHostMac(_foundIPs[index].ip, mac)) {
-          ShowStatusAction::show("MAC unavailable");
-          return;
-        }
-        // IP discovery cannot distinguish APs from clients. Use station
-        // tracking for hosts on the connected WiFi network.
-        const uint8_t channel = WiFi.channel();
-        if (channel < 1 || channel > 14) {
-          ShowStatusAction::show("Channel unavailable");
-          return;
-        }
-        auto* hunt = new WifiFoxHuntScreen();
-        const uint8_t* connectedAp = WiFi.BSSID();
-        const bool validAp = connectedAp &&
-            memcmp(connectedAp, "\0\0\0\0\0\0", 6) != 0;
-        // The gateway's ARP MAC can be the router's LAN interface MAC,
-        // which differs from the BSSID used to transmit WiFi frames.
-        // For the gateway, prefer the associated AP's BSSID as a heuristic.
-        // This assumes the gateway and associated AP are the same device;
-        // on networks with a separate gateway/AP this may track the AP instead.
-        IPAddress selectedIp;
-        const bool isGateway = selectedIp.fromString(_foundIPs[index].ip) &&
-                               selectedIp == WiFi.gatewayIP();
-        if (validAp && (isGateway || memcmp(mac, connectedAp, 6) == 0)) {
-          hunt->configureTarget(false, connectedAp, channel,
-                                _foundIPs[index].hostname);
-        } else {
-          hunt->configureTransmitterTarget(mac, channel,
-                                           _foundIPs[index].hostname);
-        }
-        Screen.push(hunt);
+      IPAddress ipAddr;
+      if (ipAddr.fromString(_foundIPs[index].ip)) {
+        HostTarget t;
+        t.ip   = (uint32_t)ipAddr;
+        t.name = _foundIPs[index].hostname;
+        // IP scan does not retain MACs; the helper resolves from the ARP cache.
+        if (!NetworkHostActions::openOptions(t)) render();
+      } else {
+        render();
       }
     }
   }
 }
 
 // ── private ────────────────────────────────────────────
-
-void IPScannerScreen::_showDetails(uint8_t index) {
-  if (index >= _foundCount) return;
-  _selectedHost = index;
-  uint8_t mac[6] = {};
-  const bool hasMac = lookupHostMac(_foundIPs[index].ip, mac);
-  auto* details = new IPScannerDetailsScreen();
-  details->configure(_foundIPs[index].ip, _foundIPs[index].hostname,
-                     hasMac ? mac : nullptr);
-  Screen.push(details);
-}
 
 void IPScannerScreen::_showConfiguration(uint8_t selectedIndex) {
   _state = STATE_CONFIGURATION;
