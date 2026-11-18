@@ -27,9 +27,9 @@ constexpr Entry kEntries[] = {
   {CONNECT,  "Connect",         "connect"},
   {MONITOR,  "Packet Monitor",  "monitor"},
   {SNIFFER,  "Packet Sniffer",  "sniffer"},
+  {DEAUTH,   "Deauth/Disassoc", "deauth"},
   {FOX_HUNT, "Fox Hunt",        "foxhunt"},
   {FOX_HUNT_AP, "Fox Hunt (AP)",  "foxhunt_ap"},
-  {DEAUTH,   "Deauth/Disassoc", "deauth"},
 };
 constexpr uint8_t kEntryCount = sizeof(kEntries) / sizeof(kEntries[0]);
 
