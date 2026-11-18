@@ -408,6 +408,14 @@ void WifiDeauthDisassocScreen::_startDeauth()
   _spinIdx     = 0;
   _chromeDrawn = false;
 
+  // Draw the status before the blocking radio init below: the WifiAttackUtil
+  // ctor calls WiFi.mode(APSTA), which can take a few hundred ms, and the
+  // screen was just cleared to black by BaseScreen::init(). Without this early
+  // render it stays black for that whole time.
+  _statusMsg = (_mode == MODE_ALL) ? String("Scanning...")
+                                   : (String("Deauthing ") + _target.ssid + "...");
+  render();
+
   int nd = Achievement.inc("wifi_deauth_first");
   if (nd == 1)  Achievement.unlock("wifi_deauth_first");
   if (nd == 10) Achievement.unlock("wifi_deauth_10");
