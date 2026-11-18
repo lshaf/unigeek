@@ -179,7 +179,7 @@ private:
   uint32_t _netBase   = 0;   // first host address
   uint32_t _hostCount = 0;   // usable hosts in the subnet, capped
   // Targeted mode: a short explicit list the sweep uses instead of the subnet.
-  static constexpr int MAX_EXPLICIT = 4;
+  static constexpr int MAX_EXPLICIT = 5;  // up to 4 targets + the gateway (NetCut)
   uint32_t _explicit[MAX_EXPLICIT] = {};  // network order
   uint8_t  _explicitCount = 0;
   uint8_t  _peerIdx = 0;     // cycles through peer pairs in targeted mode

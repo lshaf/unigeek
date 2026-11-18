@@ -53,7 +53,7 @@ public:
   };
   static constexpr uint8_t FILTER_COUNT = 24;
 
-  const char* title()    override { return "MITM Attack"; }
+  const char* title()    override { return _cut ? "NetCut" : "MITM Attack"; }
   bool inhibitPowerOff() override { return _state == STATE_RUNNING || _state == STATE_DETAILS; }
 
   ~NetworkMitmScreen();
@@ -62,6 +62,12 @@ public:
   // ready to Start. Used by the "Sniff" action in IP Scan and Monitor Hosts.
   // Both IPs are network byte order (as from IPAddress / WiFi.gatewayIP()).
   void configureSniff(uint32_t hostIpNet, uint32_t gatewayIpNet);
+
+  // NetCut: ARP-poison the chosen hosts against the gateway with forwarding
+  // off, so they lose the network. setCutMode() opens the setup in cut mode
+  // (up to 4 targets); configureCut() also starts immediately on one host.
+  void setCutMode();
+  void configureCut(uint32_t hostIpNet);
 
   void onInit() override;
   void onUpdate() override;
@@ -97,6 +103,8 @@ private:
   uint8_t  _previewView = 0;
   bool     _saveToFile    = true;
   String   _fileName;
+  bool     _cut            = false;  // NetCut: poison but do not forward
+  bool     _autoStart      = false;  // start cutting immediately on init
   bool     _arpEnabled     = false;  // derived from Mode at Start
   bool     _snifferEnabled = true;   // derived from _saveToFile at Start
 

@@ -89,6 +89,12 @@ NetworkMitmScreen::~NetworkMitmScreen() {
 // ── Lifecycle ───────────────────────────────────────────────────────────────
 
 void NetworkMitmScreen::onInit() {
+  if (_autoStart) {
+    _autoStart = false;
+    _start();
+    if (_state != STATE_RUNNING) _showMenu();  // start failed -> show the setup
+    return;
+  }
   _showMenu();
 }
 
@@ -129,16 +135,17 @@ void NetworkMitmScreen::_showMenu(uint8_t selected) {
       add(lbl, _targets[i] ? String(_targetText[i]) : String("-"), R_TARGET1 + i);
     }
   }
-  // Capture filters only mean something on decrypted traffic.
-  if (decrypted) add("Capture Filters", _captureMask ? "Custom" : "All", R_FILTERS);
+  // Capture filters only mean something on decrypted traffic. NetCut does not
+  // capture, so its menu is just Mode, Targets and Start.
+  if (decrypted && !_cut) add("Capture Filters", _captureMask ? "Custom" : "All", R_FILTERS);
   // Preview (Counter/Traffic) and its filters only apply to decrypted traffic.
-  if (decrypted) {
+  if (decrypted && !_cut) {
     static const char* kPreviewNames[] = {"Counters", "Packets"};
     add("Preview", kPreviewNames[_livePreview], R_PREVIEW);
     add("Preview Filters", _previewMask ? "Custom" : "All", R_PREVFILT);
   }
-  add("Save to File", _saveToFile ? "On" : "Off", R_SAVE);
-  if (_saveToFile) add("File Name", _fileName.length() ? _fileName : String("Auto"), R_FILENAME);
+  if (!_cut) add("Save to File", _saveToFile ? "On" : "Off", R_SAVE);
+  if (!_cut && _saveToFile) add("File Name", _fileName.length() ? _fileName : String("Auto"), R_FILENAME);
   add("Start", String(), R_START);
 
   _rowCount = n;
@@ -181,6 +188,22 @@ void NetworkMitmScreen::configureSniff(uint32_t hostIpNet, uint32_t gatewayIpNet
   fill(1, hostIpNet);     // Target 2 shows the selected host
 }
 
+void NetworkMitmScreen::setCutMode() {
+  _cut  = true;
+  _mode = MODE_TARGETS;
+}
+
+void NetworkMitmScreen::configureCut(uint32_t hostIpNet) {
+  setCutMode();
+  for (uint8_t i = 0; i < 4; ++i) { _targets[i] = 0; _targetText[i][0] = '\0'; }
+  if (hostIpNet) {
+    _targets[0] = hostIpNet;
+    snprintf(_targetText[0], sizeof(_targetText[0]), "%s",
+             IPAddress(hostIpNet).toString().c_str());
+  }
+  _autoStart = true;  // the gateway is added as a peer in _start()
+}
+
 void NetworkMitmScreen::onItemSelected(uint8_t index) {
   if (_state == STATE_FILTERS) {
     uint32_t& mask = _editingPreview ? _previewMask : _captureMask;
@@ -202,7 +225,9 @@ void NetworkMitmScreen::onItemSelected(uint8_t index) {
 
   switch (_rowKind[index]) {
     case R_MODE:
-      _mode = (Mode)((_mode + 1) % 3);
+      // NetCut only poisons, so Passive is meaningless: cycle Full <-> Targets.
+      if (_cut) _mode = (_mode == MODE_ALL) ? MODE_TARGETS : MODE_ALL;
+      else      _mode = (Mode)((_mode + 1) % 3);
       _selectedIndex = 0;  // Mode is row 0; rows below change with the mode
       _showMenu(_selectedIndex);
       break;
@@ -285,18 +310,29 @@ void NetworkMitmScreen::_start() {
   // Mode -> engine flags. All/Targets poison (relay, decrypted); Passive does
   // not (monitor, encrypted). Targets needs at least one IP.
   _arpEnabled     = _mode != MODE_PASSIVE;
-  _snifferEnabled = _saveToFile;
+  _snifferEnabled = _saveToFile && !_cut;  // NetCut does not capture
   statusReset();
   static const char* kModeN[] = {"Full", "Targets", "Passive"};
-  { char l[40]; snprintf(l, sizeof(l), "MITM %s", kModeN[_mode]); statusLog(l); }
-  uint32_t peerIps[4];
+  { char l[40]; snprintf(l, sizeof(l), "%s %s", _cut ? "NetCut" : "MITM", kModeN[_mode]); statusLog(l); }
+  uint32_t peerIps[5];  // up to 4 targets, plus the gateway in cut mode
   uint8_t  peerN = 0;
   for (uint8_t i = 0; i < 4; ++i) s_targetIps[i] = 0;
   s_gatewayIp = 0;
   if (_mode == MODE_TARGETS) {
     for (uint8_t i = 0; i < 4; ++i) if (_targets[i]) peerIps[peerN++] = _targets[i];
-    // Capture is between targets, so a single host has nothing to intercept.
-    if (peerN < 2) { ShowStatusAction::show("At least two targets required", 1800); return; }
+    if (_cut) {
+      // NetCut cuts the chosen hosts from the gateway, so the gateway must be a
+      // poisoned peer (hosts alone would only be cut from each other). One
+      // target is enough; the gateway is appended here.
+      if (peerN < 1) { ShowStatusAction::show("Select at least one target", 1800); return; }
+      const uint32_t gw = (uint32_t)WiFi.gatewayIP();
+      bool hasGw = false;
+      for (uint8_t i = 0; i < peerN; ++i) if (peerIps[i] == gw) hasGw = true;
+      if (gw && !hasGw && peerN < 5) peerIps[peerN++] = gw;
+    } else {
+      // Capture is between targets, so a single host has nothing to intercept.
+      if (peerN < 2) { ShowStatusAction::show("At least two targets required", 1800); return; }
+    }
     // Label these in the preview as T1..T4 (same slot order the user entered);
     // a target that is the network gateway shows as Tn(G).
     for (uint8_t i = 0; i < 4; ++i) s_targetIps[i] = _targets[i];
@@ -370,7 +406,7 @@ void NetworkMitmScreen::_start() {
   if (_arpEnabled || _snifferEnabled) {
     _relay.setPcap(_pcapUp ? &_pcap : nullptr);
     _relay.setArp(_arpUp ? &_arp : nullptr);
-    _relay.setForward(_arpEnabled);
+    _relay.setForward(_arpEnabled && !_cut);  // NetCut poisons but drops
     // Capture Filters only apply to decrypted (relay) traffic.
     s_captureMask = relayMode ? _captureMask : 0;
     _relay.setCaptureFilter(relayMode ? &mitmCaptureFilter : nullptr);

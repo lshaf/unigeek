@@ -125,9 +125,10 @@ void IPScannerScreen::onItemSelected(uint8_t index) {
         {"Details", "details"},
         {"Port Scan", "ports"},
         {"Sniff", "sniff"},
+        {"NetCut", "netcut"},
         {"Fox Hunt", "fox"},
       };
-      const char* choice = InputSelectAction::popup("Options", options, 4);
+      const char* choice = InputSelectAction::popup("Options", options, 5);
       // The popup clears its rectangle but does not restore the underlying UI.
       // Redraw the screen chrome and list before opening Details or ProgressView.
       render();
@@ -149,6 +150,20 @@ void IPScannerScreen::onItemSelected(uint8_t index) {
           auto* mitm = new NetworkMitmScreen();
           mitm->configureSniff((uint32_t)hostIp, gw);
           Screen.push(mitm);
+        }
+      } else if (choice && strcmp(choice, "netcut") == 0) {
+        IPAddress hostIp;
+        const uint32_t gw = (uint32_t)WiFi.gatewayIP();
+        if (!hostIp.fromString(_foundIPs[index].ip)) {
+          ShowStatusAction::show("Invalid IP");
+        } else if (!gw) {
+          ShowStatusAction::show("No gateway");
+        } else if ((uint32_t)hostIp == gw) {
+          ShowStatusAction::show("Host is the gateway");
+        } else {
+          auto* cut = new NetworkMitmScreen();
+          cut->configureCut((uint32_t)hostIp);
+          Screen.push(cut);
         }
       } else if (choice && strcmp(choice, "fox") == 0) {
         uint8_t mac[6] = {};
