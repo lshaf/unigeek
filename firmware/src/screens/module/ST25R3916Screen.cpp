@@ -5154,6 +5154,13 @@ const char* ST25R3916Screen::_expSub2Title() const {
 }
 
 void ST25R3916Screen::_showExperimentalMenu(ExperimentalFamily family) {
+  // The experimental families share these selection indices, and this entry
+  // point is also used for back-navigation (same family), so reset the
+  // highlight only when switching to a different family.
+  if (family != _expFamily) {
+    _selExp = _selExpTag = _selExpAdvanced =
+    _selExpSub1 = _selExpSub2 = _selExpNdef = 0;
+  }
   _expFamily = family;
   _ndefExperimentalTarget = false;
   _state = STATE_EXP_MENU;
