@@ -29,6 +29,10 @@ void fmtIp(uint32_t ip, char* out, size_t n) {
 bool onSubnet(uint32_t ipNet) {
   IPAddress local = WiFi.localIP();
   IPAddress mask  = WiFi.subnetMask();
+  // No usable IPv4 (e.g. IPv6-only network, or before a DHCPv4 lease): a zero
+  // mask would make every address compare equal and look on-subnet, so treat
+  // "no IPv4" as nothing being reachable on the local subnet.
+  if ((uint32_t)local == 0 || (uint32_t)mask == 0) return false;
   IPAddress remote(ipNet);
   for (int i = 0; i < 4; ++i)
     if ((local[i] & mask[i]) != (remote[i] & mask[i])) return false;
@@ -61,6 +65,7 @@ bool NetworkHostActions::lookupHostMac(const char* ip, uint8_t mac[6], bool prob
   // misleading for off-subnet destinations.
   IPAddress local = WiFi.localIP();
   IPAddress mask  = WiFi.subnetMask();
+  if ((uint32_t)local == 0 || (uint32_t)mask == 0) return false;  // no IPv4
   IPAddress remote;
   if (!remote.fromString(ip)) return false;
   for (int i = 0; i < 4; ++i)
