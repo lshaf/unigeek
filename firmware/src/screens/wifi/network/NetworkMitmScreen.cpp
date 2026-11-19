@@ -761,7 +761,7 @@ void NetworkMitmScreen::_drawCutting() {
   lcd.drawFastHLine(bodyX(), sepY, bodyW(), TFT_DARKGREY);
   const uint32_t seconds = (millis() - _sessionStartMs) / 1000;
   char foot[28];
-  snprintf(foot, sizeof(foot), "Cutting... %02lu:%02lu",
+  snprintf(foot, sizeof(foot), "Time %02lu:%02lu",
            (unsigned long)(seconds / 60), (unsigned long)(seconds % 60));
   lcd.setTextColor(TFT_LIGHTGREY, TFT_BLACK);
   lcd.setTextDatum(TL_DATUM);
