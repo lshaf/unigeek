@@ -12,6 +12,8 @@ volatile int NetworkWatchcatScreen::_ringHead = 0;
 volatile int NetworkWatchcatScreen::_ringTail = 0;
 portMUX_TYPE NetworkWatchcatScreen::_ringLock = portMUX_INITIALIZER_UNLOCKED;
 
+static constexpr int kFooterH = 27;
+
 static bool netPayload(const uint8_t* pay, size_t len,
                        const uint8_t** out, size_t* outLen, uint16_t* et) {
   if (len < 32) return false;
@@ -104,7 +106,7 @@ const char* NetworkWatchcatScreen::_ipStr(uint32_t ip, char* out, size_t n) {
 
 void NetworkWatchcatScreen::_pushHit(std::vector<Hit>& list, const Hit& h) {
   for (auto& e : list) {
-    if (strcmp(e.text, h.text) == 0) { e.seen = h.seen; return; }
+    if (e.ip == h.ip && strcmp(e.value, h.value) == 0) { e.seen = h.seen; return; }
   }
   if ((int)list.size() >= MAX_LIST) list.erase(list.begin());
   list.push_back(h);
@@ -112,12 +114,11 @@ void NetworkWatchcatScreen::_pushHit(std::vector<Hit>& list, const Hit& h) {
 
 void NetworkWatchcatScreen::_noteArp(uint32_t ip, const uint8_t* mac) {
   if (!ip || ip == _selfIp) return;
-  char a[20];
   for (uint8_t i = 0; i < _arpCount; ++i) {
     if (_arp[i].ip != ip) continue;
     if (memcmp(_arp[i].mac, mac, 6) != 0) {
       Hit h; h.ip = ip; h.seen = millis();
-      snprintf(h.text, sizeof(h.text), "%s  MAC changed", _ipStr(ip, a, sizeof(a)));
+      snprintf(h.value, sizeof(h.value), "MAC changed");
       _pushHit(_arpChanges, h);
       memcpy(_arp[i].mac, mac, 6);
     }
@@ -128,24 +129,22 @@ void NetworkWatchcatScreen::_noteArp(uint32_t ip, const uint8_t* mac) {
   memcpy(_arp[_arpCount].mac, mac, 6);
   ++_arpCount;
   Hit h; h.ip = ip; h.seen = millis();
-  snprintf(h.text, sizeof(h.text), "%s  %02X:%02X:%02X:%02X:%02X:%02X",
-           _ipStr(ip, a, sizeof(a)), mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+  snprintf(h.value, sizeof(h.value), "%02X:%02X:%02X:%02X:%02X:%02X",
+           mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
   _pushHit(_hosts, h);
 }
 
 void NetworkWatchcatScreen::_noteService(const char* name, uint32_t ip) {
   if (!name || !ip) return;
   Hit h; h.ip = ip; h.seen = millis();
-  char a[20];
-  snprintf(h.text, sizeof(h.text), "%s  %s", name, _ipStr(ip, a, sizeof(a)));
+  snprintf(h.value, sizeof(h.value), "%s", name);
   _pushHit(_services, h);
 }
 
 void NetworkWatchcatScreen::_noteName(const char* name, uint32_t ip) {
   if (!name || !name[0] || !ip) return;
   Hit h; h.ip = ip; h.seen = millis();
-  char a[20];
-  snprintf(h.text, sizeof(h.text), "%s -> %s", name, _ipStr(ip, a, sizeof(a)));
+  snprintf(h.value, sizeof(h.value), "%s", name);
   _pushHit(_names, h);
 }
 
@@ -183,10 +182,17 @@ void NetworkWatchcatScreen::onInit() {
     Screen.goBack();
     return;
   }
+  _scroll.setResultStyle(true);  // Traffic Analyzer-like rows: white name
+  _scroll.resetScroll();
   _view = VIEW_OVERALL;
   _gridSel = 0;
   _prevGridSel = -1;
+  _holdCell = -1;
   for (int i = 0; i < 4; ++i) _prevCounts[i] = -1;
+  _paused = false;
+  _holdHandled = false;
+  _snap.clear();
+  _lastUpdate = millis();
   _ringHead = _ringTail = 0;
   _arpCount = 0;
   _hosts.clear(); _services.clear(); _arpChanges.clear(); _names.clear();
@@ -194,15 +200,9 @@ void NetworkWatchcatScreen::onInit() {
   render();
 }
 
-void NetworkWatchcatScreen::onRestore() { _startRadio(); render(); }
+void NetworkWatchcatScreen::onRestore() { _startRadio(); _lastUpdate = millis(); render(); }
 
 void NetworkWatchcatScreen::onBack() {
-  if (_view != VIEW_OVERALL) {
-    _view = VIEW_OVERALL;
-    _prevGridSel = -1;
-    render();
-    return;
-  }
   _stopRadio();
   Screen.goBack();
 }
@@ -273,71 +273,114 @@ void NetworkWatchcatScreen::_renderOverall() {
   _prevGridSel = _gridSel;
 }
 
-void NetworkWatchcatScreen::_renderList(const std::vector<Hit>& list) {
-  // Selectable list with a footer hint, mirroring Monitor Hosts' _drawList:
-  // the screen owns the selection (_sel) and highlights the chosen row.
-  auto& lcd = Uni.Lcd;
-  const int bx = bodyX(), by = bodyY(), bw = bodyW(), bh = bodyH();
-  lcd.fillRect(bx, by, bw, bh, TFT_BLACK);
-  lcd.setTextSize(1);
-  const int fh = lcd.fontHeight();
-  const int lineH = fh + 3;
-  const int footerH = fh + 6;
-  const int slots = (bh - footerH) / lineH;
-  const int listH = slots > 0 ? slots * lineH : 0;
-  const int count = (int)list.size();
-
-  if (_sel >= count) _sel = count ? count - 1 : 0;
-
-  int first = 0;
-  if (count > slots) first = _sel - slots / 2;
-  if (first < 0) first = 0;
-  if (count > slots && first > count - slots) first = count - slots;
-
-  for (int row = 0; row < slots; ++row) {
-    const int idx = first + row;
-    if (idx >= count) break;
-    const bool sel = idx == _sel;
-    const int y = by + row * lineH;
-    const uint16_t bg = sel ? Config.getThemeColor() : TFT_BLACK;
-    if (sel) lcd.fillRect(bx, y, bw, lineH, bg);
-    lcd.setTextColor(TFT_WHITE, bg);   // selection shown by background, like Monitor Hosts
-    lcd.setTextDatum(TL_DATUM);
-    lcd.drawString(list[idx].text, bx + 2, y + 1);
-  }
-
-  if (!count) {
-    lcd.setTextDatum(MC_DATUM);
-    lcd.setTextColor(TFT_DARKGREY, TFT_BLACK);
-    lcd.drawString("Scanning...", bx + bw / 2, by + (listH > 0 ? listH : bh) / 2);
-  }
-
-  // Footer hints, laid out like Monitor Hosts: action on the left, back on the
-  // right. Back returns to the grid (the watches have no pause/resume state).
-  const int footerTop = by + bh - footerH;
-  lcd.drawFastHLine(bx, footerTop, bw, TFT_DARKGREY);
-  lcd.setTextColor(TFT_LIGHTGREY, TFT_BLACK);
-  if (count) {
-    lcd.setTextDatum(TL_DATUM);
-    lcd.drawString("[Press] Options", bx + 2, footerTop + 3);
-    lcd.setTextDatum(TR_DATUM);
-    lcd.drawString("[Back] Grid", bx + bw - 2, footerTop + 3);
-  } else {
-    lcd.setTextDatum(TC_DATUM);
-    lcd.drawString("[Back] Grid", bx + bw / 2, footerTop + 3);
+const std::vector<NetworkWatchcatScreen::Hit>&
+NetworkWatchcatScreen::_currentList() const {
+  switch (_view) {
+    case VIEW_SERVICES: return _services;
+    case VIEW_ARP:      return _arpChanges;
+    case VIEW_NAMES:    return _names;
+    default:            return _hosts;   // VIEW_HOSTS
   }
 }
 
 void NetworkWatchcatScreen::_enter(View v) {
+  _holdCell = -1;
   _view = v;
-  _sel = 0;
+  _itemCount = 0;
+  _paused = false;
+  _snap.clear();
+  _scroll.setSelectable(false);
+  _scroll.resetScroll();
   static const char* titles[] = {"", "New Hosts", "Services", "ARP Changes", "Names"};
   _viewTitle = titles[v];
+  _renderView();
+}
+
+// One row per entry. Rows copy their text into a stable buffer so the
+// ScrollListView row pointers stay valid as the live lists change.
+void NetworkWatchcatScreen::_renderView() {
+  if (_view == VIEW_OVERALL) { _renderOverall(); return; }
+  const std::vector<Hit>& items = _paused ? _snap : _currentList();
+  int n = 0;
+  for (const auto& h : items) {
+    if (n >= MAX_LIST) break;
+    _ipStr(h.ip, _labels[n], sizeof(_labels[n]));   // IP on the left
+    _rows[n] = ScrollListView::Row(_labels[n], h.value);  // detail on the right
+    ++n;
+  }
+  _setListState(n);
+}
+
+void NetworkWatchcatScreen::_setListState(int n) {
+  _itemCount = n;
+  _scroll.setRows(_rows, (uint8_t)_itemCount);
   render();
 }
 
+int NetworkWatchcatScreen::_listHeight() {
+  return bodyH() - kFooterH;
+}
+
+// Hints follow the Wi-Fi Watchcat: Options on the upper line, Pause/Resume on
+// the lower, below a separator at the top of a fixed-height footer.
+void NetworkWatchcatScreen::_renderFooter() {
+  auto& lcd = Uni.Lcd;
+  const int x = bodyX(), y = bodyY(), w = bodyW(), h = bodyH();
+  const int footerTop = y + h - kFooterH;
+  lcd.fillRect(x, footerTop, w, kFooterH, TFT_BLACK);
+  lcd.drawFastHLine(x, footerTop, w, TFT_DARKGREY);
+  lcd.setTextColor(TFT_DARKGREY, TFT_BLACK);
+  lcd.setTextDatum(BC_DATUM);
+  if (_paused) {
+    const char* hint = "[Back] Resume Scan";
+    if (lcd.textWidth(hint) > w - 6) hint = "[Back] Resume";
+    lcd.drawString("[Press] Options", x + w / 2, y + h - 14);
+    lcd.drawString(hint, x + w / 2, y + h - 1);
+  } else {
+    lcd.drawString("[Press] Pause", x + w / 2, y + h - 1);
+  }
+  lcd.setTextDatum(TL_DATUM);
+}
+
+void NetworkWatchcatScreen::_pause() {
+  _paused = true;
+  _snap = _currentList();
+  _scroll.setSelectable(true);
+  _scroll.setSelected(0);
+  _renderView();
+}
+
+void NetworkWatchcatScreen::_resume() {
+  _paused = false;
+  _snap.clear();
+  _scroll.setSelectable(false);
+  _renderView();
+}
+
+void NetworkWatchcatScreen::_leaveList() {
+  _paused = false;
+  _snap.clear();
+  _scroll.setSelectable(false);
+  _view = VIEW_OVERALL;
+  _prevGridSel = -1;
+  Uni.Lcd.fillRect(bodyX(), bodyY(), bodyW(), bodyH(), TFT_BLACK);
+  render();
+}
+
+// Build the host target from the selected (paused) row and open the shared
+// Options menu; hand the radio over, onRestore() takes it back.
+void NetworkWatchcatScreen::_openOptions() {
+  const int index = _scroll.selected();
+  if (index < 0 || index >= (int)_snap.size()) return;
+  const uint32_t ip = _snap[index].ip;
+  if (!ip || ip == _selfIp) { render(); return; }
+  HostTarget t;
+  t.ip = ip;  // no stored MAC here; the helper resolves it from the ARP cache
+  if (!NetworkHostActions::openOptions(t, [this] { _stopRadio(); }))
+    render();  // popup cancelled or guarded away: redraw the paused list
+}
+
 void NetworkWatchcatScreen::onUpdate() {
-  _drain();
   if (_view == VIEW_OVERALL) {
     if (Uni.Nav->wasPressed()) {
       auto dir = Uni.Nav->readDirection();
@@ -369,46 +412,48 @@ void NetworkWatchcatScreen::onUpdate() {
       } else if (dir == INavigation::DIR_BACK) { onBack(); return; }
       _renderOverall();
 #endif
-    } else {
-      static unsigned long last = 0;
-      if (millis() - last > 800) { last = millis(); _renderOverall(); }
     }
-    return;
-  }
-  if (Uni.Nav->wasPressed()) {
-    auto dir = Uni.Nav->readDirection();
-    if (dir == INavigation::DIR_BACK) { onBack(); return; }
-    if (dir == INavigation::DIR_PRESS) { _openOptions(); return; }
-    const int count = (int)_currentList().size();
-    if (dir == INavigation::DIR_UP)        { if (_sel > 0) _sel--; }
-    else if (dir == INavigation::DIR_DOWN) { if (_sel < count - 1) _sel++; }
-    onRender();
-  }
-}
+  } else {
+    _scroll.tickMarquee();  // scroll an overlong value on the selected row
+    // Like the Wi-Fi Watchcat. Live: [Press] pauses, [Back] returns to the
+    // grid. Paused: arrows select, [Press] opens Options, [Back] resumes;
+    // [Hold] opens Options too.
+    if (_paused && Uni.Nav->isPressed() && Uni.Nav->currentDirection() == INavigation::DIR_PRESS &&
+        Uni.Nav->heldDuration() >= 700 && !_holdHandled) {
+      _holdHandled = true;
+      Uni.Nav->suppressCurrentPress();
+      _openOptions();
+      return;
+    }
+    if (_holdHandled && !Uni.Nav->isPressed()) _holdHandled = false;
 
-const std::vector<NetworkWatchcatScreen::Hit>&
-NetworkWatchcatScreen::_currentList() const {
-  switch (_view) {
-    case VIEW_SERVICES: return _services;
-    case VIEW_ARP:      return _arpChanges;
-    case VIEW_NAMES:    return _names;
-    default:            return _hosts;   // VIEW_HOSTS
+    if (Uni.Nav->wasPressed()) {
+      const auto     dir      = Uni.Nav->readDirection();
+      const uint32_t duration = Uni.Nav->pressDuration();
+      if (dir == INavigation::DIR_BACK) {
+        if (_paused) _resume();
+        else         _leaveList();
+        return;
+      }
+      if (dir == INavigation::DIR_PRESS && duration < 700) {
+        if (_paused) _openOptions();
+        else         _pause();
+        return;
+      }
+      if (dir == INavigation::DIR_UP   || dir == INavigation::DIR_DOWN ||
+          dir == INavigation::DIR_LEFT || dir == INavigation::DIR_RIGHT) {
+        _scroll.onNav(dir);
+      }
+    }
   }
-}
 
-void NetworkWatchcatScreen::_openOptions() {
-  const std::vector<Hit>& list = _currentList();
-  const int sel = _sel;
-  if (sel < 0 || sel >= (int)list.size()) return;
-  const uint32_t ip = list[sel].ip;
-  if (!ip || ip == _selfIp) return;
+  _drain();
 
-  HostTarget t;
-  t.ip = ip;  // no stored MAC here; the helper resolves it from the ARP cache
-  // Promiscuous must be off for the socket-based actions; onRestore() re-arms it
-  // when the pushed screen is closed.
-  if (!NetworkHostActions::openOptions(t, [this] { _stopRadio(); }))
-    onRender();  // popup cancelled or guarded away: redraw the list
+  if (millis() - _lastUpdate >= 1000) {
+    _lastUpdate = millis();
+    // A paused list keeps its snapshot; capture goes on in the background.
+    if (!_paused) _renderView();
+  }
 }
 
 void NetworkWatchcatScreen::onRender() {
@@ -419,9 +464,15 @@ void NetworkWatchcatScreen::onRender() {
     _renderOverall();
     return;
   }
-  // _renderList clears the body itself; no extra fill here (avoids a double paint).
-  if (_view == VIEW_HOSTS) _renderList(_hosts);
-  else if (_view == VIEW_SERVICES) _renderList(_services);
-  else if (_view == VIEW_ARP) _renderList(_arpChanges);
-  else _renderList(_names);
+  const int listH = _listHeight();
+  if (_itemCount > 0) {
+    _scroll.render(bodyX(), bodyY(), bodyW(), listH);
+  } else {
+    Uni.Lcd.fillRect(bodyX(), bodyY(), bodyW(), listH, TFT_BLACK);
+    Uni.Lcd.setTextDatum(MC_DATUM);
+    Uni.Lcd.setTextColor(TFT_DARKGREY, TFT_BLACK);
+    Uni.Lcd.drawString(_paused ? "Paused - No results" : "Scanning...",
+                       bodyX() + bodyW() / 2, bodyY() + listH / 2);
+  }
+  _renderFooter();
 }
