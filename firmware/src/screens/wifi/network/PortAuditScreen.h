@@ -40,7 +40,7 @@ protected:
         if (f[j].severity > f[i].severity) { auto t = f[i]; f[i] = f[j]; f[j] = t; }
     for (uint8_t i = 0; i < n; ++i)
       _print(String("[") + ExposureAudit::severityLabel(f[i].severity) + "] " + f[i].text);
-    if (n == 0) _print("Nothing found");
+    if (n == 0) _print("No vulnerabilities found");
     return false;
   }
 

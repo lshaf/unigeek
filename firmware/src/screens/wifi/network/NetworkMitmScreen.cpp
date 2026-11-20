@@ -435,7 +435,7 @@ void NetworkMitmScreen::_start() {
     // Everything the user picked failed to come up. The per-component lines
     // above already say why; repeat the first cause in the toast so it is
     // visible without scrolling the log.
-    _stop(_pcap.error() ? _pcap.error() : "Nothing started");
+    _stop(_pcap.error() ? _pcap.error() : "Failed to start");
     _showMenu();
     return;
   }
