@@ -457,7 +457,7 @@ void BLEDetectorScreen::_draw()
     sp.fillSprite(TFT_BLACK);
     sp.setTextDatum(MC_DATUM);
     sp.setTextColor(TFT_DARKGREY, TFT_BLACK);
-    sp.drawString(_paused ? "Nothing captured" : "Scanning...", bodyW() / 2, spH / 2);
+    sp.drawString(_paused ? "Paused - No results" : "Scanning...", bodyW() / 2, spH / 2);
     sp.pushSprite(bodyX(), spY);
     sp.deleteSprite();
     if (spY > contentY)
