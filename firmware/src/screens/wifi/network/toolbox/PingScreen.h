@@ -6,7 +6,15 @@ class PingScreen : public ToolScreen {
 public:
   const char* title() override { return "Ping"; }
 
+  // From a host popup: skip setup, ping continuously, Back returns to the list.
+  void configure(const char* host) {
+    _host = host ? host : "";
+    _countSetting = 0;
+    _immediate = true;
+  }
+
 protected:
+  bool _startsImmediately() const override { return _immediate; }
   void _buildRows() override;
   void _editRow(uint8_t id) override;
   bool _begin() override;
@@ -16,6 +24,7 @@ protected:
 private:
   enum Row : uint8_t { ROW_HOST, ROW_COUNT, ROW_INTERVAL, ROW_SIZE };
   String    _host;
+  bool      _immediate = false;
   int       _countSetting = 0;  // 0 = continuous (Linux ping default): stop with [Press] Stop
   int       _intervalMs   = 1000;
   int       _size         = 32;

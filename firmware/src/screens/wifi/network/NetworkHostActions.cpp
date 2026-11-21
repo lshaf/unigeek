@@ -7,6 +7,7 @@
 #include "PortScannerScreen.h"
 #include "screens/wifi/WifiFoxHuntScreen.h"
 #include "screens/wifi/network/NetworkMitmScreen.h"
+#include "screens/wifi/network/toolbox/PingScreen.h"
 #include "core/ScreenManager.h"
 #include "ui/actions/InputSelectAction.h"
 #include "ui/actions/ShowStatusAction.h"
@@ -100,9 +101,10 @@ bool NetworkHostActions::openOptions(const HostTarget& t,
   else          { macKnown = lookupHostMac(ip, mac, /*probe=*/false); }
 
   // Curate: only the actions that make sense for this target.
-  InputSelectAction::Option options[5];
+  InputSelectAction::Option options[6];
   uint8_t n = 0;
   options[n++] = {"Details", "details"};        // always
+  options[n++] = {"Ping", "ping"};              // always; starts immediately
   if (sub)         options[n++] = {"Port Scan", "ports"};
   if (poison)      options[n++] = {"Sniff", "sniff"};
   if (poison)      options[n++] = {"NetCut", "netcut"};
@@ -118,6 +120,14 @@ bool NetworkHostActions::openOptions(const HostTarget& t,
     auto* d = new IPScannerDetailsScreen();
     d->configure(ip, t.name, macKnown ? mac : nullptr);
     Screen.push(d);
+    return true;
+  }
+
+  if (strcmp(choice, "ping") == 0) {
+    leave();
+    auto* p = new PingScreen();
+    p->configure(ip);
+    Screen.push(p);
     return true;
   }
 
