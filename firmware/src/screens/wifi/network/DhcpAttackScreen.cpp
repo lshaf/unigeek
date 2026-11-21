@@ -41,17 +41,33 @@ void DhcpAttackScreen::_showMenu() {
   _menuItems[1] = {"Rogue DHCP",      _rogueSub.c_str()};
   _menuItems[2] = {"Deauth Burst",    _deauthSub.c_str()};
   _menuItems[3] = {"Start"};
-  setItems(_menuItems, 4);
+  // Same pattern as SshClientScreen::_rebuildItems: pass _selectedIndex so a
+  // toggle does not jump the highlight back to row 0.
+  setItems(_menuItems, 4, min<uint8_t>(_selectedIndex, 3));
 }
 
 void DhcpAttackScreen::onItemSelected(uint8_t index) {
   if (_state != STATE_MENU) return;
 
   switch (index) {
-    case 0: _starvEnabled = !_starvEnabled; _showMenu(); break;
-    case 1: _rogueEnabled = !_rogueEnabled; _showMenu(); break;
-    case 2: _deauthBurst  = !_deauthBurst;  _showMenu(); break;
-    case 3: _start(); break;
+    case 0:
+      _starvEnabled = !_starvEnabled;
+      _selectedIndex = index;
+      _showMenu();
+      break;
+    case 1:
+      _rogueEnabled = !_rogueEnabled;
+      _selectedIndex = index;
+      _showMenu();
+      break;
+    case 2:
+      _deauthBurst = !_deauthBurst;
+      _selectedIndex = index;
+      _showMenu();
+      break;
+    case 3:
+      _start();
+      break;
   }
 }
 

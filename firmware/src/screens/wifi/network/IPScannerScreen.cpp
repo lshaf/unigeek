@@ -1,9 +1,18 @@
 #include "IPScannerScreen.h"
+#include "IPScannerDetailsScreen.h"
+#include "PortScannerScreen.h"
+#include "NetworkHostActions.h"
+#include "screens/wifi/WifiFoxHuntScreen.h"
+#include "screens/wifi/network/NetworkMitmScreen.h"
 #include <WiFi.h>
+#include <lwip/etharp.h>
+#include <lwip/ip4_addr.h>
+#include <lwip/netif.h>
 #include "core/ScreenManager.h"
 #include "core/AchievementManager.h"
 #include "screens/wifi/network/NetworkMenuScreen.h"
 #include "ui/actions/InputNumberAction.h"
+#include "ui/actions/InputSelectAction.h"
 #include "ui/actions/ShowStatusAction.h"
 #include "ui/views/ProgressView.h"
 #include "utils/network/ScanCancelUtil.h"
@@ -27,7 +36,7 @@ void IPScannerScreen::onBack() {
     case STATE_RESULT_PORT:
       _state = STATE_RESULT_IP;
       setPreferSublabel(true);
-      setItems(_foundItems, (_foundCount == 0) ? 1 : _foundCount);
+      setItems(_foundItems, (_foundCount == 0) ? 1 : _foundCount, _selectedHost);
       break;
     case STATE_RESULT_IP:
       _showConfiguration();
@@ -58,6 +67,10 @@ void IPScannerScreen::onItemSelected(uint8_t index) {
         _showConfiguration(index);
         break;
       case 3:
+        _aggressive = !_aggressive;
+        _showConfiguration(index);
+        break;
+      case 4:
         _scanIP();
         break;
     }
@@ -65,7 +78,17 @@ void IPScannerScreen::onItemSelected(uint8_t index) {
     if (_foundCount == 0 || _foundIPs[index].ip[0] == '\0') {
       _showConfiguration();
     } else {
-      _scanPort(_foundIPs[index].ip);
+      _selectedHost = index;
+      IPAddress ipAddr;
+      if (ipAddr.fromString(_foundIPs[index].ip)) {
+        HostTarget t;
+        t.ip   = (uint32_t)ipAddr;
+        t.name = _foundIPs[index].hostname;
+        // IP scan does not retain MACs; the helper resolves from the ARP cache.
+        if (!NetworkHostActions::openOptions(t)) render();
+      } else {
+        render();
+      }
     }
   }
 }
@@ -80,8 +103,9 @@ void IPScannerScreen::_showConfiguration(uint8_t selectedIndex) {
   _configItems[0] = {"Start IP", _startIpSub.c_str()};
   _configItems[1] = {"End IP", _endIpSub.c_str()};
   _configItems[2] = {"Resolve Name", _resolveName ? "On" : "Off"};
-  _configItems[3] = {"Start Scan"};
-  setItems(_configItems, 4, selectedIndex);
+  _configItems[3] = {"Profile", _aggressive ? "Aggressive" : "Fast"};
+  _configItems[4] = {"Start"};
+  setItems(_configItems, 5, selectedIndex);
 }
 
 void IPScannerScreen::_scanIP() {
@@ -105,7 +129,8 @@ void IPScannerScreen::_scanIP() {
     (uint8_t)_startIp, (uint8_t)_endIp,
     _foundIPs, MAX_FOUND, _resolveName,
     [](uint8_t pct) { ProgressView::progress("Scanning...", pct); },
-    []() { return ScanCancelUtil::poll(); }
+    []() { return ScanCancelUtil::poll(); },
+    _aggressive ? IpScanUtil::Profile::Aggressive : IpScanUtil::Profile::Fast
   );
 
   ProgressView::finish();
@@ -153,7 +178,7 @@ void IPScannerScreen::_scanPort(const char* ip) {
   if (ScanCancelUtil::wasCancelled()) {
     _state = STATE_RESULT_IP;
     setPreferSublabel(true);
-    setItems(_foundItems, _foundCount);
+    setItems(_foundItems, _foundCount, _selectedHost);
     return;
   }
 

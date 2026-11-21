@@ -123,6 +123,11 @@ void IoTDeviceScannerScreen::onItemSelected(uint8_t index)
         break;
       }
 
+      case CFG_DEPTH:
+        _aggressive = !_aggressive;
+        _showConfig(index);
+        break;
+
       case CFG_START_SCAN:
         _scan();
         break;
@@ -184,7 +189,8 @@ void IoTDeviceScannerScreen::_showConfig(uint8_t selectedIndex)
     add("End IP", _endIpSub.c_str(), CFG_END_IP);
   }
 
-  add("Start Scan", nullptr, CFG_START_SCAN);
+  add("Profile", _aggressive ? "Aggressive" : "Fast", CFG_DEPTH);
+  add("Start", nullptr, CFG_START_SCAN);
   setItems(_configItems, _configCount, selectedIndex);
 }
 
@@ -346,7 +352,8 @@ void IoTDeviceScannerScreen::_scanRange()
     [](uint8_t pct) {
       ProgressView::progress("Scanning hosts...", pct);
     },
-    []() { return ScanCancelUtil::poll(); }
+    []() { return ScanCancelUtil::poll(); },
+    _aggressive ? IpScanUtil::Profile::Aggressive : IpScanUtil::Profile::Fast
   );
 
   for (uint8_t i = 0; i < hostCount; ++i) {
@@ -400,7 +407,7 @@ void IoTDeviceScannerScreen::_probeTarget(const char* ip, const char* label)
 {
   if (!ip || !ip[0]) return;
 
-  const bool patient = _scanMode == MODE_TARGETS;
+  const bool patient = _scanMode == MODE_TARGETS || _aggressive;
   const uint32_t quickTimeout = patient ? 450 : 300;
 
   static constexpr struct {

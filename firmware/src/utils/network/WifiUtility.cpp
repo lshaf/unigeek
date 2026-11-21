@@ -37,6 +37,7 @@ bool WifiUtility::connect(const char* ssid, const char* password)
   }
 
   WiFi.setAutoReconnect(false);
+  _applyIpConfig(ssid);  // static settings saved for this network, or DHCP
   WiFi.begin(ssid, password);
   bool ok = WiFi.waitForConnectResult(10000) == WL_CONNECTED;
   if (!ok) {
@@ -99,6 +100,89 @@ void WifiUtility::savePassword(const char* bssid, const char* ssid, const char* 
   String path = _buildPasswordPath(bssid, ssid);
   Uni.Storage->makeDir(_passwordPath);
   Uni.Storage->writeFile(path.c_str(), password);
+}
+
+// ── IP settings ───────────────────────────────────────────────────────────
+
+String WifiUtility::_buildIpConfigPath(const char* ssid)
+{
+  String name = ssid;
+  name.replace("/", "_");  // keep the file inside the folder
+  return String(_passwordPath) + "/" + name + ".ip";
+}
+
+IPAddress WifiUtility::prefixToMask(uint8_t prefix)
+{
+  if (prefix > 32) prefix = 32;
+  const uint32_t mask = prefix ? 0xFFFFFFFFu << (32 - prefix) : 0;
+  return IPAddress((mask >> 24) & 0xFF, (mask >> 16) & 0xFF, (mask >> 8) & 0xFF, mask & 0xFF);
+}
+
+uint8_t WifiUtility::maskToPrefix(const IPAddress& mask)
+{
+  uint8_t n = 0;
+  for (int i = 0; i < 4; ++i)
+    for (int b = 7; b >= 0; --b)
+      if (mask[i] & (1 << b)) ++n;
+  return n;
+}
+
+bool WifiUtility::readIpConfig(const char* ssid, IpConfig& out)
+{
+  out = IpConfig();
+  if (!Uni.Storage || !ssid || !ssid[0]) return false;
+  const String path = _buildIpConfigPath(ssid);
+  if (!Uni.Storage->exists(path.c_str())) return false;
+  const String text = Uni.Storage->readFile(path.c_str());
+  int start = 0;
+  while (start < (int)text.length()) {
+    int end = text.indexOf('\n', start);
+    if (end < 0) end = text.length();
+    String line = text.substring(start, end);
+    start = end + 1;
+    line.trim();
+    const int eq = line.indexOf('=');
+    if (eq <= 0) continue;
+    const String key = line.substring(0, eq);
+    const String value = line.substring(eq + 1);
+    if (key == "mode")         out.isStatic = value == "static";
+    else if (key == "ip")      out.ip.fromString(value);
+    else if (key == "gateway") out.gateway.fromString(value);
+    else if (key == "prefix")  out.prefix = (uint8_t)constrain(value.toInt(), 1, 30);
+    else if (key == "dns1")    out.dns1.fromString(value);
+    else if (key == "dns2")    out.dns2.fromString(value);
+  }
+  return true;
+}
+
+bool WifiUtility::saveIpConfig(const char* ssid, const IpConfig& c)
+{
+  if (!Uni.Storage || !ssid || !ssid[0]) return false;
+  auto addr = [](const IPAddress& a) {
+    return a == IPAddress(0, 0, 0, 0) ? String("") : a.toString();
+  };
+  String text = String("mode=") + (c.isStatic ? "static" : "dhcp") + "\n";
+  text += "ip=" + addr(c.ip) + "\n";
+  text += "gateway=" + addr(c.gateway) + "\n";
+  text += "prefix=" + String(c.prefix) + "\n";
+  text += "dns1=" + addr(c.dns1) + "\n";
+  text += "dns2=" + addr(c.dns2) + "\n";
+  Uni.Storage->makeDir(_passwordPath);
+  return Uni.Storage->writeFile(_buildIpConfigPath(ssid).c_str(), text.c_str());
+}
+
+// Before WiFi.begin(): the network's static settings, or back to DHCP (which
+// a previous network's static settings would otherwise keep disabled).
+void WifiUtility::_applyIpConfig(const char* ssid)
+{
+  IpConfig c;
+  if (readIpConfig(ssid, c) && c.isStatic && c.ip != IPAddress(0, 0, 0, 0)) {
+    const IPAddress unset(0, 0, 0, 0);
+    const IPAddress dns1 = c.dns1 != unset ? c.dns1 : c.gateway;
+    WiFi.config(c.ip, c.gateway, prefixToMask(c.prefix), dns1, c.dns2);
+  } else {
+    WiFi.config(INADDR_NONE, INADDR_NONE, INADDR_NONE);
+  }
 }
 
 // ── Internet check ───────────────────────────────────────────────────────

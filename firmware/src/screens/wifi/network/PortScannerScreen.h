@@ -8,6 +8,9 @@ public:
   const char* title() override { return "Port Scan"; }
   bool inhibitPowerOff() override { return _state == STATE_SCANNING; }
 
+  // Prefill the configuration when launched from IP Scan.
+  void configureTarget(const char* ip);
+
   void onInit() override;
   void onBack() override;
   void onItemSelected(uint8_t index) override;
@@ -26,12 +29,15 @@ private:
     CFG_END_IP,
     CFG_PORTS,
     CFG_CUSTOM_PORTS,
+    CFG_DEPTH,
     CFG_START_SCAN
   };
 
   State    _state       = STATE_INPUT;
   ScanMode _scanMode    = MODE_RANGE;
+  bool _aggressive = false;  // Profile: Fast / Aggressive
   PortMode _portMode    = PORTS_COMMON;
+  bool     _singleTargetView = false;
 
   static constexpr uint8_t MAX_TARGETS = 4;
   String   _targets[MAX_TARGETS];
@@ -44,7 +50,7 @@ private:
   String _endIpSub;
   String _customPortsSub;
 
-  static constexpr uint8_t MAX_CONFIG_ITEMS = 12;
+  static constexpr uint8_t MAX_CONFIG_ITEMS = 13;
   static constexpr uint8_t MAX_FOUND_HOSTS  = 64;
 
   ListItem     _configItems[MAX_CONFIG_ITEMS];

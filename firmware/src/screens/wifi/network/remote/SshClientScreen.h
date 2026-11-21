@@ -22,9 +22,10 @@ public:
   void onBack() override;
 
 private:
+  enum ConfigRow : uint8_t { ROW_HOST, ROW_PORT, ROW_USER, ROW_AUTH, ROW_SECRET };
+
   enum State : uint8_t {
     STATE_CONFIG,
-    STATE_SELECT_AUTH,
     STATE_SELECT_KEY,
     STATE_CONNECTING,
     STATE_HOSTKEY_CONFIRM,
@@ -67,13 +68,9 @@ private:
   char _authLabel[20] = "-";
   char _passwordLabel[16] = "-";
   char _keyLabel[32] = {};
-  ListItem _items[6];
+  ListItem _items[ROW_SECRET + 2];  // + Password/Key File + Connect
   BrowseFileView _browser;
   String _browsePath = "/unigeek/wifi/remote/ssh";
-  ListItem _authItems[2] = {
-    {"Password", nullptr},
-    {"Private Key", nullptr},
-  };
 
   TaskHandle_t _sshTask = nullptr;
   SemaphoreHandle_t _ioMutex = nullptr;
@@ -98,12 +95,13 @@ private:
 
   void _updateLabels();
   void _rebuildItems();
+  uint8_t _connectRow() const;
+  void _returnToConfig(uint8_t row);
   void _configHost();
   void _configPort();
   void _configUsername();
   void _configPassword();
-  void _auth();
-  void _selectAuth(uint8_t index);
+  void _toggleAuthMode();
   void _openKeyPicker();
   void _loadKeyDir(const String& path);
   void _selectKey(uint8_t index);

@@ -9,6 +9,8 @@ public:
   bool inhibitPowerSave() override { return _state == STATE_TRACK; }
 
   ~WifiFoxHuntScreen() override;
+  void configureTarget(bool client, const uint8_t mac[6], uint8_t channel, const char* ssid = nullptr);
+  void configureTransmitterTarget(const uint8_t mac[6], uint8_t channel, const char* name = nullptr);
   void onInit() override;
   void onUpdate() override;
   void onRender() override;
@@ -18,7 +20,11 @@ public:
 private:
   static constexpr int MAX_SCAN = 20;
 
-  enum State { STATE_SCAN, STATE_TRACK };
+  enum State { STATE_MODE, STATE_SCAN, STATE_TRACK };
+  enum TargetMode { MODE_AP, MODE_CLIENT };
+  TargetMode _mode = MODE_AP;
+  bool _directTarget = false;
+  bool _directTransmitterTarget = false;
   State _state = STATE_SCAN;
 
   struct WifiEntry {
@@ -48,7 +54,9 @@ private:
   int16_t         _pulseSpriteW = 0;
   int16_t         _pulseSpriteH = 0;
 
+  void _showModes();
   void _doScan();
+  void _scanClients();
   void _showScan();
   void _startTracking(int index);
   void _stopTracking();

