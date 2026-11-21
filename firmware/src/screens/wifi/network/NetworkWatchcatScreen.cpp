@@ -163,6 +163,7 @@ void NetworkWatchcatScreen::_drain() {
 }
 
 void NetworkWatchcatScreen::_startRadio() {
+  if (WiFi.getMode() != WIFI_STA) WiFi.mode(WIFI_STA);
   _active = this;
   _selfIp = (uint32_t)WiFi.localIP();
   esp_wifi_set_promiscuous(false);

@@ -20,6 +20,7 @@ void PortScannerScreen::configureTarget(const char* ip) {
   if (!ip || !*ip) return;
   _scanMode = MODE_TARGETS;
   _singleTargetView = true;
+  _integrated = true;
   _targets[0] = ip;
   for (uint8_t i = 1; i < MAX_TARGETS; ++i) _targets[i] = "";
 }
@@ -34,7 +35,8 @@ void PortScannerScreen::onInit() {
 
 void PortScannerScreen::onBack() {
   if (_state == STATE_RESULTS) {
-    _showInput();
+    if (_integrated) Screen.goBack();
+    else _showInput();
   } else if (_state != STATE_SCANNING) {
     Screen.goBack();
   }

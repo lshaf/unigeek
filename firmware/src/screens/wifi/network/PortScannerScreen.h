@@ -38,6 +38,7 @@ private:
   bool _aggressive = false;  // Profile: Fast / Aggressive
   PortMode _portMode    = PORTS_COMMON;
   bool     _singleTargetView = false;
+  bool     _integrated       = false;
 
   static constexpr uint8_t MAX_TARGETS = 4;
   String   _targets[MAX_TARGETS];

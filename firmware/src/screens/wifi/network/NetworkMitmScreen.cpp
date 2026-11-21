@@ -92,7 +92,10 @@ void NetworkMitmScreen::onInit() {
   if (_autoStart) {
     _autoStart = false;
     _start();
-    if (_state != STATE_RUNNING) _showMenu();  // start failed -> show the setup
+    if (_state != STATE_RUNNING) {
+      if (_integrated) Screen.goBack();
+      else _showMenu();  // start failed -> show the setup
+    }
     return;
   }
   _showMenu();
@@ -102,7 +105,8 @@ void NetworkMitmScreen::onBack() {
   if (_state == STATE_DETAILS) { _state = STATE_RUNNING; render(); return; }
   if (_state == STATE_RUNNING) {
     _stop("Stopped");
-    _showMenu();
+    if (_integrated) Screen.goBack();
+    else _showMenu();
     return;
   }
   if (_state == STATE_FILTERS) { _showMenu(_menuIndex); return; }
@@ -176,6 +180,7 @@ void NetworkMitmScreen::_editTarget(uint8_t i) {
 void NetworkMitmScreen::configureSniff(uint32_t hostIpNet, uint32_t gatewayIpNet) {
   // Two-target ARP capture: the host and the gateway. The engine poisons each
   // against the other, so the host's upstream traffic is diverted through us.
+  _integrated = true;
   _mode = MODE_TARGETS;
   for (uint8_t i = 0; i < 4; ++i) { _targets[i] = 0; _targetText[i][0] = '\0'; }
   auto fill = [&](uint8_t slot, uint32_t ipNet) {
@@ -194,6 +199,7 @@ void NetworkMitmScreen::setCutMode() {
 }
 
 void NetworkMitmScreen::configureCut(uint32_t hostIpNet) {
+  _integrated = true;
   setCutMode();
   for (uint8_t i = 0; i < 4; ++i) { _targets[i] = 0; _targetText[i][0] = '\0'; }
   if (hostIpNet) {
@@ -577,7 +583,8 @@ void NetworkMitmScreen::onUpdate() {
 
   if (_relayUp && _relay.storageFailed()) {
     _stop("Failed to write to SD");
-    _showMenu();
+    if (_integrated) Screen.goBack();
+    else _showMenu();
     return;
   }
 
@@ -585,7 +592,8 @@ void NetworkMitmScreen::onUpdate() {
     _lastFreeChk = now;
     if (!_checkFreeSpace()) {
       _stop("SD full");
-      _showMenu();
+      if (_integrated) Screen.goBack();
+      else _showMenu();
       return;
     }
   }
@@ -641,7 +649,11 @@ void NetworkMitmScreen::onUpdate() {
       return;
     }
     if (_livePreview == PREVIEW_COUNTER && _arpEnabled) {
-      if (dir == INavigation::DIR_BACK) { _stop("Stopped"); _showMenu(); }
+      if (dir == INavigation::DIR_BACK) {
+        _stop("Stopped");
+        if (_integrated) Screen.goBack();
+        else _showMenu();
+      }
       return;  // running total: no pause/inspect
     }
     if (_livePreview == PREVIEW_TRAFFIC && _arpEnabled) {
@@ -653,7 +665,12 @@ void NetworkMitmScreen::onUpdate() {
           render();
           return;
         }
-        if (dir == INavigation::DIR_BACK) { _stop("Stopped"); _showMenu(); return; }
+        if (dir == INavigation::DIR_BACK) {
+          _stop("Stopped");
+          if (_integrated) Screen.goBack();
+          else _showMenu();
+          return;
+        }
       } else {
         if (dir == INavigation::DIR_BACK) { _previewPaused = false; render(); return; }
         if (dir == INavigation::DIR_PRESS) {
@@ -670,7 +687,8 @@ void NetworkMitmScreen::onUpdate() {
     }
     if (dir == INavigation::DIR_BACK || dir == INavigation::DIR_PRESS) {
       _stop("Stopped");
-      _showMenu();
+      if (_integrated) Screen.goBack();
+      else _showMenu();
     }
   }
 }

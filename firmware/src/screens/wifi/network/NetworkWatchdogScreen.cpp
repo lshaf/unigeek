@@ -194,6 +194,7 @@ void NetworkWatchdogScreen::_drain() {
 }
 
 void NetworkWatchdogScreen::_startRadio() {
+  if (WiFi.getMode() != WIFI_STA) WiFi.mode(WIFI_STA);
   _active = this;
   _selfIp = (uint32_t)WiFi.localIP();
   _gwIp = (uint32_t)WiFi.gatewayIP();

@@ -105,6 +105,7 @@ private:
   String   _fileName;
   bool     _cut            = false;  // NetCut: poison but do not forward
   bool     _autoStart      = false;  // start cutting immediately on init
+  bool     _integrated     = false;  // launched from host Options popup
   bool     _arpEnabled     = false;  // derived from Mode at Start
   bool     _snifferEnabled = true;   // derived from _saveToFile at Start
 
