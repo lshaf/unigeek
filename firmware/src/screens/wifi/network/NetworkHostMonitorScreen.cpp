@@ -3,12 +3,7 @@
 #include "core/Device.h"
 #include "core/ScreenManager.h"
 #include "core/ConfigManager.h"
-#include "ui/actions/InputSelectAction.h"
 #include "ui/actions/ShowStatusAction.h"
-#include "screens/wifi/network/IPScannerDetailsScreen.h"
-#include "screens/wifi/network/PortScannerScreen.h"
-#include "screens/wifi/WifiFoxHuntScreen.h"
-#include "screens/wifi/network/NetworkMitmScreen.h"
 #include "screens/wifi/network/NetworkHostActions.h"
 
 #include <WiFi.h>
@@ -18,6 +13,7 @@
 #include <lwip/ip_addr.h>
 #include <lwip/inet_chksum.h>
 #include <lwip/netif.h>
+#include <algorithm>
 
 namespace {
 volatile bool gPingHit = false;
@@ -64,47 +60,110 @@ const char* ageText(uint32_t lastSeen, uint32_t now) {
   else snprintf(buf, sizeof(buf), "%lum", (unsigned long)(s / 60U));
   return buf;
 }
+
+// Match the scrollbar used by ScrollListView and Traffic Analyzer (3px track and theme thumb).
+void drawMonitorScrollBar(int x, int y, int height, int total, int visible, int offset) {
+  if (height <= 0) return;
+  auto& lcd = Uni.Lcd;
+  if (total <= visible || visible <= 0) {
+    lcd.fillRect(x, y, 3, height, TFT_BLACK);
+    return;
+  }
+  lcd.fillRect(x, y, 3, height, 0x2104);
+  const int thumb = std::min(height, std::max(4, height * visible / total));
+  const int top = y + (height - thumb) * offset / (total - visible);
+  lcd.fillRect(x, top, 3, thumb, Config.getThemeColor());
+}
 }
 
 void NetworkHostMonitorScreen::onInit() {
+  if (WiFi.status() != WL_CONNECTED) {
+    ShowStatusAction::show("Not connected", 1500);
+    Screen.goBack();
+    return;
+  }
   _state = STATE_RUNNING;
   _count = 0;
   _selected = 0;
+  _scroll = 0;
   _probeOctet = 1;
+  _holdHandled = false;
   _gateway = (uint32_t)WiFi.gatewayIP();
   render();
 }
 
-void NetworkHostMonitorScreen::onItemSelected(uint8_t) {}
+void NetworkHostMonitorScreen::onRestore() {
+  if (WiFi.getMode() != WIFI_STA) WiFi.mode(WIFI_STA);
+  _drawList();
+}
 
 void NetworkHostMonitorScreen::onBack() {
-  if (_state == STATE_PAUSED) { _state = STATE_RUNNING; _dirty = true; _drawList(); return; }
+  if (_state == STATE_PAUSED) {
+    _state = STATE_RUNNING;
+    _dirty = true;
+    _drawList();
+    return;
+  }
   Screen.goBack();
 }
 
 void NetworkHostMonitorScreen::onUpdate() {
+  if (_state == STATE_PAUSED && Uni.Nav && Uni.Nav->isPressed() &&
+      Uni.Nav->currentDirection() == INavigation::DIR_PRESS &&
+      Uni.Nav->heldDuration() >= 700 && !_holdHandled && _count) {
+    _holdHandled = true;
+    Uni.Nav->suppressCurrentPress();
+    _openOptions();
+    return;
+  }
+  if (_holdHandled && Uni.Nav && !Uni.Nav->isPressed()) _holdHandled = false;
+
   if (Uni.Nav && Uni.Nav->wasPressed()) {
     const auto dir = Uni.Nav->readDirection();
+    const uint32_t duration = Uni.Nav->pressDuration();
     if (dir == INavigation::DIR_BACK) { onBack(); return; }
-    if (_state == STATE_RUNNING && dir == INavigation::DIR_PRESS) {
-      _state = STATE_PAUSED;
-      if (_selected >= _count) _selected = _count ? _count - 1 : 0;
-      _dirty = true;
-      _drawList();
-      return;
-    }
-    if (_state == STATE_PAUSED) {
-      if (dir == INavigation::DIR_UP && _count) {
-        _selected = _selected == 0 ? _count - 1 : _selected - 1;
+
+    constexpr int footerH = 27;
+    constexpr int rowH = 19;
+    const int visible = std::max(1, (bodyH() - 2 - footerH) / rowH);
+
+    if (_state == STATE_RUNNING) {
+      if (dir == INavigation::DIR_PRESS && duration < 700) {
+        _state = STATE_PAUSED;
+        _selected = _scroll;
+        if (_selected >= _count) _selected = _count ? _count - 1 : 0;
+        _dirty = true;
         _drawList();
         return;
       }
-      if (dir == INavigation::DIR_DOWN && _count) {
-        _selected = (_selected + 1) % _count;
+      if ((dir == INavigation::DIR_DOWN || dir == INavigation::DIR_RIGHT) && _count > visible) {
+        if (_scroll + visible < _count) { ++_scroll; _drawList(); }
+        return;
+      }
+      if ((dir == INavigation::DIR_UP || dir == INavigation::DIR_LEFT) && _scroll > 0) {
+        --_scroll;
         _drawList();
         return;
       }
-      if (dir == INavigation::DIR_PRESS && _count) { _openOptions(); return; }
+    } else {
+      if (dir == INavigation::DIR_UP || dir == INavigation::DIR_LEFT) {
+        if (_count) {
+          _selected = _selected == 0 ? _count - 1 : _selected - 1;
+          _drawList();
+        }
+        return;
+      }
+      if (dir == INavigation::DIR_DOWN || dir == INavigation::DIR_RIGHT) {
+        if (_count) {
+          _selected = (_selected + 1) % _count;
+          _drawList();
+        }
+        return;
+      }
+      if (dir == INavigation::DIR_PRESS && duration < 700 && _count) {
+        _openOptions();
+        return;
+      }
     }
   }
 
@@ -170,63 +229,88 @@ void NetworkHostMonitorScreen::onRender() {
 
 void NetworkHostMonitorScreen::_drawList() {
   auto& lcd = Uni.Lcd;
-  const int bx = bodyX(), by = bodyY(), bw = bodyW(), bh = bodyH();
-  lcd.fillRect(bx, by, bw, bh, TFT_BLACK);
+  const int x = bodyX(), y = bodyY(), w = bodyW(), h = bodyH();
+  lcd.fillRect(x, y, w, h, TFT_BLACK);
   lcd.setTextSize(1);
-  const int fh = lcd.fontHeight();
-  const int lineH = fh + 3;
-  const int footerH = fh + 6;
-  const int slots = (bh - footerH) / lineH;
-  const int listH = slots > 0 ? slots * lineH : 0;
+  lcd.setTextDatum(TL_DATUM);
+  lcd.setTextColor(TFT_WHITE, TFT_BLACK);
 
-  int first = 0;
-  if (_state == STATE_PAUSED && _count > slots)
-    first = (int)_selected - slots / 2;
-  if (first < 0) first = 0;
-  if (_count > slots && first > (int)_count - slots) first = _count - slots;
-
-  for (int row = 0; row < slots; ++row) {
-    const int idx = first + row;
-    if (idx >= _count) break;
-    const Host& h = _hosts[idx];
-    const bool selected = _state == STATE_PAUSED && idx == (int)_selected;
-    const int y = by + row * lineH;
-    const uint16_t bg = selected ? Config.getThemeColor() : TFT_BLACK;
-    if (selected) lcd.fillRect(bx, y, bw, lineH, bg);
-
-    char ip[16], right[8];
-    fmtIp(h.ip, ip, sizeof(ip));
-    snprintf(right, sizeof(right), "%s", h.gateway ? "gw" : ageText(h.lastSeen, millis()));
-
-    lcd.setTextColor(TFT_WHITE, bg);
-    lcd.setTextDatum(TL_DATUM);
-    lcd.drawString(ip, bx + 2, y + 1);
-    lcd.setTextDatum(TR_DATUM);
-    lcd.setTextColor(selected || h.gateway ? TFT_WHITE : TFT_LIGHTGREY, bg);
-    lcd.drawString(right, bx + bw - 2, y + 1);
-  }
+  const int top = y + 2, footerH = 27, rowH = 19;
+  const int visible = (h - 2 - footerH) / rowH;
+  const bool paused = (_state == STATE_PAUSED);
 
   if (!_count) {
     lcd.setTextDatum(MC_DATUM);
     lcd.setTextColor(TFT_DARKGREY, TFT_BLACK);
-    lcd.drawString("Scanning...", bx + bw / 2, by + listH / 2);
+    lcd.drawString(paused ? "Paused - No hosts" : "Scanning...",
+                   x + w / 2, y + (h - footerH) / 2);
+    lcd.setTextDatum(TL_DATUM);
   }
 
-  const int footerTop = by + bh - footerH;
-  lcd.drawFastHLine(bx, footerTop, bw, TFT_DARKGREY);
-  lcd.setTextSize(1);
-  lcd.setTextColor(TFT_LIGHTGREY, TFT_BLACK);
-  if (_state == STATE_RUNNING) {
-    lcd.setTextDatum(TC_DATUM);
-    lcd.drawString("[Press] Pause", bx + bw / 2, footerTop + 3);
-  } else {
-    lcd.setTextDatum(TL_DATUM);
-    lcd.drawString("[Press] Options", bx + 2, footerTop + 3);
-    lcd.setTextDatum(TR_DATUM);
-    lcd.drawString("[Back] Resume", bx + bw - 2, footerTop + 3);
+  if (visible > 0) {
+    if (paused) {
+      if (_selected < _scroll) _scroll = _selected;
+      if (_selected >= _scroll + visible) _scroll = _selected - visible + 1;
+    }
+    const uint8_t maxScroll = _count > (uint8_t)visible ? _count - visible : 0;
+    if (_scroll > maxScroll) _scroll = maxScroll;
+
+    const bool hasScrollbar = _count > visible;
+    const int rightEdge = x + w - (hasScrollbar ? 7 : 3);
+    const uint32_t now = millis();
+
+    for (int i = 0; i < visible && i + _scroll < _count; ++i) {
+      const uint8_t idx = i + _scroll;
+      const Host& host = _hosts[idx];
+      const int yy = top + i * rowH;
+      lcd.fillRect(x, yy - 2, w - 3, rowH, TFT_BLACK);
+
+      const bool selected = paused && idx == _selected;
+      const uint16_t bg = selected ? Config.getThemeColor() : TFT_BLACK;
+      if (selected) lcd.fillRoundRect(x, yy - 2, rightEdge - x, rowH, 3, bg);
+
+      char ip[16], right[8];
+      fmtIp(host.ip, ip, sizeof(ip));
+      snprintf(right, sizeof(right), "%s", host.gateway ? "gw" : ageText(host.lastSeen, now));
+
+      lcd.setTextColor(TFT_WHITE, bg);
+      lcd.drawString(ip, x + 3, yy);
+      lcd.setTextDatum(TR_DATUM);
+      lcd.setTextColor(selected ? TFT_WHITE : TFT_DARKGREY, bg);
+      lcd.drawString(right, rightEdge - 3, yy);
+      lcd.setTextDatum(TL_DATUM);
+    }
+
+    const int drawn = std::min((int)_count - (int)_scroll, visible);
+    if (drawn < visible) {
+      lcd.fillRect(x, top + std::max(0, drawn) * rowH, w - 3,
+                   (visible - std::max(0, drawn)) * rowH, TFT_BLACK);
+    }
+    drawMonitorScrollBar(x + w - 3, top, visible * rowH, _count, visible, _scroll);
   }
+
+  _renderHints(x, y, w, h, paused);
+  lcd.setTextDatum(TL_DATUM);
   _dirty = false;
   _lastDrawMs = millis();
+}
+
+void NetworkHostMonitorScreen::_renderHints(int x, int y, int w, int h, bool paused) {
+  auto& lcd = Uni.Lcd;
+  const int footerTop = y + h - 27;
+  lcd.fillRect(x, footerTop, w, 27, TFT_BLACK);
+  lcd.drawFastHLine(x, footerTop, w, TFT_DARKGREY);
+  lcd.setTextColor(TFT_DARKGREY, TFT_BLACK);
+  lcd.setTextDatum(BC_DATUM);
+  if (paused) {
+    const char* resumeHint = "[Back] Resume Scan";
+    if (lcd.textWidth(resumeHint) > w - 6) resumeHint = "[Back] Resume";
+    lcd.drawString("[Press] Options", x + w / 2, y + h - 14);
+    lcd.drawString(resumeHint, x + w / 2, y + h - 1);
+  } else {
+    lcd.drawString("[Press] Pause", x + w / 2, y + h - 1);
+  }
+  lcd.setTextDatum(TL_DATUM);
 }
 
 void NetworkHostMonitorScreen::_openOptions() {
@@ -241,4 +325,3 @@ void NetworkHostMonitorScreen::_openOptions() {
   // pause before launching a child action.
   if (!NetworkHostActions::openOptions(t)) _drawList();
 }
-
